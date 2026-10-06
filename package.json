@@ -1,0 +1,33 @@
+{
+  "name": "conflora-ai",
+  "version": "2.1.0",
+  "private": true,
+  "description": "Agente de vendas da Conflora integrado ao WhatsApp Cloud API, Gemini, Google Sheets, Firestore e Cloud Tasks.",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "test:all": "npm install && npm run check && npm test && npm run dev",
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "check": "node --check src/server.js && node --check src/http/app.js && node --check src/services/message.service.js && node --check src/ai/agent.service.js && node --check src/catalog/catalog.repository.js && node --check src/orders/order.service.js && node --check src/integrations/whatsapp.client.js && node --check src/integrations/task-queue.client.js && node --check src/router/message.router.js && node --check src/services/direct-price.service.js",
+    "test": "node --test test/*.test.js",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@google-cloud/firestore": "9.3.1",
+    "@google-cloud/tasks": "7.2.1",
+    "@google/genai": "2.27.0",
+    "dotenv": "18.0.5",
+    "express": "5.2.1",
+    "googleapis": "183.0.0"
+  },
+  "devDependencies": {
+    "eslint": "10.12.0",
+    "prettier": "3.9.9"
+  }
+}

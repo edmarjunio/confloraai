@@ -1,0 +1,13 @@
+node_modules/
+.env
+.env.*
+!.env.example
+*.log
+*.bak
+coverage/
+.DS_Store
+Thumbs.db
+backup-*/
+service-account*.json
+credentials*.json
+.gcloud/
