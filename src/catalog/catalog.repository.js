@@ -1,4 +1,4 @@
-const { normalizeText, parseCurrencyString } = require('../shared/string.util');
+const { normalizeText, parseCurrencyString, toSingular } = require('../shared/string.util');
 const Logger = require('../shared/logger');
 
 let googleApisModule = null;
@@ -21,26 +21,9 @@ const IGNORED_CATEGORIES = new Set([
   'servicos',
 ]);
 
-function resolveDomain(category, subcategory, productName) {
-  const c = (category || '').toLowerCase();
-  const s = (subcategory || '').toLowerCase();
-  const n = (productName || '').toLowerCase();
-
-  if (c.includes('pet') || s.includes('aves') || s.includes('mamifero') || s.includes('repteis') || s.includes('caes') || s.includes('gaiola') || s.includes('racao')) {
-    return 'PETS';
-  }
-  if (c.includes('hortifrutti') || s.includes('frutas') || s.includes('legumes') || s.includes('verduras') || s.includes('ovos')) {
-    return 'HORTIFRUTTI';
-  }
-  if (s.includes('adubo') || s.includes('fertilizante') || s.includes('jardinagem') || s.includes('vaso')) {
-    return 'INSUMOS';
-  }
-  return 'PLANTAS';
-}
-
 function buildDriveDirectImageUrl(fileId, rawUrl) {
   if (fileId && typeof fileId === 'string' && fileId.trim().length > 10) {
-    return 'https://drive.google.com/uc?export=view&id=' + fileId.trim();
+    return `https://drive.google.com/uc?export=view&id=${fileId.trim()}`;
   }
   if (rawUrl && typeof rawUrl === 'string' && rawUrl.startsWith('http')) {
     return rawUrl.trim();
@@ -49,6 +32,14 @@ function buildDriveDirectImageUrl(fileId, rawUrl) {
 }
 
 class CatalogRepository {
+  /**
+   * @param {Object} options
+   * @param {string} options.spreadsheetId
+   * @param {string} [options.sheetName='PRODUTOS']
+   * @param {number} [options.cacheTtlSeconds=60]
+   * @param {Array<Object>} [options.mockData=null]
+   * @param {import('../database/firestore.repository').FirestoreRepository} [options.firestoreRepo=null]
+   */
   constructor({
     spreadsheetId,
     sheetName = 'PRODUTOS',
@@ -63,6 +54,8 @@ class CatalogRepository {
     this.productByNameMap = new Map();
     this.productByTagMap = new Map();
     this.productsByCategoryMap = new Map();
+    this.categoriesSet = new Set();
+    this.subcategoriesSet = new Set();
     this.lastCacheTime = 0;
     this.mockData = mockData;
     this.firestoreRepo = firestoreRepo;
@@ -84,7 +77,7 @@ class CatalogRepository {
 
     const googleapis = getGoogleApis();
     if (!googleapis) {
-      Logger.warn('Modulo googleapis nao encontrado; usando dados existentes em memoria.');
+      Logger.warn('Módulo googleapis não encontrado; usando dados existentes em memória.');
       return;
     }
 
@@ -96,12 +89,12 @@ class CatalogRepository {
 
       const response = await sheets.spreadsheets.values.get({
         spreadsheetId: this.spreadsheetId,
-        range: this.sheetName + '!A1:O1500',
+        range: `${this.sheetName}!A1:O1500`,
       });
 
       const rows = response.data.values || [];
       if (rows.length < 2) {
-        Logger.warn('Tabela de produtos vazia ou sem cabecalhos.');
+        Logger.warn('Tabela de produtos vazia ou sem cabeçalhos.');
         return;
       }
 
@@ -146,7 +139,7 @@ class CatalogRepository {
           : parseCurrencyString(row[valorIdx]);
 
         parsedItems.push({
-          id: row[idIdx] || 'item-' + i,
+          id: row[idIdx] || `item-${i}`,
           name,
           category: rawCat,
           subcategory: rawSubCat,
@@ -161,9 +154,9 @@ class CatalogRepository {
       }
 
       this.loadItems(parsedItems);
-      Logger.info('Catalogo atualizado com sucesso. ' + this.items.length + ' itens comerciais ativos indexados.');
+      Logger.info(`Catálogo atualizado em tempo real. ${this.items.length} itens comerciais ativos indexados.`);
     } catch (error) {
-      Logger.error('Falha ao atualizar catalogo via Google Sheets', error);
+      Logger.error('Falha ao atualizar catálogo via Google Sheets', error);
       if (this.items.length === 0) {
         throw error;
       }
@@ -175,56 +168,75 @@ class CatalogRepository {
       return;
     }
 
-    this.items = rawItems.filter((item) => item.status?.toUpperCase() === 'ATIVO');
+    this.items = rawItems
+      .filter((item) => (item.status || 'ATIVO').toUpperCase() === 'ATIVO')
+      .map((item) => ({
+        ...item,
+        price: typeof item.price === 'number' ? item.price : parseCurrencyString(item.price || item.valor),
+      }));
+
     this.productByNameMap.clear();
     this.productByTagMap.clear();
     this.productsByCategoryMap.clear();
+    this.categoriesSet.clear();
+    this.subcategoriesSet.clear();
 
     for (const item of this.items) {
       const normalizedName = normalizeText(item.name);
       const normalizedSubcat = normalizeText(item.subcategory || '');
       const normalizedCat = normalizeText(item.category || '');
-      const domain = resolveDomain(item.category, item.subcategory, item.name);
+
+      if (normalizedCat) {
+        this.categoriesSet.add(normalizedCat);
+      }
+      if (normalizedSubcat) {
+        this.subcategoriesSet.add(normalizedSubcat);
+      }
 
       if (!this.productByNameMap.has(normalizedName)) {
         this.productByNameMap.set(normalizedName, {
           canonicalName: item.name,
           category: item.category,
           subcategory: item.subcategory,
-          domain,
           descriptionAi: item.descriptionAi || '',
           tags: new Set(),
           prices: [],
           images: [],
           items: [],
+          variations: [],
         });
       }
 
       const productGroup = this.productByNameMap.get(normalizedName);
       productGroup.items.push(item);
 
+      // Preços sem duplicidade ordenados
       if (typeof item.price === 'number' && !productGroup.prices.includes(item.price)) {
         productGroup.prices.push(item.price);
         productGroup.prices.sort((a, b) => a - b);
       }
 
+      // Descrição IA
       if (item.descriptionAi && !productGroup.descriptionAi) {
         productGroup.descriptionAi = item.descriptionAi;
       }
 
+      // Imagens do Drive ou URL
       const directUrl = buildDriveDirectImageUrl(item.imageFileId, item.imageUrl);
       if (directUrl && !productGroup.images.includes(directUrl)) {
         productGroup.images.push(directUrl);
       }
 
+      // Indexação de TAGS_IA da planilha
       if (item.tagsAi) {
-        const rawTags = item.tagsAi.split(",").map((t) => normalizeText(t)).filter((t) => t.length > 1);
+        const rawTags = item.tagsAi.split(/[,;\n]/).map((t) => normalizeText(t)).filter((t) => t.length > 1);
         for (const tag of rawTags) {
           productGroup.tags.add(tag);
           this.productByTagMap.set(tag, productGroup);
         }
       }
 
+      // Indexação por subcategoria e categoria
       if (normalizedSubcat) {
         if (!this.productsByCategoryMap.has(normalizedSubcat)) {
           this.productsByCategoryMap.set(normalizedSubcat, []);
@@ -238,13 +250,82 @@ class CatalogRepository {
         }
         this.productsByCategoryMap.get(normalizedCat).push(item);
       }
+
+      // Agrupamento de produtos-base com variações (ex: MINI CABRA MACHO + MINI CABRA FÊMEA -> MINI CABRA)
+      const baseNorm = normalizedName
+        .replace(/\b(macho|femea|casal|adulto|adulta|filhote|franga|frango|grande|medio|pequeno)\b/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (baseNorm && baseNorm !== normalizedName && baseNorm.length >= 3) {
+        if (!this.productByNameMap.has(baseNorm)) {
+          const baseTitle = baseNorm
+            .split(' ')
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(' ');
+
+          this.productByNameMap.set(baseNorm, {
+            canonicalName: baseTitle,
+            category: item.category,
+            subcategory: item.subcategory,
+            descriptionAi: item.descriptionAi || '',
+            tags: new Set(),
+            prices: [],
+            images: [],
+            items: [],
+            variations: [],
+          });
+        }
+
+        const baseGroup = this.productByNameMap.get(baseNorm);
+        baseGroup.items.push(item);
+        if (typeof item.price === 'number' && !baseGroup.prices.includes(item.price)) {
+          baseGroup.prices.push(item.price);
+          baseGroup.prices.sort((a, b) => a - b);
+        }
+
+        if (directUrl && !baseGroup.images.includes(directUrl)) {
+          baseGroup.images.push(directUrl);
+        }
+
+        const varMatch = item.name.match(/\b(Macho|Fêmea|Femea|Casal|Adulto|Adulta|Filhote)\b/i);
+        const varName = varMatch ? varMatch[1].toUpperCase() : item.name;
+        if (!baseGroup.variations.some((v) => v.name === varName)) {
+          baseGroup.variations.push({ name: varName, price: item.price });
+        }
+      }
     }
 
     this.lastCacheTime = Date.now();
   }
 
+  isCategoryOrSubcategory(text) {
+    const norm = normalizeText(text);
+    const sing = toSingular(text);
+    if (!norm || norm.length < 3) {
+      return false;
+    }
+
+    for (const cat of this.categoriesSet) {
+      const catSing = toSingular(cat);
+      if (cat === norm || catSing === sing || norm === catSing || sing === cat) {
+        return true;
+      }
+    }
+
+    for (const sub of this.subcategoriesSet) {
+      const subSing = toSingular(sub);
+      if (sub === norm || subSing === sing || norm === subSing || sing === sub) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   findProductByName(query) {
     const normalizedQuery = normalizeText(query);
+    const singularQuery = toSingular(query);
     if (!normalizedQuery) {
       return null;
     }
@@ -252,19 +333,31 @@ class CatalogRepository {
     if (this.productByNameMap.has(normalizedQuery)) {
       return this.productByNameMap.get(normalizedQuery);
     }
+    if (singularQuery && this.productByNameMap.has(singularQuery)) {
+      return this.productByNameMap.get(singularQuery);
+    }
 
     if (this.productByTagMap.has(normalizedQuery)) {
       return this.productByTagMap.get(normalizedQuery);
     }
+    if (singularQuery && this.productByTagMap.has(singularQuery)) {
+      return this.productByTagMap.get(singularQuery);
+    }
 
     for (const [key, group] of this.productByNameMap.entries()) {
-      if (normalizedQuery.includes(key) || key.includes(normalizedQuery)) {
+      if (key === normalizedQuery || key === singularQuery || key.startsWith(normalizedQuery) || key.startsWith(singularQuery)) {
+        return group;
+      }
+    }
+
+    for (const [key, group] of this.productByNameMap.entries()) {
+      if (normalizedQuery.includes(key) || (singularQuery && singularQuery.includes(key)) || key.includes(normalizedQuery)) {
         return group;
       }
     }
 
     for (const [tagKey, group] of this.productByTagMap.entries()) {
-      if (normalizedQuery.includes(tagKey) || tagKey.includes(normalizedQuery)) {
+      if (normalizedQuery.includes(tagKey) || (singularQuery && singularQuery.includes(tagKey))) {
         return group;
       }
     }
@@ -283,32 +376,36 @@ class CatalogRepository {
     if (group) {
       group.tags.add(normalizedTag);
       this.productByTagMap.set(normalizedTag, group);
-      Logger.info('Tag aprendida indexada em memoria: [' + normalizedTag + '] -> ' + group.canonicalName);
+      Logger.info(`Tag aprendida indexada em memória: [${normalizedTag}] -> ${group.canonicalName}`);
     }
   }
 
   findProductsByCategory(categoryQuery) {
     const normalized = normalizeText(categoryQuery);
+    const singular = toSingular(categoryQuery);
     if (!normalized || normalized.length < 3) {
       return [];
     }
 
-    const singular = normalized.endsWith('s') ? normalized.slice(0, -1) : normalized;
     const matchedProducts = new Map();
 
     for (const [catKey, items] of this.productsByCategoryMap.entries()) {
-      if (catKey === normalized || catKey === singular || catKey.startsWith(singular)) {
+      const catSing = toSingular(catKey);
+      if (catKey === normalized || catKey === singular || catSing === singular || catKey.includes(singular)) {
         for (const item of items) {
           const groupKey = normalizeText(item.name);
           if (!matchedProducts.has(groupKey)) {
-            matchedProducts.set(groupKey, this.productByNameMap.get(groupKey));
+            const grp = this.productByNameMap.get(groupKey);
+            if (grp) {
+              matchedProducts.set(groupKey, grp);
+            }
           }
         }
       }
     }
 
     for (const [nameKey, group] of this.productByNameMap.entries()) {
-      if (nameKey.includes(singular)) {
+      if (nameKey.includes(singular) || nameKey.includes(normalized)) {
         if (!matchedProducts.has(nameKey)) {
           matchedProducts.set(nameKey, group);
         }
@@ -325,5 +422,4 @@ class CatalogRepository {
 
 module.exports = {
   CatalogRepository,
-  resolveDomain,
 };

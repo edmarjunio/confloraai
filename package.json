@@ -12,7 +12,7 @@
     "test:all": "npm install && npm run check && npm test && npm run dev",
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "check": "node --check src/server.js && node --check src/http/app.js && node --check src/services/message.service.js && node --check src/ai/agent.service.js && node --check src/catalog/catalog.repository.js && node --check src/orders/order.service.js && node --check src/integrations/whatsapp.client.js && node --check src/integrations/task-queue.client.js && node --check src/router/message.router.js && node --check src/services/direct-price.service.js && node --check src/services/learning.service.js",
+    "check": "node --check src/server.js && node --check src/http/app.js && node --check src/services/message.service.js && node --check src/ai/agent.service.js && node --check src/catalog/catalog.repository.js && node --check src/orders/order.service.js && node --check src/integrations/whatsapp.client.js && node --check src/integrations/task-queue.client.js && node --check src/router/message.router.js && node --check src/services/direct-price.service.js",
     "test": "node --test test/*.test.js",
     "lint": "eslint .",
     "format": "prettier --write .",

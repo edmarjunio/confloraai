@@ -18,16 +18,7 @@ if not exist "package.json" (
   )
 )
 
-echo [1/4] Instalando/atualizando dependencias (npm install)...
-call npm install
-if %ERRORLEVEL% neq 0 (
-  echo [FALHA] Erro ao executar npm install.
-  pause
-  exit /b %ERRORLEVEL%
-)
-
-echo.
-echo [2/4] Validando sintaxe de todo o codigo (npm run check)...
+echo [1/3] Validando sintaxe de todo o codigo (npm run check)...
 call npm run check
 if %ERRORLEVEL% neq 0 (
   echo [FALHA] Erro de sintaxe encontrado no codigo.
@@ -36,7 +27,7 @@ if %ERRORLEVEL% neq 0 (
 )
 
 echo.
-echo [3/4] Executando bateria de testes automatizados (npm test)...
+echo [2/3] Executando bateria de testes automatizados (npm test)...
 call npm test
 if %ERRORLEVEL% neq 0 (
   echo [FALHA] Algum teste falhou. Corrija antes de iniciar.

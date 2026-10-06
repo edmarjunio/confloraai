@@ -19,6 +19,7 @@ class FirestoreRepository {
     this.inMemoryMessages = new Set();
     this.inMemorySessions = new Map();
     this.inMemoryOrders = new Map();
+    this.inMemoryCustomers = new Map();
 
     if (!this.firestore && !isInMemory && process.env.NODE_ENV !== 'test') {
       const mod = getFirestoreModule();
@@ -128,6 +129,7 @@ class FirestoreRepository {
   async saveOrder(phone, orderData) {
     const dataWithTs = {
       ...orderData,
+      phone,
       updatedAt: new Date().toISOString(),
     };
 
@@ -144,6 +146,7 @@ class FirestoreRepository {
   }
 
   async getOrder(phone) {
+    if (!phone) return null;
     if (this.firestore) {
       try {
         const doc = await this.firestore.collection('orders').doc(phone).get();
@@ -154,6 +157,41 @@ class FirestoreRepository {
     }
 
     return this.inMemoryOrders.get(phone) || null;
+  }
+
+  async getCustomerProfile(phone) {
+    if (!phone) return null;
+    if (this.firestore) {
+      try {
+        const doc = await this.firestore.collection('customers').doc(phone).get();
+        return doc.exists ? doc.data() : null;
+      } catch (err) {
+        Logger.warn('Erro ao buscar perfil do cliente no Firestore; usando fallback', { error: err.message });
+      }
+    }
+
+    return this.inMemoryCustomers.get(phone) || null;
+  }
+
+  async saveCustomerProfile(phone, profileData) {
+    if (!phone) return;
+    const dataWithTs = {
+      ...profileData,
+      phone,
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (this.firestore) {
+      try {
+        await this.firestore.collection('customers').doc(phone).set(dataWithTs, { merge: true });
+        return;
+      } catch (err) {
+        Logger.warn('Erro ao salvar perfil do cliente no Firestore; usando fallback', { error: err.message });
+      }
+    }
+
+    const existing = this.inMemoryCustomers.get(phone) || {};
+    this.inMemoryCustomers.set(phone, { ...existing, ...dataWithTs });
   }
 }
 

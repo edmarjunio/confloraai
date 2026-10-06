@@ -14,27 +14,19 @@ if (-not (Test-Path "package.json")) {
     }
 }
 
-Write-Host "[1/4] Instalando dependencias (npm install)..." -ForegroundColor Cyan
-npm install
-if ( -ne 0) {
-    Write-Host "[FALHA] Erro ao executar npm install." -ForegroundColor Red
-    Exit 
-}
-
-Write-Host ""
-Write-Host "[2/4] Validando sintaxe do codigo (npm run check)..." -ForegroundColor Cyan
+Write-Host "[1/3] Validando sintaxe do codigo (npm run check)..." -ForegroundColor Cyan
 npm run check
-if ( -ne 0) {
+if ($LASTEXITCODE -ne 0) {
     Write-Host "[FALHA] Erro de sintaxe no codigo." -ForegroundColor Red
-    Exit 
+    Exit $LASTEXITCODE
 }
 
 Write-Host ""
-Write-Host "[3/4] Executando testes automatizados (npm test)..." -ForegroundColor Cyan
+Write-Host "[2/3] Executando testes automatizados (npm test)..." -ForegroundColor Cyan
 npm test
-if ( -ne 0) {
+if ($LASTEXITCODE -ne 0) {
     Write-Host "[FALHA] Testes falharam." -ForegroundColor Red
-    Exit 
+    Exit $LASTEXITCODE
 }
 
 Write-Host ""

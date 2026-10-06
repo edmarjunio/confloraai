@@ -84,11 +84,17 @@ class WhatsAppClient {
 
   /**
    * Marca a mensagem como lida.
+   * Apenas executa para IDs oficiais da Meta (wamid.), prevenindo erro #131009 em testes locais.
    * @param {string} messageId
    */
   async markAsRead(messageId) {
     if (!this.token || !config.whatsapp.phoneNumberId || !messageId) {
       return { mock: true };
+    }
+
+    // Proteção contra erro 131009 da Meta Graph API para IDs de teste local (ex: local-...)
+    if (typeof messageId !== 'string' || !messageId.startsWith('wamid.')) {
+      return { mock: true, skippedNonMetaId: true };
     }
 
     const payload = {
