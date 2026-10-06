@@ -1,105 +1,79 @@
-require("dotenv").config();
+const fs = require('node:fs');
+const path = require('node:path');
 
-const { onlyDigits } = require("../shared/text");
-
-function string(name, fallback = "") {
-  return String(process.env[name] ?? fallback).trim();
-}
-
-function number(name, fallback) {
-  const parsed = Number(process.env[name]);
-  return Number.isFinite(parsed) ? parsed : fallback;
+// Safely load environment variables from .env file
+try {
+  const envPath = path.resolve(process.cwd(), '.env');
+  if (fs.existsSync(envPath)) {
+    const lines = fs.readFileSync(envPath, 'utf-8').split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) {
+        continue;
+      }
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx > 0) {
+        const key = trimmed.slice(0, eqIdx).trim();
+        const value = trimmed.slice(eqIdx + 1).trim();
+        if (!process.env[key]) {
+          process.env[key] = value;
+        }
+      }
+    }
+  }
+} catch {
+  // Silent fallback
 }
 
 const config = Object.freeze({
-  environment: string("NODE_ENV", "development"),
-  port: number("PORT", 8080),
-  projectId: string("GCP_PROJECT_ID", "conflora-ai"),
-  region: string("GCP_REGION", "southamerica-east1"),
+  env: process.env.NODE_ENV || 'development',
+  isDev: (process.env.NODE_ENV || 'development') === 'development',
+  port: parseInt(process.env.PORT || '8080', 10),
 
-  gemini: Object.freeze({
-    location: string("GEMINI_LOCATION", "global"),
-    model: string("GEMINI_MODEL", "gemini-3.7-flash"),
-  }),
+  gcp: {
+    projectId: process.env.GCP_PROJECT_ID || 'conflora-ai',
+    region: process.env.GCP_REGION || 'southamerica-east1',
+  },
 
-  sheets: Object.freeze({
-    spreadsheetId: string("SPREADSHEET_ID"),
-    sheetName: string("SHEET_NAME", "PRODUTOS"),
-    cacheSeconds: number("SHEETS_CACHE_SECONDS", 60),
-  }),
+  gemini: {
+    location: process.env.GEMINI_LOCATION || 'global',
+    model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+  },
 
-  tasks: Object.freeze({
-    queue: string("CLOUD_TASKS_QUEUE", "conflora-jobs"),
-    serviceUrl: string("SERVICE_URL").replace(/\/$/, ""),
-    secret: string("TASK_SECRET"),
-    followupSeconds: number("FOLLOWUP_SECONDS", 3600),
-  }),
+  sheets: {
+    spreadsheetId: process.env.SPREADSHEET_ID || '1p9gVQkuZkVagi4gyP4Tp8fdItHm6W-wkT2osxTstQVU',
+    sheetName: process.env.SHEET_NAME || 'PRODUTOS',
+    cacheSeconds: parseInt(process.env.SHEETS_CACHE_SECONDS || '60', 10),
+  },
 
-  whatsapp: Object.freeze({
-    graphVersion: string("WHATSAPP_GRAPH_VERSION"),
-    phoneNumberId: string("WHATSAPP_PHONE_NUMBER_ID"),
-    token: string("WHATSAPP_TOKEN"),
-    verifyToken: string("WHATSAPP_VERIFY_TOKEN"),
-    appSecret: string("META_APP_SECRET"),
-    ownerNumber: onlyDigits(string("OWNER_WHATSAPP_NUMBER")),
-    orderTemplate: string("OWNER_ORDER_TEMPLATE", "nova_venda_conflora"),
-    receiptImageTemplate: string(
-      "OWNER_RECEIPT_IMAGE_TEMPLATE",
-      "comprovante_pix_imagem",
-    ),
-    receiptDocumentTemplate: string(
-      "OWNER_RECEIPT_DOCUMENT_TEMPLATE",
-      "comprovante_pix_documento",
-    ),
-    templateLanguage: string("WHATSAPP_TEMPLATE_LANGUAGE", "pt_BR"),
-  }),
+  tasks: {
+    queue: process.env.CLOUD_TASKS_QUEUE || 'conflora-jobs',
+    serviceUrl: process.env.SERVICE_URL || '',
+    followupSeconds: parseInt(process.env.FOLLOWUP_SECONDS || '3600', 10),
+    taskSecret: process.env.TASK_SECRET || '',
+  },
 
-  pix: Object.freeze({
-    key: string("PIX_KEY"),
-    holder: string("PIX_TITULAR"),
-  }),
+  whatsapp: {
+    graphVersion: process.env.WHATSAPP_GRAPH_VERSION || 'v21.0',
+    phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || '',
+    token: process.env.WHATSAPP_TOKEN || '',
+    verifyToken: process.env.WHATSAPP_VERIFY_TOKEN || '',
+    metaAppSecret: process.env.META_APP_SECRET || '',
+    ownerNumber: process.env.OWNER_WHATSAPP_NUMBER || '',
+    templates: {
+      orderNotification: process.env.OWNER_ORDER_TEMPLATE || 'nova_venda_conflora',
+      receiptImage: process.env.OWNER_RECEIPT_IMAGE_TEMPLATE || 'comprovante_pix_imagem',
+      receiptDocument: process.env.OWNER_RECEIPT_DOCUMENT_TEMPLATE || 'comprovante_pix_documento',
+      language: process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'pt_BR',
+    },
+  },
 
-  adminSecret: string("ADMIN_SECRET"),
+  pix: {
+    key: process.env.PIX_KEY || 'conflora@exemplo.com.br',
+    holder: process.env.PIX_TITULAR || 'Conflora Horta e Viveiro',
+  },
+
+  adminSecret: process.env.ADMIN_SECRET || '',
 });
 
-function isProduction() {
-  return config.environment === "production";
-}
-
-function assertRequired(entries) {
-  const missing = entries.filter(([, value]) => !value).map(([name]) => name);
-  if (missing.length) {
-    throw new Error(`Variáveis obrigatórias ausentes: ${missing.join(", ")}`);
-  }
-}
-
-function validateBaseConfig() {
-  assertRequired([
-    ["GCP_PROJECT_ID", config.projectId],
-    ["SPREADSHEET_ID", config.sheets.spreadsheetId],
-  ]);
-}
-
-function validateProductionConfig() {
-  validateBaseConfig();
-  assertRequired([
-    ["SERVICE_URL", config.tasks.serviceUrl],
-    ["TASK_SECRET", config.tasks.secret],
-    ["WHATSAPP_GRAPH_VERSION", config.whatsapp.graphVersion],
-    ["WHATSAPP_PHONE_NUMBER_ID", config.whatsapp.phoneNumberId],
-    ["WHATSAPP_TOKEN", config.whatsapp.token],
-    ["WHATSAPP_VERIFY_TOKEN", config.whatsapp.verifyToken],
-    ["META_APP_SECRET", config.whatsapp.appSecret],
-    ["OWNER_WHATSAPP_NUMBER", config.whatsapp.ownerNumber],
-    ["PIX_KEY", config.pix.key],
-    ["PIX_TITULAR", config.pix.holder],
-    ["ADMIN_SECRET", config.adminSecret],
-  ]);
-}
-
-module.exports = {
-  config,
-  isProduction,
-  validateBaseConfig,
-  validateProductionConfig,
-};
+module.exports = config;

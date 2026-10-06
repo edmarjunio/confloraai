@@ -1,33 +1,32 @@
-function sanitizeContext(context = {}) {
-  const clone = { ...context };
-  for (const key of Object.keys(clone)) {
-    if (/token|secret|authorization|senha|password/i.test(key)) {
-      clone[key] = "[REDACTED]";
+/**
+ * Simple structured logger without exposing sensitive secrets.
+ */
+class Logger {
+  static info(message, metadata = {}) {
+    console.log(JSON.stringify({ level: 'INFO', timestamp: new Date().toISOString(), message, ...metadata }));
+  }
+
+  static warn(message, metadata = {}) {
+    console.warn(JSON.stringify({ level: 'WARN', timestamp: new Date().toISOString(), message, ...metadata }));
+  }
+
+  static error(message, error = null, metadata = {}) {
+    console.error(
+      JSON.stringify({
+        level: 'ERROR',
+        timestamp: new Date().toISOString(),
+        message,
+        error: error ? { message: error.message, stack: error.stack } : undefined,
+        ...metadata,
+      })
+    );
+  }
+
+  static debug(message, metadata = {}) {
+    if (process.env.NODE_ENV === 'development') {
+      console.debug(JSON.stringify({ level: 'DEBUG', timestamp: new Date().toISOString(), message, ...metadata }));
     }
   }
-  return clone;
 }
 
-function write(level, message, context = {}) {
-  const payload = {
-    severity: level.toUpperCase(),
-    message,
-    timestamp: new Date().toISOString(),
-    ...sanitizeContext(context),
-  };
-
-  const line = JSON.stringify(payload);
-  if (level === "error") {
-    return console.error(line);
-  }
-  if (level === "warn") {
-    return console.warn(line);
-  }
-  return console.log(line);
-}
-
-module.exports = {
-  info: (message, context) => write("info", message, context),
-  warn: (message, context) => write("warn", message, context),
-  error: (message, context) => write("error", message, context),
-};
+module.exports = Logger;

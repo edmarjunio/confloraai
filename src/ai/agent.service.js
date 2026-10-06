@@ -1,319 +1,184 @@
-const { GoogleGenAI, Type } = require("@google/genai");
-const { config } = require("../config/env");
-const { buscarProdutos } = require("../catalog/catalog.repository");
-const { prepareOrder, finalizeOrder } = require("../orders/order.service");
-const logger = require("../shared/logger");
+const config = require('../config/env');
+const Logger = require('../shared/logger');
+const { formatCurrency } = require('../shared/string.util');
 
-const ai = new GoogleGenAI({
-  vertexai: true,
-  project: config.projectId,
-  location: config.gemini.location,
-  httpOptions: { apiVersion: "v1" },
-});
-
-const SYSTEM_INSTRUCTION = `
-Você é o atendente virtual e consultor de vendas da CONFLORA HORTA E VIVEIRO no WhatsApp.
-
-MISSÃO: ENTENDER → FILTRAR → RECOMENDAR → CONVERTER.
-
-ESTILO:
-- português brasileiro natural, curto, acolhedor e profissional;
-- uma pergunta principal por vez;
-- não repita perguntas já respondidas;
-- não invente informações;
-- se perguntarem se você é IA, responda com transparência.
-
-CATÁLOGO:
-- use buscar_produtos para produtos, preços, categorias, subcategorias e variações;
-- o catálogo é a fonte oficial;
-- nunca invente produto, preço, promoção, estoque, variação ou característica;
-- STATUS ATIVO significa publicado, não estoque físico confirmado;
-- se o cliente pedir todas as opções de um grupo, mostre todas as opções relacionadas;
-- se pedir recomendação, consulte todos os produtos relacionados antes de escolher;
-- se a busca for ampla e houver muitas possibilidades, faça uma pergunta útil antes de despejar produtos.
-
-VENDAS:
-- se o cliente disser exatamente o produto, responda direto;
-- quando houver intenção de compra, colete naturalmente: nome, itens e quantidades, entrega ou retirada, endereço se entrega e forma de pagamento;
-- só use preparar_pedido quando todos esses dados estiverem disponíveis;
-- após preparar_pedido, mostre o resumo exato e pergunte claramente se pode formalizar;
-- não finalize por interesse, dúvida ou negociação;
-- só use finalizar_pedido após confirmação inequívoca como “sim”, “confirmo”, “pode fechar”, “pode formalizar”, “está certo” ou “fechado”.
-
-PIX:
-- se finalizar_pedido retornar PIX, informe exatamente a chave, titular e valor retornados;
-- peça o comprovante por foto ou PDF no próprio WhatsApp.
-
-HUMANO:
-Use encaminhar_humano quando o cliente pedir pessoa, quando for necessária confirmação humana, negociação fora das regras, estoque físico, informação não confiável ou situação fora do escopo.
-O sistema fará o encaminhamento silenciosamente.
-
-FORMATAÇÃO:
-- blocos curtos;
-- listas quando úteis;
-- *negrito* para destaque;
-- emojis com moderação;
-- não use sempre as mesmas aberturas ou chamadas para ação.
-`;
-
-const tools = [
-  {
-    name: "buscar_produtos",
-    description: "Pesquisa produtos reais no catálogo da Conflora.",
-    parameters: {
-      type: Type.OBJECT,
-      properties: {
-        termo: { type: Type.STRING, description: "Termo objetivo de busca." },
-      },
-      required: ["termo"],
-    },
-  },
-  {
-    name: "preparar_pedido",
-    description:
-      "Valida itens, recalcula preços e prepara o pedido para confirmação.",
-    parameters: {
-      type: Type.OBJECT,
-      properties: {
-        cliente_nome: { type: Type.STRING },
-        itens: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              productId: { type: Type.STRING },
-              quantidade: { type: Type.INTEGER },
-            },
-            required: ["productId", "quantidade"],
-          },
-        },
-        recebimento: { type: Type.STRING, enum: ["entrega", "retirada"] },
-        endereco: { type: Type.STRING },
-        forma_pagamento: {
-          type: Type.STRING,
-          enum: ["pix", "dinheiro", "cartao", "outro"],
-        },
-        observacoes: { type: Type.STRING },
-      },
-      required: ["cliente_nome", "itens", "recebimento", "forma_pagamento"],
-    },
-  },
-  {
-    name: "finalizar_pedido",
-    description:
-      "Finaliza pedido já preparado somente após confirmação inequívoca.",
-    parameters: {
-      type: Type.OBJECT,
-      properties: { pedidoId: { type: Type.STRING } },
-      required: ["pedidoId"],
-    },
-  },
-  {
-    name: "encaminhar_humano",
-    description: "Interrompe a IA e deixa o atendimento para uma pessoa.",
-    parameters: {
-      type: Type.OBJECT,
-      properties: { motivo: { type: Type.STRING } },
-      required: ["motivo"],
-    },
-  },
-];
-
-function productForGemini(product) {
-  return {
-    id: product.id,
-    descricao: product.descricao,
-    valor: product.valor,
-    valorNum: product.valorNum,
-    categoria: product.categoria,
-    subcategoria: product.subcategoria,
-    variacao: product.variacao,
-    descricaoIa: product.descricaoIa,
-    tagsIa: product.tagsIa,
-  };
-}
-
-function buildContents(history, currentMessage) {
-  const contents = (Array.isArray(history) ? history : [])
-    .filter((item) => item?.text)
-    .map((item) => ({
-      role:
-        item.role === "model" || item.role === "assistant" ? "model" : "user",
-      parts: [{ text: String(item.text) }],
-    }));
-
-  const last = contents.at(-1);
-  if (
-    !last ||
-    last.role !== "user" ||
-    last.parts?.[0]?.text !== currentMessage
-  ) {
-    contents.push({ role: "user", parts: [{ text: currentMessage }] });
-  }
-
-  return contents;
-}
-
-async function executeTool(call, context, currentMessage) {
-  if (call.name === "encaminhar_humano") {
-    return {
-      terminalResult: {
-        type: "human",
-        reason: call.args?.motivo || "gemini_solicitou_humano",
-      },
-    };
-  }
-
-  if (call.name === "buscar_produtos") {
-    const term = String(call.args?.termo || "").trim();
-    if (!term) {
-      return { terminalResult: { type: "human", reason: "busca_sem_termo" } };
+let genAiModule = null;
+function getGenAI() {
+  if (!genAiModule) {
+    try {
+      genAiModule = require('@google/genai');
+    } catch {
+      return null;
     }
-
-    const products = await buscarProdutos(term, { todos: true });
-    logger.info("Gemini consultou catálogo", {
-      termo: term,
-      resultados: products.length,
-    });
-    return {
-      functionResponse: {
-        termo: term,
-        total: products.length,
-        produtos: products.map(productForGemini),
-      },
-    };
   }
+  return genAiModule;
+}
 
-  if (call.name === "preparar_pedido") {
-    const result = await prepareOrder({
-      phone: context.phone,
-      profileName: context.profileName,
-      args: call.args || {},
-    });
-    return {
-      functionResponse: result,
-      preparedOrderId: result.ok ? result.orderId : null,
-    };
-  }
+class AgentService {
+  constructor({ aiClient = null } = {}) {
+    this.aiClient = aiClient;
+    this.modelName = config.gemini.model || 'gemini-2.5-flash';
 
-  if (call.name === "finalizar_pedido") {
-    const result = await finalizeOrder({
-      orderId: call.args?.pedidoId,
-      currentMessage,
-    });
-    return {
-      functionResponse: result.ok
-        ? {
-            ok: true,
-            pedidoId: result.order.id,
-            codigo: result.order.code,
-            total: result.totalFormatted,
-            pagamento: result.order.paymentMethod,
-            recebimento: result.order.fulfillment,
-            endereco: result.order.address,
-            pix: result.pix || null,
+    if (!this.aiClient && process.env.NODE_ENV !== 'test') {
+      const GenAI = getGenAI();
+      if (GenAI && GenAI.GoogleGenAI) {
+        try {
+          if (process.env.GEMINI_API_KEY) {
+            this.aiClient = new GenAI.GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+          } else {
+            this.aiClient = new GenAI.GoogleGenAI({
+              vertexAI: true,
+              project: config.gcp.projectId,
+              location: config.gemini.location || 'southamerica-east1',
+            });
           }
-        : result,
-      finalizedOrder: result.ok ? result.order : null,
-    };
+        } catch (err) {
+          Logger.warn('Aviso: Inicializacao da IA sera feita na primeira requisicao', { error: err.message });
+        }
+      }
+    }
   }
 
-  return {
-    terminalResult: {
-      type: "human",
-      reason: `ferramenta_desconhecida:${call.name}`,
-    },
-  };
-}
+  buildSystemPrompt({ mode, targetProduct = null, suggestedProducts = [], domain = 'PLANTAS' }) {
+    let specificDirective = '';
 
-async function responderComIA(context) {
-  const currentMessage = String(context?.message || "").trim();
-  if (!currentMessage) {
-    return { type: "human", reason: "mensagem_vazia" };
-  }
-
-  const contents = buildContents(context.history, currentMessage);
-  let preparedOrderId = null;
-  let finalizedOrder = null;
-
-  for (let round = 0; round < 6; round += 1) {
-    const response = await ai.models.generateContent({
-      model: config.gemini.model,
-      contents,
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
-        temperature: 0.45,
-        maxOutputTokens: 900,
-        tools: [{ functionDeclarations: tools }],
-      },
-    });
-
-    const calls = response.functionCalls || [];
-    if (!calls.length) {
-      const text = response.text?.trim();
-      if (!text) {
-        return { type: "human", reason: "gemini_sem_resposta" };
-      }
-      return { type: "response", text, preparedOrderId, finalizedOrder };
-    }
-
-    if (response.candidates?.[0]?.content) {
-      contents.push(response.candidates[0].content);
-    }
-
-    const functionParts = [];
-    for (const call of calls) {
-      const toolResult = await executeTool(call, context, currentMessage);
-      if (toolResult.terminalResult) {
-        return toolResult.terminalResult;
-      }
-      if (toolResult.preparedOrderId) {
-        preparedOrderId = toolResult.preparedOrderId;
-      }
-      if (toolResult.finalizedOrder) {
-        finalizedOrder = toolResult.finalizedOrder;
-      }
-
-      functionParts.push({
-        functionResponse: {
-          name: call.name,
-          ...(call.id ? { id: call.id } : {}),
-          response: toolResult.functionResponse,
-        },
-      });
-    }
-
-    contents.push({ role: "user", parts: functionParts });
-  }
-
-  return { type: "human", reason: "limite_de_rodadas" };
-}
-
-async function gerarFollowupPedido({ history, order }) {
-  const recentAssistantTexts = (history || [])
-    .filter((message) => ["model", "assistant"].includes(message.role))
-    .map((message) => message.text)
-    .filter(Boolean)
-    .slice(-8);
-
-  const prompt = `
-O cliente recebeu o resumo do pedido ${order.code} há cerca de 1 hora e não respondeu.
-Escreva UMA mensagem curta, educada e natural perguntando se ficou alguma dúvida ou se podemos formalizar.
-Sem urgência, pressão ou menção de automação.
-Evite repetir estas mensagens recentes:
-${recentAssistantTexts.map((text) => `- ${text}`).join("\n") || "(nenhuma)"}
+    if (mode === 'DIRECT_PRICE' && targetProduct) {
+      const prices = targetProduct.prices.map((p) => formatCurrency(p)).join(' e ');
+      const descLine = targetProduct.descriptionAi ? `- Descrição técnica: ${targetProduct.descriptionAi}` : '';
+      specificDirective = `
+MODO DE ATENDIMENTO: RESPOSTA DIRETA DE PREÇO (OBJETIVA E SEM ENROLAÇÃO)
+- O cliente perguntou o valor específico de: "${targetProduct.canonicalName}".
+- Preços oficiais do catálogo: ${prices}. Categoria: ${targetProduct.category || 'Geral'}.
+${descLine}
+DIRETRIZES:
+1. Vá DIRETO ao ponto! Comece já informando os valores com naturalidade e simpatia.
+2. NÃO fique de conversinha fiada ou fazendo perguntas antes de passar o preço. O cliente quer saber o valor primeiro.
+3. Se houver variações de preço, explique com clareza o motivo (ex: tamanho/porte da muda ou sexo/raça).
+4. Após passar os valores, pergunte com naturalidade se ele gostaria de ver fotos das opções disponíveis ou qual porte/modelo prefere.
 `;
+    } else if (mode === 'CONSULTATIVE_SALES') {
+      let catalogText = '';
+      if (suggestedProducts.length > 0) {
+        catalogText = suggestedProducts
+          .map((p) => `• ${p.canonicalName}: ${p.prices.map((v) => formatCurrency(v)).join(' a ')} (${p.subcategory || p.category})`)
+          .join('\n');
+      }
 
-  const response = await ai.models.generateContent({
-    model: config.gemini.model,
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-    config: { temperature: 0.8, maxOutputTokens: 180 },
-  });
+      if (domain === 'PETS') {
+        specificDirective = `
+MODO DE ATENDIMENTO: CONSULTORIA DE PETS E ANIMAIS (AVES, ROEDORES, PEQUENOS MAMÍFEROS)
+- O cliente perguntou sobre pets (ex: porquinho da índia, hamster, calopsita, aves).
+DIRETRIZES:
+1. NUNCA pergunte sobre jardim, vaso, sol ou sombra! Isso é exclusivo de plantas.
+2. Apresente com simpatia as raças, pelagens e opções disponíveis com seus respectivos valores reais.
+   Exemplo para Porquinho da Índia: mencione as raças que temos (Abissínio com pelo arrepiado, Peruano com pelo longo, Inglês/Comum com pelo curto), e que temos opções de machos e fêmeas.
+3. Pergunte com agilidade e cordialidade: "Você procura alguma raça ou sexo específico (macho ou fêmea)? Temos algumas opções lindas aqui na loja e posso te mandar fotos se quiser!"
+4. Conduza com atenção para tirar dúvidas de gaiola/ração e fechar a venda.
 
-  return (
-    response.text?.trim() ||
-    "Oi 😊 Ficou alguma dúvida sobre o pedido ou podemos formalizar para você?"
-  );
+PRODUTOS REAIS DO CATÁLOGO:
+${catalogText || 'Consulte o atendente.'}
+`;
+      } else {
+        specificDirective = `
+MODO DE ATENDIMENTO: CONSULTORIA DE PLANTAS E JARDINAGEM (SOL VS SOMBRA)
+- O cliente perguntou sobre plantas ou palmeiras de forma ampla (ex: "quero uma palmeira", "vocês têm palmeiras?").
+DIRETRIZES:
+1. Atue como um consultor especialista e atencioso da Conflora Horta e Viveiro em Mineiros - GO.
+2. Como temos opções ativas tanto para sol pleno quanto para sombra/interior no viveiro, pergunte com naturalidade e clareza:
+   "Você quer pra colocar no jardim ou dentro de casa? Temos algumas opções disponíveis na nossa loja!"
+3. Não vomite a lista inteira. Cite 2 ou 3 exemplos mais procurados:
+   - Para sol/jardim: Palmeira Rabo de Raposa, Palmeira Azul, etc.
+   - Para sombra/dentro de casa: Ráfia, Areca Bambu.
+4. Desvende com agilidade a necessidade do cliente sem parecer um robô que repete mensagens prontas.
+
+PRODUTOS REAIS DO CATÁLOGO:
+${catalogText || 'Consulte o catálogo da Conflora.'}
+`;
+      }
+    } else if (mode === 'ORDER_CONFIRMATION') {
+      specificDirective = `
+MODO DE ATENDIMENTO: CONFIRMAÇÃO DE PEDIDO
+- O cliente está confirmando a compra.
+- Responda calorosamente, confirme o pedido com entusiasmo e instrua sobre o envio do comprovante PIX com cordialidade.
+`;
+    }
+
+    return `
+Você é o atendente e consultor de vendas oficial da Conflora Horta e Viveiro & Agromadeiras em Mineiros - Goiás.
+Você atende clientes no WhatsApp de forma humana, acolhedora, confiável e profissional.
+
+Regras Invioláveis de Credibilidade:
+1. Jamais pareça um robô programado. Gere uma resposta única, fluida e personalizada para cada cliente.
+2. Jamais invente preços, espécies ou informações que não estejam no catálogo fornecido.
+3. Responda no tom acolhedor característico de um viveiro em Goiás: educado, ágil, seguro e prestativo.
+4. Mantenha as mensagens no tamanho ideal para leitura rápida no celular (2 a 4 parágrafos curtos).
+
+${specificDirective}
+`.trim();
+  }
+
+  async generateResponse({
+    userMessage,
+    history = [],
+    mode = 'GENERAL_CHAT',
+    targetProduct = null,
+    suggestedProducts = [],
+    domain = 'PLANTAS',
+    customerName = '',
+  }) {
+    const systemInstruction = this.buildSystemPrompt({ mode, targetProduct, suggestedProducts, domain });
+
+    if (this.aiClient && this.aiClient.models && typeof this.aiClient.models.generateContent === 'function') {
+      try {
+        const contents = [];
+
+        for (const msg of history) {
+          contents.push({
+            role: msg.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: msg.text }],
+          });
+        }
+
+        contents.push({
+          role: 'user',
+          parts: [{ text: userMessage }],
+        });
+
+        const response = await this.aiClient.models.generateContent({
+          model: this.modelName,
+          contents,
+          config: {
+            systemInstruction,
+            temperature: 0.5,
+            maxOutputTokens: 600,
+          },
+        });
+
+        const replyText = response.text?.trim();
+        if (replyText) {
+          return replyText;
+        }
+      } catch (error) {
+        Logger.error('Erro na chamada da API do Gemini', error);
+      }
+    }
+
+    if (mode === 'DIRECT_PRICE' && targetProduct) {
+      const prices = targetProduct.prices.map((p) => formatCurrency(p)).join(' e ');
+      return 'Olá! A nossa ' + targetProduct.canonicalName + ', temos a partir de ' + prices + ' dependendo do porte da muda. Gostaria que eu te mande fotos das que estão disponíveis aqui no viveiro?';
+    }
+
+    if (mode === 'CONSULTATIVE_SALES') {
+      if (domain === 'PETS') {
+        return 'Olá! Temos ótimas opções aqui na Conflora, como porquinho da índia abissínio (pelo arrepiado), peruano (pelo longo) e comum, tanto machos quanto fêmeas. Você procura alguma raça específica ou gostaria de fotos dos que temos hoje?';
+      }
+      return 'Olá! Temos excelentes opções disponíveis na nossa loja! Você quer pra colocar no jardim ou dentro de casa?';
+    }
+
+    return 'Olá! Seja muito bem-vindo à Conflora Horta e Viveiro 🌱. Como posso te ajudar hoje?';
+  }
 }
 
-module.exports = { responderComIA, gerarFollowupPedido };
+module.exports = {
+  AgentService,
+};

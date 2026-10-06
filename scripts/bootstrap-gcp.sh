@@ -1,52 +1,56 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_ID="${PROJECT_ID:-conflora-ai}"
-REGION="${REGION:-southamerica-east1}"
-QUEUE="${QUEUE:-conflora-jobs}"
-RUNTIME_SA_NAME="${RUNTIME_SA_NAME:-conflora-api-sa}"
-RUNTIME_SA="${RUNTIME_SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
+PROJECT_ID="${GCP_PROJECT_ID:-conflora-ai}"
+REGION="${GCP_REGION:-southamerica-east1}"
+SERVICE_ACCOUNT="conflora-api-sa@${PROJECT_ID}.iam.gserviceaccount.com"
+QUEUE_NAME="${CLOUD_TASKS_QUEUE:-conflora-jobs}"
 
-gcloud config set project "$PROJECT_ID"
+echo ">>> Configurando projeto GCP: ${PROJECT_ID} na região ${REGION}..."
 
+# 1. Ativar APIs necessárias
 gcloud services enable \
   run.googleapis.com \
-  cloudbuild.googleapis.com \
-  artifactregistry.googleapis.com \
-  firestore.googleapis.com \
   cloudtasks.googleapis.com \
+  firestore.googleapis.com \
+  sheets.googleapis.com \
   aiplatform.googleapis.com \
   secretmanager.googleapis.com \
-  sheets.googleapis.com
+  --project="${PROJECT_ID}"
 
-if ! gcloud firestore databases describe --database="(default)" >/dev/null 2>&1; then
-  gcloud firestore databases create \
-    --database="(default)" \
-    --location="$REGION" \
-    --edition=standard \
-    --type=firestore-native \
-    --delete-protection
+# 2. Criar fila do Cloud Tasks se não existir
+if ! gcloud tasks queues describe "${QUEUE_NAME}" --location="${REGION}" --project="${PROJECT_ID}" &>/dev/null; then
+  echo ">>> Criando fila do Cloud Tasks: ${QUEUE_NAME}..."
+  gcloud tasks queues create "${QUEUE_NAME}" \
+    --location="${REGION}" \
+    --project="${PROJECT_ID}"
+else
+  echo ">>> Fila do Cloud Tasks ${QUEUE_NAME} já existe."
 fi
 
-if ! gcloud tasks queues describe "$QUEUE" --location="$REGION" >/dev/null 2>&1; then
-  gcloud tasks queues create "$QUEUE" \
-    --location="$REGION" \
-    --log-sampling-ratio=1.0
+# 3. Criar Service Account se não existir
+if ! gcloud iam service-accounts describe "${SERVICE_ACCOUNT}" --project="${PROJECT_ID}" &>/dev/null; then
+  echo ">>> Criando conta de serviço: conflora-api-sa..."
+  gcloud iam service-accounts create conflora-api-sa \
+    --display-name="Conflora AI Service Account" \
+    --project="${PROJECT_ID}"
 fi
 
-if ! gcloud iam service-accounts describe "$RUNTIME_SA" >/dev/null 2>&1; then
-  gcloud iam service-accounts create "$RUNTIME_SA_NAME" \
-    --display-name="Conflora AI Runtime"
-fi
+# 4. Conceder permissões de runtime mínimas necessárias
+ROLES=(
+  "roles/datastore.user"
+  "roles/cloudtasks.enqueuer"
+  "roles/aiplatform.user"
+  "roles/secretmanager.secretAccessor"
+)
 
-for ROLE in roles/datastore.user roles/cloudtasks.enqueuer roles/aiplatform.user; do
-  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-    --member="serviceAccount:$RUNTIME_SA" \
-    --role="$ROLE" \
-    --quiet >/dev/null
+for ROLE in "${ROLES[@]}"; do
+  echo ">>> Vinculando papel ${ROLE}..."
+  gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+    --member="serviceAccount:${SERVICE_ACCOUNT}" \
+    --role="${ROLE}" \
+    --condition=None
 done
 
-echo
-echo "Infraestrutura base pronta."
-echo "Conta de serviço da aplicação: $RUNTIME_SA"
-echo "Compartilhe a planilha Google Sheets com esse e-mail como Leitor."
+echo ">>> Bootstrap concluído com sucesso!"
+echo ">>> Não esqueça de compartilhar a planilha do Google Sheets com: ${SERVICE_ACCOUNT} (como Leitor)."

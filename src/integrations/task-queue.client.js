@@ -1,71 +1,113 @@
-const { CloudTasksClient } = require("@google-cloud/tasks");
-const { config } = require("../config/env");
+const config = require('../config/env');
+const Logger = require('../shared/logger');
 
-const client = new CloudTasksClient();
-
-function requireTaskConfig() {
-  if (!config.tasks.serviceUrl) {
-    throw new Error("SERVICE_URL não configurada.");
+let cloudTasksModule = null;
+function getCloudTasksModule() {
+  if (!cloudTasksModule) {
+    try {
+      cloudTasksModule = require('@google-cloud/tasks');
+    } catch {
+      return null;
+    }
   }
-  if (!config.tasks.secret) {
-    throw new Error("TASK_SECRET não configurado.");
-  }
+  return cloudTasksModule;
 }
 
-async function createHttpTask(path, payload, delaySeconds = 0) {
-  requireTaskConfig();
+class TaskQueueClient {
+  constructor() {
+    this.client = null;
+    this.queuePath = null;
 
-  const parent = client.queuePath(
-    config.projectId,
-    config.region,
-    config.tasks.queue,
-  );
+    if (config.tasks.serviceUrl && process.env.NODE_ENV !== 'test') {
+      try {
+        const tasks = getCloudTasksModule();
+        if (tasks && tasks.CloudTasksClient) {
+          this.client = new tasks.CloudTasksClient();
+          this.queuePath = this.client.queuePath(
+            config.gcp.projectId,
+            config.gcp.region,
+            config.tasks.queue
+          );
+        }
+      } catch (err) {
+        Logger.warn('Cloud Tasks client não inicializado; operando em modo local direto.', { error: err.message });
+      }
+    }
+  }
 
-  const task = {
-    httpRequest: {
-      httpMethod: "POST",
-      url: `${config.tasks.serviceUrl}${path}`,
+  /**
+   * Enqueues an incoming webhook message to be processed asynchronously.
+   * @param {Object} payload
+   */
+  async enqueueProcessMessage(payload) {
+    if (!this.client || !this.queuePath) {
+      Logger.debug('Cloud Tasks ausente; processando internamente em background.');
+      return { inProcess: true };
+    }
+
+    const url = `${config.tasks.serviceUrl}/tasks/processar-mensagem`;
+    const httpRequest = {
+      httpMethod: 'POST',
+      url,
       headers: {
-        "Content-Type": "application/json",
-        "X-Conflora-Task-Secret": config.tasks.secret,
+        'Content-Type': 'application/json',
+        'X-Conflora-Task-Secret': config.tasks.taskSecret,
       },
-      body: Buffer.from(JSON.stringify(payload || {})).toString("base64"),
-    },
-  };
-
-  if (delaySeconds > 0) {
-    task.scheduleTime = {
-      seconds: Math.floor(Date.now() / 1000) + Math.floor(delaySeconds),
+      body: Buffer.from(JSON.stringify(payload)).toString('base64'),
     };
+
+    try {
+      const [response] = await this.client.createTask({
+        parent: this.queuePath,
+        task: { httpRequest },
+      });
+      Logger.info(`Tarefa Cloud Tasks criada: ${response.name}`);
+      return response;
+    } catch (error) {
+      Logger.error('Falha ao criar tarefa no Cloud Tasks', error);
+      throw error;
+    }
   }
 
-  const [response] = await client.createTask({ parent, task });
-  return response.name;
-}
+  /**
+   * Enqueues a delayed follow-up task for unconfirmed orders.
+   * @param {string} phone
+   * @param {number} delaySeconds
+   */
+  async enqueueFollowUp(phone, delaySeconds = config.tasks.followupSeconds) {
+    if (!this.client || !this.queuePath) {
+      return { inProcess: true };
+    }
 
-function scheduleInboundMessage(payload) {
-  return createHttpTask("/tasks/processar-mensagem", payload, 0);
-}
+    const url = `${config.tasks.serviceUrl}/tasks/follow-up`;
+    const scheduleTime = {
+      seconds: Math.floor(Date.now() / 1000) + delaySeconds,
+    };
 
-function scheduleOrderFollowup(orderId, followupToken) {
-  return createHttpTask(
-    "/tasks/followup-pedido",
-    { orderId, followupToken },
-    config.tasks.followupSeconds,
-  );
-}
+    const httpRequest = {
+      httpMethod: 'POST',
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Conflora-Task-Secret': config.tasks.taskSecret,
+      },
+      body: Buffer.from(JSON.stringify({ phone })).toString('base64'),
+    };
 
-function scheduleOwnerOrderNotification(orderId) {
-  return createHttpTask("/tasks/notificar-venda", { orderId }, 0);
-}
-
-function scheduleReceiptForward(payload) {
-  return createHttpTask("/tasks/encaminhar-comprovante", payload, 0);
+    try {
+      const [response] = await this.client.createTask({
+        parent: this.queuePath,
+        task: { httpRequest, scheduleTime },
+      });
+      Logger.info(`Follow-up agendado para ${delaySeconds}s: ${response.name}`);
+      return response;
+    } catch (error) {
+      Logger.error('Falha ao agendar follow-up no Cloud Tasks', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = {
-  scheduleInboundMessage,
-  scheduleOrderFollowup,
-  scheduleOwnerOrderNotification,
-  scheduleReceiptForward,
+  TaskQueueClient,
 };

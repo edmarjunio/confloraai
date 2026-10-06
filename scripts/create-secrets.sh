@@ -1,48 +1,35 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_ID="${PROJECT_ID:-conflora-ai}"
-RUNTIME_SA_NAME="${RUNTIME_SA_NAME:-conflora-api-sa}"
-RUNTIME_SA="${RUNTIME_SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
+PROJECT_ID="${GCP_PROJECT_ID:-conflora-ai}"
 
-gcloud config set project "$PROJECT_ID" >/dev/null
+echo ">>> Configuração segura de segredos no Google Secret Manager..."
 
-put_secret() {
-  local name="$1"
-  local value="$2"
+create_or_update_secret() {
+  local SECRET_NAME="$1"
+  local SECRET_VAL="$2"
 
-  if gcloud secrets describe "$name" >/dev/null 2>&1; then
-    printf "%s" "$value" | gcloud secrets versions add "$name" --data-file=- >/dev/null
-  else
-    printf "%s" "$value" | gcloud secrets create "$name" \
-      --replication-policy=automatic \
-      --data-file=- >/dev/null
+  if ! gcloud secrets describe "${SECRET_NAME}" --project="${PROJECT_ID}" &>/dev/null; then
+    gcloud secrets create "${SECRET_NAME}" --replication-policy="automatic" --project="${PROJECT_ID}"
   fi
 
-  gcloud secrets add-iam-policy-binding "$name" \
-    --member="serviceAccount:$RUNTIME_SA" \
-    --role="roles/secretmanager.secretAccessor" \
-    --quiet >/dev/null
+  echo -n "${SECRET_VAL}" | gcloud secrets versions add "${SECRET_NAME}" --data-file=- --project="${PROJECT_ID}"
+  echo "Segredo [${SECRET_NAME}] atualizado."
 }
 
-read -rsp "Token permanente do WhatsApp Cloud API: " WHATSAPP_TOKEN_VALUE
-echo
-read -rsp "App Secret do app Meta: " META_APP_SECRET_VALUE
-echo
+read -r -s -p "Token Permanente do WhatsApp Cloud API: " WHATSAPP_TOKEN
+echo ""
+read -r -s -p "Meta App Secret: " META_APP_SECRET
+echo ""
 
-VERIFY_TOKEN_VALUE="$(openssl rand -hex 24)"
-TASK_SECRET_VALUE="$(openssl rand -hex 32)"
-ADMIN_SECRET_VALUE="$(openssl rand -hex 32)"
+WHATSAPP_VERIFY_TOKEN=$(openssl rand -hex 16)
+TASK_SECRET=$(openssl rand -hex 32)
+ADMIN_SECRET=$(openssl rand -hex 32)
 
-put_secret "whatsapp-token" "$WHATSAPP_TOKEN_VALUE"
-put_secret "whatsapp-verify-token" "$VERIFY_TOKEN_VALUE"
-put_secret "meta-app-secret" "$META_APP_SECRET_VALUE"
-put_secret "conflora-task-secret" "$TASK_SECRET_VALUE"
-put_secret "conflora-admin-secret" "$ADMIN_SECRET_VALUE"
+create_or_update_secret "whatsapp-token" "${WHATSAPP_TOKEN}"
+create_or_update_secret "meta-app-secret" "${META_APP_SECRET}"
+create_or_update_secret "whatsapp-verify-token" "${WHATSAPP_VERIFY_TOKEN}"
+create_or_update_secret "conflora-task-secret" "${TASK_SECRET}"
+create_or_update_secret "conflora-admin-secret" "${ADMIN_SECRET}"
 
-unset WHATSAPP_TOKEN_VALUE META_APP_SECRET_VALUE TASK_SECRET_VALUE ADMIN_SECRET_VALUE
-
-echo
-echo "Segredos criados/atualizados."
-echo "Para configurar o webhook da Meta, obtenha o verify token com:"
-echo "gcloud secrets versions access latest --secret=whatsapp-verify-token"
+echo ">>> Todos os segredos foram criados/atualizados com sucesso no Secret Manager!"
