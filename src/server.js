@@ -88,7 +88,7 @@ async function bootstrap() {
 
 if (require.main === module) {
   bootstrap().catch((err) => {
-    Logger.error('Erro fatal ao inicializar servidor', err);
+    Logger.error('Erro fatal ao inicializar servidor ', err);
     process.exit(1);
   });
 }

@@ -12,3 +12,6 @@ service-account*.json
 firebase-service-account*.json
 credentials*.json
 .gcloud/
+repomix-output.xml
+.env
+firebase-service-account.json

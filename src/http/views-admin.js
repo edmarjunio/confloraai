@@ -708,6 +708,7 @@ function renderAdminHtml() {
         <div style="margin-bottom:10px;">
           <label style="font-size:12px; font-weight:bold;">Cargo / Nível de Acesso:</label>
           <select id="uRole" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;">
+            <option value="CLIENTE">CLIENTE (Perfil de Compras da Loja)</option>
             <option value="CAIXA">CAIXA (Acesso Somente ao Caixa e Vendas de Hoje)</option>
             <option value="ADMIN">ADMIN (Acesso Total: Analytics, Aprovação Diff, Produtos)</option>
           </select>
@@ -1142,18 +1143,46 @@ function renderAdminHtml() {
 
       users.forEach(u => {
         const tr = document.createElement('tr');
+        const role = u.role || 'CLIENTE';
         tr.innerHTML = \`
-          <td><strong>\${u.name}</strong></td>
+          <td><strong>\${u.name || 'Sem nome'}</strong></td>
           <td>\${u.email}</td>
-          <td><span class="role-badge \${u.role === 'CAIXA' ? 'caixa' : ''}">\${u.role === 'ADMIN' ? 'ADMIN (Total)' : 'CAIXA (Balcão)'}</span></td>
-          <td>••••</td>
-          <td>\${u.active ? '🟢 Ativo' : '🔴 Inativo'}</td>
+          <td>
+            <select onchange="changeUserRole('\${u.id}', this.value)" style="padding:4px 8px; border-radius:6px; font-weight:700; font-size:12px; border:1px solid #cbd5e1; background:\${role === 'ADMIN' ? '#dcfce7' : (role === 'CAIXA' ? '#e0f2fe' : '#f8fafc')}; color:\${role === 'ADMIN' ? '#166534' : (role === 'CAIXA' ? '#0369a1' : '#475569')}; cursor:pointer;" \${u.id === 'usr-edmar' ? 'disabled' : ''}>
+              <option value="CLIENTE" \${role === 'CLIENTE' ? 'selected' : ''}>👤 CLIENTE (Padrão)</option>
+              <option value="CAIXA" \${role === 'CAIXA' ? 'selected' : ''}>🛒 CAIXA (Balcão)</option>
+              <option value="ADMIN" \${role === 'ADMIN' ? 'selected' : ''}>👑 ADMIN (Total)</option>
+            </select>
+          </td>
+          <td>\${u.pin ? '••••' : (u.password ? '🔑 Senha' : '🌐 Google')}</td>
+          <td>\${u.active !== false ? '🟢 Ativo' : '🔴 Inativo'}</td>
           <td>
             \${u.id !== 'usr-edmar' ? \`<button class="action-btn btn-red" style="padding:4px 8px;" onclick="deleteUser('\${u.id}')">Excluir</button>\` : '<em>Administrador Geral</em>'}
           </td>
         \`;
         tbody.appendChild(tr);
       });
+    }
+
+    async function changeUserRole(userId, newRole) {
+      try {
+        const res = await fetch('/api/admin/users/' + encodeURIComponent(userId) + '/role', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role: newRole }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('✅ Perfil atualizado para ' + newRole + ' com sucesso!');
+          loadTeam();
+        } else {
+          alert('Erro ao alterar perfil: ' + (data.error || 'Falha'));
+          loadTeam();
+        }
+      } catch (err) {
+        alert('Erro ao conectar com servidor: ' + err.message);
+        loadTeam();
+      }
     }
 
     function openNewUserModal() {

@@ -1041,13 +1041,15 @@ function createApp({ messageService, taskQueueClient }) {
   // Client Web Orders API
   app.post('/api/orders', async (req, res) => {
     try {
-      const { customerName, customerPhone, orderType, deliveryAddress, paymentMethod, items } = req.body;
+      const { customerName, customerPhone, customerEmail, customerId, orderType, deliveryAddress, paymentMethod, items } = req.body;
       if (!customerName || !customerPhone || !Array.isArray(items) || items.length === 0) {
         return res.status(400).json({ error: 'Dados do pedido incompletos.' });
       }
 
       const total = items.reduce((acc, it) => acc + (Number(it.price || 0) * Number(it.quantity || 1)), 0);
       const order = await messageService.firestoreRepo.createDirectOrder({
+        customerId: customerId || '',
+        customerEmail: (customerEmail || '').toLowerCase().trim(),
         customerName,
         customerPhone,
         orderType: orderType || 'DELIVERY',
@@ -1064,6 +1066,18 @@ function createApp({ messageService, taskQueueClient }) {
     } catch (err) {
       Logger.error('Erro ao registrar pedido web', err);
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Client: Histórico de Compras e Produtos Mais Comprados
+  app.get('/api/customer/orders', async (req, res) => {
+    try {
+      const { userId, email, phone } = req.query;
+      const data = await messageService.firestoreRepo.getCustomerPurchases(userId, email, phone);
+      res.status(200).json({ success: true, ...data });
+    } catch (err) {
+      Logger.error('Erro ao buscar pedidos do cliente', err);
+      res.status(500).json({ success: false, error: err.message });
     }
   });
 
@@ -1225,13 +1239,60 @@ function createApp({ messageService, taskQueueClient }) {
         authProvider: 'GOOGLE',
       };
 
-      if (!existingUser && role === 'ADMIN') {
+      // Sempre persiste o usuário para que o admin possa gerenciá-lo na lista de usuários
+      if (!existingUser) {
         await messageService.firestoreRepo.saveUser(user).catch(() => {});
       }
 
       res.status(200).json({ success: true, user });
     } catch (err) {
       Logger.error('Erro na autenticação Google', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Auth: Cadastro de Cliente com Email e Senha (perfil padrão: CLIENTE)
+  app.post('/api/auth/register', async (req, res) => {
+    try {
+      const { name, email, password, phone, address } = req.body;
+      const result = await messageService.firestoreRepo.registerUser({ name, email, password, phone, address });
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+      res.status(200).json(result);
+    } catch (err) {
+      Logger.error('Erro no cadastro de usuário', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Auth: Login do Cliente com Email e Senha
+  app.post('/api/auth/login', async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      const result = await messageService.firestoreRepo.loginUser(email, password);
+      if (!result.success) {
+        return res.status(401).json(result);
+      }
+      res.status(200).json(result);
+    } catch (err) {
+      Logger.error('Erro no login de usuário', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Admin: Alterar Perfil de qualquer Usuário (CLIENTE, CAIXA, ADMIN)
+  app.post('/api/admin/users/:id/role', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { role } = req.body;
+      const result = await messageService.firestoreRepo.updateUserRole(id, role);
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+      res.status(200).json(result);
+    } catch (err) {
+      Logger.error('Erro ao atualizar perfil do usuário', err);
       res.status(500).json({ success: false, error: err.message });
     }
   });

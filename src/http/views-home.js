@@ -126,28 +126,6 @@ function renderHomeHtml() {
       z-index: 50;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
-    .device-switcher {
-      display: flex;
-      gap: 6px;
-      background: #1e293b;
-      padding: 3px;
-      border-radius: 8px;
-    }
-    .device-btn {
-      background: none;
-      border: none;
-      color: #94a3b8;
-      padding: 5px 14px;
-      border-radius: 6px;
-      font-size: 12px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    .device-btn.active {
-      background: var(--primary);
-      color: white;
-    }
     .admin-link-btn {
       color: #86efac;
       text-decoration: none;
@@ -210,33 +188,16 @@ function renderHomeHtml() {
     .status-diag-card.warning { border-left: 4px solid #f59e0b; }
     .status-diag-card.info { border-left: 4px solid #3b82f6; }
 
-    .viewport-container {
+    /* LAYOUT NATURAL E 100% RESPONSIVO PARA QUALQUER DISPOSITIVO */
+    .app-container {
       width: 100%;
-      min-height: calc(100vh - 42px);
-      display: flex;
-      justify-content: center;
-      align-items: flex-start;
-      padding: 16px;
-      transition: all 0.3s;
-    }
-    .viewport-container.mobile-mode { padding: 24px 16px; }
-    .phone-frame {
-      width: 100%;
-      max-width: 1400px;
-      background: var(--bg);
-      border-radius: 12px;
-      overflow: hidden;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+      max-width: 1380px;
+      margin: 0 auto;
+      min-height: 100vh;
       display: flex;
       flex-direction: column;
-      transition: all 0.3s;
-    }
-    .mobile-mode .phone-frame {
-      max-width: 440px;
-      min-height: 850px;
-      border-radius: 36px;
-      border: 10px solid #1e293b;
-      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+      background: var(--bg);
+      box-shadow: 0 0 25px rgba(0,0,0,0.04);
     }
 
     .brand-header {
@@ -388,12 +349,8 @@ function renderHomeHtml() {
 
     .products-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
       gap: 14px;
-    }
-    .mobile-mode .products-grid {
-      grid-template-columns: repeat(2, 1fr);
-      gap: 10px;
     }
     .prod-card {
       background: #ffffff;
@@ -782,30 +739,280 @@ function renderHomeHtml() {
       background: #dcfce7;
       transform: scale(1.03);
     }
+
+    /* TABS E CARDS DO PAINEL DO CLIENTE & AUTH */
+    .portal-tabs {
+      display: flex;
+      gap: 6px;
+      border-bottom: 2px solid #e2e8f0;
+      padding-bottom: 8px;
+      margin-bottom: 16px;
+      overflow-x: auto;
+    }
+    .portal-tab-btn {
+      background: none;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 13px;
+      color: #64748b;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+    .portal-tab-btn.active {
+      background: #f0fdf4;
+      color: #166534;
+      border-bottom: 2px solid #166534;
+    }
+    .portal-tab-content { display: none; }
+    .portal-tab-content.active { display: block; }
+
+    .cust-stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .cust-stat-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 12px;
+      text-align: center;
+    }
+    .cust-stat-val {
+      font-size: 18px;
+      font-weight: 800;
+      color: #14532d;
+    }
+    .cust-stat-lbl {
+      font-size: 11px;
+      color: #64748b;
+      margin-top: 2px;
+    }
+
+    .order-card {
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+      transition: all 0.15s;
+    }
+    .order-card:hover {
+      border-color: #86efac;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.06);
+    }
+    .order-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 8px;
+      border-bottom: 1px dashed #e2e8f0;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .order-status-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .badge-pending { background: #fef3c7; color: #92400e; }
+    .badge-confirmed { background: #dcfce7; color: #166534; }
+    .badge-delivering { background: #e0f2fe; color: #0369a1; }
+    .badge-delivered { background: #bbf7d0; color: #14532d; }
+    .badge-cancelled { background: #fee2e2; color: #991b1b; }
+
+    .fav-prods-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+    }
+    .fav-prod-card {
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 10px;
+      background: #fafafa;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .mobile-cart-float-bar {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #14532d;
+      color: white;
+      padding: 12px 18px;
+      font-weight: 700;
+      font-size: 14px;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 -4px 12px rgba(0,0,0,0.2);
+      z-index: 85;
+      cursor: pointer;
+    }
+
+    /* REGRAS RESPONSIVAS CONFORME PEDIDO DO USUÁRIO */
+    @media (max-width: 680px) {
+      .app-main {
+        grid-template-columns: 1fr !important;
+        padding: 10px 8px 80px 8px !important;
+        gap: 12px !important;
+      }
+      .brand-header {
+        padding: 12px 10px !important;
+      }
+      .conflora-logo-badge {
+        width: 38px !important;
+        height: 38px !important;
+        font-size: 20px !important;
+        border-radius: 10px !important;
+      }
+      .brand-title h1 {
+        font-size: 16px !important;
+      }
+      .brand-title p {
+        font-size: 10px !important;
+      }
+      .cart-pill-btn {
+        padding: 6px 10px !important;
+        font-size: 11px !important;
+      }
+      .catalog-toolbar {
+        flex-direction: column !important;
+        gap: 8px !important;
+      }
+      .search-input {
+        font-size: 12px !important;
+        padding: 8px 10px !important;
+      }
+      .sort-select {
+        font-size: 12px !important;
+        padding: 6px 8px !important;
+        width: 100% !important;
+      }
+      .categories-bar {
+        gap: 6px !important;
+        padding-bottom: 6px !important;
+        margin-bottom: 8px !important;
+      }
+      .cat-btn {
+        padding: 6px 12px !important;
+        font-size: 11px !important;
+      }
+      .subcategories-bar {
+        gap: 4px !important;
+        margin-bottom: 10px !important;
+      }
+      .subcat-btn {
+        padding: 3px 8px !important;
+        font-size: 11px !important;
+      }
+
+      /* 2 PRODUTOS POR LINHA E CARTÕES/LETRAS REDUZIDOS NO CELULAR */
+      .products-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 8px !important;
+      }
+      .prod-card {
+        border-radius: 8px !important;
+      }
+      .card-img-wrapper {
+        height: 115px !important;
+      }
+      .photo-count-badge {
+        font-size: 9px !important;
+        padding: 1px 5px !important;
+        bottom: 4px !important;
+        right: 4px !important;
+      }
+      .unit-tag-badge {
+        font-size: 9px !important;
+        padding: 1px 5px !important;
+        top: 4px !important;
+        left: 4px !important;
+      }
+      .card-body {
+        padding: 8px 6px !important;
+      }
+      .card-category {
+        font-size: 9px !important;
+        margin-bottom: 2px !important;
+      }
+      .card-title {
+        font-size: 12px !important;
+        line-height: 1.25 !important;
+        height: 30px !important;
+        margin-bottom: 4px !important;
+        display: -webkit-box !important;
+        -webkit-line-clamp: 2 !important;
+        -webkit-box-orient: vertical !important;
+        overflow: hidden !important;
+      }
+      .card-footer {
+        padding-top: 4px !important;
+      }
+      .card-price {
+        font-size: 13px !important;
+      }
+      .card-stock {
+        font-size: 9px !important;
+      }
+      .add-btn {
+        min-width: 26px !important;
+        height: 26px !important;
+        font-size: 11px !important;
+        padding: 0 6px !important;
+        border-radius: 6px !important;
+      }
+      .cart-checkout-panel {
+        position: static !important;
+        padding: 12px !important;
+        margin-top: 14px !important;
+      }
+      .mobile-cart-float-bar {
+        display: flex !important;
+      }
+      .fav-prods-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 8px !important;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="top-toolbar">
-    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-      <span style="font-weight:700;">Conflora AI</span>
-      <div class="device-switcher">
-        <button class="device-btn active" id="btnDesk" onclick="setDevice('desktop')">🖥️ Computador</button>
-        <button class="device-btn" id="btnMob" onclick="setDevice('mobile')">📱 Celular</button>
-      </div>
+    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+      <span style="font-weight:800; color:#86efac; font-size:14px;">🌿 Conflora AI</span>
+      <span style="font-size:11px; color:#cbd5e1;">Viveiro & Horta • Mineiros - GO</span>
     </div>
 
     <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-      <!-- SEÇÃO GOOGLE LOGIN / USUÁRIO -->
-      <button id="googleLoginBtn" class="google-auth-btn" onclick="openGoogleLoginModal()">
+      <!-- BOTÃO DE IDENTIFICAÇÃO / LOGIN DO CLIENTE (TOTALMENTE OPCIONAL) -->
+      <button id="authOpenBtn" class="google-auth-btn" onclick="openAuthModal()">
         <svg style="width:14px; height:14px;" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
-        Entrar com Google
+        Entrar / Cadastrar
       </button>
 
-      <div id="googleUserPill" style="display:none; align-items:center; gap:6px; background:#1e293b; padding:4px 10px; border-radius:20px; font-size:12px; color:white;">
-        <img id="googleUserPic" style="width:20px; height:20px; border-radius:50%; object-fit:cover;" src="" />
-        <span id="googleUserName" style="font-weight:600;"></span>
-        <span id="googleUserBadge" style="background:#15803d; color:white; font-size:10px; padding:1px 6px; border-radius:8px; font-weight:700;">ADMIN</span>
-        <button onclick="logoutGoogle()" style="background:transparent; border:none; color:#94a3b8; cursor:pointer; font-size:11px; margin-left:4px;" title="Sair da conta">✕</button>
+      <!-- PILL DO USUÁRIO IDENTIFICADO -->
+      <div id="userHeaderPill" style="display:none; align-items:center; gap:6px; background:#1e293b; padding:4px 10px; border-radius:20px; font-size:12px; color:white;">
+        <img id="userHeaderPic" style="width:22px; height:22px; border-radius:50%; object-fit:cover;" src="" />
+        <span id="userHeaderName" style="font-weight:600;"></span>
+        <span id="userHeaderBadge" style="background:#0284c7; color:white; font-size:10px; padding:1px 6px; border-radius:8px; font-weight:700;">CLIENTE</span>
+        <button class="action-btn" onclick="openCustomerPortalModal()" style="background:#0f172a; color:#86efac; border:1px solid #334155; padding:3px 8px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer;" title="Acompanhar meus pedidos e compras">📦 Meus Pedidos</button>
+        <button onclick="logoutCurrentUser()" style="background:transparent; border:none; color:#94a3b8; cursor:pointer; font-size:12px; margin-left:4px;" title="Sair da conta">✕</button>
       </div>
 
       <!-- BOTÃO STATUS DE DIAGNÓSTICO (VISÍVEL SOMENTE PARA ADMIN) -->
@@ -820,20 +1027,19 @@ function renderHomeHtml() {
     </div>
   </div>
 
-  <div class="viewport-container" id="viewportContainer">
-    <div class="phone-frame">
-      <header class="brand-header">
-        <div class="brand-title">
-          <div class="conflora-logo-badge">🌿</div>
-          <div>
-            <h1>Conflora Horta e Viveiro</h1>
-            <p>Cardápio Digital & Pedidos Diretos • Mineiros - GO</p>
-          </div>
+  <div class="app-container">
+    <header class="brand-header">
+      <div class="brand-title">
+        <div class="conflora-logo-badge">🌿</div>
+        <div>
+          <h1>Conflora Horta e Viveiro</h1>
+          <p>Cardápio Digital & Pedidos Diretos • Mineiros - GO</p>
         </div>
-        <button class="cart-pill-btn" onclick="scrollToCart()">
-          🛒 <span id="cartCountHeader">0 itens</span>
-        </button>
-      </header>
+      </div>
+      <button class="cart-pill-btn" onclick="scrollToCart()">
+        🛒 <span id="cartCountHeader">0 itens</span>
+      </button>
+    </header>
 
       <main class="app-main">
         <section>
@@ -936,7 +1142,15 @@ function renderHomeHtml() {
         </aside>
       </main>
     </div>
-  </div>
+
+    <!-- BARRA FLUTUANTE INFERIOR DA SACOLA NO CELULAR -->
+    <div class="mobile-cart-float-bar" id="mobileCartFloatBar" onclick="scrollToCart()">
+      <span>🛒 <span id="mobCartCount">0</span> item(ns) na sacola</span>
+      <span style="display:flex; align-items:center; gap:6px;">
+        <span id="mobCartTotal">R$ 0,00</span>
+        <span style="background:white; color:#14532d; padding:2px 8px; border-radius:12px; font-size:12px;">Ver Sacola ➔</span>
+      </span>
+    </div>
 
   <!-- MODAL DE GALERIA DE FOTOS -->
   <div class="modal-overlay" id="galleryModal">
@@ -1003,29 +1217,176 @@ function renderHomeHtml() {
     </div>
   </div>
 
-  <!-- MODAL: LOGIN COM GOOGLE -->
-  <div class="modal-overlay" id="googleLoginModal">
-    <div class="modal-box" style="max-width:420px; text-align:center; padding:28px 24px;">
-      <div style="font-size:36px; margin-bottom:8px;">🌿</div>
-      <h3 style="font-size:20px; font-weight:800; color:#0f172a; margin-bottom:8px;">Identificação com Google</h3>
-      <p style="font-size:13px; color:#64748b; line-height:1.5; margin-bottom:20px;">
-        Os clientes <strong>não precisam fazer login</strong> para comprar no viveiro! O login com Google é opcional e serve para identificar administradores e liberar a página de configurações.
-      </p>
-
-      <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:16px; margin-bottom:18px;">
-        <label style="display:block; font-size:12px; font-weight:bold; color:#475569; margin-bottom:6px; text-align:left;">E-mail do Google (Gmail ou Workspace):</label>
-        <input type="email" id="googleEmailInput" placeholder="ex: edmarjuniob@gmail.com" value="edmarjuniob@gmail.com" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; margin-bottom:10px;" />
-        <label style="display:block; font-size:12px; font-weight:bold; color:#475569; margin-bottom:6px; text-align:left;">Seu Nome:</label>
-        <input type="text" id="googleNameInput" placeholder="Edmar Júnio" value="Edmar Júnio" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; margin-bottom:14px;" />
-
-        <button type="button" class="checkout-submit-btn" onclick="submitGoogleLogin()" style="display:flex; align-items:center; justify-content:center; gap:8px;">
-          <svg style="width:18px; height:18px;" viewBox="0 0 24 24"><path fill="#ffffff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#ffffff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#ffffff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#ffffff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
-          Confirmar e Entrar
-        </button>
+  <!-- MODAL: AUTENTICAÇÃO / LOGIN / CADASTRO DE CLIENTE -->
+  <div class="modal-overlay" id="authModal">
+    <div class="modal-box" style="max-width:440px; padding:24px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:24px;">🌿</span>
+          <h3 style="font-size:18px; font-weight:800; color:#0f172a; margin:0;">Identificação Conflora</h3>
+        </div>
+        <button onclick="closeAuthModal()" style="border:none; background:none; font-size:20px; cursor:pointer; color:#64748b;">✕</button>
       </div>
 
-      <div style="margin-top:14px;">
-        <button type="button" class="action-btn" onclick="closeGoogleLoginModal()" style="background:#f1f5f9; border:none; padding:8px 16px; border-radius:6px; cursor:pointer; color:#475569; font-weight:600;">Fechar</button>
+      <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:8px; padding:10px 12px; margin-bottom:14px; font-size:12px; color:#166534; line-height:1.4;">
+        ✨ <strong>O login é 100% opcional!</strong> Você pode comprar à vontade sem conta. Ao entrar, você salva seu endereço, acompanha seus pedidos e vê os produtos que mais compra!
+      </div>
+
+      <!-- ABAS DO LOGIN -->
+      <div class="portal-tabs" style="margin-bottom:16px;">
+        <button class="portal-tab-btn active" id="authTabGoogleBtn" onclick="switchAuthTab('google')">🚀 Google (1-clique)</button>
+        <button class="portal-tab-btn" id="authTabLoginBtn" onclick="switchAuthTab('login')">🔑 Entrar</button>
+        <button class="portal-tab-btn" id="authTabRegisterBtn" onclick="switchAuthTab('register')">📝 Criar Conta</button>
+      </div>
+
+      <!-- ABA 1: GOOGLE SIGN-IN -->
+      <div id="authContentGoogle">
+        <p style="font-size:13px; color:#64748b; margin-bottom:12px;">
+          Faça login rápido com sua conta Google (Gmail ou Workspace):
+        </p>
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:14px; margin-bottom:14px;">
+          <label style="display:block; font-size:12px; font-weight:bold; color:#475569; margin-bottom:4px;">E-mail do Google:</label>
+          <input type="email" id="googleEmailInput" placeholder="ex: cliente@gmail.com" value="edmarjuniob@gmail.com" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; margin-bottom:10px;" />
+          <label style="display:block; font-size:12px; font-weight:bold; color:#475569; margin-bottom:4px;">Seu Nome:</label>
+          <input type="text" id="googleNameInput" placeholder="Ex: Maria Flor" value="Edmar Júnio" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; margin-bottom:14px;" />
+          <button type="button" class="checkout-submit-btn" onclick="submitGoogleLogin()" style="display:flex; align-items:center; justify-content:center; gap:8px;">
+            <svg style="width:16px; height:16px;" viewBox="0 0 24 24"><path fill="#ffffff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#ffffff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#ffffff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#ffffff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+            Entrar com Google
+          </button>
+        </div>
+      </div>
+
+      <!-- ABA 2: EMAIL E SENHA -->
+      <div id="authContentLogin" style="display:none;">
+        <form onsubmit="submitPasswordLogin(event)">
+          <div style="margin-bottom:10px;">
+            <label style="font-size:12px; font-weight:bold; color:#475569;">E-mail cadastrado:</label>
+            <input type="email" id="loginEmailInput" required placeholder="seuemail@exemplo.com" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; margin-top:4px;" />
+          </div>
+          <div style="margin-bottom:14px;">
+            <label style="font-size:12px; font-weight:bold; color:#475569;">Sua Senha:</label>
+            <input type="password" id="loginPassInput" required placeholder="••••••••" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; margin-top:4px;" />
+          </div>
+          <button type="submit" class="checkout-submit-btn" style="width:100%;">Acessar Minha Conta</button>
+        </form>
+      </div>
+
+      <!-- ABA 3: CRIAR CONTA DE CLIENTE -->
+      <div id="authContentRegister" style="display:none;">
+        <form onsubmit="submitRegisterAccount(event)">
+          <div style="margin-bottom:8px;">
+            <label style="font-size:12px; font-weight:bold; color:#475569;">Nome Completo:</label>
+            <input type="text" id="regNameInput" required placeholder="Ex: Mariana Silva" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;" />
+          </div>
+          <div style="margin-bottom:8px;">
+            <label style="font-size:12px; font-weight:bold; color:#475569;">E-mail:</label>
+            <input type="email" id="regEmailInput" required placeholder="mariana@exemplo.com" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;" />
+          </div>
+          <div style="margin-bottom:8px;">
+            <label style="font-size:12px; font-weight:bold; color:#475569;">Senha (mínimo 4 caracteres):</label>
+            <input type="password" id="regPassInput" required minlength="4" placeholder="Crie uma senha segura" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;" />
+          </div>
+          <div style="margin-bottom:8px;">
+            <label style="font-size:12px; font-weight:bold; color:#475569;">WhatsApp / Telefone com DDD:</label>
+            <input type="text" id="regPhoneInput" placeholder="64999990000" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;" />
+          </div>
+          <div style="margin-bottom:12px;">
+            <label style="font-size:12px; font-weight:bold; color:#475569;">Endereço de Entrega (Mineiros - GO):</label>
+            <input type="text" id="regAddressInput" placeholder="Rua, Número e Bairro" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;" />
+          </div>
+          <button type="submit" class="checkout-submit-btn" style="width:100%;">Criar Minha Conta Conflora</button>
+        </form>
+      </div>
+
+      <div style="text-align:center; margin-top:14px;">
+        <button type="button" class="action-btn" onclick="closeAuthModal()" style="background:#f1f5f9; border:none; padding:8px 16px; border-radius:6px; cursor:pointer; color:#64748b; font-weight:600;">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: PAINEL DO CLIENTE (HISTÓRICO, MAIS COMPRADOS E STATUS) -->
+  <div class="modal-overlay" id="customerPortalModal">
+    <div class="modal-box" style="max-width:750px; padding:22px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:12px; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <img id="portalUserPic" style="width:36px; height:36px; border-radius:50%; object-fit:cover;" src="" />
+          <div>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <h3 id="portalUserName" style="font-size:16px; font-weight:800; color:#0f172a; margin:0;">Painel do Cliente</h3>
+              <span id="portalUserRoleBadge" style="background:#0284c7; color:white; font-size:10px; padding:1px 6px; border-radius:8px; font-weight:700;">CLIENTE</span>
+            </div>
+            <span id="portalUserEmail" style="font-size:12px; color:#64748b;"></span>
+          </div>
+        </div>
+        <button onclick="closeCustomerPortalModal()" style="background:none; border:none; font-size:22px; cursor:pointer; color:#64748b;">✕</button>
+      </div>
+
+      <!-- MÉTRICAS DO CLIENTE -->
+      <div class="cust-stat-grid">
+        <div class="cust-stat-card">
+          <div class="cust-stat-val" id="custStatOrders">0</div>
+          <div class="cust-stat-lbl">📦 Pedidos Realizados</div>
+        </div>
+        <div class="cust-stat-card">
+          <div class="cust-stat-val" id="custStatSpent">R$ 0,00</div>
+          <div class="cust-stat-lbl">💰 Total Comprado</div>
+        </div>
+        <div class="cust-stat-card">
+          <div class="cust-stat-val" id="custStatPoints" style="color:#15803d;">0 pts</div>
+          <div class="cust-stat-lbl">🌿 Pontos Fidelidade</div>
+        </div>
+      </div>
+
+      <!-- ABAS DO PAINEL DO CLIENTE -->
+      <div class="portal-tabs">
+        <button class="portal-tab-btn active" id="cTabOrdersBtn" onclick="switchCustomerTab('orders')">📦 Meus Pedidos & Rastreio</button>
+        <button class="portal-tab-btn" id="cTabFavsBtn" onclick="switchCustomerTab('favs')">🔥 Mais Comprados</button>
+        <button class="portal-tab-btn" id="cTabLoyaltyBtn" onclick="switchCustomerTab('loyalty')">⭐ Programa Fidelidade</button>
+      </div>
+
+      <!-- CONTEÚDO 1: HISTÓRICO DE PEDIDOS -->
+      <div id="cTabOrdersContent" class="portal-tab-content active">
+        <div id="customerOrdersList">
+          <div style="text-align:center; padding:24px; color:#64748b;">Carregando histórico de pedidos...</div>
+        </div>
+      </div>
+
+      <!-- CONTEÚDO 2: PRODUTOS MAIS COMPRADOS -->
+      <div id="cTabFavsContent" class="portal-tab-content">
+        <div id="customerFavsList">
+          <div style="text-align:center; padding:24px; color:#64748b;">Carregando seus produtos favoritos...</div>
+        </div>
+      </div>
+
+      <!-- CONTEÚDO 3: PROGRAMA FIDELIDADE & SUGESTÕES DE FLUXO -->
+      <div id="cTabLoyaltyContent" class="portal-tab-content">
+        <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:12px; padding:18px; margin-bottom:14px;">
+          <h4 style="color:#166534; font-size:15px; margin-bottom:6px;">🌿 Programa Conflora Fidelidade Verde</h4>
+          <p style="font-size:13px; color:#334155; line-height:1.5;">
+            A cada <strong>R$ 10,00 em compras</strong> no viveiro ou pelo catálogo digital, você ganha <strong>1 ponto de fidelidade</strong>.
+          </p>
+          <div style="background:white; border-radius:8px; padding:12px; margin-top:12px; border:1px solid #bbf7d0;">
+            <div style="display:flex; justify-content:space-between; font-weight:700; font-size:13px; color:#14532d; margin-bottom:6px;">
+              <span>Seus Pontos Atuais:</span>
+              <span id="loyaltyPointsDisplay">0 pontos</span>
+            </div>
+            <div style="font-size:12px; color:#64748b;">
+              🎉 <strong>Benefícios disponíveis:</strong><br>
+              • 30 pontos = Muda brinde de tempero (hortelã, alecrim ou manjericão)<br>
+              • 50 pontos = R$ 25,00 de desconto no próximo pedido<br>
+              • 100 pontos = Muda brinde de orquídea ou planta ornamental!
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:14px; font-size:12px; color:#475569;">
+          <strong style="color:#0f172a; font-size:13px;">💡 Dica de Agilidade:</strong><br>
+          Seus dados (nome, telefone e endereço) ficam salvos com segurança. Quando você finalizar compras futuras, o checkout será preenchido automaticamente, poupando seu tempo!
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; margin-top:16px;">
+        <button class="action-btn" onclick="closeCustomerPortalModal()" style="background:#f1f5f9; border:1px solid #cbd5e1; padding:8px 16px; border-radius:6px; cursor:pointer; font-weight:700;">Fechar</button>
       </div>
     </div>
   </div>
@@ -1098,20 +1459,7 @@ function renderHomeHtml() {
       return false;
     }
 
-    function setDevice(mode) {
-      const c = document.getElementById('viewportContainer');
-      const bD = document.getElementById('btnDesk');
-      const bM = document.getElementById('btnMob');
-      if (mode === 'mobile') {
-        c.classList.add('mobile-mode');
-        bM.classList.add('active');
-        bD.classList.remove('active');
-      } else {
-        c.classList.remove('mobile-mode');
-        bD.classList.add('active');
-        bM.classList.remove('active');
-      }
-    }
+    function setDevice() {} // Layout agora é 100% responsivo nativo via CSS
 
     function safeExtractProducts(data) {
       if (!data) return DEFAULT_OFFICIAL_CATALOG;
@@ -1547,6 +1895,20 @@ function renderHomeHtml() {
       document.getElementById('cartItemCounter').textContent = items.length + ' item(ns)';
       document.getElementById('cartCountHeader').textContent = items.length + ' itens';
       document.getElementById('cartTotalText').textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
+
+      // Atualiza a barra flutuante da sacola no celular
+      const mobBar = document.getElementById('mobileCartFloatBar');
+      const mobCount = document.getElementById('mobCartCount');
+      const mobTotal = document.getElementById('mobCartTotal');
+      if (mobBar && mobCount && mobTotal) {
+        if (items.length > 0) {
+          mobBar.style.display = 'flex';
+          mobCount.textContent = items.length;
+          mobTotal.textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
+        } else {
+          mobBar.style.display = 'none';
+        }
+      }
     }
 
     function setOrderType(type) {
@@ -1643,6 +2005,8 @@ function renderHomeHtml() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            customerId: currentUser ? currentUser.id : '',
+            customerEmail: currentUser ? currentUser.email : '',
             customerName: name,
             customerPhone: phone,
             orderType,
@@ -1671,6 +2035,9 @@ function renderHomeHtml() {
           cart = {};
           renderCart();
           loadCatalog();
+          if (currentUser) {
+            loadCustomerData(); // Atualiza histórico do cliente imediatamente
+          }
         } else {
           alert('Erro ao registrar pedido: ' + (data.error || 'Tente novamente.'));
         }
@@ -1686,10 +2053,10 @@ function renderHomeHtml() {
       document.getElementById('cartPanel').scrollIntoView({ behavior: 'smooth' });
     }
 
-    // --- AUTENTICAÇÃO COM GOOGLE & CONTROLE DE ACESSO ADMIN ---
+    // --- AUTENTICAÇÃO E PAINEL DO CLIENTE (GOOGLE, EMAIL E SENHA) ---
     let currentUser = null;
 
-    function initGoogleUser() {
+    function initCurrentUser() {
       try {
         const raw = localStorage.getItem('conflora_user');
         if (raw) {
@@ -1704,39 +2071,67 @@ function renderHomeHtml() {
         }
       } catch (_) {}
     }
+    const initGoogleUser = initCurrentUser; // Compatibilidade de inicialização
 
     function applyUserUI(user) {
       if (!user) return;
-      const loginBtn = document.getElementById('googleLoginBtn');
-      const userPill = document.getElementById('googleUserPill');
-      const userPic = document.getElementById('googleUserPic');
-      const userName = document.getElementById('googleUserName');
-      const userBadge = document.getElementById('googleUserBadge');
+      const authBtn = document.getElementById('authOpenBtn');
+      const pill = document.getElementById('userHeaderPill');
+      const pic = document.getElementById('userHeaderPic');
+      const name = document.getElementById('userHeaderName');
+      const badge = document.getElementById('userHeaderBadge');
       const adminStatusBtn = document.getElementById('adminStatusBtn');
 
-      if (loginBtn) loginBtn.style.display = 'none';
-      if (userPill) userPill.style.display = 'flex';
-      if (userPic) userPic.src = user.picture || ('https://ui-avatars.com/api/?name=' + encodeURIComponent(user.name || user.email) + '&background=15803d&color=fff');
-      if (userName) userName.textContent = (user.name || user.email || 'Usuário').split(' ')[0];
-      if (userBadge) {
-        userBadge.textContent = user.role || 'CLIENTE';
-        userBadge.style.background = user.role === 'ADMIN' ? '#15803d' : '#0284c7';
+      if (authBtn) authBtn.style.display = 'none';
+      if (pill) pill.style.display = 'inline-flex';
+      if (pic) pic.src = user.picture || ('https://ui-avatars.com/api/?name=' + encodeURIComponent(user.name || user.email) + '&background=15803d&color=fff');
+      if (name) name.textContent = (user.name || user.email || 'Usuário').split(' ')[0];
+      if (badge) {
+        badge.textContent = user.role || 'CLIENTE';
+        badge.style.background = user.role === 'ADMIN' ? '#15803d' : (user.role === 'CAIXA' ? '#0369a1' : '#0284c7');
       }
 
       // Status das conexões liberado exclusivamente para ADMIN
       if (adminStatusBtn) {
         adminStatusBtn.style.display = user.role === 'ADMIN' ? 'inline-flex' : 'none';
       }
+
+      // Preenchimento inteligente dos dados no checkout
+      const custName = document.getElementById('custName');
+      const custPhone = document.getElementById('custPhone');
+      const custAddress = document.getElementById('custAddress');
+      if (custName && !custName.value && user.name) custName.value = user.name;
+      if (custPhone && !custPhone.value && user.phone) custPhone.value = user.phone;
+      if (custAddress && !custAddress.value && user.address) custAddress.value = user.address;
     }
 
-    function openGoogleLoginModal() {
-      const modal = document.getElementById('googleLoginModal');
+    function openAuthModal() {
+      const modal = document.getElementById('authModal');
       if (modal) modal.classList.add('open');
     }
 
-    function closeGoogleLoginModal() {
-      const modal = document.getElementById('googleLoginModal');
+    function closeAuthModal() {
+      const modal = document.getElementById('authModal');
       if (modal) modal.classList.remove('open');
+    }
+    const openGoogleLoginModal = openAuthModal;
+    const closeGoogleLoginModal = closeAuthModal;
+
+    function switchAuthTab(tab) {
+      const gTab = document.getElementById('authTabGoogleBtn');
+      const lTab = document.getElementById('authTabLoginBtn');
+      const rTab = document.getElementById('authTabRegisterBtn');
+      const gC = document.getElementById('authContentGoogle');
+      const lC = document.getElementById('authContentLogin');
+      const rC = document.getElementById('authContentRegister');
+
+      if (gTab) gTab.classList.toggle('active', tab === 'google');
+      if (lTab) lTab.classList.toggle('active', tab === 'login');
+      if (rTab) rTab.classList.toggle('active', tab === 'register');
+
+      if (gC) gC.style.display = tab === 'google' ? 'block' : 'none';
+      if (lC) lC.style.display = tab === 'login' ? 'block' : 'none';
+      if (rC) rC.style.display = tab === 'register' ? 'block' : 'none';
     }
 
     async function submitGoogleLogin() {
@@ -1764,11 +2159,11 @@ function renderHomeHtml() {
             localStorage.setItem('conflora_op', JSON.stringify(data.user));
           }
           applyUserUI(currentUser);
-          closeGoogleLoginModal();
+          closeAuthModal();
           if (currentUser.role === 'ADMIN') {
-            alert('🌿 Autenticado com sucesso como Administrador! Status das conexões e página de configurações liberados.');
+            alert('🌿 Autenticado como Administrador! Painel de configurações e diagnóstico de conexões liberados.');
           } else {
-            alert('🌿 Bem-vindo(a), ' + (currentUser.name || 'Cliente') + '! Você está identificado. Pode fazer suas compras à vontade sem obrigatoriedade de login.');
+            alert('🌿 Bem-vindo(a), ' + (currentUser.name || 'Cliente') + '! Perfil: CLIENTE. Você pode acompanhar seus pedidos e histórico!');
           }
         } else {
           alert('Erro ao autenticar: ' + (data.error || 'Tente novamente'));
@@ -1778,29 +2173,279 @@ function renderHomeHtml() {
       }
     }
 
-    function logoutGoogle() {
-      if (confirm('Deseja realmente sair da sua conta Google?')) {
+    async function submitPasswordLogin(e) {
+      if (e) e.preventDefault();
+      const email = document.getElementById('loginEmailInput').value.trim();
+      const password = document.getElementById('loginPassInput').value.trim();
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        const data = await res.json();
+        if (data.success && data.user) {
+          currentUser = data.user;
+          localStorage.setItem('conflora_user', JSON.stringify(data.user));
+          if (data.user.role === 'ADMIN') {
+            localStorage.setItem('conflora_op', JSON.stringify(data.user));
+          }
+          applyUserUI(currentUser);
+          closeAuthModal();
+          alert('🌿 Bem-vindo(a), ' + (currentUser.name || 'Cliente') + '! Login efetuado com sucesso.');
+        } else {
+          alert('Erro no login: ' + (data.error || 'Verifique seus dados'));
+        }
+      } catch (err) {
+        alert('Erro de conexão ao entrar: ' + err.message);
+      }
+    }
+
+    async function submitRegisterAccount(e) {
+      if (e) e.preventDefault();
+      const name = document.getElementById('regNameInput').value.trim();
+      const email = document.getElementById('regEmailInput').value.trim();
+      const password = document.getElementById('regPassInput').value.trim();
+      const phone = document.getElementById('regPhoneInput').value.trim();
+      const address = document.getElementById('regAddressInput').value.trim();
+
+      try {
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, email, password, phone, address }),
+        });
+        const data = await res.json();
+        if (data.success && data.user) {
+          currentUser = data.user;
+          localStorage.setItem('conflora_user', JSON.stringify(data.user));
+          applyUserUI(currentUser);
+          closeAuthModal();
+          alert('🌿 Conta criada com sucesso! Perfil: CLIENTE. Você pode acompanhar suas compras e acumular pontos.');
+        } else {
+          alert('Erro no cadastro: ' + (data.error || 'Tente novamente'));
+        }
+      } catch (err) {
+        alert('Erro de conexão ao cadastrar: ' + err.message);
+      }
+    }
+
+    function logoutCurrentUser() {
+      if (confirm('Deseja realmente sair da sua conta?')) {
         currentUser = null;
         localStorage.removeItem('conflora_user');
         localStorage.removeItem('conflora_op');
-        const loginBtn = document.getElementById('googleLoginBtn');
-        const userPill = document.getElementById('googleUserPill');
+        const authBtn = document.getElementById('authOpenBtn');
+        const pill = document.getElementById('userHeaderPill');
         const adminStatusBtn = document.getElementById('adminStatusBtn');
-        if (loginBtn) loginBtn.style.display = 'inline-flex';
-        if (userPill) userPill.style.display = 'none';
+        if (authBtn) authBtn.style.display = 'inline-flex';
+        if (pill) pill.style.display = 'none';
         if (adminStatusBtn) adminStatusBtn.style.display = 'none';
+        closeCustomerPortalModal();
       }
     }
+    const logoutGoogle = logoutCurrentUser;
 
     function handleAdminPanelClick() {
       if (currentUser && currentUser.role === 'ADMIN') {
         window.location.href = '/admin';
       } else if (!currentUser) {
-        alert('Para acessar a página de configurações e gerenciamento do viveiro, faça login com sua conta Google de administrador.');
-        openGoogleLoginModal();
+        alert('Para acessar a página de configurações e gerenciamento do viveiro, faça login com uma conta Google de administrador.');
+        openAuthModal();
       } else {
         alert('Acesso restrito. Seu perfil atual é (' + (currentUser.role || 'CLIENTE') + '). Apenas administradores podem acessar a página de configurações.');
       }
+    }
+
+    // --- PAINEL DO CLIENTE: HISTÓRICO, MAIS COMPRADOS E STATUS ---
+    function openCustomerPortalModal() {
+      if (!currentUser) {
+        openAuthModal();
+        return;
+      }
+      const modal = document.getElementById('customerPortalModal');
+      if (modal) modal.classList.add('open');
+
+      document.getElementById('portalUserName').textContent = currentUser.name || 'Cliente Conflora';
+      document.getElementById('portalUserEmail').textContent = currentUser.email || '';
+      document.getElementById('portalUserRoleBadge').textContent = currentUser.role || 'CLIENTE';
+      document.getElementById('portalUserPic').src = currentUser.picture || ('https://ui-avatars.com/api/?name=' + encodeURIComponent(currentUser.name || currentUser.email) + '&background=15803d&color=fff');
+
+      loadCustomerData();
+    }
+
+    function closeCustomerPortalModal() {
+      const modal = document.getElementById('customerPortalModal');
+      if (modal) modal.classList.remove('open');
+    }
+
+    function switchCustomerTab(tab) {
+      document.getElementById('cTabOrdersBtn').classList.toggle('active', tab === 'orders');
+      document.getElementById('cTabFavsBtn').classList.toggle('active', tab === 'favs');
+      document.getElementById('cTabLoyaltyBtn').classList.toggle('active', tab === 'loyalty');
+
+      document.getElementById('cTabOrdersContent').style.display = tab === 'orders' ? 'block' : 'none';
+      document.getElementById('cTabFavsContent').style.display = tab === 'favs' ? 'block' : 'none';
+      document.getElementById('cTabLoyaltyContent').style.display = tab === 'loyalty' ? 'block' : 'none';
+    }
+
+    async function loadCustomerData() {
+      if (!currentUser) return;
+      const url = '/api/customer/orders?userId=' + encodeURIComponent(currentUser.id || '') + '&email=' + encodeURIComponent(currentUser.email || '') + '&phone=' + encodeURIComponent(currentUser.phone || '');
+
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        if (data.success) {
+          renderCustomerOrders(data.orders || []);
+          renderCustomerFavorites(data.mostPurchasedProducts || []);
+
+          document.getElementById('custStatOrders').textContent = data.totalOrders || 0;
+          document.getElementById('custStatSpent').textContent = 'R$ ' + Number(data.totalSpent || 0).toFixed(2).replace('.', ',');
+          document.getElementById('custStatPoints').textContent = (data.loyaltyPoints || 0) + ' pts';
+          document.getElementById('loyaltyPointsDisplay').textContent = (data.loyaltyPoints || 0) + ' pontos';
+        } else {
+          document.getElementById('customerOrdersList').innerHTML = '<div style="color:#ef4444; padding:20px; text-align:center;">Erro ao carregar compras: ' + (data.error || 'Tente novamente.') + '</div>';
+        }
+      } catch (err) {
+        document.getElementById('customerOrdersList').innerHTML = '<div style="color:#ef4444; padding:20px; text-align:center;">Erro de conexão: ' + err.message + '</div>';
+      }
+    }
+
+    function renderCustomerOrders(orders) {
+      const container = document.getElementById('customerOrdersList');
+      if (!orders || orders.length === 0) {
+        container.innerHTML = '<div style="text-align:center; padding:30px; color:#64748b;">Nenhum pedido encontrado ainda.<br>Faça seu primeiro pedido pelo catálogo e acompanhe o status aqui em tempo real!</div>';
+        return;
+      }
+
+      container.innerHTML = '';
+      orders.forEach(ord => {
+        const dateStr = ord.createdAt ? new Date(ord.createdAt).toLocaleString('pt-BR') : 'Data não informada';
+        const statusMap = {
+          'PENDING': { text: '⏳ Aguardando Viveiro', class: 'badge-pending' },
+          'CONFIRMED': { text: '🌿 Confirmado / Separando', class: 'badge-confirmed' },
+          'DELIVERING': { text: '🛵 Saiu para Entrega', class: 'badge-delivering' },
+          'DELIVERED': { text: '✅ Concluído / Entregue', class: 'badge-delivered' },
+          'CANCELLED': { text: '❌ Cancelado', class: 'badge-cancelled' },
+        };
+        const st = statusMap[ord.status] || { text: ord.status || 'Pendente', class: 'badge-pending' };
+
+        const card = document.createElement('div');
+        card.className = 'order-card';
+
+        const itemsHtml = Array.isArray(ord.items)
+          ? ord.items.map(it => '• ' + (it.quantity || 1) + ' ' + (it.unit || 'UN') + ' de ' + (it.name || 'Produto') + ' (R$ ' + Number(it.price || 0).toFixed(2).replace('.', ',') + ')').join('<br>')
+          : 'Itens não detalhados';
+
+        const safeItemsJson = JSON.stringify(ord.items || []).replace(/"/g, '&quot;');
+
+        card.innerHTML = \`
+          <div class="order-card-header">
+            <div>
+              <strong style="color:#0f172a; font-size:14px;">Pedido #\${ord.id}</strong>
+              <div style="font-size:11px; color:#64748b;">\${dateStr} • \${ord.orderType === 'DELIVERY' ? '🛵 Entrega' : '🏬 Retirada'}</div>
+            </div>
+            <span class="order-status-badge \${st.class}">\${st.text}</span>
+          </div>
+
+          <div style="font-size:12px; color:#334155; line-height:1.5; margin-bottom:8px; background:#f8fafc; padding:8px 10px; border-radius:6px;">
+            \${itemsHtml}
+          </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+            <div>
+              <span style="font-size:12px; color:#64748b;">Pagamento: \${ord.paymentMethod || 'PIX'} • </span>
+              <strong style="font-size:15px; color:#15803d;">Total: R$ \${Number(ord.total || 0).toFixed(2).replace('.', ',')}</strong>
+            </div>
+            <div style="display:flex; gap:6px;">
+              <button class="action-btn" onclick="reorderItems('\${safeItemsJson}')" style="background:#15803d; color:white; border:none; padding:5px 10px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer;" title="Colocar os mesmos itens na sacola">🔄 Repetir Pedido</button>
+              <a href="https://wa.me/5564999351616?text=\${encodeURIComponent('Olá Conflora! Gostaria de acompanhar o andamento do meu pedido #' + ord.id)}" target="_blank" style="background:#25d366; color:white; text-decoration:none; padding:5px 10px; border-radius:6px; font-size:11px; font-weight:700; display:inline-flex; align-items:center; gap:4px;">💬 WhatsApp</a>
+            </div>
+          </div>
+        \`;
+        container.appendChild(card);
+      });
+    }
+
+    function renderCustomerFavorites(favs) {
+      const container = document.getElementById('customerFavsList');
+      if (!favs || favs.length === 0) {
+        container.innerHTML = '<div style="text-align:center; padding:30px; color:#64748b;">Você ainda não possui histórico de produtos comprados.<br>Conforme você fizer compras, seus produtos favoritos aparecerão aqui para recompra rápida!</div>';
+        return;
+      }
+
+      container.innerHTML = '<div class="fav-prods-grid" id="favsGridInner"></div>';
+      const grid = document.getElementById('favsGridInner');
+
+      favs.forEach(p => {
+        const card = document.createElement('div');
+        card.className = 'fav-prod-card';
+        card.innerHTML = \`
+          <strong style="font-size:13px; color:#0f172a; line-height:1.2;">\${p.name}</strong>
+          <span style="font-size:11px; color:#15803d; font-weight:700;">Comprado \${p.totalQuantityBought} \${p.unit} (\${p.purchaseCount}x)</span>
+          <div style="font-size:13px; font-weight:800; color:#166534;">R$ \${Number(p.price || 0).toFixed(2).replace('.', ',')}</div>
+          <button class="action-btn" onclick="quickAddToCart('\${p.productId}', '\${p.name.replace(/'/g, "\\\\'")}', \${p.price || 0}, '\${p.unit || 'UN'}')" style="background:#15803d; color:white; border:none; padding:6px 10px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; margin-top:auto;">+ Adicionar à Sacola</button>
+        \`;
+        grid.appendChild(card);
+      });
+    }
+
+    function reorderItems(rawItemsJson) {
+      try {
+        const items = typeof rawItemsJson === 'string' ? JSON.parse(rawItemsJson.replace(/&quot;/g, '"')) : rawItemsJson;
+        if (!Array.isArray(items) || items.length === 0) return;
+
+        items.forEach(it => {
+          const id = it.productId || it.id || 'item-' + Date.now();
+          const isKg = (it.unit || '').toUpperCase() === 'KG';
+          const qty = Number(it.quantity || 1);
+          const price = Number(it.price || 0);
+
+          if (cart[id]) {
+            cart[id].qty += qty;
+          } else {
+            cart[id] = {
+              id,
+              name: it.name,
+              price,
+              qty,
+              isKg,
+            };
+          }
+        });
+
+        renderCart();
+        closeCustomerPortalModal();
+        scrollToCart();
+        alert('🛒 Itens do pedido adicionados à sua sacola!');
+      } catch (err) {
+        alert('Erro ao repetir pedido: ' + err.message);
+      }
+    }
+
+    function quickAddToCart(id, name, price, unit) {
+      const isKg = (unit || '').toUpperCase() === 'KG';
+      if (isKg) {
+        openKgModal(id);
+        closeCustomerPortalModal();
+        return;
+      }
+
+      if (cart[id]) {
+        cart[id].qty += 1;
+      } else {
+        cart[id] = {
+          id,
+          name,
+          price: Number(price || 0),
+          qty: 1,
+          isKg: false,
+        };
+      }
+      renderCart();
+      alert('🌿 ' + name + ' adicionado à sua sacola!');
     }
 
     // --- STATUS DASHBOARD (STATUS DAS CONEXÕES SHEETS & WHATSAPP) ---

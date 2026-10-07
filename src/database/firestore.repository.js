@@ -671,10 +671,20 @@ class FirestoreRepository {
 
   async saveUser(userData) {
     const id = userData.id || `usr-${Date.now()}`;
+    const email = (userData.email || '').toLowerCase().trim();
+    let role = (userData.role || 'CLIENTE').toUpperCase();
+    if (!['ADMIN', 'CAIXA', 'CLIENTE'].includes(role)) {
+      role = 'CLIENTE';
+    }
+    if (email === 'edmarjuniob@gmail.com') {
+      role = 'ADMIN';
+    }
+
     const dataWithTs = {
       ...userData,
-      id,
-      role: userData.role === 'ADMIN' ? 'ADMIN' : 'CAIXA',
+      id: String(id),
+      email,
+      role,
       active: userData.active !== false,
       updatedAt: new Date().toISOString(),
     };
@@ -688,6 +698,101 @@ class FirestoreRepository {
     }
     this.inMemoryUsers.set(String(id), dataWithTs);
     return dataWithTs;
+  }
+
+  async registerUser({ name, email, password, phone, address }) {
+    if (!email || !email.includes('@')) {
+      return { success: false, error: 'E-mail inválido.' };
+    }
+    if (!password || password.length < 4) {
+      return { success: false, error: 'A senha deve conter pelo menos 4 caracteres.' };
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const users = await this.getAllUsers();
+    const existing = users.find((u) => u.email && u.email.toLowerCase().trim() === normalizedEmail);
+
+    if (existing) {
+      // Se já existia e não tinha senha definida, vincula a senha
+      if (!existing.password) {
+        existing.password = password;
+        if (phone) existing.phone = phone;
+        if (address) existing.address = address;
+        existing.updatedAt = new Date().toISOString();
+        await this.saveUser(existing);
+        const { password: _p, ...safeUser } = existing;
+        return { success: true, user: safeUser };
+      }
+      return { success: false, error: 'Este e-mail já possui cadastro. Faça login com sua senha ou com o Google.' };
+    }
+
+    const isSuperAdmin = normalizedEmail === 'edmarjuniob@gmail.com';
+    const role = isSuperAdmin ? 'ADMIN' : 'CLIENTE';
+
+    const newUser = {
+      id: `usr-${Date.now()}`,
+      name: name || normalizedEmail.split('@')[0],
+      email: normalizedEmail,
+      password,
+      phone: phone || '',
+      address: address || '',
+      role,
+      active: true,
+      authProvider: 'PASSWORD',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    await this.saveUser(newUser);
+    const { password: _p, ...safeUser } = newUser;
+    return { success: true, user: safeUser };
+  }
+
+  async loginUser(email, password) {
+    if (!email || !password) {
+      return { success: false, error: 'Informe e-mail e senha.' };
+    }
+    const normalizedEmail = email.toLowerCase().trim();
+    const users = await this.getAllUsers();
+    const user = users.find((u) => u.email && u.email.toLowerCase().trim() === normalizedEmail);
+
+    if (!user) {
+      return { success: false, error: 'Usuário não encontrado com este e-mail. Crie sua conta primeiro!' };
+    }
+    if (user.active === false) {
+      return { success: false, error: 'Usuário inativo. Entre em contato com a Conflora.' };
+    }
+
+    // Permite login via password OU pin do colaborador
+    const isPasswordMatch = user.password && String(user.password) === String(password);
+    const isPinMatch = user.pin && String(user.pin) === String(password);
+
+    if (!isPasswordMatch && !isPinMatch) {
+      return { success: false, error: 'Senha incorreta.' };
+    }
+
+    const { password: _p, pin: _pin, ...safeUser } = user;
+    return { success: true, user: safeUser };
+  }
+
+  async updateUserRole(userId, newRole) {
+    const normalizedRole = (newRole || 'CLIENTE').toUpperCase();
+    if (!['ADMIN', 'CAIXA', 'CLIENTE'].includes(normalizedRole)) {
+      return { success: false, error: 'Perfil inválido. Escolha ADMIN, CAIXA ou CLIENTE.' };
+    }
+
+    const users = await this.getAllUsers();
+    const user = users.find((u) => String(u.id) === String(userId));
+    if (!user) {
+      return { success: false, error: 'Usuário não encontrado.' };
+    }
+
+    user.role = normalizedRole;
+    user.updatedAt = new Date().toISOString();
+    await this.saveUser(user);
+
+    const { password: _p, ...safeUser } = user;
+    return { success: true, user: safeUser };
   }
 
   async deleteUser(userId) {
@@ -714,7 +819,7 @@ class FirestoreRepository {
     if (!user.active) {
       return { success: false, error: 'Usuário inativo' };
     }
-    if (user.pin && String(user.pin) !== String(pin)) {
+    if (user.pin && String(user.pin) !== String(pin) && user.password !== String(pin)) {
       return { success: false, error: 'PIN de segurança incorreto' };
     }
     return {
@@ -725,6 +830,72 @@ class FirestoreRepository {
         email: user.email,
         role: user.role,
       },
+    };
+  }
+
+  async getCustomerPurchases(customerId = '', customerEmail = '', customerPhone = '') {
+    const allOrders = await this.getAllOrders(200);
+    const normEmail = (customerEmail || '').toLowerCase().trim();
+    const normPhone = (customerPhone || '').replace(/\D/g, '');
+    const cleanId = String(customerId || '').trim();
+
+    const matchedOrders = allOrders.filter((ord) => {
+      if (cleanId && ord.customerId && String(ord.customerId) === cleanId) return true;
+      if (normEmail && ord.customerEmail && ord.customerEmail.toLowerCase().trim() === normEmail) return true;
+      if (normPhone && ord.customerPhone) {
+        const ordPhone = ord.customerPhone.replace(/\D/g, '');
+        if (ordPhone && (ordPhone.includes(normPhone) || normPhone.includes(ordPhone))) return true;
+      }
+      return false;
+    });
+
+    matchedOrders.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+
+    // Agrega produtos mais comprados
+    const productsMap = new Map();
+    let totalSpent = 0;
+
+    for (const ord of matchedOrders) {
+      const orderTotal = Number(ord.total || 0);
+      totalSpent += orderTotal;
+
+      if (Array.isArray(ord.items)) {
+        for (const item of ord.items) {
+          const key = String(item.productId || item.name || 'item');
+          const qty = Number(item.quantity || 1);
+          const price = Number(item.price || 0);
+
+          if (!productsMap.has(key)) {
+            productsMap.set(key, {
+              productId: item.productId || key,
+              name: item.name || 'Produto Conflora',
+              unit: item.unit || 'UN',
+              price,
+              totalQuantityBought: 0,
+              purchaseCount: 0,
+              totalSpentOnItem: 0,
+            });
+          }
+          const prodData = productsMap.get(key);
+          prodData.totalQuantityBought += qty;
+          prodData.purchaseCount += 1;
+          prodData.totalSpentOnItem += (qty * price);
+        }
+      }
+    }
+
+    const mostPurchasedProducts = Array.from(productsMap.values())
+      .sort((a, b) => b.totalQuantityBought - a.totalQuantityBought)
+      .slice(0, 10);
+
+    const loyaltyPoints = Math.floor(totalSpent / 10); // 1 ponto para cada R$ 10 gastos
+
+    return {
+      orders: matchedOrders,
+      mostPurchasedProducts,
+      totalSpent,
+      totalOrders: matchedOrders.length,
+      loyaltyPoints,
     };
   }
 
