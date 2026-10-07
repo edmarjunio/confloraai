@@ -12,7 +12,7 @@ const { OrderService } = require('../src/orders/order.service');
 const { LearningService } = require('../src/services/learning.service');
 const { MessageService } = require('../src/services/message.service');
 const { parseCurrencyString, formatCurrency } = require('../src/shared/string.util');
-const { renderPrivacyPolicyHtml, renderDataDeletionHtml, renderTermsOfServiceHtml } = require('../src/http/app');
+const { renderPrivacyPolicyHtml, renderDataDeletionHtml, renderTermsOfServiceHtml, renderHomeHtml, renderAdminHtml } = require('../src/http/app');
 
 const mockProducts = [
   {
@@ -437,4 +437,127 @@ test('15. Meta App Verification: Validação das páginas de Privacidade e Exclu
 
   const termsHtml = renderTermsOfServiceHtml();
   assert.match(termsHtml, /Termos de Serviço/);
+});
+
+test('16. Cardápio Digital & Painel Admin: Renderização e elementos essenciais', () => {
+  const homeHtml = renderHomeHtml();
+  assert.match(homeHtml, /Conflora Horta e Viveiro/);
+  assert.match(homeHtml, /Cardápio Digital/);
+  assert.match(homeHtml, /device-switcher/);
+  assert.match(homeHtml, /galleryModal/);
+  assert.match(homeHtml, /setOrderType/);
+
+  const adminHtml = renderAdminHtml();
+  assert.match(adminHtml, /Painel Operacional Conflora/);
+  assert.match(adminHtml, /Caixa & Pedidos/);
+  assert.match(adminHtml, /Entrada Rápida de Estoque/);
+  assert.match(adminHtml, /Cadastro de Produtos/);
+  assert.match(adminHtml, /Importar Planilhas/);
+});
+
+test('17. Firestore Repository: Entrada ágil de estoque, venda balcão e importador de planilha', async () => {
+  const repo = new FirestoreRepository({ isInMemory: true });
+
+  // 1. Produtos iniciais carregados
+  const products = await repo.getAllProducts();
+  assert.ok(products.length >= 10);
+
+  // 2. Entrada ágil de estoque (+10)
+  const prodId = products[0].id;
+  const initialStock = products[0].stockQuantity || products[0].estoque || 0;
+  const stockResult = await repo.quickAddStock(prodId, 10);
+  assert.strictEqual(stockResult.success, true);
+  assert.strictEqual(stockResult.newStock, initialStock + 10);
+
+  // 3. Venda manual no balcão
+  const manualOrder = await repo.createManualOrder({
+    customerName: 'Cliente Balcão Mineiros',
+    customerPhone: '5564999998888',
+    paymentMethod: 'PIX',
+    items: [{ productId: prodId, name: products[0].name, price: products[0].price, quantity: 2 }],
+  });
+  assert.ok(manualOrder.id);
+  assert.strictEqual(manualOrder.status, 'CONFIRMED');
+
+  // Verifica que o estoque baixou 2 unidades
+  const updatedProds = await repo.getAllProducts();
+  const updatedProd = updatedProds.find(p => p.id === prodId);
+  assert.strictEqual(updatedProd.stockQuantity, initialStock + 10 - 2);
+
+  // 4. Importação de lote de planilha
+  const importResult = await repo.importSpreadsheetData({
+    type: 'products',
+    records: [
+      { id: 'teste-imp-1', name: 'Palmeira Imperial Gigante', category: 'Palmeiras', price: 'R$ 350,00', stockQuantity: 5 },
+      { id: 'teste-imp-2', name: 'Muda de Jabuticaba Híbrida', category: 'Frutíferas', price: 120, stockQuantity: 8 },
+    ],
+  });
+  assert.strictEqual(importResult.success, true);
+  assert.strictEqual(importResult.count, 2);
+
+  const afterImport = await repo.getAllProducts();
+  const importedItem = afterImport.find(p => p.id === 'teste-imp-1');
+  assert.ok(importedItem);
+  assert.strictEqual(importedItem.name, 'Palmeira Imperial Gigante');
+});
+
+test('18. Status Dashboard & Google Auth: Diagnóstico de conexões e autenticação Google', async () => {
+  const { SystemStatusService } = require('../src/services/system-status.service');
+  const repo = new FirestoreRepository({ isInMemory: true });
+  const catalog = new CatalogRepository({ firestoreRepo: repo });
+  const statusService = new SystemStatusService({ catalogRepo: catalog, firestoreRepo: repo, whatsappClient: {} });
+
+  // 1. Diagnóstico completo
+  const status = await statusService.getSystemStatus();
+  assert.ok(status.googleSheets);
+  assert.ok(status.whatsapp);
+  assert.ok(status.firestore);
+  assert.ok(status.defaultCatalog);
+  assert.strictEqual(status.defaultCatalog.totalItems, 111);
+  assert.ok(['ONLINE', 'FALLBACK_OFFICIAL'].includes(status.googleSheets.status));
+
+  // 2. Teste do webhook
+  statusService.recordWebhookHit('5564999351616');
+  const waStatus = statusService.checkWhatsAppStatus();
+  assert.strictEqual(waStatus.totalReceivedCount, 1);
+  assert.strictEqual(waStatus.webhookRoute, '/webhook');
+
+  // 3. Teste Google Auth no backend
+  const { createApp } = require('../src/http/app');
+  const messageService = { firestoreRepo: repo, catalogRepo: catalog };
+  const app = createApp({ messageService, taskQueueClient: {} });
+
+  const server = app.listen(0);
+  const port = server.address().port;
+
+  try {
+    // Admin login
+    const adminRes = await fetch(`http://localhost:${port}/api/auth/google`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'edmarjuniob@gmail.com', name: 'Edmar Júnio' }),
+    });
+    const adminData = await adminRes.json();
+    assert.strictEqual(adminData.success, true);
+    assert.strictEqual(adminData.user.role, 'ADMIN');
+
+    // Customer login (opcional para clientes)
+    const custRes = await fetch(`http://localhost:${port}/api/auth/google`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'cliente@gmail.com', name: 'Maria Silva' }),
+    });
+    const custData = await custRes.json();
+    assert.strictEqual(custData.success, true);
+    assert.strictEqual(custData.user.role, 'CLIENTE');
+
+    // Live inventory endpoint
+    const invRes = await fetch(`http://localhost:${port}/api/inventory`);
+    const invData = await invRes.json();
+    assert.strictEqual(invRes.status, 200);
+    assert.ok(Array.isArray(invData.products));
+    assert.ok(invData.products.length >= 100);
+  } finally {
+    server.close();
+  }
 });

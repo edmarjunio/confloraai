@@ -180,6 +180,17 @@ class OrderService {
     const isPix = !order.paymentMethod || /pix/i.test(order.paymentMethod);
     order.status = isPix ? ORDER_STATUS.CONFIRMED_AWAITING_PAYMENT : ORDER_STATUS.CONFIRMED_AWAITING_DELIVERY;
     order.confirmedAt = new Date().toISOString();
+
+    // Realiza a baixa de estoque atômica no Firestore
+    const stockDeduction = await this.firestoreRepo.deductStock(order.items, phone).catch((err) => {
+      Logger.warn('Aviso: falha na baixa de estoque no Firestore', { error: err.message });
+      return null;
+    });
+    if (stockDeduction && stockDeduction.deducted && stockDeduction.deducted.length > 0) {
+      order.stockDeducted = true;
+      order.deductedItems = stockDeduction.deducted;
+    }
+
     await this.firestoreRepo.saveOrder(phone, order);
 
     // Salvar preferências no perfil do cliente para compras futuras ("O de sempre")

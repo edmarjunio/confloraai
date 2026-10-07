@@ -63,6 +63,8 @@ class CatalogRepository {
 
     if (this.mockData) {
       this.loadItems(this.mockData);
+    } else {
+      this.loadItems(DEFAULT_CATALOG_ITEMS);
     }
   }
 
@@ -74,6 +76,30 @@ class CatalogRepository {
 
     if (this.isCacheValid()) {
       return;
+    }
+
+    // 1. Tentar ler primeiro do Cloud Firestore
+    if (this.firestoreRepo && typeof this.firestoreRepo.getAllProducts === 'function') {
+      try {
+        const firestoreProducts = await this.firestoreRepo.getAllProducts();
+        if (firestoreProducts && firestoreProducts.length >= DEFAULT_CATALOG_ITEMS.length) {
+          this.loadItems(firestoreProducts);
+          Logger.info(`Catálogo carregado via Cloud Firestore. ${this.items.length} itens comerciais ativos.`);
+          return;
+        } else if (firestoreProducts && firestoreProducts.length > 0) {
+          const existingIds = new Set(firestoreProducts.map(p => String(p.id)));
+          const merged = [...firestoreProducts];
+          for (const defItem of DEFAULT_CATALOG_ITEMS) {
+            if (!existingIds.has(String(defItem.id))) {
+              merged.push(defItem);
+            }
+          }
+          this.loadItems(merged);
+          return;
+        }
+      } catch (err) {
+        Logger.warn('Aviso: falha ao consultar Firestore no catálogo; usando contingência padrão', { error: err.message });
+      }
     }
 
     const googleapis = getGoogleApis();
@@ -157,7 +183,9 @@ class CatalogRepository {
       this.loadItems(parsedItems);
       Logger.info(`Catálogo atualizado em tempo real. ${this.items.length} itens comerciais ativos indexados.`);
     } catch (error) {
-      Logger.error('Falha ao atualizar catálogo via Google Sheets', error);
+      Logger.warn('Google Sheets indisponível no ambiente atual; catálogo em contingência ativo', {
+        details: error.message,
+      });
       if (this.items.length === 0) {
         Logger.info('Carregando catálogo padrão de contingência Conflora...');
         this.loadItems(DEFAULT_CATALOG_ITEMS);
@@ -170,12 +198,10 @@ class CatalogRepository {
       return;
     }
 
+    const { normalizeCatalogItem } = require('./default-catalog');
     this.items = rawItems
       .filter((item) => (item.status || 'ATIVO').toUpperCase() === 'ATIVO')
-      .map((item) => ({
-        ...item,
-        price: typeof item.price === 'number' ? item.price : parseCurrencyString(item.price || item.valor),
-      }));
+      .map((item) => normalizeCatalogItem(item));
 
     this.productByNameMap.clear();
     this.productByTagMap.clear();

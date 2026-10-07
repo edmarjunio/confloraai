@@ -25,14 +25,30 @@ try {
   // Silent fallback
 }
 
+let serviceAccountKeyPath = null;
+let serviceAccountProjectId = null;
+try {
+  const possibleSaPath = path.resolve(process.cwd(), 'firebase-service-account.json');
+  if (fs.existsSync(possibleSaPath)) {
+    serviceAccountKeyPath = possibleSaPath;
+    const saData = JSON.parse(fs.readFileSync(possibleSaPath, 'utf-8'));
+    if (saData.project_id) {
+      serviceAccountProjectId = saData.project_id;
+    }
+  }
+} catch {
+  // Silent fallback
+}
+
 const config = Object.freeze({
   env: process.env.NODE_ENV || 'development',
   isDev: (process.env.NODE_ENV || 'development') === 'development',
   port: parseInt(process.env.PORT || '3000', 10),
 
   gcp: {
-    projectId: process.env.GCP_PROJECT_ID || 'conflora-ai',
+    projectId: serviceAccountProjectId || process.env.GCP_PROJECT_ID || 'confloraai',
     region: process.env.GCP_REGION || 'southamerica-east1',
+    keyFilename: serviceAccountKeyPath,
   },
 
   gemini: {

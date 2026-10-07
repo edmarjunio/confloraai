@@ -53,14 +53,30 @@ async function bootstrap() {
   const app = createApp({ messageService, taskQueueClient });
 
   const host = process.env.HOST || '0.0.0.0';
-  const server = app.listen(config.port, host, () => {
-    Logger.info(`Conflora AI rodando com sucesso na porta ${config.port} (${host})`);
+  const targetPort = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+
+  const server = app.listen(targetPort, host, () => {
+    Logger.info(`Conflora AI rodando com sucesso na porta principal ${targetPort} (${host})`);
   });
+
+  let secondaryServer = null;
+  if (targetPort !== 3000) {
+    try {
+      secondaryServer = app.listen(3000, host, () => {
+        Logger.info(`Conflora AI dev server também escutando na porta 3000 (${host})`);
+      });
+    } catch (err) {
+      Logger.warn(`Não foi possível escutar na porta 3000: ${err.message}`);
+    }
+  }
 
   // Graceful shutdown
   const shutdown = () => {
     Logger.info('Encerrando servidor com segurança...');
     server.close(() => {
+      if (secondaryServer) {
+        try { secondaryServer.close(); } catch {}
+      }
       Logger.info('Servidor finalizado.');
       process.exit(0);
     });

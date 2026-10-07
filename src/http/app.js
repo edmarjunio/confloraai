@@ -13,6 +13,20 @@ function getExpress() {
 const config = require('../config/env');
 const Logger = require('../shared/logger');
 const { SignatureValidator } = require('../security/signature.validator');
+const { SystemStatusService } = require('../services/system-status.service');
+const { renderHomeHtml, renderAdminHtml } = require('./views');
+
+const FETCH_SHIM_SCRIPT = `<script>
+  try {
+    var _origFetch = window.fetch;
+    Object.defineProperty(window, 'fetch', {
+      get: function() { return _origFetch; },
+      set: function(v) { _origFetch = v; },
+      configurable: true,
+      enumerable: true
+    });
+  } catch (_) {}
+</script>`;
 
 function renderPrivacyPolicyHtml() {
   return `<!DOCTYPE html>
@@ -21,6 +35,7 @@ function renderPrivacyPolicyHtml() {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Política de Privacidade | Conflora Horta e Viveiro</title>
+  ${FETCH_SHIM_SCRIPT}
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #2d3748; max-width: 800px; margin: 0 auto; padding: 24px 16px; background-color: #f7fafc; }
     .card { background: white; padding: 36px 28px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
@@ -91,6 +106,7 @@ function renderDataDeletionHtml() {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Instruções de Exclusão de Dados | Conflora AI</title>
+  ${FETCH_SHIM_SCRIPT}
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #2d3748; max-width: 800px; margin: 0 auto; padding: 24px 16px; background-color: #f7fafc; }
     .card { background: white; padding: 36px 28px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
@@ -133,151 +149,560 @@ function renderDataDeletionHtml() {
 </html>`;
 }
 
-function renderHomeHtml() {
+function renderWhatsAppSimulatorHtml() {
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Conflora AI — Atendimento & Vendas WhatsApp</title>
+  <title>Conflora AI — WhatsApp Web Simulator & Live Firestore</title>
+  ${FETCH_SHIM_SCRIPT}
   <style>
     :root {
-      --primary: #22543d;
-      --primary-light: #276749;
-      --accent: #38a169;
-      --bg: #f7fafc;
-      --card-bg: #ffffff;
-      --text: #2d3748;
-      --text-muted: #718096;
-      --border: #e2e8f0;
-      --chat-user: #dcf8c6;
-      --chat-bot: #ffffff;
+      --wa-teal: #008069;
+      --wa-teal-dark: #005c4b;
+      --wa-teal-light: #25d366;
+      --wa-bg: #efeae2;
+      --wa-panel-bg: #f0f2f5;
+      --wa-card: #ffffff;
+      --wa-bubble-in: #ffffff;
+      --wa-bubble-out: #d9fdd3;
+      --wa-text: #111b21;
+      --wa-text-muted: #667781;
+      --wa-border: #e9edef;
+      --wa-blue-tick: #53bdeb;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; padding: 20px 16px; }
-    .container { max-width: 960px; margin: 0 auto; }
-    header { background: var(--card-bg); border-radius: 12px; padding: 24px 28px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.08); margin-bottom: 20px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; }
-    .brand h1 { color: var(--primary); font-size: 24px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
-    .brand p { color: var(--text-muted); font-size: 14px; margin-top: 4px; }
-    .badge-status { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; background: #def7ec; color: #03543f; }
-    .badge-status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #31c48d; }
-    .grid { display: grid; grid-template-columns: 1fr 1.3fr; gap: 20px; }
-    @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
-    .card { background: var(--card-bg); border-radius: 12px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.08); }
-    h2 { font-size: 18px; color: var(--primary-light); margin-bottom: 14px; padding-bottom: 8px; border-bottom: 2px solid #edf2f7; }
-    .info-item { margin-bottom: 12px; font-size: 14px; }
-    .info-item strong { color: var(--primary); }
-    .links-list { list-style: none; margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
-    .links-list a { display: inline-flex; align-items: center; color: var(--primary-light); text-decoration: none; font-size: 14px; font-weight: 500; padding: 8px 12px; background: #f0fff4; border-radius: 6px; transition: background 0.2s; }
-    .links-list a:hover { background: #dcfce7; }
-    .chat-container { display: flex; flex-direction: column; height: 540px; }
-    .chat-messages { flex: 1; overflow-y: auto; padding: 16px; background: #efeae2; border-radius: 8px; display: flex; flex-direction: column; gap: 12px; }
-    .message-bubble { max-width: 82%; padding: 10px 14px; border-radius: 8px; font-size: 14px; word-break: break-word; white-space: pre-wrap; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
-    .message-bubble.user { align-self: flex-end; background: var(--chat-user); border-top-right-radius: 2px; }
-    .message-bubble.assistant { align-self: flex-start; background: var(--chat-bot); border-top-left-radius: 2px; }
-    .message-meta { font-size: 11px; color: var(--text-muted); margin-top: 4px; text-align: right; }
-    .quick-prompts { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 8px; }
-    .quick-btn { background: #edf2f7; border: 1px solid #cbd5e0; border-radius: 14px; padding: 4px 10px; font-size: 12px; cursor: pointer; color: #4a5568; transition: all 0.15s; }
-    .quick-btn:hover { background: #e2e8f0; color: #2d3748; }
-    .chat-inputs { display: flex; gap: 8px; margin-top: 8px; }
-    .chat-input { flex: 1; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; outline: none; }
-    .chat-input:focus { border-color: var(--accent); }
-    .send-btn { background: var(--accent); color: white; border: none; border-radius: 8px; padding: 10px 20px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
-    .send-btn:hover { background: #2f855a; }
-    .send-btn:disabled { background: #cbd5e0; cursor: not-allowed; }
-    .phone-row { display: flex; gap: 8px; margin-bottom: 8px; font-size: 13px; }
-    .phone-row input { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #dadbd5;
+      color: var(--wa-text);
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+    }
+    .app-wrapper {
+      width: 100vw;
+      height: 100vh;
+      background: var(--wa-card);
+      display: flex;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.1);
+      position: relative;
+    }
+    @media (min-width: 1200px) {
+      .app-wrapper {
+        width: 98vw;
+        height: 96vh;
+        border-radius: 10px;
+        overflow: hidden;
+      }
+    }
+    /* LEFT SIDEBAR: ESTOQUE E AUDITORIA FIRESTORE */
+    .sidebar {
+      width: 380px;
+      min-width: 340px;
+      background: #ffffff;
+      border-right: 1px solid var(--wa-border);
+      display: flex;
+      flex-direction: column;
+      z-index: 2;
+    }
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+    }
+    .sidebar-header {
+      background: var(--wa-panel-bg);
+      padding: 12px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--wa-border);
+    }
+    .db-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #03543f;
+      background: #def7ec;
+      padding: 4px 10px;
+      border-radius: 12px;
+    }
+    .db-badge::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      background: #31c48d;
+      border-radius: 50%;
+    }
+    .tabs-bar {
+      display: flex;
+      background: var(--wa-panel-bg);
+      border-bottom: 1px solid var(--wa-border);
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 10px 8px;
+      font-size: 12px;
+      font-weight: 600;
+      text-align: center;
+      border: none;
+      background: none;
+      cursor: pointer;
+      color: var(--wa-text-muted);
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+    .tab-btn.active {
+      color: var(--wa-teal);
+      border-bottom-color: var(--wa-teal);
+      background: #ffffff;
+    }
+    .customer-config {
+      padding: 10px 14px;
+      background: #f8fafc;
+      border-bottom: 1px solid var(--wa-border);
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .config-row {
+      display: flex;
+      gap: 6px;
+    }
+    .config-input {
+      flex: 1;
+      padding: 6px 10px;
+      border: 1px solid #cbd5e0;
+      border-radius: 6px;
+      font-size: 12px;
+      outline: none;
+    }
+    .config-input:focus { border-color: var(--wa-teal); }
+    .sidebar-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+    .product-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #f1f5f9;
+      margin-bottom: 6px;
+      transition: background 0.15s;
+    }
+    .product-item:hover { background: #f8fafc; }
+    .product-thumb {
+      width: 44px;
+      height: 44px;
+      border-radius: 6px;
+      object-fit: cover;
+      background: #e2e8f0;
+      flex-shrink: 0;
+    }
+    .product-info { flex: 1; min-width: 0; }
+    .product-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--wa-text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .product-sub {
+      font-size: 11px;
+      color: var(--wa-text-muted);
+      margin-top: 2px;
+    }
+    .stock-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 10px;
+      background: #e0f2fe;
+      color: #0369a1;
+      flex-shrink: 0;
+      text-align: right;
+    }
+    .stock-badge.low {
+      background: #fee2e2;
+      color: #b91c1c;
+    }
+    .movement-item {
+      padding: 8px 10px;
+      border-left: 3px solid var(--wa-teal);
+      background: #f8fafc;
+      border-radius: 0 6px 6px 0;
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+    .movement-date { font-size: 10px; color: var(--wa-text-muted); }
+
+    /* RIGHT CHAT AREA: WHATSAPP WEB AUTHENTIC UI */
+    .chat-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--wa-bg);
+      position: relative;
+    }
+    .chat-header {
+      background: var(--wa-panel-bg);
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--wa-border);
+      z-index: 2;
+    }
+    .avatar-wrapper {
+      position: relative;
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: var(--wa-teal);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+    .chat-header-info { flex: 1; }
+    .chat-header-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--wa-text);
+    }
+    .chat-header-status {
+      font-size: 12px;
+      color: var(--wa-text-muted);
+    }
+    .chat-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 24px;
+      background-color: #efeae2;
+      background-image: radial-gradient(#d4cdc4 1px, transparent 1px);
+      background-size: 20px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .enc-notice {
+      align-self: center;
+      background: #ffeecd;
+      border-radius: 8px;
+      padding: 6px 14px;
+      font-size: 11px;
+      color: #54656f;
+      text-align: center;
+      max-width: 80%;
+      margin-bottom: 10px;
+      box-shadow: 0 1px 1px rgba(0,0,0,0.06);
+    }
+    .bubble {
+      max-width: 68%;
+      padding: 8px 12px;
+      border-radius: 7.5px;
+      font-size: 14.2px;
+      line-height: 1.45;
+      position: relative;
+      word-wrap: break-word;
+      white-space: pre-wrap;
+      box-shadow: 0 1px 0.5px rgba(11,20,26,0.13);
+    }
+    .bubble.user {
+      align-self: flex-end;
+      background: var(--wa-bubble-out);
+      border-top-right-radius: 0;
+    }
+    .bubble.assistant {
+      align-self: flex-start;
+      background: var(--wa-bubble-in);
+      border-top-left-radius: 0;
+    }
+    .bubble-meta {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 4px;
+      font-size: 11px;
+      color: var(--wa-text-muted);
+      margin-top: 4px;
+      float: right;
+      padding-left: 10px;
+    }
+    .blue-ticks {
+      color: var(--wa-blue-tick);
+      font-weight: bold;
+    }
+    .bubble-img {
+      max-width: 100%;
+      border-radius: 6px;
+      margin-bottom: 6px;
+      display: block;
+    }
+
+    /* QUICK PILLS BAR */
+    .quick-bar {
+      padding: 8px 16px;
+      background: #f7fafc;
+      border-top: 1px solid var(--wa-border);
+      display: flex;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      gap: 6px;
+      scrollbar-width: none;
+    }
+    .quick-bar::-webkit-scrollbar { display: none; }
+    .pill-btn {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 16px;
+      padding: 5px 12px;
+      font-size: 12px;
+      color: #334155;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+    .pill-btn:hover {
+      background: var(--wa-teal);
+      color: white;
+      border-color: var(--wa-teal);
+    }
+    .pill-btn.highlight {
+      background: #dcfce7;
+      border-color: #86efac;
+      color: #166534;
+      font-weight: 600;
+    }
+    .pill-btn.highlight:hover {
+      background: #16a34a;
+      color: white;
+    }
+
+    /* WHATSAPP INPUT FOOTER */
+    .chat-footer {
+      background: var(--wa-panel-bg);
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-top: 1px solid var(--wa-border);
+    }
+    .input-icon-btn {
+      background: none;
+      border: none;
+      font-size: 20px;
+      color: #54656f;
+      cursor: pointer;
+      padding: 4px;
+    }
+    .message-input {
+      flex: 1;
+      background: #ffffff;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 14.5px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .message-input:focus { border-color: #cbd5e1; }
+    .send-circle-btn {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: var(--wa-teal);
+      border: none;
+      color: white;
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+      flex-shrink: 0;
+    }
+    .send-circle-btn:hover { background: var(--wa-teal-dark); }
+    .send-circle-btn:disabled { background: #cbd5e1; cursor: not-allowed; }
+
+    /* TOAST NOTIFICATION */
+    .toast {
+      position: absolute;
+      top: 70px;
+      right: 24px;
+      background: #0f172a;
+      color: white;
+      padding: 12px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+      z-index: 100;
+      opacity: 0;
+      transform: translateY(-10px);
+      transition: all 0.3s;
+      pointer-events: none;
+      max-width: 320px;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
   </style>
 </head>
 <body>
-  <div class="container">
-    <header>
-      <div class="brand">
-        <h1>🌱 Conflora AI <span>v2.1</span></h1>
-        <p>Atendimento Inteligente no WhatsApp — Conflora Horta e Viveiro & Agromadeiras</p>
-      </div>
-      <span class="badge-status">Servidor Ativo (Porta 3000)</span>
-    </header>
-
-    <div class="grid">
-      <div>
-        <div class="card" style="margin-bottom: 20px;">
-          <h2>Visão Geral do Sistema</h2>
-          <div class="info-item"><strong>WhatsApp Cloud API:</strong> Webhook Meta ativo e verificado</div>
-          <div class="info-item"><strong>Catálogo:</strong> Google Sheets com fallback em contingência</div>
-          <div class="info-item"><strong>Inteligência Artificial:</strong> Gemini 2.5 Flash / Assistente Conflora</div>
-          <div class="info-item"><strong>Persistência:</strong> Firestore com fallback em memória</div>
-          <div class="info-item"><strong>Filas:</strong> Cloud Tasks com processamento assíncrono</div>
+  <div class="app-wrapper">
+    <!-- SIDEBAR COM ESTOQUE AO VIVO NO FIRESTORE -->
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <div>
+          <strong style="font-size: 14px; color: var(--wa-teal);">Conflora Viveiro</strong>
+          <div style="font-size: 11px; color: var(--wa-text-muted);">Painel do Administrador</div>
         </div>
+        <span class="db-badge">Firestore (confloraai)</span>
+      </div>
 
-        <div class="card">
-          <h2>Conformidade & Links Meta</h2>
-          <ul class="links-list">
-            <li><a href="/politica-de-privacidade">📄 Política de Privacidade (LGPD)</a></li>
-            <li><a href="/exclusao-de-dados">🗑️ Instruções de Exclusão de Dados</a></li>
-            <li><a href="/termos-de-servico">⚖️ Termos de Serviço</a></li>
-            <li><a href="/health">🩺 Status de Saúde (/health)</a></li>
-          </ul>
+      <div class="tabs-bar">
+        <button class="tab-btn active" id="tabStockBtn" onclick="switchTab('stock')">Estoque em Tempo Real</button>
+        <button class="tab-btn" id="tabMoveBtn" onclick="switchTab('movements')">Baixas & Movimentações</button>
+        <button class="tab-btn" id="tabMetaBtn" onclick="switchTab('meta')">Links Meta</button>
+      </div>
+
+      <div class="customer-config">
+        <div style="font-weight: 600; color: #475569;">Simular com seu número:</div>
+        <div class="config-row">
+          <input type="text" id="custPhone" class="config-input" value="5564999351616" placeholder="Telefone com DDD" style="width: 140px;" />
+          <input type="text" id="custName" class="config-input" value="Edmar Júnio" placeholder="Seu Nome" />
         </div>
       </div>
 
-      <div class="card">
-        <h2>Simulador de Atendimento WhatsApp</h2>
-        <div class="chat-container">
-          <div class="phone-row">
-            <input type="text" id="phone" value="5564999990001" placeholder="Telefone com DDD" style="width: 140px;" />
-            <input type="text" id="custName" value="Cliente Teste" placeholder="Nome do cliente" style="flex: 1;" />
-          </div>
-
-          <div class="chat-messages" id="messages">
-            <div class="message-bubble assistant">
-              Olá! Seja muito bem-vindo à Conflora Horta e Viveiro 🌱. Sou o assistente de vendas e estou à sua disposição. Como posso ajudar?
-              <div class="message-meta">Conflora AI</div>
-            </div>
-          </div>
-
-          <div class="quick-prompts">
-            <button class="quick-btn" onclick="sendPrompt('qual valor da palmeira rabo de raposa?')">Palmeira Rabo de Raposa</button>
-            <button class="quick-btn" onclick="sendPrompt('Vocês tem mini cabra??')">Mini Cabra</button>
-            <button class="quick-btn" onclick="sendPrompt('Vocês tem palmeiras?')">Consultoria Palmeiras</button>
-            <button class="quick-btn" onclick="sendPrompt('Manda pra mim 3 alface cabeça de 8, 3 rucula e 5 cebolinha')">Fazer Pedido Horta</button>
-            <button class="quick-btn" onclick="sendPrompt('pode me mandar foto da palmeira rabo de raposa?')">Pedir Fotos</button>
-            <button class="quick-btn" onclick="sendPrompt('Hoje vai ser no débito')">Mudar Pagamento</button>
-            <button class="quick-btn" onclick="sendPrompt('Pode confirmar!')">Confirmar Pedido</button>
-          </div>
-
-          <div class="chat-inputs">
-            <input type="text" id="userMsg" class="chat-input" placeholder="Digite uma mensagem para o assistente..." onkeydown="if(event.key==='Enter') sendMessage()" />
-            <button id="sendBtn" class="send-btn" onclick="sendMessage()">Enviar</button>
-          </div>
+      <div class="sidebar-content" id="sidebarStockContent">
+        <div id="productList">
+          <div style="padding: 20px; text-align: center; color: var(--wa-text-muted); font-size: 13px;">Carregando produtos do Firestore...</div>
         </div>
       </div>
+
+      <div class="sidebar-content" id="sidebarMoveContent" style="display: none;">
+        <div id="movementList">
+          <div style="padding: 20px; text-align: center; color: var(--wa-text-muted); font-size: 13px;">Nenhuma baixa realizada ainda nesta sessão.</div>
+        </div>
+      </div>
+
+      <div class="sidebar-content" id="sidebarMetaContent" style="display: none; padding: 16px;">
+        <div style="font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--wa-teal);">Páginas Oficiais de Verificação Meta:</div>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <a href="/politica-de-privacidade" target="_blank" style="padding: 8px 12px; background: #f1f5f9; border-radius: 6px; text-decoration: none; color: #334155; font-size: 13px; font-weight: 500;">📄 Política de Privacidade</a>
+          <a href="/exclusao-de-dados" target="_blank" style="padding: 8px 12px; background: #f1f5f9; border-radius: 6px; text-decoration: none; color: #334155; font-size: 13px; font-weight: 500;">🗑️ Exclusão de Dados (LGPD)</a>
+          <a href="/termos-de-servico" target="_blank" style="padding: 8px 12px; background: #f1f5f9; border-radius: 6px; text-decoration: none; color: #334155; font-size: 13px; font-weight: 500;">⚖️ Termos de Serviço</a>
+          <a href="/health" target="_blank" style="padding: 8px 12px; background: #f1f5f9; border-radius: 6px; text-decoration: none; color: #334155; font-size: 13px; font-weight: 500;">🩺 Health Check API</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- CHAT AREA WHATSAPP WEB -->
+    <div class="chat-area">
+      <div class="chat-header">
+        <div class="avatar-wrapper">🌱</div>
+        <div class="chat-header-info">
+          <div class="chat-header-name">Conflora Horta e Viveiro & Agromadeiras</div>
+          <div class="chat-header-status">online • Atendimento Inteligente WhatsApp</div>
+        </div>
+        <div style="display: flex; gap: 14px; color: #54656f; font-size: 18px; cursor: pointer;">
+          <span>🔍</span>
+          <span title="Recarregar Estoque do Firestore" onclick="fetchInventory()">🔄</span>
+        </div>
+      </div>
+
+      <div class="chat-body" id="chatBody">
+        <div class="enc-notice">
+          🔒 As mensagens desta conversa utilizam IA Gemini e realizam baixa atômica de estoque em tempo real no Cloud Firestore (projeto confloraai).
+        </div>
+
+        <div class="bubble assistant">
+          Olá! Seja muito bem-vindo à Conflora Horta e Viveiro 🌱.
+Sou o assistente oficial de vendas. Como posso ajudar com nossas plantas, mudas ou hortaliças hoje?
+          <div class="bubble-meta"><span>10:00</span></div>
+        </div>
+      </div>
+
+      <!-- PILLS DE TESTE RÁPIDO -->
+      <div class="quick-bar">
+        <button class="pill-btn" onclick="sendPrompt('qual valor da palmeira rabo de raposa?')">🌴 Palmeira Rabo de Raposa</button>
+        <button class="pill-btn" onclick="sendPrompt('Vocês tem mini cabra??')">🐐 Mini Cabra</button>
+        <button class="pill-btn" onclick="sendPrompt('Vocês tem palmeiras?')">🌱 Consultoria Palmeiras</button>
+        <button class="pill-btn highlight" onclick="sendPrompt('Manda pra mim 3 alface cabeça de 8, 3 rucula e 5 cebolinha')">🛒 Fazer Pedido Horta</button>
+        <button class="pill-btn" onclick="sendPrompt('pode me mandar foto da palmeira rabo de raposa?')">📸 Pedir Fotos</button>
+        <button class="pill-btn" onclick="sendPrompt('Hoje vai ser no débito')">💳 Mudar Pagamento</button>
+        <button class="pill-btn highlight" onclick="sendPrompt('Pode confirmar!')">✅ Confirmar Pedido (Dá Baixa no Estoque)</button>
+      </div>
+
+      <!-- BARRA DE DIGITAÇÃO WHATSAPP -->
+      <div class="chat-footer">
+        <button class="input-icon-btn">😊</button>
+        <button class="input-icon-btn">📎</button>
+        <input type="text" id="chatInput" class="message-input" placeholder="Mensagem" onkeydown="if(event.key==='Enter') sendChatMessage()" />
+        <button id="sendCircleBtn" class="send-circle-btn" onclick="sendChatMessage()">➤</button>
+      </div>
+
+      <div class="toast" id="stockToast"></div>
     </div>
   </div>
 
   <script>
-    const messagesEl = document.getElementById('messages');
-    const userMsgEl = document.getElementById('userMsg');
-    const sendBtnEl = document.getElementById('sendBtn');
-    const phoneEl = document.getElementById('phone');
-    const nameEl = document.getElementById('custName');
+    const chatBodyEl = document.getElementById('chatBody');
+    const chatInputEl = document.getElementById('chatInput');
+    const sendCircleBtnEl = document.getElementById('sendCircleBtn');
+    const custPhoneEl = document.getElementById('custPhone');
+    const custNameEl = document.getElementById('custName');
+    const productListEl = document.getElementById('productList');
+    const movementListEl = document.getElementById('movementList');
+    const stockToastEl = document.getElementById('stockToast');
 
-    function sendPrompt(text) {
-      userMsgEl.value = text;
-      sendMessage();
+    function switchTab(tab) {
+      document.getElementById('tabStockBtn').className = 'tab-btn ' + (tab === 'stock' ? 'active' : '');
+      document.getElementById('tabMoveBtn').className = 'tab-btn ' + (tab === 'movements' ? 'active' : '');
+      document.getElementById('tabMetaBtn').className = 'tab-btn ' + (tab === 'meta' ? 'active' : '');
+
+      document.getElementById('sidebarStockContent').style.display = tab === 'stock' ? 'block' : 'none';
+      document.getElementById('sidebarMoveContent').style.display = tab === 'movements' ? 'block' : 'none';
+      document.getElementById('sidebarMetaContent').style.display = tab === 'meta' ? 'block' : 'none';
     }
 
-    async function sendMessage() {
-      const text = userMsgEl.value.trim();
-      const phone = phoneEl.value.trim() || '5564999990001';
-      const name = nameEl.value.trim() || 'Cliente Teste';
+    function showToast(msg) {
+      stockToastEl.textContent = msg;
+      stockToastEl.classList.add('show');
+      setTimeout(() => stockToastEl.classList.remove('show'), 4000);
+    }
+
+    function getTimeString() {
+      const now = new Date();
+      return String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    }
+
+    function sendPrompt(text) {
+      chatInputEl.value = text;
+      sendChatMessage();
+    }
+
+    async function sendChatMessage() {
+      const text = chatInputEl.value.trim();
+      const phone = custPhoneEl.value.trim() || '5564999351616';
+      const name = custNameEl.value.trim() || 'Edmar Júnio';
       if (!text) return;
 
-      appendBubble(text, 'user', name);
-      userMsgEl.value = '';
-      sendBtnEl.disabled = true;
+      appendBubble(text, 'user', getTimeString());
+      chatInputEl.value = '';
+      sendCircleBtnEl.disabled = true;
 
-      const loadingBubble = appendBubble('Digitando...', 'assistant', 'Conflora AI');
+      const typingBubble = appendBubble('Digitando...', 'assistant', getTimeString(), true);
 
       try {
         const res = await fetch('/chat', {
@@ -286,37 +711,101 @@ function renderHomeHtml() {
           body: JSON.stringify({ telefone: phone, nome: name, mensagem: text }),
         });
         const data = await res.json();
-        loadingBubble.remove();
+        typingBubble.remove();
 
         if (data.reply) {
-          const metaInfo = (data.intent ? 'Intent: ' + data.intent : '') + (data.latencyMs ? ' (' + data.latencyMs + 'ms)' : '');
-          appendBubble(data.reply, 'assistant', 'Conflora AI', metaInfo);
+          appendBubble(data.reply, 'assistant', getTimeString());
+
+          // Se a intenção foi fechar pedido, atualiza estoque na hora
+          if (data.intent === 'ORDER_CONFIRMATION') {
+            showToast('📉 Pedido confirmado! Baixa de estoque registrada no Firestore.');
+            fetchInventory();
+          }
         } else if (data.error) {
-          appendBubble('Erro: ' + data.error, 'assistant', 'Sistema');
-        } else {
-          appendBubble('Sem resposta do atendente.', 'assistant', 'Conflora AI');
+          appendBubble('Erro: ' + data.error, 'assistant', getTimeString());
         }
       } catch (err) {
-        loadingBubble.remove();
-        appendBubble('Erro de conexão ao enviar mensagem: ' + err.message, 'assistant', 'Sistema');
+        typingBubble.remove();
+        appendBubble('Erro de conexão: ' + err.message, 'assistant', getTimeString());
       } finally {
-        sendBtnEl.disabled = false;
-        userMsgEl.focus();
+        sendCircleBtnEl.disabled = false;
+        chatInputEl.focus();
       }
     }
 
-    function appendBubble(text, role, sender, extraMeta) {
+    function appendBubble(text, role, time, isTyping = false) {
       const bubble = document.createElement('div');
-      bubble.className = 'message-bubble ' + role;
+      bubble.className = 'bubble ' + role;
       bubble.textContent = text;
-      const meta = document.createElement('div');
-      meta.className = 'message-meta';
-      meta.textContent = sender + (extraMeta ? ' • ' + extraMeta : '');
-      bubble.appendChild(meta);
-      messagesEl.appendChild(bubble);
-      messagesEl.scrollTop = messagesEl.scrollHeight;
+
+      if (!isTyping) {
+        const meta = document.createElement('div');
+        meta.className = 'bubble-meta';
+        meta.innerHTML = '<span>' + time + '</span>' + (role === 'user' ? ' <span class="blue-ticks">✓✓</span>' : '');
+        bubble.appendChild(meta);
+      }
+
+      chatBodyEl.appendChild(bubble);
+      chatBodyEl.scrollTop = chatBodyEl.scrollHeight;
       return bubble;
     }
+
+    async function fetchInventory() {
+      try {
+        const res = await fetch('/api/inventory');
+        const data = await res.json();
+        if (Array.isArray(data.products)) {
+          renderProducts(data.products);
+        }
+        if (Array.isArray(data.movements)) {
+          renderMovements(data.movements);
+        }
+      } catch (err) {
+        console.error('Erro ao carregar estoque:', err);
+      }
+    }
+
+    function renderProducts(products) {
+      productListEl.innerHTML = '';
+      products.forEach(p => {
+        const div = document.createElement('div');
+        div.className = 'product-item';
+        const qty = p.stockQuantity ?? p.estoque ?? 0;
+        const isLow = qty <= 5;
+        const img = p.imageurl || 'https://images.unsplash.com/photo-1512428813834-c702c7702b78?auto=format&fit=crop&w=100&q=80';
+
+        div.innerHTML = \`
+          <img src="\${img}" class="product-thumb" alt="\${p.descricao || p.name}" onerror="this.src='https://placehold.co/44x44/22543d/white?text=🌱'" />
+          <div class="product-info">
+            <div class="product-title">\${p.descricao || p.name}</div>
+            <div class="product-sub">\${p.categoria || ''} • R$ \${Number(p.valor_num || p.price || 0).toFixed(2)}</div>
+          </div>
+          <span class="stock-badge \${isLow ? 'low' : ''}">\${qty} un</span>
+        \`;
+        productListEl.appendChild(div);
+      });
+    }
+
+    function renderMovements(movements) {
+      movementListEl.innerHTML = '';
+      if (movements.length === 0) {
+        movementListEl.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--wa-text-muted); font-size: 13px;">Nenhuma baixa realizada ainda.</div>';
+        return;
+      }
+      movements.forEach(m => {
+        const div = document.createElement('div');
+        div.className = 'movement-item';
+        div.innerHTML = \`
+          <div><strong>\${m.productName}</strong>: -\${m.quantityDeducted} un</div>
+          <div style="font-size: 11px; color: #475569;">Estoque: \${m.previousStock} ➔ \${m.newStock}</div>
+          <div class="movement-date">\${new Date(m.createdAt).toLocaleTimeString()} • WhatsApp (\${m.customerPhone || 'Cliente'})</div>
+        \`;
+        movementListEl.appendChild(div);
+      });
+    }
+
+    // Carrega estoque ao abrir
+    fetchInventory();
   </script>
 </body>
 </html>`;
@@ -329,6 +818,7 @@ function renderTermsOfServiceHtml() {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Termos de Serviço | Conflora AI</title>
+  ${FETCH_SHIM_SCRIPT}
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #2d3748; max-width: 800px; margin: 0 auto; padding: 24px 16px; background-color: #f7fafc; }
     .card { background: white; padding: 36px 28px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
@@ -364,6 +854,11 @@ function createApp({ messageService, taskQueueClient }) {
   if (!express) { throw new Error('Express module not available'); }
   const app = express();
   const signatureValidator = new SignatureValidator(config.whatsapp.metaAppSecret);
+  const systemStatusService = new SystemStatusService({
+    catalogRepo: messageService ? messageService.catalogRepo : null,
+    firestoreRepo: messageService ? messageService.firestoreRepo : null,
+    whatsappClient: messageService ? messageService.whatsappClient : null,
+  });
 
   // Preserve raw body buffer for signature validation
   app.use(
@@ -374,10 +869,28 @@ function createApp({ messageService, taskQueueClient }) {
     })
   );
 
-  // Home / Dashboard & Test Console
+  // Home / Cardápio Digital Conflora
   app.get('/', (_req, res) => {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.status(200).send(renderHomeHtml());
+  });
+
+  // Painel de Administração, Frente de Caixa & Estoque
+  app.get('/admin', (_req, res) => {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.status(200).send(renderAdminHtml());
+  });
+
+  // Simulador WhatsApp Oficial
+  app.get(['/simulador', '/chat-simulador'], (_req, res) => {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.status(200).send(renderWhatsAppSimulatorHtml());
   });
 
   // Health check
@@ -451,6 +964,8 @@ function createApp({ messageService, taskQueueClient }) {
             continue;
           }
 
+          systemStatusService.recordWebhookHit(phone);
+
           const taskPayload = { phone, message: text, customerName, messageId };
 
           if (taskQueueClient) {
@@ -494,6 +1009,369 @@ function createApp({ messageService, taskQueueClient }) {
     }
   });
 
+  // Live Inventory & Stock Movements API (Firestore com fallback garantido na planilha padrão LISTA DE PRODUTOS)
+  const handleInventoryRequest = async (_req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    try {
+      let products = await messageService.firestoreRepo.getAllProducts();
+      if (!products || products.length === 0) {
+        const { DEFAULT_CATALOG_ITEMS } = require('../catalog/default-catalog');
+        products = DEFAULT_CATALOG_ITEMS;
+      }
+      let movements = [];
+      try {
+        movements = await messageService.firestoreRepo.getStockMovements(15);
+      } catch {
+        movements = [];
+      }
+      res.status(200).json({ products, movements: movements || [] });
+    } catch (err) {
+      Logger.error('Erro ao buscar inventário; fornecendo catálogo padrão da planilha', err);
+      const { DEFAULT_CATALOG_ITEMS } = require('../catalog/default-catalog');
+      res.status(200).json({ products: DEFAULT_CATALOG_ITEMS, movements: [] });
+    }
+  };
+
+  app.get('/api/inventory', handleInventoryRequest);
+  app.get('/api/products', handleInventoryRequest);
+  app.get('/api/catalog', handleInventoryRequest);
+
+  // Client Web Orders API
+  app.post('/api/orders', async (req, res) => {
+    try {
+      const { customerName, customerPhone, orderType, deliveryAddress, paymentMethod, items } = req.body;
+      if (!customerName || !customerPhone || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ error: 'Dados do pedido incompletos.' });
+      }
+
+      const total = items.reduce((acc, it) => acc + (Number(it.price || 0) * Number(it.quantity || 1)), 0);
+      const order = await messageService.firestoreRepo.createDirectOrder({
+        customerName,
+        customerPhone,
+        orderType: orderType || 'DELIVERY',
+        deliveryAddress: deliveryAddress || 'Retirada no Viveiro Conflora',
+        paymentMethod: paymentMethod || 'PIX',
+        items,
+        total,
+        status: 'PENDING',
+        source: 'WEB_CATALOG',
+      });
+
+      await messageService.firestoreRepo.deductStock(items, customerPhone);
+      res.status(200).json({ success: true, order });
+    } catch (err) {
+      Logger.error('Erro ao registrar pedido web', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin: Get all orders (Web & WhatsApp)
+  app.get('/api/admin/orders', async (_req, res) => {
+    try {
+      const orders = await messageService.firestoreRepo.getAllOrders(50);
+      res.status(200).json(orders);
+    } catch (err) {
+      Logger.error('Erro ao buscar pedidos no admin', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin: Update order status (CONFIRMED, DELIVERED, CANCELLED)
+  app.post('/api/admin/orders/:id/action', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+      const result = await messageService.firestoreRepo.updateOrderStatus(id, status);
+      res.status(200).json(result);
+    } catch (err) {
+      Logger.error('Erro ao atualizar status do pedido', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin: Nova Venda Manual no Balcão / Caixa
+  app.post('/api/admin/orders/manual', async (req, res) => {
+    try {
+      const { customerName, customerPhone, items, paymentMethod, notes } = req.body;
+      const order = await messageService.firestoreRepo.createManualOrder({
+        customerName,
+        customerPhone,
+        items,
+        paymentMethod,
+        notes,
+      });
+      res.status(200).json({ success: true, order });
+    } catch (err) {
+      Logger.error('Erro ao lançar pedido manual no caixa', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin: Entrada Rápida de Estoque
+  app.post('/api/admin/stock/quick-entry', async (req, res) => {
+    try {
+      const { productId, quantityAdded } = req.body;
+      const result = await messageService.firestoreRepo.quickAddStock(productId, quantityAdded);
+      res.status(200).json(result);
+    } catch (err) {
+      Logger.error('Erro na entrada rápida de estoque', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin: Salvar / Atualizar Produto
+  app.post('/api/admin/products', async (req, res) => {
+    try {
+      const product = req.body;
+      await messageService.firestoreRepo.saveProduct(product);
+      res.status(200).json({ success: true, product });
+    } catch (err) {
+      Logger.error('Erro ao salvar produto no admin', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin: Excluir Produto
+  app.delete('/api/admin/products/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      await messageService.firestoreRepo.deleteProduct(id);
+      res.status(200).json({ success: true });
+    } catch (err) {
+      Logger.error('Erro ao excluir produto no admin', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin: Importar Dados da Planilha
+  app.post('/api/admin/import-data', async (req, res) => {
+    try {
+      const { type, records } = req.body;
+      const result = await messageService.firestoreRepo.importSpreadsheetData({ type, records });
+      res.status(200).json(result);
+    } catch (err) {
+      Logger.error('Erro na importação de dados da planilha', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin: Restaurar / Popular Catálogo Padrão
+  app.post('/api/admin/seed-catalog', async (_req, res) => {
+    try {
+      const { DEFAULT_CATALOG_ITEMS } = require('../catalog/default-catalog');
+      await messageService.firestoreRepo.batchUpsertProducts(DEFAULT_CATALOG_ITEMS);
+      res.status(200).json({ success: true, count: DEFAULT_CATALOG_ITEMS.length });
+    } catch (err) {
+      Logger.error('Erro ao semear catálogo padrão', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // System Diagnostics & Connection Status API (Exclusivo Admin)
+  app.get('/api/admin/system-status', async (_req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    try {
+      const status = await systemStatusService.getSystemStatus();
+      res.status(200).json(status);
+    } catch (err) {
+      Logger.error('Erro ao coletar status do sistema', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/admin/test-sheets', async (_req, res) => {
+    try {
+      const result = await systemStatusService.checkGoogleSheetsStatus();
+      res.status(200).json(result);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/admin/test-webhook', async (_req, res) => {
+    try {
+      const t0 = Date.now();
+      const status = systemStatusService.checkWhatsAppStatus();
+      res.status(200).json({ ...status, pingLatencyMs: Date.now() - t0, pingSuccess: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Auth: Google Sign-In (Clientes opcionais e Admin com acesso liberado)
+  app.post('/api/auth/google', async (req, res) => {
+    try {
+      const { email, name, picture } = req.body;
+      if (!email) {
+        return res.status(400).json({ success: false, error: 'E-mail é obrigatório para autenticação Google.' });
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+      const users = await messageService.firestoreRepo.getAllUsers();
+      const existingUser = users.find((u) => u.email && u.email.toLowerCase().trim() === normalizedEmail);
+
+      // Edmar Júnio ou qualquer usuário previamente cadastrado com perfil ADMIN
+      const isSuperAdmin = normalizedEmail === 'edmarjuniob@gmail.com' || (existingUser && existingUser.role === 'ADMIN');
+      const role = isSuperAdmin ? 'ADMIN' : (existingUser ? existingUser.role : 'CLIENTE');
+
+      const user = {
+        id: existingUser ? existingUser.id : `usr-g-${Date.now()}`,
+        name: name || (existingUser ? existingUser.name : normalizedEmail.split('@')[0]),
+        email: normalizedEmail,
+        picture: picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || normalizedEmail)}&background=15803d&color=fff`,
+        role,
+        authProvider: 'GOOGLE',
+      };
+
+      if (!existingUser && role === 'ADMIN') {
+        await messageService.firestoreRepo.saveUser(user).catch(() => {});
+      }
+
+      res.status(200).json({ success: true, user });
+    } catch (err) {
+      Logger.error('Erro na autenticação Google', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Auth: Login do Colaborador (Admin ou Caixa)
+  app.post('/api/admin/auth/login', async (req, res) => {
+    try {
+      const { userId, pin } = req.body;
+      const result = await messageService.firestoreRepo.authenticateUser(userId, pin);
+      if (!result.success) {
+        return res.status(401).json(result);
+      }
+      res.status(200).json(result);
+    } catch (err) {
+      Logger.error('Erro no login admin', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Auth: Listar Colaboradores para Autenticação e Gestão
+  app.get('/api/admin/auth/users', async (_req, res) => {
+    try {
+      const users = await messageService.firestoreRepo.getAllUsers();
+      res.status(200).json(users);
+    } catch (err) {
+      Logger.error('Erro ao listar usuários', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin: Criar ou Editar Colaborador
+  app.post('/api/admin/users', async (req, res) => {
+    try {
+      const userData = req.body;
+      const saved = await messageService.firestoreRepo.saveUser(userData);
+      res.status(200).json({ success: true, user: saved });
+    } catch (err) {
+      Logger.error('Erro ao salvar colaborador', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin: Excluir Colaborador
+  app.delete('/api/admin/users/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const deleted = await messageService.firestoreRepo.deleteUser(id);
+      res.status(200).json({ success: deleted });
+    } catch (err) {
+      Logger.error('Erro ao excluir colaborador', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Alterações de Venda: Listar Solicitações
+  app.get('/api/admin/alterations', async (_req, res) => {
+    try {
+      const alterations = await messageService.firestoreRepo.getAllOrderAlterations();
+      res.status(200).json(alterations);
+    } catch (err) {
+      Logger.error('Erro ao buscar alterações', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Alterações de Venda: Criar Solicitação pelo Atendente do Caixa
+  app.post('/api/admin/alterations', async (req, res) => {
+    try {
+      const { orderId, originalOrder, proposedOrder, requestedBy, requestedByName, reason } = req.body;
+      if (!orderId || !proposedOrder) {
+        return res.status(400).json({ error: 'Dados da solicitação incompletos.' });
+      }
+      const requestObj = await messageService.firestoreRepo.createOrderAlterationRequest({
+        orderId,
+        originalOrder,
+        proposedOrder,
+        requestedBy,
+        requestedByName,
+        reason,
+      });
+      res.status(200).json({ success: true, request: requestObj });
+    } catch (err) {
+      Logger.error('Erro ao criar solicitação de alteração', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Alterações de Venda: Administrador Aceita ou Recusa com Motivo
+  app.post('/api/admin/alterations/:id/review', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { action, reviewedBy, rejectionReason } = req.body;
+      const result = await messageService.firestoreRepo.reviewOrderAlteration({
+        requestId: id,
+        action,
+        reviewedBy,
+        rejectionReason,
+      });
+      res.status(200).json(result);
+    } catch (err) {
+      Logger.error('Erro ao revisar alteração', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Notificações: Buscar para o usuário (Caixa ou Admin)
+  app.get('/api/admin/notifications', async (req, res) => {
+    try {
+      const { userId } = req.query;
+      const notifs = await messageService.firestoreRepo.getUserNotifications(userId);
+      res.status(200).json(notifs);
+    } catch (err) {
+      Logger.error('Erro ao buscar notificações', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Notificações: Marcar como lida
+  app.post('/api/admin/notifications/:id/read', async (req, res) => {
+    try {
+      const { id } = req.params;
+      await messageService.firestoreRepo.markNotificationRead(id);
+      res.status(200).json({ success: true });
+    } catch (err) {
+      Logger.error('Erro ao atualizar notificação', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Métricas do Dia e Resumo do Caixa
+  app.get('/api/admin/daily-metrics', async (_req, res) => {
+    try {
+      const metrics = await messageService.firestoreRepo.getDailySalesMetrics();
+      res.status(200).json(metrics);
+    } catch (err) {
+      Logger.error('Erro ao buscar métricas diárias', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Local Testing Chat Endpoint
   if (config.isDev || process.env.NODE_ENV !== 'production') {
     app.post('/chat', async (req, res) => {
@@ -509,7 +1387,8 @@ function createApp({ messageService, taskQueueClient }) {
           customerName: nome || 'Cliente Teste',
           messageId: `local-${Date.now()}`,
         });
-        res.status(200).json(result);
+        const products = await messageService.firestoreRepo.getAllProducts();
+        res.status(200).json({ ...result, products });
       } catch (error) {
         Logger.error('Erro no endpoint /chat local', error);
         res.status(500).json({ error: error.message });
@@ -523,6 +1402,8 @@ function createApp({ messageService, taskQueueClient }) {
 module.exports = {
   createApp,
   renderHomeHtml,
+  renderAdminHtml,
+  renderWhatsAppSimulatorHtml,
   renderPrivacyPolicyHtml,
   renderDataDeletionHtml,
   renderTermsOfServiceHtml,

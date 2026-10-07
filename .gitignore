@@ -9,5 +9,6 @@ coverage/
 Thumbs.db
 backup-*/
 service-account*.json
+firebase-service-account*.json
 credentials*.json
 .gcloud/
