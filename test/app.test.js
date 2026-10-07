@@ -457,9 +457,18 @@ test('16. Cardápio Digital & Painel Admin: Renderização e elementos essenciai
 test('17. Firestore Repository: Entrada ágil de estoque, venda balcão e importador de planilha', async () => {
   const repo = new FirestoreRepository({ isInMemory: true });
 
-  // 1. Produtos iniciais carregados
+  // 1. O repositório começa vazio; o cenário cadastra seu próprio produto.
+  assert.deepStrictEqual(await repo.getAllProducts(), []);
+  await repo.saveProduct({
+    id: 'stock-test-palm',
+    name: 'Palmeira de Teste',
+    category: 'Palmeiras',
+    price: 100,
+    stockQuantity: 5,
+  });
   const products = await repo.getAllProducts();
-  assert.ok(products.length >= 10);
+  assert.strictEqual(products.length, 1);
+  assert.strictEqual(products[0].id, 'stock-test-palm');
 
   // 2. Entrada ágil de estoque (+10)
   const prodId = products[0].id;
