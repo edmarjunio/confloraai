@@ -91,6 +91,12 @@ const config = Object.freeze({
   },
 
   adminSecret: process.env.ADMIN_SECRET || '',
+  firebase: {
+    apiKey: process.env.FIREBASE_API_KEY || '',
+    authDomain: process.env.FIREBASE_AUTH_DOMAIN || '',
+    projectId: process.env.FIREBASE_PROJECT_ID || serviceAccountProjectId || process.env.GCP_PROJECT_ID || 'confloraai',
+    appId: process.env.FIREBASE_APP_ID || '',
+  },
 });
 
 module.exports = config;

@@ -408,3 +408,22 @@ bash scripts/deploy.sh
 ```
 
 Depois que o fluxo estiver estável, o próximo passo recomendado é CI/CD para fazer o deploy automático da `main`.
+# Login Google com Firebase Authentication
+
+Configure `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`, `FIREBASE_PROJECT_ID` e
+`FIREBASE_APP_ID` no `.env` local e nas variáveis do ambiente de hospedagem,
+usando a configuração do aplicativo Web no console Firebase. Esses campos são
+configuração pública do aplicativo; nunca use a chave privada da conta de serviço.
+O projeto do aplicativo Web deve corresponder ao projeto usado para validar tokens.
+
+Em Authentication, habilite o provedor Google e adicione o domínio da aplicação
+(e `localhost` para desenvolvimento) aos domínios autorizados.
+O servidor usa a conta de serviço já configurada ou Application Default Credentials.
+
+No modal de admin, clique em Entrar com Google e escolha a conta no popup.
+O servidor valida o ID token Firebase e obtém e-mail, nome e foto assinados.
+As funções ADMIN/CAIXA/CLIENTE continuam sendo determinadas pelo cadastro existente.
+O login por PIN permanece disponível. O botão Sair também encerra a sessão Firebase.
+A página inicial compartilha o mesmo fluxo Google, sem campos manuais.
+
+Referência: https://firebase.google.com/docs/auth/web/google-signin

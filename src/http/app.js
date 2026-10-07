@@ -11,6 +11,7 @@ function getExpress() {
 }
 
 const config = require('../config/env');
+const { verifyFirebaseToken } = require('../security/firebase-auth');
 const Logger = require('../shared/logger');
 const { SignatureValidator } = require('../security/signature.validator');
 const { SystemStatusService } = require('../services/system-status.service');
@@ -849,7 +850,7 @@ function renderTermsOfServiceHtml() {
 </html>`;
 }
 
-function createApp({ messageService, taskQueueClient }) {
+function createApp({ messageService, taskQueueClient, verifyGoogleToken = verifyFirebaseToken }) {
   const express = getExpress();
   if (!express) { throw new Error('Express module not available'); }
   const app = express();
@@ -1217,10 +1218,20 @@ function createApp({ messageService, taskQueueClient }) {
   // Auth: Google Sign-In (Clientes opcionais e Admin com acesso liberado)
   app.post('/api/auth/google', async (req, res) => {
     try {
-      const { email, name, picture } = req.body;
-      if (!email) {
-        return res.status(400).json({ success: false, error: 'E-mail é obrigatório para autenticação Google.' });
+      const { idToken } = req.body || {};
+      if (typeof idToken !== 'string' || !idToken.trim()) {
+        return res.status(401).json({ success: false, error: 'Token Firebase obrigatório.' });
       }
+      let identity;
+      try {
+        identity = await verifyGoogleToken(idToken);
+      } catch {
+        return res.status(401).json({ success: false, error: 'Sessão Google inválida ou expirada. Entre novamente.' });
+      }
+      if (!identity.email || identity.email_verified !== true || identity.firebase?.sign_in_provider !== 'google.com') {
+        return res.status(401).json({ success: false, error: 'Use uma conta Google com e-mail verificado.' });
+      }
+      const { email, name, picture, uid } = identity;
 
       const normalizedEmail = email.toLowerCase().trim();
       const users = await messageService.firestoreRepo.getAllUsers();
@@ -1231,18 +1242,17 @@ function createApp({ messageService, taskQueueClient }) {
       const role = isSuperAdmin ? 'ADMIN' : (existingUser ? existingUser.role : 'CLIENTE');
 
       const user = {
-        id: existingUser ? existingUser.id : `usr-g-${Date.now()}`,
+        id: existingUser ? existingUser.id : `usr-g-${uid}`,
         name: name || (existingUser ? existingUser.name : normalizedEmail.split('@')[0]),
         email: normalizedEmail,
         picture: picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || normalizedEmail)}&background=15803d&color=fff`,
         role,
         authProvider: 'GOOGLE',
+        firebaseUid: uid,
       };
 
       // Sempre persiste o usuário para que o admin possa gerenciá-lo na lista de usuários
-      if (!existingUser) {
-        await messageService.firestoreRepo.saveUser(user).catch(() => {});
-      }
+      await messageService.firestoreRepo.saveUser({ ...existingUser, ...user });
 
       res.status(200).json({ success: true, user });
     } catch (err) {

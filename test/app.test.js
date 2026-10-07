@@ -524,7 +524,16 @@ test('18. Status Dashboard & Google Auth: Diagnóstico de conexões e autentica�
   // 3. Teste Google Auth no backend
   const { createApp } = require('../src/http/app');
   const messageService = { firestoreRepo: repo, catalogRepo: catalog };
-  const app = createApp({ messageService, taskQueueClient: {} });
+  const identities = {
+    admin: { uid: 'google-admin', email: 'edmarjuniob@gmail.com', name: 'Edmar Júnio', picture: 'https://example.com/avatar.jpg', email_verified: true, firebase: { sign_in_provider: 'google.com' } },
+    customer: { uid: 'google-customer', email: 'cliente@gmail.com', name: 'Maria Silva', email_verified: true, firebase: { sign_in_provider: 'google.com' } },
+    unverified: { email: 'edmarjuniob@gmail.com', email_verified: false, firebase: { sign_in_provider: 'google.com' } },
+    password: { email: 'edmarjuniob@gmail.com', email_verified: true, firebase: { sign_in_provider: 'password' } },
+  };
+  const app = createApp({ messageService, taskQueueClient: {}, verifyGoogleToken: async (token) => {
+    if (!identities[token]) { throw new Error('Invalid token'); }
+    return identities[token];
+  } });
 
   const server = app.listen(0);
   const port = server.address().port;
@@ -534,21 +543,36 @@ test('18. Status Dashboard & Google Auth: Diagnóstico de conexões e autentica�
     const adminRes = await fetch(`http://localhost:${port}/api/auth/google`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'edmarjuniob@gmail.com', name: 'Edmar Júnio' }),
+      body: JSON.stringify({ idToken: 'admin' }),
     });
     const adminData = await adminRes.json();
     assert.strictEqual(adminData.success, true);
     assert.strictEqual(adminData.user.role, 'ADMIN');
+    assert.strictEqual(adminData.user.name, 'Edmar Júnio');
+    assert.strictEqual(adminData.user.picture, identities.admin.picture);
 
     // Customer login (opcional para clientes)
     const custRes = await fetch(`http://localhost:${port}/api/auth/google`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'cliente@gmail.com', name: 'Maria Silva' }),
+      body: JSON.stringify({ idToken: 'customer', email: 'edmarjuniob@gmail.com', name: 'Forged Admin' }),
     });
     const custData = await custRes.json();
     assert.strictEqual(custData.success, true);
     assert.strictEqual(custData.user.role, 'CLIENTE');
+    assert.strictEqual(custData.user.name, 'Maria Silva');
+    assert.strictEqual(custData.user.email, 'cliente@gmail.com');
+    for (const payload of [{ email: 'edmarjuniob@gmail.com' }, { idToken: 'invalid' }, { idToken: 'unverified' }, { idToken: 'password' }]) {
+      const response = await fetch(`http://localhost:${port}/api/auth/google`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      });
+      assert.strictEqual(response.status, 401);
+    }
+    identities.admin.name = 'Updated Google Name';
+    await fetch(`http://localhost:${port}/api/auth/google`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken: 'admin' }),
+    });
+    assert.strictEqual((await repo.getAllUsers()).find(user => user.id === adminData.user.id).name, 'Updated Google Name');
 
     // Live inventory endpoint
     const invRes = await fetch(`http://localhost:${port}/api/inventory`);
