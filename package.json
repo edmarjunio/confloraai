@@ -9,6 +9,7 @@
     "node": ">=18.0.0"
   },
   "scripts": {
+    "build": "npm run check",
     "test:all": "npm install && npm run check && npm test && npm run dev",
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",

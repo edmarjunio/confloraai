@@ -1,0 +1,7 @@
+{
+  "name": "Conflora AI",
+  "description": "Agente de vendas e atendimento da Conflora Horta e Viveiro integrado ao WhatsApp Cloud API, Gemini AI, Google Sheets, Firestore e Cloud Tasks.",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

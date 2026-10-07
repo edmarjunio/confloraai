@@ -88,7 +88,7 @@ function parseOrderItems(rawText) {
     return [];
   }
 
-  let clean = rawText
+  const clean = rawText
     .replace(/^(manda pra mim|manda|me manda|quero|vou querer|ve pra mim|por favor manda|manda ai)\s+/i, '')
     .trim();
 
@@ -159,10 +159,15 @@ class MessageRouter {
     if ((isPaymentUpdate || isAddressUpdate) && context.pendingOrder) {
       const updatedFields = {};
       if (isPaymentUpdate) {
-        if (/debito/i.test(normalized)) updatedFields.paymentMethod = 'Cartão de Débito';
-        else if (/credito/i.test(normalized)) updatedFields.paymentMethod = 'Cartão de Crédito';
-        else if (/pix/i.test(normalized)) updatedFields.paymentMethod = 'PIX';
-        else if (/dinheiro/i.test(normalized)) updatedFields.paymentMethod = 'Dinheiro';
+        if (/debito/i.test(normalized)) {
+          updatedFields.paymentMethod = 'Cartão de Débito';
+        } else if (/credito/i.test(normalized)) {
+          updatedFields.paymentMethod = 'Cartão de Crédito';
+        } else if (/pix/i.test(normalized)) {
+          updatedFields.paymentMethod = 'PIX';
+        } else if (/dinheiro/i.test(normalized)) {
+          updatedFields.paymentMethod = 'Dinheiro';
+        }
       }
       if (isAddressUpdate) {
         const addrMatch = rawMessage.match(/(?:entregar em|entrega em|endereco|na rua|no endereco)\s*:?\s*(.*)$/i);

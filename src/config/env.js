@@ -28,7 +28,7 @@ try {
 const config = Object.freeze({
   env: process.env.NODE_ENV || 'development',
   isDev: (process.env.NODE_ENV || 'development') === 'development',
-  port: parseInt(process.env.PORT || '8080', 10),
+  port: parseInt(process.env.PORT || '3000', 10),
 
   gcp: {
     projectId: process.env.GCP_PROJECT_ID || 'conflora-ai',
@@ -38,6 +38,7 @@ const config = Object.freeze({
   gemini: {
     location: process.env.GEMINI_LOCATION || 'global',
     model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+    apiKey: process.env.GEMINI_API_KEY || '',
   },
 
   sheets: {

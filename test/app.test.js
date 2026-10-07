@@ -152,7 +152,9 @@ function createTestMessageService(aiMock = null, captures = {}) {
       return { success: true };
     },
     async markAsRead(id) {
-      if (!id || !id.startsWith('wamid.')) return { mock: true, skippedNonMetaId: true };
+      if (!id || !id.startsWith('wamid.')) {
+        return { mock: true, skippedNonMetaId: true };
+      }
       return { success: true };
     },
   };

@@ -133,6 +133,195 @@ function renderDataDeletionHtml() {
 </html>`;
 }
 
+function renderHomeHtml() {
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Conflora AI — Atendimento & Vendas WhatsApp</title>
+  <style>
+    :root {
+      --primary: #22543d;
+      --primary-light: #276749;
+      --accent: #38a169;
+      --bg: #f7fafc;
+      --card-bg: #ffffff;
+      --text: #2d3748;
+      --text-muted: #718096;
+      --border: #e2e8f0;
+      --chat-user: #dcf8c6;
+      --chat-bot: #ffffff;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; padding: 20px 16px; }
+    .container { max-width: 960px; margin: 0 auto; }
+    header { background: var(--card-bg); border-radius: 12px; padding: 24px 28px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.08); margin-bottom: 20px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; }
+    .brand h1 { color: var(--primary); font-size: 24px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .brand p { color: var(--text-muted); font-size: 14px; margin-top: 4px; }
+    .badge-status { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; background: #def7ec; color: #03543f; }
+    .badge-status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #31c48d; }
+    .grid { display: grid; grid-template-columns: 1fr 1.3fr; gap: 20px; }
+    @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+    .card { background: var(--card-bg); border-radius: 12px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.08); }
+    h2 { font-size: 18px; color: var(--primary-light); margin-bottom: 14px; padding-bottom: 8px; border-bottom: 2px solid #edf2f7; }
+    .info-item { margin-bottom: 12px; font-size: 14px; }
+    .info-item strong { color: var(--primary); }
+    .links-list { list-style: none; margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+    .links-list a { display: inline-flex; align-items: center; color: var(--primary-light); text-decoration: none; font-size: 14px; font-weight: 500; padding: 8px 12px; background: #f0fff4; border-radius: 6px; transition: background 0.2s; }
+    .links-list a:hover { background: #dcfce7; }
+    .chat-container { display: flex; flex-direction: column; height: 540px; }
+    .chat-messages { flex: 1; overflow-y: auto; padding: 16px; background: #efeae2; border-radius: 8px; display: flex; flex-direction: column; gap: 12px; }
+    .message-bubble { max-width: 82%; padding: 10px 14px; border-radius: 8px; font-size: 14px; word-break: break-word; white-space: pre-wrap; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+    .message-bubble.user { align-self: flex-end; background: var(--chat-user); border-top-right-radius: 2px; }
+    .message-bubble.assistant { align-self: flex-start; background: var(--chat-bot); border-top-left-radius: 2px; }
+    .message-meta { font-size: 11px; color: var(--text-muted); margin-top: 4px; text-align: right; }
+    .quick-prompts { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 8px; }
+    .quick-btn { background: #edf2f7; border: 1px solid #cbd5e0; border-radius: 14px; padding: 4px 10px; font-size: 12px; cursor: pointer; color: #4a5568; transition: all 0.15s; }
+    .quick-btn:hover { background: #e2e8f0; color: #2d3748; }
+    .chat-inputs { display: flex; gap: 8px; margin-top: 8px; }
+    .chat-input { flex: 1; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; outline: none; }
+    .chat-input:focus { border-color: var(--accent); }
+    .send-btn { background: var(--accent); color: white; border: none; border-radius: 8px; padding: 10px 20px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+    .send-btn:hover { background: #2f855a; }
+    .send-btn:disabled { background: #cbd5e0; cursor: not-allowed; }
+    .phone-row { display: flex; gap: 8px; margin-bottom: 8px; font-size: 13px; }
+    .phone-row input { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <h1>🌱 Conflora AI <span>v2.1</span></h1>
+        <p>Atendimento Inteligente no WhatsApp — Conflora Horta e Viveiro & Agromadeiras</p>
+      </div>
+      <span class="badge-status">Servidor Ativo (Porta 3000)</span>
+    </header>
+
+    <div class="grid">
+      <div>
+        <div class="card" style="margin-bottom: 20px;">
+          <h2>Visão Geral do Sistema</h2>
+          <div class="info-item"><strong>WhatsApp Cloud API:</strong> Webhook Meta ativo e verificado</div>
+          <div class="info-item"><strong>Catálogo:</strong> Google Sheets com fallback em contingência</div>
+          <div class="info-item"><strong>Inteligência Artificial:</strong> Gemini 2.5 Flash / Assistente Conflora</div>
+          <div class="info-item"><strong>Persistência:</strong> Firestore com fallback em memória</div>
+          <div class="info-item"><strong>Filas:</strong> Cloud Tasks com processamento assíncrono</div>
+        </div>
+
+        <div class="card">
+          <h2>Conformidade & Links Meta</h2>
+          <ul class="links-list">
+            <li><a href="/politica-de-privacidade">📄 Política de Privacidade (LGPD)</a></li>
+            <li><a href="/exclusao-de-dados">🗑️ Instruções de Exclusão de Dados</a></li>
+            <li><a href="/termos-de-servico">⚖️ Termos de Serviço</a></li>
+            <li><a href="/health">🩺 Status de Saúde (/health)</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Simulador de Atendimento WhatsApp</h2>
+        <div class="chat-container">
+          <div class="phone-row">
+            <input type="text" id="phone" value="5564999990001" placeholder="Telefone com DDD" style="width: 140px;" />
+            <input type="text" id="custName" value="Cliente Teste" placeholder="Nome do cliente" style="flex: 1;" />
+          </div>
+
+          <div class="chat-messages" id="messages">
+            <div class="message-bubble assistant">
+              Olá! Seja muito bem-vindo à Conflora Horta e Viveiro 🌱. Sou o assistente de vendas e estou à sua disposição. Como posso ajudar?
+              <div class="message-meta">Conflora AI</div>
+            </div>
+          </div>
+
+          <div class="quick-prompts">
+            <button class="quick-btn" onclick="sendPrompt('qual valor da palmeira rabo de raposa?')">Palmeira Rabo de Raposa</button>
+            <button class="quick-btn" onclick="sendPrompt('Vocês tem mini cabra??')">Mini Cabra</button>
+            <button class="quick-btn" onclick="sendPrompt('Vocês tem palmeiras?')">Consultoria Palmeiras</button>
+            <button class="quick-btn" onclick="sendPrompt('Manda pra mim 3 alface cabeça de 8, 3 rucula e 5 cebolinha')">Fazer Pedido Horta</button>
+            <button class="quick-btn" onclick="sendPrompt('pode me mandar foto da palmeira rabo de raposa?')">Pedir Fotos</button>
+            <button class="quick-btn" onclick="sendPrompt('Hoje vai ser no débito')">Mudar Pagamento</button>
+            <button class="quick-btn" onclick="sendPrompt('Pode confirmar!')">Confirmar Pedido</button>
+          </div>
+
+          <div class="chat-inputs">
+            <input type="text" id="userMsg" class="chat-input" placeholder="Digite uma mensagem para o assistente..." onkeydown="if(event.key==='Enter') sendMessage()" />
+            <button id="sendBtn" class="send-btn" onclick="sendMessage()">Enviar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const messagesEl = document.getElementById('messages');
+    const userMsgEl = document.getElementById('userMsg');
+    const sendBtnEl = document.getElementById('sendBtn');
+    const phoneEl = document.getElementById('phone');
+    const nameEl = document.getElementById('custName');
+
+    function sendPrompt(text) {
+      userMsgEl.value = text;
+      sendMessage();
+    }
+
+    async function sendMessage() {
+      const text = userMsgEl.value.trim();
+      const phone = phoneEl.value.trim() || '5564999990001';
+      const name = nameEl.value.trim() || 'Cliente Teste';
+      if (!text) return;
+
+      appendBubble(text, 'user', name);
+      userMsgEl.value = '';
+      sendBtnEl.disabled = true;
+
+      const loadingBubble = appendBubble('Digitando...', 'assistant', 'Conflora AI');
+
+      try {
+        const res = await fetch('/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ telefone: phone, nome: name, mensagem: text }),
+        });
+        const data = await res.json();
+        loadingBubble.remove();
+
+        if (data.reply) {
+          const metaInfo = (data.intent ? 'Intent: ' + data.intent : '') + (data.latencyMs ? ' (' + data.latencyMs + 'ms)' : '');
+          appendBubble(data.reply, 'assistant', 'Conflora AI', metaInfo);
+        } else if (data.error) {
+          appendBubble('Erro: ' + data.error, 'assistant', 'Sistema');
+        } else {
+          appendBubble('Sem resposta do atendente.', 'assistant', 'Conflora AI');
+        }
+      } catch (err) {
+        loadingBubble.remove();
+        appendBubble('Erro de conexão ao enviar mensagem: ' + err.message, 'assistant', 'Sistema');
+      } finally {
+        sendBtnEl.disabled = false;
+        userMsgEl.focus();
+      }
+    }
+
+    function appendBubble(text, role, sender, extraMeta) {
+      const bubble = document.createElement('div');
+      bubble.className = 'message-bubble ' + role;
+      bubble.textContent = text;
+      const meta = document.createElement('div');
+      meta.className = 'message-meta';
+      meta.textContent = sender + (extraMeta ? ' • ' + extraMeta : '');
+      bubble.appendChild(meta);
+      messagesEl.appendChild(bubble);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      return bubble;
+    }
+  </script>
+</body>
+</html>`;
+}
+
 function renderTermsOfServiceHtml() {
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -184,6 +373,12 @@ function createApp({ messageService, taskQueueClient }) {
       },
     })
   );
+
+  // Home / Dashboard & Test Console
+  app.get('/', (_req, res) => {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.status(200).send(renderHomeHtml());
+  });
 
   // Health check
   app.get('/health', (_req, res) => {
@@ -300,7 +495,7 @@ function createApp({ messageService, taskQueueClient }) {
   });
 
   // Local Testing Chat Endpoint
-  if (config.isDev) {
+  if (config.isDev || process.env.NODE_ENV !== 'production') {
     app.post('/chat', async (req, res) => {
       const { telefone, nome, mensagem } = req.body;
       if (!telefone || !mensagem) {
@@ -327,6 +522,7 @@ function createApp({ messageService, taskQueueClient }) {
 
 module.exports = {
   createApp,
+  renderHomeHtml,
   renderPrivacyPolicyHtml,
   renderDataDeletionHtml,
   renderTermsOfServiceHtml,

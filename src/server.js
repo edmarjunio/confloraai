@@ -52,8 +52,9 @@ async function bootstrap() {
   // 3. Aplicação Express
   const app = createApp({ messageService, taskQueueClient });
 
-  const server = app.listen(config.port, () => {
-    Logger.info(`Conflora AI rodando com sucesso na porta ${config.port}`);
+  const host = process.env.HOST || '0.0.0.0';
+  const server = app.listen(config.port, host, () => {
+    Logger.info(`Conflora AI rodando com sucesso na porta ${config.port} (${host})`);
   });
 
   // Graceful shutdown

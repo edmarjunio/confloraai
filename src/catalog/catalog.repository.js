@@ -1,5 +1,6 @@
 const { normalizeText, parseCurrencyString, toSingular } = require('../shared/string.util');
 const Logger = require('../shared/logger');
+const { DEFAULT_CATALOG_ITEMS } = require('./default-catalog');
 
 let googleApisModule = null;
 function getGoogleApis() {
@@ -158,7 +159,8 @@ class CatalogRepository {
     } catch (error) {
       Logger.error('Falha ao atualizar catálogo via Google Sheets', error);
       if (this.items.length === 0) {
-        throw error;
+        Logger.info('Carregando catálogo padrão de contingência Conflora...');
+        this.loadItems(DEFAULT_CATALOG_ITEMS);
       }
     }
   }

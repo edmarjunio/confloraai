@@ -24,23 +24,36 @@ class AgentService {
     this.modelName = config.gemini.model || 'gemini-2.5-flash';
 
     if (!this.aiClient && process.env.NODE_ENV !== 'test') {
-      const GenAI = getGenAI();
-      if (GenAI && GenAI.GoogleGenAI) {
-        try {
-          if (process.env.GEMINI_API_KEY) {
-            this.aiClient = new GenAI.GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-          } else {
-            this.aiClient = new GenAI.GoogleGenAI({
-              vertexAI: true,
-              project: config.gcp.projectId,
-              location: config.gemini.location || 'southamerica-east1',
-            });
-          }
-        } catch (err) {
-          Logger.warn('Aviso: Inicialização da IA será feita na primeira requisição', { error: err.message });
+      this.getAiClient();
+    }
+  }
+
+  getAiClient() {
+    if (this.aiClient) {
+      return this.aiClient;
+    }
+    if (process.env.NODE_ENV === 'test') {
+      return null;
+    }
+
+    const GenAI = getGenAI();
+    if (GenAI && GenAI.GoogleGenAI) {
+      try {
+        const apiKey = process.env.GEMINI_API_KEY || config.gemini.apiKey;
+        if (apiKey) {
+          this.aiClient = new GenAI.GoogleGenAI({ apiKey });
+        } else {
+          this.aiClient = new GenAI.GoogleGenAI({
+            vertexAI: true,
+            project: config.gcp.projectId,
+            location: config.gemini.location || 'southamerica-east1',
+          });
         }
+      } catch (err) {
+        Logger.warn('Aviso: Inicialização da IA será feita na primeira requisição', { error: err.message });
       }
     }
+    return this.aiClient;
   }
 
   /**
@@ -126,11 +139,12 @@ ${specificDirective}
     mode = 'GENERAL_CHAT',
     targetProduct = null,
     suggestedProducts = [],
-    customerName = '',
+    customerName: _customerName = '',
   }) {
     const systemInstruction = this.buildSystemPrompt({ mode, targetProduct, suggestedProducts });
 
-    if (this.aiClient && this.aiClient.models && typeof this.aiClient.models.generateContent === 'function') {
+    const client = this.getAiClient();
+    if (client && client.models && typeof client.models.generateContent === 'function') {
       try {
         const contents = [];
 
@@ -148,7 +162,7 @@ ${specificDirective}
           parts: [{ text: userMessage }],
         });
 
-        const response = await this.aiClient.models.generateContent({
+        const response = await client.models.generateContent({
           model: this.modelName,
           contents,
           config: {

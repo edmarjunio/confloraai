@@ -146,7 +146,9 @@ class FirestoreRepository {
   }
 
   async getOrder(phone) {
-    if (!phone) return null;
+    if (!phone) {
+      return null;
+    }
     if (this.firestore) {
       try {
         const doc = await this.firestore.collection('orders').doc(phone).get();
@@ -160,7 +162,9 @@ class FirestoreRepository {
   }
 
   async getCustomerProfile(phone) {
-    if (!phone) return null;
+    if (!phone) {
+      return null;
+    }
     if (this.firestore) {
       try {
         const doc = await this.firestore.collection('customers').doc(phone).get();
@@ -174,7 +178,9 @@ class FirestoreRepository {
   }
 
   async saveCustomerProfile(phone, profileData) {
-    if (!phone) return;
+    if (!phone) {
+      return;
+    }
     const dataWithTs = {
       ...profileData,
       phone,
