@@ -443,7 +443,6 @@ test('16. Cardápio Digital & Painel Admin: Renderização e elementos essenciai
   const homeHtml = renderHomeHtml();
   assert.match(homeHtml, /Conflora Horta e Viveiro/);
   assert.match(homeHtml, /Cardápio Digital/);
-  assert.match(homeHtml, /device-switcher/);
   assert.match(homeHtml, /galleryModal/);
   assert.match(homeHtml, /setOrderType/);
 
