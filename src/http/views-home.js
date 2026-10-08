@@ -1977,6 +1977,7 @@ function renderHomeHtml() {
     }
 
     // --- FINALIZAÇÃO DO PEDIDO ---
+    let pendingWebOrder = null;
     async function submitOrder() {
       const items = Object.values(cart);
       if (items.length === 0) {
@@ -1998,11 +1999,13 @@ function renderHomeHtml() {
       submitBtn.disabled = true;
       submitBtn.innerText = 'Enviando Pedido...';
 
+      pendingWebOrder ||= crypto.randomUUID();
       try {
         const res = await fetch('/api/orders', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            requestId: pendingWebOrder,
             customerId: currentUser ? currentUser.id : '',
             customerEmail: currentUser ? currentUser.email : '',
             customerName: name,
@@ -2022,6 +2025,7 @@ function renderHomeHtml() {
 
         const data = await res.json();
         if (data.success) {
+          pendingWebOrder = null;
           if (typeof gtag === 'function') {
             gtag('event', 'purchase', {
               transaction_id: data.order?.id || String(Date.now()),

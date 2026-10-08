@@ -1245,7 +1245,7 @@ class FirestoreRepository {
     if (this.firestore) {
       try {
         await this.firestore
-          .collection('orders')
+          .collection('pending_orders')
           .doc(phone)
           .set(dataWithTs, { merge: true });
 
@@ -1269,7 +1269,7 @@ class FirestoreRepository {
     if (this.firestore) {
       try {
         const doc = await this.firestore
-          .collection('orders')
+          .collection('pending_orders')
           .doc(phone)
           .get();
 
@@ -1678,11 +1678,10 @@ class FirestoreRepository {
       };
     }
 
-    if (
-      user.pin &&
-      String(user.pin) !== String(pin) &&
-      user.password !== String(pin)
-    ) {
+    const hasCredential = Boolean(user.pin || user.password);
+    const matchesPin = Boolean(user.pin) && String(user.pin) === String(pin);
+    const matchesPassword = Boolean(user.password) && String(user.password) === String(pin);
+    if (!hasCredential || (!matchesPin && !matchesPassword)) {
       return {
         success: false,
         error: 'PIN de segurança incorreto',

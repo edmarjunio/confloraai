@@ -262,6 +262,7 @@ function renderAdminHtml() {
       <button class="nav-btn" id="tabBtn-cashier" onclick="showTab('cashier')">💰 Caixa & Pedidos / Vendas</button>
       <button class="nav-btn" id="tabBtn-diff" onclick="showTab('diff')">🔀 Alterações (Git Diff) <span id="diffCountBadge" style="background:#ef4444; color:white; padding:1px 6px; border-radius:10px; font-size:10px; margin-left:4px; display:none;">0</span></button>
       <button class="nav-btn" id="tabBtn-orders" onclick="showTab('orders')">📜 Histórico de Pedidos</button>
+      <a class="nav-btn" href="/lancamentos">🌱 Lançamentos e conferência de estoque</a><a class="nav-btn" href="/fiados">📒 Controle de fiados</a><a class="nav-btn" href="/caixa">💵 Valores de hoje / Caixa</a>
       <button class="nav-btn" id="tabBtn-stock" onclick="showTab('stock')">📦 Entrada Rápida de Estoque</button>
       <button class="nav-btn" id="tabBtn-price" onclick="showTab('price')">🔍 Consulta Rápida de Preço</button>
       <button class="nav-btn" id="tabBtn-products" onclick="showTab('products')">🌱 Cadastro de Produtos</button>
@@ -1527,6 +1528,7 @@ function renderAdminHtml() {
     }
 
     async function addStock(prodId, qty) {
+      window.location.href = '/lancamentos'; return;
       const res = await fetch('/api/admin/stock/quick-entry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1672,6 +1674,7 @@ function renderAdminHtml() {
 
     // 12. VENDA MANUAL NO BALCÃO
     function openManualOrderModal() {
+      window.location.href = '/lancamentos'; return;
       const select = document.getElementById('mProdSelect');
       select.innerHTML = '';
       allProducts.forEach(p => {
@@ -1688,6 +1691,7 @@ function renderAdminHtml() {
     }
 
     async function submitManualOrder(e) {
+      e.preventDefault(); window.location.href='/lancamentos'; return;
       e.preventDefault();
       const name = document.getElementById('mCustName').value;
       const phone = document.getElementById('mCustPhone').value;

@@ -870,6 +870,8 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
     })
   );
 
+  const operations = require('../operations/routes').registerOperations(app, express, messageService.firestoreRepo);
+
   // Home / Cardápio Digital Conflora
   app.get('/', (_req, res) => {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -1047,22 +1049,12 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
         return res.status(400).json({ error: 'Dados do pedido incompletos.' });
       }
 
-      const total = items.reduce((acc, it) => acc + (Number(it.price || 0) * Number(it.quantity || 1)), 0);
-      const order = await messageService.firestoreRepo.createDirectOrder({
-        customerId: customerId || '',
-        customerEmail: (customerEmail || '').toLowerCase().trim(),
-        customerName,
-        customerPhone,
-        orderType: orderType || 'DELIVERY',
-        deliveryAddress: deliveryAddress || 'Retirada no Viveiro Conflora',
-        paymentMethod: paymentMethod || 'PIX',
-        items,
-        total,
-        status: 'PENDING',
-        source: 'WEB_CATALOG',
-      });
-
-      await messageService.firestoreRepo.deductStock(items, customerPhone);
+      const { Ledger } = require('../operations/ledger');
+      const order = await new Ledger(messageService.firestoreRepo).sale({
+        requestId: req.body.requestId, items, customerName, customerPhone,
+        customerId, customerEmail, orderType, deliveryAddress, paymentMethod,
+        source: 'WEB_CATALOG', onAccount: true, confirmNegative: true,
+      }, { id: 'web-catalog', name: customerName, role: 'SYSTEM' });
       res.status(200).json({ success: true, order });
     } catch (err) {
       Logger.error('Erro ao registrar pedido web', err);
@@ -1094,52 +1086,27 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
   });
 
   // Admin: Update order status (CONFIRMED, DELIVERED, CANCELLED)
-  app.post('/api/admin/orders/:id/action', async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { status } = req.body;
-      const result = await messageService.firestoreRepo.updateOrderStatus(id, status);
-      res.status(200).json(result);
-    } catch (err) {
-      Logger.error('Erro ao atualizar status do pedido', err);
-      res.status(500).json({ error: err.message });
-    }
+  app.post('/api/admin/orders/:id/action', (_req, res) => {
+    res.status(409).json({ error: 'Use a página /lancamentos para registrar esta operação com auditoria.' });
   });
 
   // Admin: Nova Venda Manual no Balcão / Caixa
-  app.post('/api/admin/orders/manual', async (req, res) => {
-    try {
-      const { customerName, customerPhone, items, paymentMethod, notes } = req.body;
-      const order = await messageService.firestoreRepo.createManualOrder({
-        customerName,
-        customerPhone,
-        items,
-        paymentMethod,
-        notes,
-      });
-      res.status(200).json({ success: true, order });
-    } catch (err) {
-      Logger.error('Erro ao lançar pedido manual no caixa', err);
-      res.status(500).json({ error: err.message });
-    }
+  app.post('/api/admin/orders/manual', (_req, res) => {
+    res.status(409).json({ error: 'Use a página /lancamentos para registrar esta operação com auditoria.' });
   });
 
   // Admin: Entrada Rápida de Estoque
-  app.post('/api/admin/stock/quick-entry', async (req, res) => {
-    try {
-      const { productId, quantityAdded } = req.body;
-      const result = await messageService.firestoreRepo.quickAddStock(productId, quantityAdded);
-      res.status(200).json(result);
-    } catch (err) {
-      Logger.error('Erro na entrada rápida de estoque', err);
-      res.status(500).json({ error: err.message });
-    }
+  app.post('/api/admin/stock/quick-entry', (_req, res) => {
+    res.status(409).json({ error: 'Use a página /lancamentos para registrar esta operação com auditoria.' });
   });
 
   // Admin: Salvar / Atualizar Produto
   app.post('/api/admin/products', async (req, res) => {
     try {
-      const product = req.body;
+      const product = { ...req.body };
+      const existing = (await messageService.firestoreRepo.getAllProducts()).find(p => p.id === String(product.id));
+      if (existing) { delete product.stockQuantity; delete product.estoque; delete product.ESTOQUE; delete product.stockVersion; }
+      else { product.stockQuantity = 0; product.estoque = 0; product.stockVersion = 0; }
       await messageService.firestoreRepo.saveProduct(product);
       res.status(200).json({ success: true, product });
     } catch (err) {
@@ -1164,7 +1131,9 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
   app.post('/api/admin/import-data', async (req, res) => {
     try {
       const { type, records } = req.body;
-      const result = await messageService.firestoreRepo.importSpreadsheetData({ type, records });
+      if (type !== 'products') { return res.status(409).json({ error: 'Importe histórico e entradas por /lancamentos.' }); }
+      const safeRecords = records.map(record => { const safe = { ...record }; delete safe.stockQuantity; delete safe.estoque; delete safe.ESTOQUE; delete safe.stockVersion; return safe; });
+      const result = await messageService.firestoreRepo.importSpreadsheetData({ type, records: safeRecords });
       res.status(200).json(result);
     } catch (err) {
       Logger.error('Erro na importação de dados da planilha', err);
@@ -1254,6 +1223,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       // Sempre persiste o usuário para que o admin possa gerenciá-lo na lista de usuários
       await messageService.firestoreRepo.saveUser({ ...existingUser, ...user });
 
+      await operations.issueSession(res, user);
       res.status(200).json({ success: true, user });
     } catch (err) {
       Logger.error('Erro na autenticação Google', err);
@@ -1315,6 +1285,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       if (!result.success) {
         return res.status(401).json(result);
       }
+      await operations.issueSession(res, result.user);
       res.status(200).json(result);
     } catch (err) {
       Logger.error('Erro no login admin', err);
@@ -1326,7 +1297,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
   app.get('/api/admin/auth/users', async (_req, res) => {
     try {
       const users = await messageService.firestoreRepo.getAllUsers();
-      res.status(200).json(users);
+      res.status(200).json(users.map(({ password: _password, pin: _pin, ...user }) => user));
     } catch (err) {
       Logger.error('Erro ao listar usuários', err);
       res.status(500).json({ error: err.message });
@@ -1375,6 +1346,8 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       if (!orderId || !proposedOrder) {
         return res.status(400).json({ error: 'Dados da solicitação incompletos.' });
       }
+      const current = await messageService.firestoreRepo.firestore.collection('orders').doc(String(orderId)).get();
+      if (current.exists && current.data().stockDeducted) { return res.status(409).json({ error: 'Para corrigir esta venda, peça ao ADMIN o cancelamento e registre uma nova venda em /lancamentos.' }); }
       const requestObj = await messageService.firestoreRepo.createOrderAlterationRequest({
         orderId,
         originalOrder,
@@ -1395,6 +1368,11 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
     try {
       const { id } = req.params;
       const { action, reviewedBy, rejectionReason } = req.body;
+      const storedRequest = await messageService.firestoreRepo.firestore.collection('order_alterations').doc(String(id)).get();
+      if (storedRequest.exists && action === 'APPROVED') {
+        const current = await messageService.firestoreRepo.firestore.collection('orders').doc(String(storedRequest.data().orderId)).get();
+        if (current.exists && current.data().stockDeducted) { return res.status(409).json({ error: 'Use cancelamento com estorno e novo lançamento em /lancamentos.' }); }
+      }
       const result = await messageService.firestoreRepo.reviewOrderAlteration({
         requestId: id,
         action,

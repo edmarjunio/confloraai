@@ -13,7 +13,7 @@
     "test:all": "npm install && npm run check && npm test && npm run dev",
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "check": "node --check src/server.js && node --check src/http/app.js && node --check src/services/message.service.js && node --check src/ai/agent.service.js && node --check src/catalog/catalog.repository.js && node --check src/orders/order.service.js && node --check src/integrations/whatsapp.client.js && node --check src/integrations/task-queue.client.js && node --check src/router/message.router.js && node --check src/services/direct-price.service.js",
+    "check": "node --check src/server.js && node --check src/http/app.js && node --check src/services/message.service.js && node --check src/ai/agent.service.js && node --check src/catalog/catalog.repository.js && node --check src/orders/order.service.js && node --check src/integrations/whatsapp.client.js && node --check src/integrations/task-queue.client.js && node --check src/router/message.router.js && node --check src/services/direct-price.service.js && node --check src/operations/ledger.js && node --check src/operations/importer.js && node --check src/operations/routes.js && node --check src/operations/view.js && node --check src/operations/cash-report.js",
     "test": "node --test test/*.test.js",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -24,6 +24,7 @@
     "@google-cloud/tasks": "7.2.1",
     "@google/genai": "2.27.0",
     "dotenv": "18.0.5",
+    "exceljs": "^4.4.0",
     "express": "5.2.1",
     "firebase-admin": "13.10.0",
     "googleapis": "183.0.0"

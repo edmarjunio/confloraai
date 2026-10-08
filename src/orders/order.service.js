@@ -46,6 +46,7 @@ class OrderService {
       total += subtotal;
 
       validatedItems.push({
+        productId: prod.id || prod.productId || '',
         name: prod.canonicalName,
         price,
         quantity: qty,
@@ -55,6 +56,7 @@ class OrderService {
 
     const order = {
       phone,
+      operationId: require('node:crypto').randomUUID(),
       items: validatedItems,
       total,
       deliveryAddress: customerProfile?.deliveryAddress || '',
@@ -181,14 +183,30 @@ class OrderService {
     order.status = isPix ? ORDER_STATUS.CONFIRMED_AWAITING_PAYMENT : ORDER_STATUS.CONFIRMED_AWAITING_DELIVERY;
     order.confirmedAt = new Date().toISOString();
 
-    // Realiza a baixa de estoque atômica no Firestore
-    const stockDeduction = await this.firestoreRepo.deductStock(order.items, phone).catch((err) => {
-      Logger.warn('Aviso: falha na baixa de estoque no Firestore', { error: err.message });
-      return null;
-    });
-    if (stockDeduction && stockDeduction.deducted && stockDeduction.deducted.length > 0) {
+    if (this.firestoreRepo.firestore) {
+      const products = await this.firestoreRepo.getAllProducts();
+      const items = order.items.map(item => {
+        let product = products.find(p => p.id === item.productId);
+        if (!product) {
+          const matches = products.filter(p => normalizeText(p.name || p.descricao) === normalizeText(item.name) && Number(p.price ?? p.valor_num) === Number(item.price));
+          if (matches.length !== 1) {throw new Error('Produto ambíguo no pedido. Necessário atendimento humano.');}
+          product = matches[0];
+        }
+        return { productId: product.id, quantity: item.quantity };
+      });
+      const finalized = await new (require('../operations/ledger').Ledger)(this.firestoreRepo).sale({
+        requestId: order.operationId, items, customerName, customerPhone: phone,
+        deliveryAddress: order.deliveryAddress, paymentMethod: order.paymentMethod,
+        source: 'WHATSAPP', onAccount: true, confirmNegative: true,
+      }, { id: 'whatsapp-agent', name: 'WhatsApp', role: 'SYSTEM' });
+      order.total = finalized.total;
+      order.items = finalized.items;
       order.stockDeducted = true;
-      order.deductedItems = stockDeduction.deducted;
+      order.saleId = finalized.id;
+    } else if (this.firestoreRepo.isInMemory) {
+      await this.firestoreRepo.deductStock(order.items, phone);
+    } else {
+      throw new Error('Firestore indisponível. Pedido não confirmado.');
     }
 
     await this.firestoreRepo.saveOrder(phone, order);
