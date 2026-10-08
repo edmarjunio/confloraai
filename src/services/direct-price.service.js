@@ -1,3 +1,4 @@
+const { t } = require('../i18n');
 const { formatCurrency } = require('../shared/string.util');
 
 function toTitleCase(str) {
@@ -36,7 +37,7 @@ class DirectPriceService {
    */
   formatDirectPriceResponse(productGroup) {
     if (!productGroup || !Array.isArray(productGroup.prices) || productGroup.prices.length === 0) {
-      return 'No momento este produto não possui valores ativos cadastrados no catálogo.';
+      return t("interface.message.b5e591d33d91");
     }
 
     const { canonicalName, prices, category } = productGroup;
@@ -48,24 +49,24 @@ class DirectPriceService {
       const priceText = formatCurrency(prices[0]);
       if (isPet) {
         return (
-          `${article} ${displayName} está saindo por ${priceText}.\n\n` +
-          `Gostaria que eu te envie fotos dele? Temos também a gaiola e a ração própria disponíveis aqui na Conflora se você precisar!`
+          `${article} ${displayName}${t("interface.message.1a27517e5083")}${priceText}.\n\n` +
+          `${t("interface.message.aa3f4c3e3223")}`
         );
       }
-      return `${article} ${displayName} está saindo por ${priceText}. Deseja que eu reserve uma unidade para você ou gostaria de ver fotos?`;
+      return `${article} ${displayName}${t("interface.message.1a27517e5083")}${priceText}${t("interface.message.f31575617992")}`;
     }
 
     if (prices.length === 2) {
       const p1 = formatCurrency(prices[0]);
       const p2 = formatCurrency(prices[1]);
       if (isPet) {
-        return `${article} ${displayName}, temos de ${p1} e de ${p2}. Deseja que eu te envie fotos deles?`;
+        return `${article} ${displayName}${t("interface.fragment.4318e2315aba")}${p1} e de ${p2}. Deseja que eu te envie fotos deles?`;
       }
-      return `${article} ${displayName}, temos de ${p1} e de ${p2} (variando pelo porte da muda). Você prefere para plantar em vaso ou direto no solo?`;
+      return `${article} ${displayName}${t("interface.fragment.4318e2315aba")}${p1} e de ${p2}${t("interface.message.f7e90b5168a2")}`;
     }
 
     const priceList = prices.map((p) => formatCurrency(p)).join(', ');
-    return `${article} ${displayName} temos nas opções de ${priceList}, conforme o tamanho/porte. Como prefere?`;
+    return `${article} ${displayName}${t("interface.message.a75fcc5b5aa3")}${priceList}${t("interface.fragment.7852b5e79fb1")}`;
   }
 }
 

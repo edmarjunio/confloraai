@@ -448,7 +448,7 @@ test('16. Cardápio Digital & Painel Admin: Renderização e elementos essenciai
 
   const adminHtml = renderAdminHtml();
   assert.match(adminHtml, /Painel Operacional Conflora/);
-  assert.match(adminHtml, /Caixa & Pedidos/);
+  assert.match(adminHtml, /Caixa &amp; Pedidos/);
   assert.match(adminHtml, /Entrada Rápida de Estoque/);
   assert.match(adminHtml, /Cadastro de Produtos/);
   assert.match(adminHtml, /Importar Planilhas/);

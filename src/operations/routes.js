@@ -1,9 +1,10 @@
+const { t } = require("../i18n");
 const { randomBytes, createHash } = require("node:crypto");
 const { Ledger, fail } = require("./ledger");
 const importer = require("./importer");
 const { renderOperations } = require("./view");
 const sessionHash = (token) => createHash("sha256").update(token).digest("hex");
-function registerOperations(app, express, repo) {
+function registerOperations(app, express, repo, catalogRepo = null) {
   const ledger = new Ledger(repo);
   app.get("/lancamentos", (_req, res) =>
     res.type("html").send(renderOperations()),
@@ -28,7 +29,7 @@ function registerOperations(app, express, repo) {
       .set({ userId: user.id, expiresAt: Date.now() + 8 * 3600000 });
     res.cookie("conflora_operator", token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV !== "test",
+      secure: !repo.isLocalTest && process.env.NODE_ENV !== "test",
       sameSite: "strict",
       maxAge: 8 * 3600000,
       path: "/",
@@ -42,14 +43,14 @@ function registerOperations(app, express, repo) {
         .find((s) => s.startsWith("conflora_operator="));
       const token = cookie?.slice("conflora_operator=".length);
       if (!token || !/^[a-f0-9]{64}$/.test(token)) {
-        fail("Entre no painel com sua conta de operador", 401);
+        fail(t("interface.message.216ce413bf5b"), 401);
       }
       const session = await ledger.db
         .collection("operator_sessions")
         .doc(sessionHash(token))
         .get();
       if (!session.exists || session.data().expiresAt < Date.now()) {
-        fail("Sessão expirada", 401);
+        fail(t("interface.message.69883ff8a543"), 401);
       }
       const user = await ledger.db
         .collection("users")
@@ -60,7 +61,7 @@ function registerOperations(app, express, repo) {
         user.data().active === false ||
         !["ADMIN", "CAIXA"].includes(user.data().role)
       ) {
-        fail("Acesso não permitido", 403);
+        fail(t("interface.message.c95202fb2826"), 403);
       }
       req.operator = {
         id: user.id,
@@ -72,7 +73,7 @@ function registerOperations(app, express, repo) {
         req.headers.origin &&
         req.headers.origin !== `${req.protocol}://${req.get("host")}`
       ) {
-        fail("Origem não permitida", 403);
+        fail(t("interface.message.d449a65c0fb6"), 403);
       }
       next();
     } catch (e) {
@@ -108,7 +109,7 @@ function registerOperations(app, express, repo) {
       const db = ledger.db;
       const [products, orders, alerts, notifications, creditCustomers] =
         await Promise.all([
-          db.collection("products").get(),
+          db.collection(await repo.getProductCollectionPath()).get(),
           db.collection("orders").orderBy("createdAt", "desc").limit(100).get(),
           db
             .collection("stock_discrepancies")
@@ -172,7 +173,7 @@ function registerOperations(app, express, repo) {
           .get(),
       ]);
       if (!customer.exists) {
-        fail("Cliente não encontrado");
+        fail(t("interface.message.77f22078da1b"));
       }
       return {
         customer: {
@@ -195,32 +196,45 @@ function registerOperations(app, express, repo) {
     express.raw({ type: "application/octet-stream", limit: "20mb" }),
     route(async (req) => {
       if (req.operator.role !== "ADMIN") {
-        fail("Somente ADMIN pode importar", 403);
+        fail(t("interface.message.f17bd086e69c"), 403);
       }
       const preview = await importer.prepare(
         req.body,
         await repo.getAllProducts(),
         JSON.parse(req.get("X-Product-Mapping") || "{}"),
+        req.get("X-Import-Mode") || "salesAndEntries",
       );
       // File bytes are stored privately as chunks to support large imports across Cloud Run instances.
       for (let start = 0; start < req.body.length; start += 500000) {
         await ledger.db
           .collection("import_files")
-          .doc(preview.importId)
+          .doc(
+            preview.importId +
+              "-" +
+              (req.get("X-Import-Mode") || "salesAndEntries"),
+          )
           .collection("chunks")
           .doc(String(start).padStart(10, "0"))
           .set({ bytes: req.body.subarray(start, start + 500000) });
       }
       await ledger.db
         .collection("import_files")
-        .doc(preview.importId)
+        .doc(
+          preview.importId +
+            "-" +
+            (req.get("X-Import-Mode") || "salesAndEntries"),
+        )
         .set({
           actorId: req.operator.id,
           mapping: JSON.parse(req.get("X-Product-Mapping") || "{}"),
+          mode: req.get("X-Import-Mode") || "salesAndEntries",
           createdAt: new Date().toISOString(),
         });
       return {
-        importId: preview.importId,
+        importId:
+          preview.importId +
+          "-" +
+          (req.get("X-Import-Mode") || "salesAndEntries"),
         counts: preview.counts,
         unresolved: preview.unresolved,
         errors: preview.errors,
@@ -232,21 +246,26 @@ function registerOperations(app, express, repo) {
     "/api/operations/import/commit",
     route(async (req) => {
       if (req.operator.role !== "ADMIN") {
-        fail("Somente ADMIN pode importar", 403);
+        fail(t("interface.message.f17bd086e69c"), 403);
       }
-      if (!/^[a-f0-9]{64}$/.test(req.body.importId || "")) {
-        fail("Importação inválida");
+      if (
+        !/^[a-f0-9]{64}-(sales|entries|salesAndEntries)$/.test(
+          req.body.importId || "",
+        )
+      ) {
+        fail(t("interface.message.236869cb418f"));
       }
       const ref = ledger.db.collection("import_files").doc(req.body.importId);
       const meta = await ref.get();
       if (!meta.exists) {
-        fail("Simulação não encontrada");
+        fail(t("interface.message.213aafa3c571"));
       }
       const chunks = await ref.collection("chunks").orderBy("__name__").get();
       const preview = await importer.prepare(
         Buffer.concat(chunks.docs.map((d) => d.data().bytes)),
         await repo.getAllProducts(),
         meta.data().mapping || {},
+        meta.data().mode || "salesAndEntries",
       );
       return importer.commit(
         ledger.db,
@@ -254,6 +273,69 @@ function registerOperations(app, express, repo) {
         req.operator,
         req.body.offset || 0,
       );
+    }),
+  );
+  app.post(
+    "/api/operations/products/preview",
+    express.raw({ type: "application/octet-stream", limit: "8mb" }),
+    route(async (req) => {
+      if (req.operator.role !== "ADMIN") {
+        fail(t("interface.message.f17bd086e69c"), 403);
+      }
+      const audit = await require("../import/product-catalog").previewProducts(
+        ledger.db,
+        req.body,
+      );
+      const ref = ledger.db
+        .collection("product_import_files")
+        .doc(audit.fileHash);
+      for (let start = 0; start < req.body.length; start += 500000) {
+        await ref
+          .collection("chunks")
+          .doc(String(start).padStart(10, "0"))
+          .set({ bytes: req.body.subarray(start, start + 500000) });
+      }
+      await ref.set({
+        expectedRevision: audit.expectedRevision,
+        actorId: req.operator.id,
+      });
+      return {
+        fileHash: audit.fileHash,
+        expectedRevision: audit.expectedRevision,
+        summary: audit.summary,
+        errors: audit.errors,
+        warnings: audit.warnings,
+      };
+    }),
+  );
+  app.post(
+    "/api/operations/products/replace",
+    route(async (req) => {
+      if (req.operator.role !== "ADMIN") {
+        fail(t("interface.message.212764ff156b"), 403);
+      }
+      if (!/^[a-f0-9]{64}$/.test(req.body.fileHash || "")) {
+        fail(t("interface.message.1cfd7fb86199"));
+      }
+      const ref = ledger.db
+        .collection("product_import_files")
+        .doc(req.body.fileHash);
+      const meta = await ref.get();
+      if (!meta.exists) {
+        fail(t("interface.message.a8beb3a8a76f"));
+      }
+      const chunks = await ref.collection("chunks").orderBy("__name__").get();
+      const result = await require("../import/product-catalog").replaceProducts(
+        repo,
+        Buffer.concat(chunks.docs.map((d) => d.data().bytes)),
+        req.body.expectedRevision,
+        req.operator,
+      );
+      if (catalogRepo) {
+        catalogRepo.lastCacheTime = 0;
+        await catalogRepo.refreshCatalog();
+      }
+      return result;
     }),
   );
   app.get(

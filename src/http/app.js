@@ -1,3 +1,4 @@
+const { t, tHtml } = require('../i18n');
 let expressModule = null;
 function getExpress() {
   if (!expressModule) {
@@ -35,7 +36,7 @@ function renderPrivacyPolicyHtml() {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Política de Privacidade | Conflora Horta e Viveiro</title>
+  <title>${tHtml("interface.message.a40af443fa24")}</title>
   ${FETCH_SHIM_SCRIPT}
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #2d3748; max-width: 800px; margin: 0 auto; padding: 24px 16px; background-color: #f7fafc; }
@@ -50,47 +51,47 @@ function renderPrivacyPolicyHtml() {
 </head>
 <body>
   <div class="card">
-    <h1>Política de Privacidade</h1>
-    <p><strong>Conflora Horta e Viveiro & Agromadeiras</strong> — Mineiros, Goiás</p>
-    <p><em>Última atualização: Outubro de 2026</em></p>
+    <h1>${tHtml("interface.message.c51dea419442")}</h1>
+    <p><strong>${tHtml("interface.label.ee10376ffacb")}</strong> ${tHtml("interface.message.d2afd74ac19e")}</p>
+    <p><em>${tHtml("interface.message.9d87c5cf7cda")}</em></p>
 
-    <p>Esta Política de Privacidade descreve como a Conflora coleta, utiliza e protege os dados pessoais fornecidos por usuários que interagem com nosso canal oficial de atendimento automatizado e vendas no WhatsApp, em total conformidade com a <strong>Lei Geral de Proteção de Dados (LGPD - Lei nº 13.709/2018)</strong> e as políticas da <strong>Meta Platforms</strong>.</p>
+    <p>${tHtml("interface.message.76475b389a97")} <strong>${tHtml("interface.message.94c69c310d35")}</strong> ${tHtml("interface.message.fb799ffa6050")} <strong>${tHtml("interface.label.d00cc862da33")}</strong>.</p>
 
-    <h2>1. Dados Coletados</h2>
-    <p>Ao interagir com nosso atendimento via WhatsApp, podemos coletar exclusivamente:</p>
+    <h2>${tHtml("interface.message.78abd1b92bc8")}</h2>
+    <p>${tHtml("interface.message.079aee6696a3")}</p>
     <ul>
-      <li><strong>Identificação básica:</strong> Nome de exibição do perfil no WhatsApp e número de telefone celular.</li>
-      <li><strong>Mensagens de atendimento:</strong> Histórico das mensagens trocadas, dúvidas sobre plantas, pedidos de orçamento e itens solicitados do catálogo.</li>
-      <li><strong>Comprovantes de pagamento:</strong> Imagens ou documentos de comprovante PIX enviados voluntariamente para confirmação de compras.</li>
+      <li><strong>${tHtml("interface.message.3df30ea24bac")}</strong> ${tHtml("interface.message.d8029e346f00")}</li>
+      <li><strong>${tHtml("interface.label.2648863c56d3")}</strong> ${tHtml("interface.message.d97e572db5bd")}</li>
+      <li><strong>${tHtml("interface.message.1195497b897f")}</strong> ${tHtml("interface.message.6def79de4e94")}</li>
     </ul>
 
-    <h2>2. Finalidade do Tratamento dos Dados</h2>
-    <p>Os dados coletados são utilizados estritamente para:</p>
+    <h2>${tHtml("interface.message.cbec6bcad11f")}</h2>
+    <p>${tHtml("interface.message.d9f4d1e012f5")}</p>
     <ul>
-      <li>Prestar atendimento ao cliente, responder dúvidas sobre espécies de plantas, portes e valores.</li>
-      <li>Montar orçamentos e emitir resumos de pedidos comerciais.</li>
-      <li>Confirmar pagamentos PIX e organizar a separação de plantas para retirada ou entrega.</li>
-      <li>Garantir a segurança, prevenção contra fraudes e melhoria contínua do atendimento.</li>
+      <li>${tHtml("interface.message.58141f3d5694")}</li>
+      <li>${tHtml("interface.message.40d913f73367")}</li>
+      <li>${tHtml("interface.message.4d685ec0b51f")}</li>
+      <li>${tHtml("interface.message.98c60bf7bd66")}</li>
     </ul>
 
-    <h2>3. Compartilhamento Seguro de Dados</h2>
-    <p>A Conflora <strong>não comercializa, não aluga e não compartilha</strong> dados pessoais com terceiros para fins publicitários. Os dados transitam unicamente por provedores de infraestrutura tecnológica essenciais para o funcionamento do serviço:</p>
+    <h2>${tHtml("interface.message.3fb54849648e")}</h2>
+    <p>${tHtml("interface.label.d3b0bc966aa3")} <strong>${tHtml("interface.message.df08672fee3a")}</strong> ${tHtml("interface.message.079d6653ad74")}</p>
     <ul>
-      <li><strong>Meta Platforms (WhatsApp Cloud API):</strong> Infraestrutura oficial de envio e recebimento de mensagens.</li>
-      <li><strong>Google Cloud Platform:</strong> Hospedagem segura de servidores e banco de dados para armazenamento do histórico de atendimento.</li>
+      <li><strong>${tHtml("interface.label.4cae9133c3ec")}</strong> ${tHtml("interface.message.072426b40982")}</li>
+      <li><strong>${tHtml("interface.label.2b45a01e6398")}</strong> ${tHtml("interface.message.0744b8558575")}</li>
     </ul>
 
-    <h2>4. Retenção e Segurança dos Dados</h2>
-    <p>Adotamos medidas técnicas e organizacionais adequadas para proteger seus dados contra acessos não autorizados ou destruição acidental. O histórico de mensagens é mantido apenas pelo tempo necessário para cumprimento das finalidades comerciais ou exigências legais.</p>
+    <h2>${tHtml("interface.message.567d2f7fa840")}</h2>
+    <p>${tHtml("interface.message.0a946e61a56a")}</p>
 
-    <h2>5. Seus Direitos (LGPD) e Exclusão de Dados</h2>
-    <p>Você tem o direito de solicitar a confirmação de tratamento, acesso, correção ou a <strong>exclusão total de seus dados pessoais</strong> a qualquer momento.</p>
-    <p>Para solicitar a exclusão definitiva de seus dados do nosso sistema, consulte nossa página de <a href="/exclusao-de-dados" style="color: #276749; font-weight: bold;">Instruções de Exclusão de Dados</a> ou envie uma mensagem diretamente para nosso canal de contato.</p>
+    <h2>${tHtml("interface.message.2403f77faacf")}</h2>
+    <p>${tHtml("interface.message.f6df442ace70")} <strong>${tHtml("interface.message.58f60b3f1815")}</strong> ${tHtml("interface.label.10425bfc1709")}</p>
+    <p>${tHtml("interface.message.91a75f801141")} <a href="/exclusao-de-dados" style="color: #276749; font-weight: bold;">${tHtml("interface.message.b3fbbd979b51")}</a> ${tHtml("interface.message.c95524625812")}</p>
 
     <div class="contact-box">
-      <strong>Canal do Encarregado de Dados (DPO / Contato):</strong><br>
-      E-mail: <a href="mailto:edmarjuniob@gmail.com">edmarjuniob@gmail.com</a><br>
-      Localização: Mineiros - GO, Brasil
+      <strong>${tHtml("interface.message.9038fe028ca8")}</strong><br>
+      ${tHtml("interface.label.63db10d8a086")} <a href="mailto:edmarjuniob@gmail.com">${tHtml("interface.message.ef748fa607f2")}</a><br>
+      ${tHtml("interface.label.96481123c11b")}
     </div>
   </div>
   <footer>
@@ -106,7 +107,7 @@ function renderDataDeletionHtml() {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Instruções de Exclusão de Dados | Conflora AI</title>
+  <title>${tHtml("interface.message.bed1e6817b90")}</title>
   ${FETCH_SHIM_SCRIPT}
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #2d3748; max-width: 800px; margin: 0 auto; padding: 24px 16px; background-color: #f7fafc; }
@@ -120,28 +121,28 @@ function renderDataDeletionHtml() {
 </head>
 <body>
   <div class="card">
-    <h1>Instruções de Exclusão de Dados do Usuário</h1>
-    <p><strong>Conflora Horta e Viveiro</strong> — Atendimento WhatsApp</p>
-    <p>Em conformidade com as diretrizes da <strong>Meta Platforms</strong> e o Artigo 18 da <strong>LGPD</strong>, você tem o direito de solicitar a remoção completa de todas as suas informações e histórico de conversas do nosso sistema a qualquer momento.</p>
+    <h1>${tHtml("interface.message.19e96aa9136c")}</h1>
+    <p><strong>${tHtml("interface.label.a0267023e56e")}</strong> ${tHtml("interface.label.34d146b7bc46")}</p>
+    <p>${tHtml("interface.message.731230028baa")} <strong>${tHtml("interface.label.d00cc862da33")}</strong> ${tHtml("interface.label.5119a73c9b67")} <strong>${tHtml("interface.label.43a2a0c8fe8b")}</strong>${tHtml("interface.message.01d30d903c82")}</p>
 
-    <h2>Como solicitar a exclusão de seus dados:</h2>
+    <h2>${tHtml("interface.message.0f12f48b3d24")}</h2>
 
     <div class="step-box">
-      <strong>Opção 1: Via E-mail Oficial</strong><br>
-      Envie um e-mail para <a href="mailto:edmarjuniob@gmail.com"><strong>edmarjuniob@gmail.com</strong></a> com:<br>
-      • <strong>Assunto:</strong> Solicitação de Exclusão de Dados (LGPD)<br>
-      • <strong>Corpo do e-mail:</strong> Informe o número de telefone (com DDD) utilizado no WhatsApp da Conflora.
+      <strong>${tHtml("interface.message.6ca619dcc8fd")}</strong><br>
+      ${tHtml("interface.label.ecf4a1c1e89e")} <a href="mailto:edmarjuniob@gmail.com"><strong>${tHtml("interface.message.ef748fa607f2")}</strong></a> ${tHtml("interface.message.12c385e3dbd5")}<br>
+      • <strong>${tHtml("interface.label.3c03b65bb4b4")}</strong> ${tHtml("interface.message.918adcb25124")}<br>
+      • <strong>${tHtml("interface.label.ba80d3d3aee1")}</strong> ${tHtml("interface.label.94190a53082d")}
     </div>
 
     <div class="step-box">
-      <strong>Opção 2: Diretamente pelo WhatsApp</strong><br>
-      Envie a mensagem <code>"Excluir meus dados"</code> ou <code>"Apagar histórico"</code> para o nosso número de atendimento comercial no WhatsApp.
+      <strong>${tHtml("interface.message.9024bfbccd01")}</strong><br>
+      ${tHtml("interface.label.6dd5a5130ffd")} <code>${tHtml("interface.message.d1ffd65ba3f1")}</code> ${tHtml("interface.label.fc74181ece96")} <code>${tHtml("interface.message.32ae2f886d21")}</code> ${tHtml("interface.label.564c29736a81")}
     </div>
 
-    <h2>Prazo e Procedimento:</h2>
-    <p>Após o recebimento da solicitação, nossa equipe processará a exclusão em até <strong>48 horas úteis</strong>. Todas as sessões, mensagens e informações vinculadas ao seu número de telefone serão permanentemente apagadas ou anonimizadas do nosso banco de dados no Firestore.</p>
+    <h2>${tHtml("interface.label.ea4cc905c39e")}</h2>
+    <p>${tHtml("interface.message.092adbccd609")} <strong>${tHtml("interface.message.4fe9f1a4ba81")}</strong>${tHtml("interface.message.1287a46ffb63")}</p>
 
-    <p><a href="/politica-de-privacidade" style="color: #276749;">← Voltar para a Política de Privacidade</a></p>
+    <p><a href="/politica-de-privacidade" style="color: #276749;">${tHtml("interface.message.718f6d6be597")}</a></p>
   </div>
   <footer>
     &copy; 2026 Conflora Horta e Viveiro. Todos os direitos reservados.
@@ -156,7 +157,7 @@ function renderWhatsAppSimulatorHtml() {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Conflora AI — WhatsApp Web Simulator & Live Firestore</title>
+  <title>${tHtml("interface.label.18535317be85")}</title>
   ${FETCH_SHIM_SCRIPT}
   <style>
     :root {
@@ -565,45 +566,45 @@ function renderWhatsAppSimulatorHtml() {
     <div class="sidebar">
       <div class="sidebar-header">
         <div>
-          <strong style="font-size: 14px; color: var(--wa-teal);">Conflora Viveiro</strong>
-          <div style="font-size: 11px; color: var(--wa-text-muted);">Painel do Administrador</div>
+          <strong style="font-size: 14px; color: var(--wa-teal);">${tHtml("interface.label.10d3e472cef1")}</strong>
+          <div style="font-size: 11px; color: var(--wa-text-muted);">${tHtml("interface.label.b14b872d6433")}</div>
         </div>
-        <span class="db-badge">Firestore (confloraai)</span>
+        <span class="db-badge">${tHtml("interface.label.eea840c102cd")}</span>
       </div>
 
       <div class="tabs-bar">
-        <button class="tab-btn active" id="tabStockBtn" onclick="switchTab('stock')">Estoque em Tempo Real</button>
-        <button class="tab-btn" id="tabMoveBtn" onclick="switchTab('movements')">Baixas & Movimentações</button>
-        <button class="tab-btn" id="tabMetaBtn" onclick="switchTab('meta')">Links Meta</button>
+        <button class="tab-btn active" id="tabStockBtn" onclick="switchTab('stock')">${tHtml("interface.message.7a1e1bcef569")}</button>
+        <button class="tab-btn" id="tabMoveBtn" onclick="switchTab('movements')">${tHtml("interface.message.7ef174a4385b")}</button>
+        <button class="tab-btn" id="tabMetaBtn" onclick="switchTab('meta')">${tHtml("interface.label.2444ed60c0f4")}</button>
       </div>
 
       <div class="customer-config">
-        <div style="font-weight: 600; color: #475569;">Simular com seu número:</div>
+        <div style="font-weight: 600; color: #475569;">${tHtml("interface.message.57cf342b2c81")}</div>
         <div class="config-row">
-          <input type="text" id="custPhone" class="config-input" value="5564999351616" placeholder="Telefone com DDD" style="width: 140px;" />
-          <input type="text" id="custName" class="config-input" value="Edmar Júnio" placeholder="Seu Nome" />
+          <input type="text" id="custPhone" class="config-input" value="5564999351616" placeholder="${tHtml("interface.message.f39cc9475948")}" style="width: 140px;" />
+          <input type="text" id="custName" class="config-input" value="Edmar Júnio" placeholder="${tHtml("interface.message.9a21e8d11daa")}" />
         </div>
       </div>
 
       <div class="sidebar-content" id="sidebarStockContent">
         <div id="productList">
-          <div style="padding: 20px; text-align: center; color: var(--wa-text-muted); font-size: 13px;">Carregando produtos do Firestore...</div>
+          <div style="padding: 20px; text-align: center; color: var(--wa-text-muted); font-size: 13px;">${tHtml("interface.message.131c97605caa")}</div>
         </div>
       </div>
 
       <div class="sidebar-content" id="sidebarMoveContent" style="display: none;">
         <div id="movementList">
-          <div style="padding: 20px; text-align: center; color: var(--wa-text-muted); font-size: 13px;">Nenhuma baixa realizada ainda nesta sessão.</div>
+          <div style="padding: 20px; text-align: center; color: var(--wa-text-muted); font-size: 13px;">${tHtml("interface.message.648cd27c28db")}</div>
         </div>
       </div>
 
       <div class="sidebar-content" id="sidebarMetaContent" style="display: none; padding: 16px;">
-        <div style="font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--wa-teal);">Páginas Oficiais de Verificação Meta:</div>
+        <div style="font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--wa-teal);">${tHtml("interface.message.4351723e6170")}</div>
         <div style="display: flex; flex-direction: column; gap: 8px;">
-          <a href="/politica-de-privacidade" target="_blank" style="padding: 8px 12px; background: #f1f5f9; border-radius: 6px; text-decoration: none; color: #334155; font-size: 13px; font-weight: 500;">📄 Política de Privacidade</a>
-          <a href="/exclusao-de-dados" target="_blank" style="padding: 8px 12px; background: #f1f5f9; border-radius: 6px; text-decoration: none; color: #334155; font-size: 13px; font-weight: 500;">🗑️ Exclusão de Dados (LGPD)</a>
-          <a href="/termos-de-servico" target="_blank" style="padding: 8px 12px; background: #f1f5f9; border-radius: 6px; text-decoration: none; color: #334155; font-size: 13px; font-weight: 500;">⚖️ Termos de Serviço</a>
-          <a href="/health" target="_blank" style="padding: 8px 12px; background: #f1f5f9; border-radius: 6px; text-decoration: none; color: #334155; font-size: 13px; font-weight: 500;">🩺 Health Check API</a>
+          <a href="/politica-de-privacidade" target="_blank" style="padding: 8px 12px; background: #f1f5f9; border-radius: 6px; text-decoration: none; color: #334155; font-size: 13px; font-weight: 500;">${tHtml("interface.message.9f978a9ee158")}</a>
+          <a href="/exclusao-de-dados" target="_blank" style="padding: 8px 12px; background: #f1f5f9; border-radius: 6px; text-decoration: none; color: #334155; font-size: 13px; font-weight: 500;">${tHtml("interface.message.7760a9d9d6ce")}</a>
+          <a href="/termos-de-servico" target="_blank" style="padding: 8px 12px; background: #f1f5f9; border-radius: 6px; text-decoration: none; color: #334155; font-size: 13px; font-weight: 500;">${tHtml("interface.message.87d5c1150e77")}</a>
+          <a href="/health" target="_blank" style="padding: 8px 12px; background: #f1f5f9; border-radius: 6px; text-decoration: none; color: #334155; font-size: 13px; font-weight: 500;">${tHtml("interface.label.6ac505d98024")}</a>
         </div>
       </div>
     </div>
@@ -613,36 +614,35 @@ function renderWhatsAppSimulatorHtml() {
       <div class="chat-header">
         <div class="avatar-wrapper">🌱</div>
         <div class="chat-header-info">
-          <div class="chat-header-name">Conflora Horta e Viveiro & Agromadeiras</div>
-          <div class="chat-header-status">online • Atendimento Inteligente WhatsApp</div>
+          <div class="chat-header-name">${tHtml("interface.label.ee10376ffacb")}</div>
+          <div class="chat-header-status">${tHtml("interface.label.3001f3d14e45")}</div>
         </div>
         <div style="display: flex; gap: 14px; color: #54656f; font-size: 18px; cursor: pointer;">
           <span>🔍</span>
-          <span title="Recarregar Estoque do Firestore" onclick="fetchInventory()">🔄</span>
+          <span title="${tHtml("interface.message.2ac3b8158bce")}" onclick="fetchInventory()">🔄</span>
         </div>
       </div>
 
       <div class="chat-body" id="chatBody">
         <div class="enc-notice">
-          🔒 As mensagens desta conversa utilizam IA Gemini e realizam baixa atômica de estoque em tempo real no Cloud Firestore (projeto confloraai).
+          ${tHtml("interface.label.5c613232e8a1")}
         </div>
 
         <div class="bubble assistant">
-          Olá! Seja muito bem-vindo à Conflora Horta e Viveiro 🌱.
-Sou o assistente oficial de vendas. Como posso ajudar com nossas plantas, mudas ou hortaliças hoje?
+          ${tHtml("interface.label.7b5e7e875e1b")}
           <div class="bubble-meta"><span>10:00</span></div>
         </div>
       </div>
 
       <!-- PILLS DE TESTE RÁPIDO -->
       <div class="quick-bar">
-        <button class="pill-btn" onclick="sendPrompt('qual valor da palmeira rabo de raposa?')">🌴 Palmeira Rabo de Raposa</button>
-        <button class="pill-btn" onclick="sendPrompt('Vocês tem mini cabra??')">🐐 Mini Cabra</button>
-        <button class="pill-btn" onclick="sendPrompt('Vocês tem palmeiras?')">🌱 Consultoria Palmeiras</button>
-        <button class="pill-btn highlight" onclick="sendPrompt('Manda pra mim 3 alface cabeça de 8, 3 rucula e 5 cebolinha')">🛒 Fazer Pedido Horta</button>
-        <button class="pill-btn" onclick="sendPrompt('pode me mandar foto da palmeira rabo de raposa?')">📸 Pedir Fotos</button>
-        <button class="pill-btn" onclick="sendPrompt('Hoje vai ser no débito')">💳 Mudar Pagamento</button>
-        <button class="pill-btn highlight" onclick="sendPrompt('Pode confirmar!')">✅ Confirmar Pedido (Dá Baixa no Estoque)</button>
+        <button class="pill-btn" onclick="sendPrompt('qual valor da palmeira rabo de raposa?')">${tHtml("interface.label.47f35644ce71")}</button>
+        <button class="pill-btn" onclick="sendPrompt('Vocês tem mini cabra??')">${tHtml("interface.label.720a1fe424c3")}</button>
+        <button class="pill-btn" onclick="sendPrompt('Vocês tem palmeiras?')">${tHtml("interface.label.7ee4afd28aa5")}</button>
+        <button class="pill-btn highlight" onclick="sendPrompt('Manda pra mim 3 alface cabeça de 8, 3 rucula e 5 cebolinha')">${tHtml("interface.message.950a78970072")}</button>
+        <button class="pill-btn" onclick="sendPrompt('pode me mandar foto da palmeira rabo de raposa?')">${tHtml("interface.label.0837c86251bd")}</button>
+        <button class="pill-btn" onclick="sendPrompt('Hoje vai ser no débito')">${tHtml("interface.message.636edd6828be")}</button>
+        <button class="pill-btn highlight" onclick="sendPrompt('Pode confirmar!')">${tHtml("interface.message.f992675ae7dd")}</button>
       </div>
 
       <!-- BARRA DE DIGITAÇÃO WHATSAPP -->
@@ -742,7 +742,7 @@ Sou o assistente oficial de vendas. Como posso ajudar com nossas plantas, mudas 
       if (!isTyping) {
         const meta = document.createElement('div');
         meta.className = 'bubble-meta';
-        meta.innerHTML = '<span>' + time + '</span>' + (role === 'user' ? ' <span class="blue-ticks">✓✓</span>' : '');
+        meta.innerHTML = '<span>${tHtml("interface.label.afe7bfb3eb68")}</span>' + (role === 'user' ? ' <span class="blue-ticks">✓✓</span>' : '');
         bubble.appendChild(meta);
       }
 
@@ -790,7 +790,7 @@ Sou o assistente oficial de vendas. Como posso ajudar com nossas plantas, mudas 
     function renderMovements(movements) {
       movementListEl.innerHTML = '';
       if (movements.length === 0) {
-        movementListEl.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--wa-text-muted); font-size: 13px;">Nenhuma baixa realizada ainda.</div>';
+        movementListEl.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--wa-text-muted); font-size: 13px;">${tHtml("interface.label.1220783ce682")}</div>';
         return;
       }
       movements.forEach(m => {
@@ -818,7 +818,7 @@ function renderTermsOfServiceHtml() {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Termos de Serviço | Conflora AI</title>
+  <title>${tHtml("interface.message.98349dcea1e4")}</title>
   ${FETCH_SHIM_SCRIPT}
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #2d3748; max-width: 800px; margin: 0 auto; padding: 24px 16px; background-color: #f7fafc; }
@@ -831,17 +831,17 @@ function renderTermsOfServiceHtml() {
 </head>
 <body>
   <div class="card">
-    <h1>Termos de Serviço</h1>
-    <p><strong>Conflora Horta e Viveiro</strong> — Atendimento WhatsApp</p>
+    <h1>${tHtml("interface.message.66335a2d29be")}</h1>
+    <p><strong>${tHtml("interface.label.a0267023e56e")}</strong> ${tHtml("interface.label.34d146b7bc46")}</p>
 
-    <h2>1. O Serviço</h2>
-    <p>O canal de atendimento via WhatsApp da Conflora é uma ferramenta voltada para disponibilizar catálogo de plantas, tirar dúvidas sobre espécies e portes, orçar pedidos e fornecer suporte a clientes na cidade de Mineiros - GO e região.</p>
+    <h2>${tHtml("interface.message.0cd713a3f492")}</h2>
+    <p>${tHtml("interface.message.e093df8846d8")}</p>
 
-    <h2>2. Disponibilidade e Preços</h2>
-    <p>Os valores e disponibilidades de mudas, plantas ornamentais, hortaliças e insumos são baseados no estoque físico e catálogo oficial da Conflora. Os pedidos tornam-se vinculantes após a confirmação mútua e validação do pagamento.</p>
+    <h2>${tHtml("interface.message.12c122e18c59")}</h2>
+    <p>${tHtml("interface.message.50056b4ed59f")}</p>
 
-    <h2>3. Contato</h2>
-    <p>Dúvidas sobre estes termos podem ser enviadas para <a href="mailto:edmarjuniob@gmail.com">edmarjuniob@gmail.com</a>.</p>
+    <h2>${tHtml("interface.label.1e3779cec821")}</h2>
+    <p>${tHtml("interface.message.4590d4a09208")} <a href="mailto:edmarjuniob@gmail.com">${tHtml("interface.message.ef748fa607f2")}</a>.</p>
   </div>
   <footer>
     &copy; 2026 Conflora Horta e Viveiro. Todos os direitos reservados.
@@ -854,6 +854,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
   const express = getExpress();
   if (!express) { throw new Error('Express module not available'); }
   const app = express();
+  require("../i18n").registerI18n(app);
   const signatureValidator = new SignatureValidator(config.whatsapp.metaAppSecret);
   const systemStatusService = new SystemStatusService({
     catalogRepo: messageService ? messageService.catalogRepo : null,
@@ -870,7 +871,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
     })
   );
 
-  const operations = require('../operations/routes').registerOperations(app, express, messageService.firestoreRepo);
+  const operations = require('../operations/routes').registerOperations(app, express, messageService.firestoreRepo, messageService.catalogRepo);
 
   // Home / Cardápio Digital Conflora
   app.get('/', (_req, res) => {
@@ -908,7 +909,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
   });
 
   // Meta Verification: Exclusão de Dados do Usuário
-  app.get(['/exclusao-de-dados', '/data-deletion'], (_req, res) => {
+  app.get([t("interface.message.3d15bb96330c"), '/data-deletion'], (_req, res) => {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.status(200).send(renderDataDeletionHtml());
   });
@@ -926,11 +927,11 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
     const challenge = req.query['hub.challenge'];
 
     if (mode === 'subscribe' && token === config.whatsapp.verifyToken) {
-      Logger.info('Meta Webhook verificado com sucesso.');
+      Logger.info(t("interface.message.54e12041f42c"));
       return res.status(200).send(challenge);
     }
 
-    Logger.warn('Tentativa de verificação do Webhook com token inválido.');
+    Logger.warn(t("interface.message.ad51a478cbdb"));
     return res.sendStatus(403);
   });
 
@@ -939,7 +940,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
     const signature = req.headers['x-hub-signature-256'];
 
     if (!signatureValidator.validate(req.rawBody, signature)) {
-      Logger.warn('Assinatura do webhook inválida.');
+      Logger.warn(t("interface.message.8031b77e4a40"));
       return res.sendStatus(401);
     }
 
@@ -973,7 +974,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
 
           if (taskQueueClient) {
             await taskQueueClient.enqueueProcessMessage(taskPayload).catch((err) => {
-              Logger.error('Erro ao enfileirar tarefa; processando diretamente', err);
+              Logger.error(t("interface.message.e6f1afbc41ed"), err);
               messageService.handleCustomerMessage(taskPayload).catch(() => {});
             });
           } else {
@@ -995,7 +996,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
 
     const { phone, message, customerName, messageId } = req.body;
     if (!phone || !message) {
-      return res.status(400).send('Dados inválidos');
+      return res.status(400).send(t("interface.message.9edf61801764"));
     }
 
     try {
@@ -1007,8 +1008,8 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       });
       res.status(200).json(result);
     } catch (error) {
-      Logger.error('Erro ao processar mensagem via Cloud Tasks', error);
-      res.status(500).send('Erro interno');
+      Logger.error(t("interface.message.7c348975e437"), error);
+      res.status(500).send(t("interface.message.22f3568a1e54"));
     }
   });
 
@@ -1019,7 +1020,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
     res.setHeader('Expires', '0');
     try {
       let products = await messageService.firestoreRepo.getAllProducts();
-      if (!products || products.length === 0) {
+      if ((!products || products.length === 0) && await messageService.firestoreRepo.getProductCollectionPath() === 'products') {
         const { DEFAULT_CATALOG_ITEMS } = require('../catalog/default-catalog');
         products = DEFAULT_CATALOG_ITEMS;
       }
@@ -1031,9 +1032,8 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       }
       res.status(200).json({ products, movements: movements || [] });
     } catch (err) {
-      Logger.error('Erro ao buscar inventário; fornecendo catálogo padrão da planilha', err);
-      const { DEFAULT_CATALOG_ITEMS } = require('../catalog/default-catalog');
-      res.status(200).json({ products: DEFAULT_CATALOG_ITEMS, movements: [] });
+      Logger.error(t("interface.message.be39c3f00559"), err);
+      res.status(503).json({ error: t('catalog.unavailable') });
     }
   };
 
@@ -1046,7 +1046,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
     try {
       const { customerName, customerPhone, customerEmail, customerId, orderType, deliveryAddress, paymentMethod, items } = req.body;
       if (!customerName || !customerPhone || !Array.isArray(items) || items.length === 0) {
-        return res.status(400).json({ error: 'Dados do pedido incompletos.' });
+        return res.status(400).json({ error: t("interface.message.e7296ec3e6c8") });
       }
 
       const { Ledger } = require('../operations/ledger');
@@ -1057,7 +1057,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       }, { id: 'web-catalog', name: customerName, role: 'SYSTEM' });
       res.status(200).json({ success: true, order });
     } catch (err) {
-      Logger.error('Erro ao registrar pedido web', err);
+      Logger.error(t("interface.message.c817886b7e1d"), err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1069,7 +1069,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       const data = await messageService.firestoreRepo.getCustomerPurchases(userId, email, phone);
       res.status(200).json({ success: true, ...data });
     } catch (err) {
-      Logger.error('Erro ao buscar pedidos do cliente', err);
+      Logger.error(t("interface.message.af6fd1f30370"), err);
       res.status(500).json({ success: false, error: err.message });
     }
   });
@@ -1080,24 +1080,24 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       const orders = await messageService.firestoreRepo.getAllOrders(50);
       res.status(200).json(orders);
     } catch (err) {
-      Logger.error('Erro ao buscar pedidos no admin', err);
+      Logger.error(t("interface.message.804bdd8125a1"), err);
       res.status(500).json({ error: err.message });
     }
   });
 
   // Admin: Update order status (CONFIRMED, DELIVERED, CANCELLED)
   app.post('/api/admin/orders/:id/action', (_req, res) => {
-    res.status(409).json({ error: 'Use a página /lancamentos para registrar esta operação com auditoria.' });
+    res.status(409).json({ error: t("interface.message.80b6316a73a8") });
   });
 
   // Admin: Nova Venda Manual no Balcão / Caixa
   app.post('/api/admin/orders/manual', (_req, res) => {
-    res.status(409).json({ error: 'Use a página /lancamentos para registrar esta operação com auditoria.' });
+    res.status(409).json({ error: t("interface.message.80b6316a73a8") });
   });
 
   // Admin: Entrada Rápida de Estoque
   app.post('/api/admin/stock/quick-entry', (_req, res) => {
-    res.status(409).json({ error: 'Use a página /lancamentos para registrar esta operação com auditoria.' });
+    res.status(409).json({ error: t("interface.message.80b6316a73a8") });
   });
 
   // Admin: Salvar / Atualizar Produto
@@ -1110,7 +1110,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       await messageService.firestoreRepo.saveProduct(product);
       res.status(200).json({ success: true, product });
     } catch (err) {
-      Logger.error('Erro ao salvar produto no admin', err);
+      Logger.error(t("interface.message.22e441115af6"), err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1122,7 +1122,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       await messageService.firestoreRepo.deleteProduct(id);
       res.status(200).json({ success: true });
     } catch (err) {
-      Logger.error('Erro ao excluir produto no admin', err);
+      Logger.error(t("interface.message.92b8c56e0560"), err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1131,12 +1131,12 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
   app.post('/api/admin/import-data', async (req, res) => {
     try {
       const { type, records } = req.body;
-      if (type !== 'products') { return res.status(409).json({ error: 'Importe histórico e entradas por /lancamentos.' }); }
+      if (type !== 'products') { return res.status(409).json({ error: t("interface.message.9f1215b6444b") }); }
       const safeRecords = records.map(record => { const safe = { ...record }; delete safe.stockQuantity; delete safe.estoque; delete safe.ESTOQUE; delete safe.stockVersion; return safe; });
       const result = await messageService.firestoreRepo.importSpreadsheetData({ type, records: safeRecords });
       res.status(200).json(result);
     } catch (err) {
-      Logger.error('Erro na importação de dados da planilha', err);
+      Logger.error(t("interface.message.b6a4b72b919f"), err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1148,7 +1148,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       await messageService.firestoreRepo.batchUpsertProducts(DEFAULT_CATALOG_ITEMS);
       res.status(200).json({ success: true, count: DEFAULT_CATALOG_ITEMS.length });
     } catch (err) {
-      Logger.error('Erro ao semear catálogo padrão', err);
+      Logger.error(t("interface.message.55e3f97151d4"), err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1160,7 +1160,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       const status = await systemStatusService.getSystemStatus();
       res.status(200).json(status);
     } catch (err) {
-      Logger.error('Erro ao coletar status do sistema', err);
+      Logger.error(t("interface.message.25b35ada612b"), err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1189,16 +1189,16 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
     try {
       const { idToken } = req.body || {};
       if (typeof idToken !== 'string' || !idToken.trim()) {
-        return res.status(401).json({ success: false, error: 'Token Firebase obrigatório.' });
+        return res.status(401).json({ success: false, error: t("interface.message.c27050a1a0eb") });
       }
       let identity;
       try {
         identity = await verifyGoogleToken(idToken);
       } catch {
-        return res.status(401).json({ success: false, error: 'Sessão Google inválida ou expirada. Entre novamente.' });
+        return res.status(401).json({ success: false, error: t("interface.message.3e1ecaa82984") });
       }
       if (!identity.email || identity.email_verified !== true || identity.firebase?.sign_in_provider !== 'google.com') {
-        return res.status(401).json({ success: false, error: 'Use uma conta Google com e-mail verificado.' });
+        return res.status(401).json({ success: false, error: t("interface.message.55115f518a17") });
       }
       const { email, name, picture, uid } = identity;
 
@@ -1226,7 +1226,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       await operations.issueSession(res, user);
       res.status(200).json({ success: true, user });
     } catch (err) {
-      Logger.error('Erro na autenticação Google', err);
+      Logger.error(t("interface.message.536ed0c77295"), err);
       res.status(500).json({ success: false, error: err.message });
     }
   });
@@ -1241,7 +1241,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       }
       res.status(200).json(result);
     } catch (err) {
-      Logger.error('Erro no cadastro de usuário', err);
+      Logger.error(t("interface.message.325c407d2e13"), err);
       res.status(500).json({ success: false, error: err.message });
     }
   });
@@ -1256,7 +1256,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       }
       res.status(200).json(result);
     } catch (err) {
-      Logger.error('Erro no login de usuário', err);
+      Logger.error(t("interface.message.d2b1ccf91aa8"), err);
       res.status(500).json({ success: false, error: err.message });
     }
   });
@@ -1272,7 +1272,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       }
       res.status(200).json(result);
     } catch (err) {
-      Logger.error('Erro ao atualizar perfil do usuário', err);
+      Logger.error(t("interface.message.84d69a596848"), err);
       res.status(500).json({ success: false, error: err.message });
     }
   });
@@ -1288,7 +1288,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       await operations.issueSession(res, result.user);
       res.status(200).json(result);
     } catch (err) {
-      Logger.error('Erro no login admin', err);
+      Logger.error(t("interface.message.2c7b63078be1"), err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1299,7 +1299,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       const users = await messageService.firestoreRepo.getAllUsers();
       res.status(200).json(users.map(({ password: _password, pin: _pin, ...user }) => user));
     } catch (err) {
-      Logger.error('Erro ao listar usuários', err);
+      Logger.error(t("interface.message.dde2f6602fbe"), err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1311,7 +1311,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       const saved = await messageService.firestoreRepo.saveUser(userData);
       res.status(200).json({ success: true, user: saved });
     } catch (err) {
-      Logger.error('Erro ao salvar colaborador', err);
+      Logger.error(t("interface.message.1bdc4180f98b"), err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1323,7 +1323,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       const deleted = await messageService.firestoreRepo.deleteUser(id);
       res.status(200).json({ success: deleted });
     } catch (err) {
-      Logger.error('Erro ao excluir colaborador', err);
+      Logger.error(t("interface.message.3400c9cf92f0"), err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1334,7 +1334,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       const alterations = await messageService.firestoreRepo.getAllOrderAlterations();
       res.status(200).json(alterations);
     } catch (err) {
-      Logger.error('Erro ao buscar alterações', err);
+      Logger.error(t("interface.message.c82878c85c4b"), err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1344,10 +1344,10 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
     try {
       const { orderId, originalOrder, proposedOrder, requestedBy, requestedByName, reason } = req.body;
       if (!orderId || !proposedOrder) {
-        return res.status(400).json({ error: 'Dados da solicitação incompletos.' });
+        return res.status(400).json({ error: t("interface.message.b7b9f9ef312b") });
       }
       const current = await messageService.firestoreRepo.firestore.collection('orders').doc(String(orderId)).get();
-      if (current.exists && current.data().stockDeducted) { return res.status(409).json({ error: 'Para corrigir esta venda, peça ao ADMIN o cancelamento e registre uma nova venda em /lancamentos.' }); }
+      if (current.exists && current.data().stockDeducted) { return res.status(409).json({ error: t("interface.message.639c21ba7043") }); }
       const requestObj = await messageService.firestoreRepo.createOrderAlterationRequest({
         orderId,
         originalOrder,
@@ -1358,7 +1358,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       });
       res.status(200).json({ success: true, request: requestObj });
     } catch (err) {
-      Logger.error('Erro ao criar solicitação de alteração', err);
+      Logger.error(t("interface.message.9b3df285f594"), err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1371,7 +1371,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       const storedRequest = await messageService.firestoreRepo.firestore.collection('order_alterations').doc(String(id)).get();
       if (storedRequest.exists && action === 'APPROVED') {
         const current = await messageService.firestoreRepo.firestore.collection('orders').doc(String(storedRequest.data().orderId)).get();
-        if (current.exists && current.data().stockDeducted) { return res.status(409).json({ error: 'Use cancelamento com estorno e novo lançamento em /lancamentos.' }); }
+        if (current.exists && current.data().stockDeducted) { return res.status(409).json({ error: t("interface.message.045ba24c9b75") }); }
       }
       const result = await messageService.firestoreRepo.reviewOrderAlteration({
         requestId: id,
@@ -1381,7 +1381,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       });
       res.status(200).json(result);
     } catch (err) {
-      Logger.error('Erro ao revisar alteração', err);
+      Logger.error(t("interface.message.4a7a31c17615"), err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1393,7 +1393,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       const notifs = await messageService.firestoreRepo.getUserNotifications(userId);
       res.status(200).json(notifs);
     } catch (err) {
-      Logger.error('Erro ao buscar notificações', err);
+      Logger.error(t("interface.message.0d492281a023"), err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1405,7 +1405,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       await messageService.firestoreRepo.markNotificationRead(id);
       res.status(200).json({ success: true });
     } catch (err) {
-      Logger.error('Erro ao atualizar notificação', err);
+      Logger.error(t("interface.message.061d23d22cfe"), err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1416,7 +1416,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       const metrics = await messageService.firestoreRepo.getDailySalesMetrics();
       res.status(200).json(metrics);
     } catch (err) {
-      Logger.error('Erro ao buscar métricas diárias', err);
+      Logger.error(t("interface.message.0f3baf4ac504"), err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1426,20 +1426,20 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
     app.post('/chat', async (req, res) => {
       const { telefone, nome, mensagem } = req.body;
       if (!telefone || !mensagem) {
-        return res.status(400).json({ error: 'Campos "telefone" e "mensagem" são obrigatórios.' });
+        return res.status(400).json({ error: t("interface.message.d75d590bc2da") });
       }
 
       try {
         const result = await messageService.handleCustomerMessage({
           phone: telefone,
           message: mensagem,
-          customerName: nome || 'Cliente Teste',
+          customerName: nome || t("interface.message.093ec820457f"),
           messageId: `local-${Date.now()}`,
         });
         const products = await messageService.firestoreRepo.getAllProducts();
         res.status(200).json({ ...result, products });
       } catch (error) {
-        Logger.error('Erro no endpoint /chat local', error);
+        Logger.error(t("interface.message.b5cdb28c954e"), error);
         res.status(500).json({ error: error.message });
       }
     });

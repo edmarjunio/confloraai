@@ -15,3 +15,7 @@ credentials*.json
 repomix-output.xml
 .env
 firebase-service-account.json
+
+.local-test-data/
+node_modules/
+.env

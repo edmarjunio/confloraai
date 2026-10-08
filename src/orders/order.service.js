@@ -1,3 +1,4 @@
+const { t } = require('../i18n');
 const config = require('../config/env');
 const { formatCurrency, normalizeText } = require('../shared/string.util');
 const Logger = require('../shared/logger');
@@ -100,10 +101,10 @@ class OrderService {
    */
   formatSizeConfirmationPrompt(product, quantity) {
     const pricesText = product.prices.map((p) => formatCurrency(p)).join(', ');
-    const qtyText = quantity > 1 ? `para as ${quantity} unidades` : '';
+    const qtyText = quantity > 1 ? `${t("interface.message.c214516fb797")}${quantity}${t("interface.fragment.9117a82d4311")}` : '';
     return (
-      `Temos a *${product.canonicalName}* em diferentes tamanhos/valores: ${pricesText}.\n\n` +
-      `Qual tamanho você prefere ${qtyText}?`
+      `${t("interface.fragment.53ea84bc1bff")}${product.canonicalName}${t("interface.message.bcf65a476c85")}${pricesText}.\n\n` +
+      `${t("interface.message.bb35e71d47fa")}${qtyText}?`
     ).trim();
   }
 
@@ -129,9 +130,9 @@ class OrderService {
       return (
         `Claro! Vai ser o de sempre?\n\n` +
         `${itemsText}\n\n` +
-        `💰 *Valor total:* ${formatCurrency(order.total)}\n\n` +
+        `${t("interface.message.b76a25558e78")}${formatCurrency(order.total)}\n\n` +
         `📍 *Entregar em:* ${order.deliveryAddress}?\n\n` +
-        `💳 No *${order.paymentMethod}* né?`
+        `💳 No *${order.paymentMethod}${t("interface.message.c780ced61f29")}`
       );
     }
 
@@ -139,31 +140,31 @@ class OrderService {
     if (isUpdated) {
       const addressLine = order.deliveryAddress
         ? `📍 *Entregar em:* ${order.deliveryAddress}\n\n`
-        : `📍 *Endereço para entrega:*\n\n`;
+        : `${t("interface.message.b36ef3eadd24")}`;
 
       const paymentLine = order.paymentMethod
-        ? `💳 *Forma de pagamento:* ${order.paymentMethod}\n\n`
-        : `💳 *Forma de pagamento:*\n\n`;
+        ? `${t("interface.message.5425f561028e")}${order.paymentMethod}\n\n`
+        : `${t("interface.message.88de79f84402")}`;
 
       return (
-        `Perfeito! Já atualizei o seu pedido:\n\n` +
-        `📋 *Resumo do Pedido:*\n\n` +
+        `${t("interface.message.e062680f20a1")}` +
+        `${t("interface.message.4d99f921071d")}` +
         `${itemsText}\n\n` +
-        `💰 *Valor total:* ${formatCurrency(order.total)}\n\n` +
+        `${t("interface.message.b76a25558e78")}${formatCurrency(order.total)}\n\n` +
         `${addressLine}` +
         `${paymentLine}` +
-        `Poderia me confirmar para finalizarmos?`
+        `${t("interface.message.928cc451a976")}`
       );
     }
 
     // Exemplo 1: Pedido Novo / Múltiplo sem histórico completo
     return (
-      `Certo! Já anotei o seu pedido:\n\n` +
-      `📋 *Resumo do Pedido:*\n\n` +
+      `${t("interface.message.562b18b49b53")}` +
+      `${t("interface.message.4d99f921071d")}` +
       `${itemsText}\n\n` +
-      `💰 *Valor total:* ${formatCurrency(order.total)}\n\n` +
-      `📍 Poderia me confirmar o pedido e mandar o endereço pra gente entregar?\n\n` +
-      `💳 Qual seria a forma de pagamento?`
+      `${t("interface.message.b76a25558e78")}${formatCurrency(order.total)}\n\n` +
+      `${t("interface.message.eccc34e86b35")}` +
+      `${t("interface.message.5ab77bb1fcbb")}`
     );
   }
 
@@ -189,7 +190,7 @@ class OrderService {
         let product = products.find(p => p.id === item.productId);
         if (!product) {
           const matches = products.filter(p => normalizeText(p.name || p.descricao) === normalizeText(item.name) && Number(p.price ?? p.valor_num) === Number(item.price));
-          if (matches.length !== 1) {throw new Error('Produto ambíguo no pedido. Necessário atendimento humano.');}
+          if (matches.length !== 1) {throw new Error(t("interface.message.1ebd81cd2671"));}
           product = matches[0];
         }
         return { productId: product.id, quantity: item.quantity };
@@ -206,7 +207,7 @@ class OrderService {
     } else if (this.firestoreRepo.isInMemory) {
       await this.firestoreRepo.deductStock(order.items, phone);
     } else {
-      throw new Error('Firestore indisponível. Pedido não confirmado.');
+      throw new Error(t("interface.message.eff25405613b"));
     }
 
     await this.firestoreRepo.saveOrder(phone, order);
@@ -228,24 +229,24 @@ class OrderService {
 
     // Enviar notificação para o WhatsApp do Dono (Edmar)
     await this.notifyOwner(order, customerName).catch((err) => {
-      Logger.warn('Aviso: falha ao notificar WhatsApp do dono', { error: err.message });
+      Logger.warn(t("interface.message.f00c071071a8"), { error: err.message });
     });
 
     // Mensagem de retorno para o cliente
-    const addrText = order.deliveryAddress ? `📍 *Entrega:* ${order.deliveryAddress}\n` : '';
-    const payText = order.paymentMethod ? `💳 *Pagamento:* ${order.paymentMethod}\n` : '💳 *Pagamento:* PIX\n';
+    const addrText = order.deliveryAddress ? `${t("interface.message.58423bf61e66")}${order.deliveryAddress}\n` : '';
+    const payText = order.paymentMethod ? `${t("interface.message.dff91eaf1b56")}${order.paymentMethod}\n` : t("interface.message.24482352d295");
 
     if (isPix) {
       return {
         order,
         reply: (
-          `✅ *Pedido Confirmado com Sucesso!*\n\n` +
-          `💰 *Valor Total:* ${formatCurrency(order.total)}\n` +
+          `${t("interface.message.e4f0544436a8")}` +
+          `${t("interface.message.8c30d93e16a0")}${formatCurrency(order.total)}\n` +
           `${addrText}` +
           `${payText}\n` +
           `🔑 *Chave PIX:* \`${config.pix.key}\`\n` +
           `👤 *Titular:* ${config.pix.holder}\n\n` +
-          `Assim que realizar o pagamento, por favor envie o comprovante aqui para agilizarmos a entrega! 🌱`
+          `${t("interface.message.65b54db8ffae")}`
         ),
       };
     }
@@ -253,11 +254,11 @@ class OrderService {
     return {
       order,
       reply: (
-        `✅ *Pedido Confirmado com Sucesso!*\n\n` +
-        `💰 *Valor Total:* ${formatCurrency(order.total)}\n` +
+        `${t("interface.message.e4f0544436a8")}` +
+        `${t("interface.message.8c30d93e16a0")}${formatCurrency(order.total)}\n` +
         `${addrText}` +
         `${payText}\n` +
-        `Já estamos separando seus produtos para entrega! Se precisar de algo mais, estou à disposição 🌱.`
+        `${t("interface.message.1011e653288d")}`
       ),
     };
   }
@@ -278,18 +279,18 @@ class OrderService {
       .join('\n');
 
     const notificationText = (
-      `🔔 *NOVO PEDIDO FECHADO - CONFLORA* 🔔\n\n` +
-      `👤 *Cliente:* ${customerName || order.phone}\n` +
+      `${t("interface.message.7f518ed03eef")}` +
+      `${t("interface.message.f15899694c23")}${customerName || order.phone}\n` +
       `📱 *WhatsApp:* ${order.phone}\n\n` +
-      `📋 *Itens do Pedido:*\n` +
+      `${t("interface.message.0714b0395754")}` +
       `${itemsText}\n\n` +
-      `💰 *Valor Total:* ${formatCurrency(order.total)}\n` +
-      `📍 *Endereço de Entrega:* ${order.deliveryAddress || 'A combinar / Retirada'}\n` +
-      `💳 *Forma de Pagamento:* ${order.paymentMethod || 'PIX'}`
+      `${t("interface.message.8c30d93e16a0")}${formatCurrency(order.total)}\n` +
+      `${t("interface.message.b661b3297b30")}${order.deliveryAddress || t("interface.message.e0155073a931")}\n` +
+      `${t("interface.message.13d5d6d3562d")}${order.paymentMethod || 'PIX'}`
     );
 
     await this.whatsappClient.sendTextMessage(ownerNumber, notificationText);
-    Logger.info(`Notificação de novo pedido enviada com sucesso para o proprietário: ${ownerNumber}`);
+    Logger.info(`${t("interface.message.3b9a127d536c")}${ownerNumber}`);
   }
 }
 

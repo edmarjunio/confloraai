@@ -16,12 +16,7 @@ function normalizeText(text) {
 }
 
 function formatCurrency(value) {
-  if (typeof value !== 'number' || isNaN(value)) {
-    return 'R$ 0,00';
-  }
-  const parts = value.toFixed(2).split('.');
-  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  return `R$ ${parts.join(',')}`;
+  return require('../i18n').currency(value).replace(/\u00a0/g, ' ');
 }
 
 function parseCurrencyString(rawStr) {

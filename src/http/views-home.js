@@ -1,6 +1,6 @@
+const { tHtml } = require('../i18n');
 const { renderFirebaseAuthScript } = require('./firebase-client');
 const { GOOGLE_ANALYTICS_TAG } = require('./analytics');
-const { DEFAULT_CATALOG_ITEMS } = require('../catalog/default-catalog');
 
 const FETCH_SHIM_SCRIPT = `<script>
   try {
@@ -26,7 +26,7 @@ function renderInitialProductCards(items) {
       <div class="prod-card">
         <div class="card-img-wrapper" onclick="openGallery('${p.id}')">
           <img class="prod-img" src="${img}" alt="${p.descricao || p.name}" loading="lazy" />
-          ${byKg ? '<span class="unit-tag-badge">⚖️ POR KG</span>' : ''}
+          ${byKg ? '<span class="unit-tag-badge">${tHtml("interface.label.31acafed402b")}</span>' : ''}
         </div>
         <div class="card-body">
           <span class="card-category">${p.subcategoria || p.subcategory || p.categoria || p.category || 'Conflora'}</span>
@@ -55,7 +55,7 @@ function renderHomeHtml() {
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
-  <title>Conflora Horta e Viveiro — Cardápio Digital & Pedidos</title>
+  <title>${tHtml("interface.message.7c8dc25793a5")}</title>
   ${GOOGLE_ANALYTICS_TAG}
   ${FETCH_SHIM_SCRIPT}
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -996,34 +996,34 @@ function renderHomeHtml() {
 <body>
   <div class="top-toolbar">
     <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-      <span style="font-weight:800; color:#86efac; font-size:14px;">🌿 Conflora AI</span>
-      <span style="font-size:11px; color:#cbd5e1;">Viveiro & Horta • Mineiros - GO</span>
+      <span style="font-weight:800; color:#86efac; font-size:14px;">${tHtml("interface.label.68da802bd234")}</span>
+      <span style="font-size:11px; color:#cbd5e1;">${tHtml("interface.label.b1800eca03a7")}</span>
     </div>
 
     <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
       <!-- BOTÃO DE IDENTIFICAÇÃO / LOGIN DO CLIENTE (TOTALMENTE OPCIONAL) -->
       <button id="authOpenBtn" class="google-auth-btn" onclick="openAuthModal()">
         <svg style="width:14px; height:14px;" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
-        Entrar / Cadastrar
+        ${tHtml("interface.label.a84f68953526")}
       </button>
 
       <!-- PILL DO USUÁRIO IDENTIFICADO -->
       <div id="userHeaderPill" style="display:none; align-items:center; gap:6px; background:#1e293b; padding:4px 10px; border-radius:20px; font-size:12px; color:white;">
         <img id="userHeaderPic" style="width:22px; height:22px; border-radius:50%; object-fit:cover;" src="" />
         <span id="userHeaderName" style="font-weight:600;"></span>
-        <span id="userHeaderBadge" style="background:#0284c7; color:white; font-size:10px; padding:1px 6px; border-radius:8px; font-weight:700;">CLIENTE</span>
-        <button class="action-btn" onclick="openCustomerPortalModal()" style="background:#0f172a; color:#86efac; border:1px solid #334155; padding:3px 8px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer;" title="Acompanhar meus pedidos e compras">📦 Meus Pedidos</button>
-        <button onclick="logoutCurrentUser()" style="background:transparent; border:none; color:#94a3b8; cursor:pointer; font-size:12px; margin-left:4px;" title="Sair da conta">✕</button>
+        <span id="userHeaderBadge" style="background:#0284c7; color:white; font-size:10px; padding:1px 6px; border-radius:8px; font-weight:700;">${tHtml("interface.label.37b9fc9718f3")}</span>
+        <button class="action-btn" onclick="openCustomerPortalModal()" style="background:#0f172a; color:#86efac; border:1px solid #334155; padding:3px 8px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer;" title="${tHtml("interface.message.092204b9c245")}">${tHtml("interface.message.fc8e2ea13d97")}</button>
+        <button onclick="logoutCurrentUser()" style="background:transparent; border:none; color:#94a3b8; cursor:pointer; font-size:12px; margin-left:4px;" title="${tHtml("interface.message.b73f3ff34b4b")}">✕</button>
       </div>
 
       <!-- BOTÃO STATUS DE DIAGNÓSTICO (VISÍVEL SOMENTE PARA ADMIN) -->
       <button id="adminStatusBtn" class="status-pill-btn" onclick="openStatusModal()" style="display:none;">
-        📡 Status das Conexões
+        ${tHtml("interface.label.3ccd4a62cd35")}
       </button>
 
       <!-- LINK DO PAINEL ADMIN (LIBERADO APENAS COM LOGIN ADMIN) -->
       <button id="adminPanelLinkBtn" class="admin-link-btn" onclick="handleAdminPanelClick()">
-        ⚙️ Configurações & Painel ➔
+        ${tHtml("interface.label.dc91f43b48a2")}
       </button>
     </div>
   </div>
@@ -1033,112 +1033,112 @@ function renderHomeHtml() {
       <div class="brand-title">
         <div class="conflora-logo-badge">🌿</div>
         <div>
-          <h1>Conflora Horta e Viveiro</h1>
-          <p>Cardápio Digital & Pedidos Diretos • Mineiros - GO</p>
+          <h1>${tHtml("interface.label.a0267023e56e")}</h1>
+          <p>${tHtml("interface.message.ea1b33970f48")}</p>
         </div>
       </div>
       <button class="cart-pill-btn" onclick="scrollToCart()">
-        🛒 <span id="cartCountHeader">0 itens</span>
+        🛒 <span id="cartCountHeader">${tHtml("interface.label.69f661683336")}</span>
       </button>
     </header>
 
       <main class="app-main">
         <section>
           <div class="categories-bar" id="categoriesBar">
-            <button class="cat-btn active" onclick="selectCategory('TODAS')">🌿 Todas</button>
+            <button class="cat-btn active" onclick="selectCategory('TODAS')">${tHtml("interface.label.70d5348be9d9")}</button>
           </div>
 
           <div class="subcategories-bar" id="subcategoriesBar"></div>
 
           <div class="catalog-toolbar">
-            <input type="text" id="searchInput" class="search-input" placeholder="Buscar produto (ex: alface, rabo de raposa, jabuticaba, eucalipto, adubo...)" oninput="filterProducts()" />
+            <input type="text" id="searchInput" class="search-input" placeholder="${tHtml("interface.message.170cc2fa15c0")}" oninput="filterProducts()" />
             <select id="sortSelect" class="sort-select" onchange="filterProducts()">
-              <option value="mais_vendidos">🔥 Mais Vendidos</option>
-              <option value="preco_asc">💰 Menor Preço</option>
-              <option value="preco_desc">💎 Maior Preço</option>
-              <option value="nome">🔤 Nome A-Z</option>
+              <option value="mais_vendidos">${tHtml("interface.message.5a2732264f2e")}</option>
+              <option value="preco_asc">${tHtml("interface.message.a637cb741f7e")}</option>
+              <option value="preco_desc">${tHtml("interface.message.daa2ad9879a3")}</option>
+              <option value="nome">${tHtml("interface.label.c4d98565c009")}</option>
             </select>
           </div>
 
           <div class="products-grid" id="productsGrid">
-            ${renderInitialProductCards(DEFAULT_CATALOG_ITEMS)}
+            ${renderInitialProductCards([])}
           </div>
         </section>
 
         <aside class="cart-checkout-panel" id="cartPanel">
           <div class="panel-title">
             <div style="display:flex; align-items:center; gap:8px;">
-              <span>🛒 Sua Sacola</span>
-              <span id="cartItemCounter" style="font-size:12px; color:var(--text-muted); font-weight:600;">0 itens</span>
+              <span>${tHtml("interface.message.ec597222c860")}</span>
+              <span id="cartItemCounter" style="font-size:12px; color:var(--text-muted); font-weight:600;">${tHtml("interface.label.69f661683336")}</span>
             </div>
             <!-- BOTÃO NO CARRINHO PARA ESVAZIAR CARRINHO -->
             <button id="clearCartBtn" class="clear-cart-btn" onclick="clearCart()" title="Esvaziar todos os itens da sacola" style="display:none;">
-              🗑️ Esvaziar
+              ${tHtml("interface.label.433aab2d9fce")}
             </button>
           </div>
 
           <div class="cart-items-list" id="cartItemsList">
             <div style="color: var(--text-muted); font-size: 13px; text-align: center; padding: 20px 0;">
-              Sua sacola está vazia.<br>Clique em <strong>+</strong> nos produtos para adicionar.
+              ${tHtml("interface.label.e4d53a93648e")}<br>${tHtml("interface.label.bc3a5125ec88")} <strong>+</strong> ${tHtml("interface.label.2e7836127be9")}
             </div>
           </div>
 
           <!-- Link secundário para esvaziar carrinho -->
           <div id="clearCartRow" style="display:none; text-align:right; padding-top:4px;">
-            <button type="button" class="clear-cart-text-btn" onclick="clearCart()">🗑️ Esvaziar carrinho</button>
+            <button type="button" class="clear-cart-text-btn" onclick="clearCart()">${tHtml("interface.label.9f72c61b2263")}</button>
           </div>
 
           <div class="cart-total-box">
-            <span>Total:</span>
+            <span>${tHtml("interface.label.18e872be2359")}</span>
             <span id="cartTotalText">R$ 0,00</span>
           </div>
 
           <!-- AVISO DE DADOS PRÉ-PREENCHIDOS DA ÚLTIMA COMPRA -->
           <div id="savedDataNotice" style="display:none; font-size:11px; background:#dcfce7; color:#166534; padding:8px 10px; border-radius:6px; border:1px solid #86efac;">
-            ✨ Dados pré-preenchidos da sua última compra. Você pode editá-los a qualquer momento!
+            ${tHtml("interface.label.3a85b8291ecd")}
           </div>
 
           <div class="form-group">
-            <label class="form-label">Seu Nome:</label>
-            <input type="text" id="custName" class="form-input" placeholder="Ex: Edmar Júnio" oninput="saveCustomerDataToStorage()" />
+            <label class="form-label">${tHtml("interface.message.a7d6ac3ece2c")}</label>
+            <input type="text" id="custName" class="form-input" placeholder="${tHtml("interface.message.cbcb44e317bb")}" oninput="saveCustomerDataToStorage()" />
           </div>
 
           <div class="form-group">
-            <label class="form-label">WhatsApp com DDD:</label>
+            <label class="form-label">${tHtml("interface.message.541090c42a02")}</label>
             <input type="text" id="custPhone" class="form-input" placeholder="Ex: 5564999351616" oninput="saveCustomerDataToStorage()" />
           </div>
 
           <div class="form-group">
-            <label class="form-label">Como deseja receber?</label>
+            <label class="form-label">${tHtml("interface.label.7e1829ab9a10")}</label>
             <div class="type-switcher">
-              <button type="button" class="type-option-btn selected" id="typeDeliveryBtn" onclick="setOrderType('DELIVERY')">🛵 Entrega</button>
-              <button type="button" class="type-option-btn" id="typePickupBtn" onclick="setOrderType('PICKUP')">🏬 Retirada no Viveiro</button>
+              <button type="button" class="type-option-btn selected" id="typeDeliveryBtn" onclick="setOrderType('DELIVERY')">${tHtml("interface.message.6e10cb62b5dc")}</button>
+              <button type="button" class="type-option-btn" id="typePickupBtn" onclick="setOrderType('PICKUP')">${tHtml("interface.message.3557c39183a6")}</button>
             </div>
           </div>
 
           <div class="form-group" id="addressGroup">
-            <label class="form-label">Endereço de Entrega em Mineiros - GO:</label>
-            <input type="text" id="custAddress" class="form-input" placeholder="Rua, Número, Bairro e Ponto de Referência" oninput="saveCustomerDataToStorage()" />
+            <label class="form-label">${tHtml("interface.message.b601c043f755")}</label>
+            <input type="text" id="custAddress" class="form-input" placeholder="${tHtml("interface.message.8148f2916a4d")}" oninput="saveCustomerDataToStorage()" />
           </div>
 
           <div class="form-group">
-            <label class="form-label">Forma de Pagamento:</label>
+            <label class="form-label">${tHtml("interface.message.fdef49897d85")}</label>
             <div class="pay-switcher">
-              <button type="button" class="pay-btn selected" id="payPixBtn" onclick="setPayment('PIX')">PIX</button>
-              <button type="button" class="pay-btn" id="payCardBtn" onclick="setPayment('CARTAO')">Cartão</button>
-              <button type="button" class="pay-btn" id="payCashBtn" onclick="setPayment('DINHEIRO')">Dinheiro</button>
+              <button type="button" class="pay-btn selected" id="payPixBtn" onclick="setPayment('PIX')">${tHtml("interface.label.41b0635bb279")}</button>
+              <button type="button" class="pay-btn" id="payCardBtn" onclick="setPayment('CARTAO')">${tHtml("interface.message.4bef4f3140f1")}</button>
+              <button type="button" class="pay-btn" id="payCashBtn" onclick="setPayment('DINHEIRO')">${tHtml("interface.message.f74b4c3d0e62")}</button>
             </div>
           </div>
 
           <div class="pix-box" id="pixBox">
-            <div style="font-weight: 700; color: #166534;">🔑 Pagamento via PIX</div>
-            <div style="margin: 4px 0;">Chave Oficial da Conflora:</div>
+            <div style="font-weight: 700; color: #166534;">${tHtml("interface.message.16be30313e2b")}</div>
+            <div style="margin: 4px 0;">${tHtml("interface.label.a50abdae469e")}</div>
             <div class="pix-key-val" id="pixKeyDisplay">64999351616</div>
-            <button type="button" class="copy-pix-btn" onclick="copyPix()">📋 Copiar Chave PIX</button>
+            <button type="button" class="copy-pix-btn" onclick="copyPix()">${tHtml("interface.label.3fdf6652dbe1")}</button>
           </div>
 
           <button id="submitOrderBtn" class="checkout-submit-btn" onclick="submitOrder()">
-            ✅ Finalizar Pedido
+            ${tHtml("interface.label.4b541d735945")}
           </button>
         </aside>
       </main>
@@ -1146,10 +1146,10 @@ function renderHomeHtml() {
 
     <!-- BARRA FLUTUANTE INFERIOR DA SACOLA NO CELULAR -->
     <div class="mobile-cart-float-bar" id="mobileCartFloatBar" onclick="scrollToCart()">
-      <span>🛒 <span id="mobCartCount">0</span> item(ns) na sacola</span>
+      <span>🛒 <span id="mobCartCount">0</span> ${tHtml("interface.label.ef14bdddca9e")}</span>
       <span style="display:flex; align-items:center; gap:6px;">
         <span id="mobCartTotal">R$ 0,00</span>
-        <span style="background:white; color:#14532d; padding:2px 8px; border-radius:12px; font-size:12px;">Ver Sacola ➔</span>
+        <span style="background:white; color:#14532d; padding:2px 8px; border-radius:12px; font-size:12px;">${tHtml("interface.label.3ddabfc6f951")}</span>
       </span>
     </div>
 
@@ -1157,8 +1157,8 @@ function renderHomeHtml() {
   <div class="modal-overlay" id="galleryModal">
     <div class="modal-box">
       <div class="modal-header">
-        <h3 id="modalProdTitle" style="font-size: 16px; color: var(--text);">Fotos do Produto</h3>
-        <button style="border:none; background:none; font-size:22px; cursor:pointer;" onclick="closeModal()">×</button>
+        <h3 id="modalProdTitle" style="font-size: 16px; color: var(--text);">${tHtml("interface.message.b49500771b47")}</h3>
+        <button style="border:none; background:none; font-size:22px; cursor:pointer;" onclick="closeModal()">${tHtml("interface.label.8db71ed28b0f")}</button>
       </div>
       <div class="modal-body">
         <img id="modalMainImg" class="gallery-main-img" src="" alt="Produto" />
@@ -1169,7 +1169,7 @@ function renderHomeHtml() {
           <p id="modalProdDesc" style="font-size: 13px; color: #334155; line-height: 1.5;"></p>
           <div style="margin-top: 14px;">
             <button id="modalAddBtn" class="checkout-submit-btn" style="padding: 10px;" onclick="">
-              🛒 Adicionar este produto à sacola
+              ${tHtml("interface.label.611d920c0386")}
             </button>
           </div>
         </div>
@@ -1181,39 +1181,39 @@ function renderHomeHtml() {
   <div class="modal-overlay" id="kgModal">
     <div class="kg-modal-box">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-        <h3 id="kgModalTitle" style="font-size:16px; color:#14532d;">⚖️ Selecionar Peso (KG)</h3>
-        <button style="border:none; background:none; font-size:22px; cursor:pointer;" onclick="closeKgModal()">×</button>
+        <h3 id="kgModalTitle" style="font-size:16px; color:#14532d;">${tHtml("interface.label.27dc15959f4b")}</h3>
+        <button style="border:none; background:none; font-size:22px; cursor:pointer;" onclick="closeKgModal()">${tHtml("interface.label.8db71ed28b0f")}</button>
       </div>
-      <p id="kgModalDesc" style="font-size:13px; color:#64748b; margin-bottom:12px;">Informe a quantidade exata de quilogramas que deseja (até 3 casas decimais):</p>
+      <p id="kgModalDesc" style="font-size:13px; color:#64748b; margin-bottom:12px;">${tHtml("interface.message.0cbb21768a2b")}</p>
       
       <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px; margin-bottom:14px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-          <span style="font-size:12px; font-weight:700;">Preço por KG:</span>
+          <span style="font-size:12px; font-weight:700;">${tHtml("interface.message.bc24372bf794")}</span>
           <strong id="kgPricePerKgDisplay" style="color:#15803d; font-size:15px;">R$ 0,00/kg</strong>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
           <input type="number" id="kgWeightInput" step="0.001" min="0.050" max="999.000" value="1.000" style="flex:1; padding:10px; font-size:18px; font-weight:800; border:2px solid #86efac; border-radius:8px; text-align:center; outline:none;" oninput="updateKgModalSubtotal()" />
-          <span style="font-size:16px; font-weight:800; color:#14532d;">KG</span>
+          <span style="font-size:16px; font-weight:800; color:#14532d;">${tHtml("interface.label.88ed32099fc7")}</span>
         </div>
       </div>
 
-      <div style="font-size:12px; font-weight:700; color:#334155;">Atalhos rápidos de peso:</div>
+      <div style="font-size:12px; font-weight:700; color:#334155;">${tHtml("interface.message.57a400b511f8")}</div>
       <div class="kg-presets">
-        <button type="button" class="kg-preset-btn" onclick="setKgPreset(0.250)">+ 0,250 kg</button>
-        <button type="button" class="kg-preset-btn" onclick="setKgPreset(0.500)">+ 0,500 kg</button>
-        <button type="button" class="kg-preset-btn" onclick="setKgPreset(1.000)">1,000 kg</button>
-        <button type="button" class="kg-preset-btn" onclick="setKgPreset(2.000)">2,000 kg</button>
-        <button type="button" class="kg-preset-btn" onclick="setKgPreset(5.000)">5,000 kg</button>
+        <button type="button" class="kg-preset-btn" onclick="setKgPreset(0.250)">${tHtml("interface.label.d2ca11ac6703")}</button>
+        <button type="button" class="kg-preset-btn" onclick="setKgPreset(0.500)">${tHtml("interface.label.f10b217fc925")}</button>
+        <button type="button" class="kg-preset-btn" onclick="setKgPreset(1.000)">${tHtml("interface.label.7b264e59b96d")}</button>
+        <button type="button" class="kg-preset-btn" onclick="setKgPreset(2.000)">${tHtml("interface.label.52541edfb93a")}</button>
+        <button type="button" class="kg-preset-btn" onclick="setKgPreset(5.000)">${tHtml("interface.label.00b5fe9e6462")}</button>
       </div>
 
       <div style="background:#f0fdf4; border:1px solid #86efac; padding:10px 14px; border-radius:8px; display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-        <span style="font-size:13px; font-weight:700;">Subtotal Calculado:</span>
+        <span style="font-size:13px; font-weight:700;">${tHtml("interface.label.3b6c2a49ba58")}</span>
         <strong id="kgSubtotalDisplay" style="font-size:18px; color:#15803d;">R$ 0,00</strong>
       </div>
 
       <div style="display:flex; gap:8px;">
-        <button type="button" class="action-btn" style="flex:1; padding:10px; border:1px solid #cbd5e1; background:#f8fafc; border-radius:8px; cursor:pointer;" onclick="closeKgModal()">Cancelar</button>
-        <button type="button" id="confirmKgBtn" class="checkout-submit-btn" style="flex:2; padding:10px;" onclick="confirmKgAddToCart()">Adicionar à Sacola</button>
+        <button type="button" class="action-btn" style="flex:1; padding:10px; border:1px solid #cbd5e1; background:#f8fafc; border-radius:8px; cursor:pointer;" onclick="closeKgModal()">${tHtml("interface.message.bb9dbb406dcb")}</button>
+        <button type="button" id="confirmKgBtn" class="checkout-submit-btn" style="flex:2; padding:10px;" onclick="confirmKgAddToCart()">${tHtml("interface.message.70acd1020a24")}</button>
       </div>
     </div>
   </div>
@@ -1224,32 +1224,32 @@ function renderHomeHtml() {
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
         <div style="display:flex; align-items:center; gap:8px;">
           <span style="font-size:24px;">🌿</span>
-          <h3 style="font-size:18px; font-weight:800; color:#0f172a; margin:0;">Identificação Conflora</h3>
+          <h3 style="font-size:18px; font-weight:800; color:#0f172a; margin:0;">${tHtml("interface.message.2d3bec1f841a")}</h3>
         </div>
         <button onclick="closeAuthModal()" style="border:none; background:none; font-size:20px; cursor:pointer; color:#64748b;">✕</button>
       </div>
 
       <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:8px; padding:10px 12px; margin-bottom:14px; font-size:12px; color:#166534; line-height:1.4;">
-        ✨ <strong>O login é 100% opcional!</strong> Você pode comprar à vontade sem conta. Ao entrar, você salva seu endereço, acompanha seus pedidos e vê os produtos que mais compra!
+        ✨ <strong>${tHtml("interface.message.49548a32b67c")}</strong> ${tHtml("interface.label.dda5afa8ad77")}
       </div>
 
       <!-- ABAS DO LOGIN -->
       <div class="portal-tabs" style="margin-bottom:16px;">
-        <button class="portal-tab-btn active" id="authTabGoogleBtn" onclick="switchAuthTab('google')">🚀 Google (1-clique)</button>
-        <button class="portal-tab-btn" id="authTabLoginBtn" onclick="switchAuthTab('login')">🔑 Entrar</button>
-        <button class="portal-tab-btn" id="authTabRegisterBtn" onclick="switchAuthTab('register')">📝 Criar Conta</button>
+        <button class="portal-tab-btn active" id="authTabGoogleBtn" onclick="switchAuthTab('google')">${tHtml("interface.label.38cf306e6926")}</button>
+        <button class="portal-tab-btn" id="authTabLoginBtn" onclick="switchAuthTab('login')">${tHtml("interface.message.c4cfc2964777")}</button>
+        <button class="portal-tab-btn" id="authTabRegisterBtn" onclick="switchAuthTab('register')">${tHtml("interface.label.268b7f4942c1")}</button>
       </div>
 
       <!-- ABA 1: GOOGLE SIGN-IN -->
       <div id="authContentGoogle">
         <p style="font-size:13px; color:#64748b; margin-bottom:12px;">
-          Faça login rápido com sua conta Google (Gmail ou Workspace):
+          ${tHtml("interface.label.870f301e851b")}
         </p>
         <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:14px; margin-bottom:14px;">
-          <p data-google-status role="status">Selecione sua conta na janela segura do Google.</p>
+          <p data-google-status role="status">${tHtml("interface.message.a08d8558a271")}</p>
           <button type="button" class="checkout-submit-btn" id="googleLoginButton" data-google-login disabled onclick="submitGoogleLogin()" style="display:flex; align-items:center; justify-content:center; gap:8px;">
             <svg style="width:16px; height:16px;" viewBox="0 0 24 24"><path fill="#ffffff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#ffffff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#ffffff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#ffffff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
-            Entrar com Google
+            ${tHtml("interface.label.5cfc81b7e7b3")}
           </button>
         </div>
       </div>
@@ -1258,14 +1258,14 @@ function renderHomeHtml() {
       <div id="authContentLogin" style="display:none;">
         <form onsubmit="submitPasswordLogin(event)">
           <div style="margin-bottom:10px;">
-            <label style="font-size:12px; font-weight:bold; color:#475569;">E-mail cadastrado:</label>
-            <input type="email" id="loginEmailInput" required placeholder="seuemail@exemplo.com" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; margin-top:4px;" />
+            <label style="font-size:12px; font-weight:bold; color:#475569;">${tHtml("interface.label.3214a27da274")}</label>
+            <input type="email" id="loginEmailInput" required placeholder="${tHtml("interface.message.be768a15f20b")}" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; margin-top:4px;" />
           </div>
           <div style="margin-bottom:14px;">
-            <label style="font-size:12px; font-weight:bold; color:#475569;">Sua Senha:</label>
+            <label style="font-size:12px; font-weight:bold; color:#475569;">${tHtml("interface.message.3909aa613eec")}</label>
             <input type="password" id="loginPassInput" required placeholder="••••••••" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; margin-top:4px;" />
           </div>
-          <button type="submit" class="checkout-submit-btn" style="width:100%;">Acessar Minha Conta</button>
+          <button type="submit" class="checkout-submit-btn" style="width:100%;">${tHtml("interface.label.29b6dfdef1b8")}</button>
         </form>
       </div>
 
@@ -1273,31 +1273,31 @@ function renderHomeHtml() {
       <div id="authContentRegister" style="display:none;">
         <form onsubmit="submitRegisterAccount(event)">
           <div style="margin-bottom:8px;">
-            <label style="font-size:12px; font-weight:bold; color:#475569;">Nome Completo:</label>
+            <label style="font-size:12px; font-weight:bold; color:#475569;">${tHtml("interface.label.f5350d7d8446")}</label>
             <input type="text" id="regNameInput" required placeholder="Ex: Mariana Silva" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;" />
           </div>
           <div style="margin-bottom:8px;">
-            <label style="font-size:12px; font-weight:bold; color:#475569;">E-mail:</label>
-            <input type="email" id="regEmailInput" required placeholder="mariana@exemplo.com" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;" />
+            <label style="font-size:12px; font-weight:bold; color:#475569;">${tHtml("interface.label.63db10d8a086")}</label>
+            <input type="email" id="regEmailInput" required placeholder="${tHtml("interface.message.205244373187")}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;" />
           </div>
           <div style="margin-bottom:8px;">
-            <label style="font-size:12px; font-weight:bold; color:#475569;">Senha (mínimo 4 caracteres):</label>
-            <input type="password" id="regPassInput" required minlength="4" placeholder="Crie uma senha segura" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;" />
+            <label style="font-size:12px; font-weight:bold; color:#475569;">${tHtml("interface.message.acfef3c9f070")}</label>
+            <input type="password" id="regPassInput" required minlength="4" placeholder="${tHtml("interface.message.626ae4a2a0c8")}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;" />
           </div>
           <div style="margin-bottom:8px;">
-            <label style="font-size:12px; font-weight:bold; color:#475569;">WhatsApp / Telefone com DDD:</label>
+            <label style="font-size:12px; font-weight:bold; color:#475569;">${tHtml("interface.message.9ab52ebc1309")}</label>
             <input type="text" id="regPhoneInput" placeholder="64999990000" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;" />
           </div>
           <div style="margin-bottom:12px;">
-            <label style="font-size:12px; font-weight:bold; color:#475569;">Endereço de Entrega (Mineiros - GO):</label>
-            <input type="text" id="regAddressInput" placeholder="Rua, Número e Bairro" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;" />
+            <label style="font-size:12px; font-weight:bold; color:#475569;">${tHtml("interface.message.6b1e6353f8a0")}</label>
+            <input type="text" id="regAddressInput" placeholder="${tHtml("interface.message.844c701b906f")}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;" />
           </div>
-          <button type="submit" class="checkout-submit-btn" style="width:100%;">Criar Minha Conta Conflora</button>
+          <button type="submit" class="checkout-submit-btn" style="width:100%;">${tHtml("interface.label.3a4ce3de1c3d")}</button>
         </form>
       </div>
 
       <div style="text-align:center; margin-top:14px;">
-        <button type="button" class="action-btn" onclick="closeAuthModal()" style="background:#f1f5f9; border:none; padding:8px 16px; border-radius:6px; cursor:pointer; color:#64748b; font-weight:600;">Fechar</button>
+        <button type="button" class="action-btn" onclick="closeAuthModal()" style="background:#f1f5f9; border:none; padding:8px 16px; border-radius:6px; cursor:pointer; color:#64748b; font-weight:600;">${tHtml("interface.label.0f2bd88ef0ac")}</button>
       </div>
     </div>
   </div>
@@ -1310,8 +1310,8 @@ function renderHomeHtml() {
           <img id="portalUserPic" style="width:36px; height:36px; border-radius:50%; object-fit:cover;" src="" />
           <div>
             <div style="display:flex; align-items:center; gap:6px;">
-              <h3 id="portalUserName" style="font-size:16px; font-weight:800; color:#0f172a; margin:0;">Painel do Cliente</h3>
-              <span id="portalUserRoleBadge" style="background:#0284c7; color:white; font-size:10px; padding:1px 6px; border-radius:8px; font-weight:700;">CLIENTE</span>
+              <h3 id="portalUserName" style="font-size:16px; font-weight:800; color:#0f172a; margin:0;">${tHtml("interface.message.52bf321112dd")}</h3>
+              <span id="portalUserRoleBadge" style="background:#0284c7; color:white; font-size:10px; padding:1px 6px; border-radius:8px; font-weight:700;">${tHtml("interface.label.37b9fc9718f3")}</span>
             </div>
             <span id="portalUserEmail" style="font-size:12px; color:#64748b;"></span>
           </div>
@@ -1323,53 +1323,53 @@ function renderHomeHtml() {
       <div class="cust-stat-grid">
         <div class="cust-stat-card">
           <div class="cust-stat-val" id="custStatOrders">0</div>
-          <div class="cust-stat-lbl">📦 Pedidos Realizados</div>
+          <div class="cust-stat-lbl">${tHtml("interface.message.59a0b7017f3e")}</div>
         </div>
         <div class="cust-stat-card">
           <div class="cust-stat-val" id="custStatSpent">R$ 0,00</div>
-          <div class="cust-stat-lbl">💰 Total Comprado</div>
+          <div class="cust-stat-lbl">${tHtml("interface.label.c0d49ccd843f")}</div>
         </div>
         <div class="cust-stat-card">
-          <div class="cust-stat-val" id="custStatPoints" style="color:#15803d;">0 pts</div>
-          <div class="cust-stat-lbl">🌿 Pontos Fidelidade</div>
+          <div class="cust-stat-val" id="custStatPoints" style="color:#15803d;">${tHtml("interface.label.cfbca14473f4")}</div>
+          <div class="cust-stat-lbl">${tHtml("interface.label.a86bfbc32cf5")}</div>
         </div>
       </div>
 
       <!-- ABAS DO PAINEL DO CLIENTE -->
       <div class="portal-tabs">
-        <button class="portal-tab-btn active" id="cTabOrdersBtn" onclick="switchCustomerTab('orders')">📦 Meus Pedidos & Rastreio</button>
-        <button class="portal-tab-btn" id="cTabFavsBtn" onclick="switchCustomerTab('favs')">🔥 Mais Comprados</button>
-        <button class="portal-tab-btn" id="cTabLoyaltyBtn" onclick="switchCustomerTab('loyalty')">⭐ Programa Fidelidade</button>
+        <button class="portal-tab-btn active" id="cTabOrdersBtn" onclick="switchCustomerTab('orders')">${tHtml("interface.message.1f87bdcf63ea")}</button>
+        <button class="portal-tab-btn" id="cTabFavsBtn" onclick="switchCustomerTab('favs')">${tHtml("interface.message.94e73b8c6854")}</button>
+        <button class="portal-tab-btn" id="cTabLoyaltyBtn" onclick="switchCustomerTab('loyalty')">${tHtml("interface.label.ec0fe6d001cf")}</button>
       </div>
 
       <!-- CONTEÚDO 1: HISTÓRICO DE PEDIDOS -->
       <div id="cTabOrdersContent" class="portal-tab-content active">
         <div id="customerOrdersList">
-          <div style="text-align:center; padding:24px; color:#64748b;">Carregando histórico de pedidos...</div>
+          <div style="text-align:center; padding:24px; color:#64748b;">${tHtml("interface.message.b6243f474f17")}</div>
         </div>
       </div>
 
       <!-- CONTEÚDO 2: PRODUTOS MAIS COMPRADOS -->
       <div id="cTabFavsContent" class="portal-tab-content">
         <div id="customerFavsList">
-          <div style="text-align:center; padding:24px; color:#64748b;">Carregando seus produtos favoritos...</div>
+          <div style="text-align:center; padding:24px; color:#64748b;">${tHtml("interface.message.1d814637fe62")}</div>
         </div>
       </div>
 
       <!-- CONTEÚDO 3: PROGRAMA FIDELIDADE & SUGESTÕES DE FLUXO -->
       <div id="cTabLoyaltyContent" class="portal-tab-content">
         <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:12px; padding:18px; margin-bottom:14px;">
-          <h4 style="color:#166534; font-size:15px; margin-bottom:6px;">🌿 Programa Conflora Fidelidade Verde</h4>
+          <h4 style="color:#166534; font-size:15px; margin-bottom:6px;">${tHtml("interface.label.e24c5ba96296")}</h4>
           <p style="font-size:13px; color:#334155; line-height:1.5;">
-            A cada <strong>R$ 10,00 em compras</strong> no viveiro ou pelo catálogo digital, você ganha <strong>1 ponto de fidelidade</strong>.
+            ${tHtml("interface.label.bfe018134f61")} <strong>R$ 10,00 em compras</strong> ${tHtml("interface.message.8e8c4ac3110a")} <strong>${tHtml("interface.label.2de3b50a546b")}</strong>.
           </p>
           <div style="background:white; border-radius:8px; padding:12px; margin-top:12px; border:1px solid #bbf7d0;">
             <div style="display:flex; justify-content:space-between; font-weight:700; font-size:13px; color:#14532d; margin-bottom:6px;">
-              <span>Seus Pontos Atuais:</span>
-              <span id="loyaltyPointsDisplay">0 pontos</span>
+              <span>${tHtml("interface.label.f8a02f07a37d")}</span>
+              <span id="loyaltyPointsDisplay">${tHtml("interface.label.fa226cbc4b69")}</span>
             </div>
             <div style="font-size:12px; color:#64748b;">
-              🎉 <strong>Benefícios disponíveis:</strong><br>
+              🎉 <strong>${tHtml("interface.message.d882654dcff3")}</strong><br>
               • 30 pontos = Muda brinde de tempero (hortelã, alecrim ou manjericão)<br>
               • 50 pontos = R$ 25,00 de desconto no próximo pedido<br>
               • 100 pontos = Muda brinde de orquídea ou planta ornamental!
@@ -1378,13 +1378,13 @@ function renderHomeHtml() {
         </div>
 
         <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:14px; font-size:12px; color:#475569;">
-          <strong style="color:#0f172a; font-size:13px;">💡 Dica de Agilidade:</strong><br>
-          Seus dados (nome, telefone e endereço) ficam salvos com segurança. Quando você finalizar compras futuras, o checkout será preenchido automaticamente, poupando seu tempo!
+          <strong style="color:#0f172a; font-size:13px;">${tHtml("interface.label.820df2678499")}</strong><br>
+          ${tHtml("interface.label.8f3ca0222582")}
         </div>
       </div>
 
       <div style="display:flex; justify-content:flex-end; margin-top:16px;">
-        <button class="action-btn" onclick="closeCustomerPortalModal()" style="background:#f1f5f9; border:1px solid #cbd5e1; padding:8px 16px; border-radius:6px; cursor:pointer; font-weight:700;">Fechar</button>
+        <button class="action-btn" onclick="closeCustomerPortalModal()" style="background:#f1f5f9; border:1px solid #cbd5e1; padding:8px 16px; border-radius:6px; cursor:pointer; font-weight:700;">${tHtml("interface.label.0f2bd88ef0ac")}</button>
       </div>
     </div>
   </div>
@@ -1396,20 +1396,20 @@ function renderHomeHtml() {
         <div style="display:flex; align-items:center; gap:8px;">
           <span style="font-size:22px;">📡</span>
           <div>
-            <h3 style="font-size:17px; font-weight:800; color:#0f172a; margin:0;">Status das Conexões & Diagnóstico</h3>
-            <span style="font-size:12px; color:#64748b;">Monitoramento de saúde do Google Sheets API, WhatsApp e Banco de Dados</span>
+            <h3 style="font-size:17px; font-weight:800; color:#0f172a; margin:0;">${tHtml("interface.message.8362b096da9f")}</h3>
+            <span style="font-size:12px; color:#64748b;">${tHtml("interface.message.ee855b04e126")}</span>
           </div>
         </div>
         <button onclick="closeStatusModal()" style="background:none; border:none; font-size:20px; cursor:pointer; color:#64748b;">✕</button>
       </div>
 
       <div id="statusDashboardBody">
-        <div style="text-align:center; padding:30px; color:#64748b;">Carregando métricas de diagnóstico em tempo real...</div>
+        <div style="text-align:center; padding:30px; color:#64748b;">${tHtml("interface.message.4ffb40459a77")}</div>
       </div>
 
       <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; border-top:1px solid #e2e8f0; padding-top:14px; flex-wrap:wrap; gap:8px;">
-        <button class="action-btn" onclick="refreshStatusDashboard()" style="background:#0f172a; color:white; border:none; padding:8px 16px; border-radius:6px; cursor:pointer; font-weight:700;">🔄 Atualizar Status</button>
-        <button class="action-btn" onclick="closeStatusModal()" style="background:#f1f5f9; border:1px solid #cbd5e1; padding:8px 16px; border-radius:6px; cursor:pointer; font-weight:700;">Fechar</button>
+        <button class="action-btn" onclick="refreshStatusDashboard()" style="background:#0f172a; color:white; border:none; padding:8px 16px; border-radius:6px; cursor:pointer; font-weight:700;">${tHtml("interface.label.003cc22a03f9")}</button>
+        <button class="action-btn" onclick="closeStatusModal()" style="background:#f1f5f9; border:1px solid #cbd5e1; padding:8px 16px; border-radius:6px; cursor:pointer; font-weight:700;">${tHtml("interface.label.0f2bd88ef0ac")}</button>
       </div>
     </div>
   </div>
@@ -1417,19 +1417,19 @@ function renderHomeHtml() {
   <script>
     // FOTOS REAIS EM ALTA DEFINIÇÃO DE CONTINGÊNCIA POR CATEGORIA
     const REAL_HD_FALLBACKS = {
-      'Palmeiras': 'https://images.unsplash.com/photo-1596726596162-421712a433a0?w=800&auto=format&fit=crop&q=80',
-      'Frutíferas': 'https://images.unsplash.com/photo-1550258987-190a2d41a8ba?w=800&auto=format&fit=crop&q=80',
-      'Flores & Ornamentais': 'https://images.unsplash.com/photo-1508615039623-a25605d2b022?w=800&auto=format&fit=crop&q=80',
-      'Horta & Temperos': 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=800&auto=format&fit=crop&q=80',
-      'Agromadeiras & Rurais': 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=800&auto=format&fit=crop&q=80',
-      'Gramas & Insumos': 'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?w=800&auto=format&fit=crop&q=80',
-      'Pets & Animais': 'https://images.unsplash.com/photo-1535083783855-76ae62b2914e?w=800&auto=format&fit=crop&q=80',
-      'Plantas / Mudas': 'https://images.unsplash.com/photo-1512428813834-c702c7702b78?w=800&auto=format&fit=crop&q=80',
-      'DEFAULT': 'https://images.unsplash.com/photo-1512428813834-c702c7702b78?w=800&auto=format&fit=crop&q=80',
+      'Palmeiras': t("interface.text.7be097832258"),
+      'Frutíferas': t("interface.text.4301b3f11be7"),
+      'Flores & Ornamentais': t("interface.text.9058df96d684"),
+      'Horta & Temperos': t("interface.text.6773d1687d8b"),
+      'Agromadeiras & Rurais': t("interface.text.b02f748bd2b5"),
+      'Gramas & Insumos': t("interface.text.d515b848677d"),
+      'Pets & Animais': t("interface.text.e3a6a526eae7"),
+      'Plantas / Mudas': t("interface.text.4c31f2ce0ce7"),
+      'DEFAULT': t("interface.text.4c31f2ce0ce7"),
     };
 
     // CATÁLOGO PADRÃO OFICIAL (PLANILHA LISTA DE PRODUTOS)
-    const DEFAULT_OFFICIAL_CATALOG = ${JSON.stringify(DEFAULT_CATALOG_ITEMS)};
+    const DEFAULT_OFFICIAL_CATALOG = [];
 
     let rawProducts = DEFAULT_OFFICIAL_CATALOG;
     let currentCategory = 'TODAS';
@@ -1482,7 +1482,7 @@ function renderHomeHtml() {
           rawProducts = DEFAULT_OFFICIAL_CATALOG;
         }
       } catch (err) {
-        console.warn('Usando catálogo padrão oficial da planilha:', err);
+        console.warn(t("interface.message.886a59ee95c7"), err);
         rawProducts = DEFAULT_OFFICIAL_CATALOG;
       }
 
@@ -1495,7 +1495,7 @@ function renderHomeHtml() {
         renderSubcategories();
         filterProducts();
       } catch (e) {
-        console.error('Falha ao renderizar catálogo, usando contingência:', e);
+        console.error(t("interface.message.52d18eaff7bf"), e);
         rawProducts = Array.isArray(DEFAULT_OFFICIAL_CATALOG) ? DEFAULT_OFFICIAL_CATALOG : [];
         renderCategories();
         renderSubcategories();
@@ -1640,10 +1640,10 @@ function renderHomeHtml() {
       if (!Array.isArray(items) || items.length === 0) {
         grid.innerHTML = \`
           <div style="grid-column: 1/-1; padding: 40px; text-align: center; color: var(--text-muted);">
-            <p style="font-size: 16px; font-weight: 700; margin-bottom: 8px;">Nenhum produto encontrado nesta busca.</p>
-            <p style="font-size: 13px; margin-bottom: 16px;">Tente limpar o filtro de busca ou selecionar todas as categorias.</p>
+            <p style="font-size: 16px; font-weight: 700; margin-bottom: 8px;">${tHtml("interface.message.a2861c679f59")}</p>
+            <p style="font-size: 13px; margin-bottom: 16px;">${tHtml("interface.label.bf211768a4c9")}</p>
             <button onclick="selectCategory('TODAS')" class="action-btn" style="background:#15803d; color:white; border:none; padding:10px 20px; border-radius:8px; font-weight:700; cursor:pointer;">
-              🌿 Ver Todos os Produtos da Conflora
+              ${tHtml("interface.label.28c95aa6b431")}
             </button>
           </div>
         \`;
@@ -1662,7 +1662,7 @@ function renderHomeHtml() {
           <div class="card-img-wrapper" onclick="openGallery('\${p.id}')">
             <img class="prod-img" src="\${images[0]}" alt="\${p.descricao || p.name}" onerror="this.onerror=null; this.src='\${REAL_HD_FALLBACKS['DEFAULT']}';" />
             \${images.length > 1 ? \`<span class="photo-count-badge">📷 \${images.length} fotos</span>\` : ''}
-            \${byKg ? \`<span class="unit-tag-badge">⚖️ POR KG</span>\` : ''}
+            \${byKg ? \`<span class="unit-tag-badge">${tHtml("interface.label.31acafed402b")}</span>\` : ''}
           </div>
           <div class="card-body">
             <span class="card-category">\${p.subcategoria || p.subcategory || p.categoria || p.category || 'Conflora'}</span>
@@ -1672,7 +1672,7 @@ function renderHomeHtml() {
                 <div class="card-price">R$ \${price.toFixed(2).replace('.', ',')} <span style="font-size:11px; font-weight:normal; color:#64748b;">\${byKg ? '/kg' : ''}</span></div>
                 <span class="card-stock">\${stock} \${byKg ? 'kg' : 'un.'} disponível</span>
               </div>
-              <button class="add-btn" onclick="handleProductAddClick('\${p.id}')" title="Adicionar à Sacola">
+              <button class="add-btn" onclick="handleProductAddClick('\${p.id}')" title="${tHtml("interface.message.70acd1020a24")}">
                 \${byKg ? '⚖️ +' : '+'}
               </button>
             </div>
@@ -1707,7 +1707,7 @@ function renderHomeHtml() {
       document.getElementById('modalProdCategory').textContent = (p.categoria || p.category || '') + ' • ' + (p.subcategoria || p.subcategory || '');
       const byKg = isSoldByKg(p);
       document.getElementById('modalProdPrice').textContent = 'R$ ' + Number(p.valor_num || p.price || 0).toFixed(2).replace('.', ',') + (byKg ? ' / kg' : '');
-      document.getElementById('modalProdDesc').textContent = p.descriptionAi || p.descricao_ia || 'Produto selecionado do viveiro e horta da Conflora em Mineiros - GO.';
+      document.getElementById('modalProdDesc').textContent = p.descriptionAi || p.descricao_ia || t("interface.message.6f21a10a19d1");
 
       const mainImg = document.getElementById('modalMainImg');
       mainImg.src = images[0];
@@ -1779,7 +1779,7 @@ function renderHomeHtml() {
       if (!pendingKgProduct) return;
       const weight = parseFloat(document.getElementById('kgWeightInput').value);
       if (isNaN(weight) || weight <= 0) {
-        alert('Por favor, informe um peso válido em kg (maior que 0).');
+        alert(t("interface.message.3a65c43967b4"));
         return;
       }
       addToCart(pendingKgProduct.id, weight, true);
@@ -1839,7 +1839,7 @@ function renderHomeHtml() {
     function clearCart() {
       const count = Object.keys(cart).length;
       if (count === 0) return;
-      if (confirm('Deseja realmente esvaziar todos os itens da sua sacola?')) {
+      if (confirm(t("interface.message.03a554fbc586"))) {
         cart = {};
         renderCart();
       }
@@ -1853,7 +1853,7 @@ function renderHomeHtml() {
 
       list.innerHTML = '';
       if (items.length === 0) {
-        list.innerHTML = '<div style="color: var(--text-muted); font-size: 13px; text-align: center; padding: 20px 0;">Sua sacola está vazia.<br>Clique em <strong>+</strong> nos produtos para adicionar.</div>';
+        list.innerHTML = '<div style="color: var(--text-muted); font-size: 13px; text-align: center; padding: 20px 0;">${tHtml("interface.message.e4d53a93648e")}<br>${tHtml("interface.label.bc3a5125ec88")} <strong>+</strong> ${tHtml("interface.message.2e7836127be9")}</div>';
       } else {
         items.forEach(item => {
           const sub = item.price * item.qty;
@@ -1869,11 +1869,11 @@ function renderHomeHtml() {
           div.innerHTML = \`
             <div class="cart-item-title">
               \${item.name}
-              \${item.isKg ? '<span class="cart-item-unit-label">(por KG)</span>' : ''}
+              \${item.isKg ? '<span class="cart-item-unit-label">${tHtml("interface.label.961841a4e440")}</span>' : ''}
             </div>
             <div class="cart-qty-ctrl">
               <button class="qty-btn" onclick="changeQty('\${item.id}', -1)" title="Diminuir">-</button>
-              <span style="font-weight: bold; min-width: 44px; text-align: center; font-size: 12px; cursor: \${item.isKg ? 'pointer' : 'default'};" \${item.isKg ? \`onclick="openKgModal('\${item.id}')" title="Clique para editar peso em KG"\` : ''}>
+              <span style="font-weight: bold; min-width: 44px; text-align: center; font-size: 12px; cursor: \${item.isKg ? 'pointer' : 'default'};" \${item.isKg ? \`onclick="openKgModal('\${item.id}')" title="${tHtml("interface.message.3a8d21708632")}"\` : ''}>
                 \${qtyDisplay}
               </span>
               <button class="qty-btn" onclick="changeQty('\${item.id}', 1)" title="Aumentar">+</button>
@@ -1981,23 +1981,23 @@ function renderHomeHtml() {
     async function submitOrder() {
       const items = Object.values(cart);
       if (items.length === 0) {
-        alert('Adicione pelo menos um item à sua sacola!');
+        alert(t("interface.message.9eb8c6769dd1"));
         return;
       }
       const name = document.getElementById('custName').value.trim();
       const phone = document.getElementById('custPhone').value.trim();
       const address = document.getElementById('custAddress').value.trim();
 
-      if (!name) { alert('Por favor, informe seu nome.'); return; }
-      if (!phone) { alert('Por favor, informe seu telefone/WhatsApp.'); return; }
-      if (orderType === 'DELIVERY' && !address) { alert('Por favor, informe o endereço de entrega em Mineiros.'); return; }
+      if (!name) { alert(t("interface.message.60a22f9eedc9")); return; }
+      if (!phone) { alert(t("interface.message.e5b4207c004d")); return; }
+      if (orderType === 'DELIVERY' && !address) { alert(t("interface.message.0f03e2cc4636")); return; }
 
       // Salva os dados para compras futuras
       saveCustomerDataToStorage();
 
       const submitBtn = document.getElementById('submitOrderBtn');
       submitBtn.disabled = true;
-      submitBtn.innerText = 'Enviando Pedido...';
+      submitBtn.innerText = t("interface.message.e0085ffae43c");
 
       pendingWebOrder ||= crypto.randomUUID();
       try {
@@ -2011,7 +2011,7 @@ function renderHomeHtml() {
             customerName: name,
             customerPhone: phone,
             orderType,
-            deliveryAddress: orderType === 'DELIVERY' ? address : 'Retirada no Viveiro Conflora',
+            deliveryAddress: orderType === 'DELIVERY' ? address : t("interface.message.cbf4b89d6a38"),
             paymentMethod,
             items: items.map(i => ({
               productId: i.id,
@@ -2033,7 +2033,7 @@ function renderHomeHtml() {
               currency: 'BRL',
             });
           }
-          alert('🎉 Pedido realizado com sucesso! Registrado no Firestore e estoque atualizado.');
+          alert(t("interface.message.d69a00f98957"));
           cart = {};
           renderCart();
           loadCatalog();
@@ -2041,13 +2041,13 @@ function renderHomeHtml() {
             loadCustomerData(); // Atualiza histórico do cliente imediatamente
           }
         } else {
-          alert('Erro ao registrar pedido: ' + (data.error || 'Tente novamente.'));
+          alert(t("interface.text.dcf75b36659c") + (data.error || t("interface.text.536b8c5f2118")));
         }
       } catch (err) {
-        alert('Erro de conexão ao finalizar pedido: ' + err.message);
+        alert(t("interface.text.a8add842092b") + err.message);
       } finally {
         submitBtn.disabled = false;
-        submitBtn.innerText = '✅ Finalizar Pedido';
+        submitBtn.innerText = t("interface.message.4b541d735945");
       }
     }
 
@@ -2086,8 +2086,8 @@ function renderHomeHtml() {
 
       if (authBtn) authBtn.style.display = 'none';
       if (pill) pill.style.display = 'inline-flex';
-      if (pic) pic.src = user.picture || ('https://ui-avatars.com/api/?name=' + encodeURIComponent(user.name || user.email) + '&background=15803d&color=fff');
-      if (name) name.textContent = (user.name || user.email || 'Usuário').split(' ')[0];
+      if (pic) pic.src = user.picture || (t("interface.text.ea84017aa4ff") + encodeURIComponent(user.name || user.email) + '&background=15803d&color=fff');
+      if (name) name.textContent = (user.name || user.email || t("interface.message.f53bbaa05fae")).split(' ')[0];
       if (badge) {
         badge.textContent = user.role || 'CLIENTE';
         badge.style.background = user.role === 'ADMIN' ? '#15803d' : (user.role === 'CAIXA' ? '#0369a1' : '#0284c7');
@@ -2151,15 +2151,15 @@ function renderHomeHtml() {
           applyUserUI(currentUser);
           closeAuthModal();
           if (currentUser.role === 'ADMIN') {
-            alert('🌿 Autenticado como Administrador! Painel de configurações e diagnóstico de conexões liberados.');
+            alert(t("interface.message.1eaef24011f0"));
           } else {
-            alert('🌿 Bem-vindo(a), ' + (currentUser.name || 'Cliente') + '! Perfil: CLIENTE. Você pode acompanhar seus pedidos e histórico!');
+            alert(t("interface.text.e998d780aab5") + (currentUser.name || t("interface.message.f851d9a83ab0")) + t("interface.text.8ab74417d98d"));
           }
         } else {
-          alert('Erro ao autenticar: ' + (data.error || 'Tente novamente'));
+          alert(t("interface.text.7d357221362c") + (data.error || t("interface.text.b33f0647fdda")));
         }
       } catch (err) {
-        alert('Erro ao conectar com servidor de login: ' + err.message);
+        alert(t("interface.text.235f135bdfad") + err.message);
       } finally {
         button.disabled = false;
       }
@@ -2185,12 +2185,12 @@ function renderHomeHtml() {
           }
           applyUserUI(currentUser);
           closeAuthModal();
-          alert('🌿 Bem-vindo(a), ' + (currentUser.name || 'Cliente') + '! Login efetuado com sucesso.');
+          alert(t("interface.text.e998d780aab5") + (currentUser.name || t("interface.message.f851d9a83ab0")) + t("interface.text.c04b7bdf4eec"));
         } else {
-          alert('Erro no login: ' + (data.error || 'Verifique seus dados'));
+          alert(t("interface.text.5f2036401e3c") + (data.error || t("interface.message.a3aefe07d4b8")));
         }
       } catch (err) {
-        alert('Erro de conexão ao entrar: ' + err.message);
+        alert(t("interface.text.47c0067b9ebf") + err.message);
       }
     }
 
@@ -2214,19 +2214,19 @@ function renderHomeHtml() {
           localStorage.setItem('conflora_user', JSON.stringify(data.user));
           applyUserUI(currentUser);
           closeAuthModal();
-          alert('🌿 Conta criada com sucesso! Perfil: CLIENTE. Você pode acompanhar suas compras e acumular pontos.');
+          alert(t("interface.message.786fd27f7f80"));
         } else {
-          alert('Erro no cadastro: ' + (data.error || 'Tente novamente'));
+          alert(t("interface.text.f884435efedd") + (data.error || t("interface.text.b33f0647fdda")));
         }
       } catch (err) {
-        alert('Erro de conexão ao cadastrar: ' + err.message);
+        alert(t("interface.text.fa30e748d1d4") + err.message);
       }
     }
 
     async function logoutCurrentUser() {
-      if (confirm('Deseja realmente sair da sua conta?')) {
+      if (confirm(t("interface.message.946000939ef0"))) {
         if (window.signOutGoogle) {
-          try { await window.signOutGoogle(); } catch (error) { alert('Erro ao sair: ' + error.message); return; }
+          try { await window.signOutGoogle(); } catch (error) { alert(t("interface.text.346a2f78875a") + error.message); return; }
         }
         currentUser = null;
         localStorage.removeItem('conflora_user');
@@ -2246,10 +2246,10 @@ function renderHomeHtml() {
       if (currentUser && currentUser.role === 'ADMIN') {
         window.location.href = '/admin';
       } else if (!currentUser) {
-        alert('Para acessar a página de configurações e gerenciamento do viveiro, faça login com uma conta Google de administrador.');
+        alert(t("interface.message.5936a50fbf35"));
         openAuthModal();
       } else {
-        alert('Acesso restrito. Seu perfil atual é (' + (currentUser.role || 'CLIENTE') + '). Apenas administradores podem acessar a página de configurações.');
+        alert(t("interface.text.2200ebb94d58") + (currentUser.role || 'CLIENTE') + t("interface.text.10cb4769c5e1"));
       }
     }
 
@@ -2262,10 +2262,10 @@ function renderHomeHtml() {
       const modal = document.getElementById('customerPortalModal');
       if (modal) modal.classList.add('open');
 
-      document.getElementById('portalUserName').textContent = currentUser.name || 'Cliente Conflora';
+      document.getElementById('portalUserName').textContent = currentUser.name || t("interface.message.ac0e0d8357ca");
       document.getElementById('portalUserEmail').textContent = currentUser.email || '';
       document.getElementById('portalUserRoleBadge').textContent = currentUser.role || 'CLIENTE';
-      document.getElementById('portalUserPic').src = currentUser.picture || ('https://ui-avatars.com/api/?name=' + encodeURIComponent(currentUser.name || currentUser.email) + '&background=15803d&color=fff');
+      document.getElementById('portalUserPic').src = currentUser.picture || (t("interface.text.ea84017aa4ff") + encodeURIComponent(currentUser.name || currentUser.email) + '&background=15803d&color=fff');
 
       loadCustomerData();
     }
@@ -2301,28 +2301,28 @@ function renderHomeHtml() {
           document.getElementById('custStatPoints').textContent = (data.loyaltyPoints || 0) + ' pts';
           document.getElementById('loyaltyPointsDisplay').textContent = (data.loyaltyPoints || 0) + ' pontos';
         } else {
-          document.getElementById('customerOrdersList').innerHTML = '<div style="color:#ef4444; padding:20px; text-align:center;">Erro ao carregar compras: ' + (data.error || 'Tente novamente.') + '</div>';
+          document.getElementById('customerOrdersList').innerHTML = '<div style="color:#ef4444; padding:20px; text-align:center;">${tHtml("interface.message.a46676ea946b")}</div>';
         }
       } catch (err) {
-        document.getElementById('customerOrdersList').innerHTML = '<div style="color:#ef4444; padding:20px; text-align:center;">Erro de conexão: ' + err.message + '</div>';
+        document.getElementById('customerOrdersList').innerHTML = '<div style="color:#ef4444; padding:20px; text-align:center;">${tHtml("interface.message.6a8e9b76949c")}</div>';
       }
     }
 
     function renderCustomerOrders(orders) {
       const container = document.getElementById('customerOrdersList');
       if (!orders || orders.length === 0) {
-        container.innerHTML = '<div style="text-align:center; padding:30px; color:#64748b;">Nenhum pedido encontrado ainda.<br>Faça seu primeiro pedido pelo catálogo e acompanhe o status aqui em tempo real!</div>';
+        container.innerHTML = '<div style="text-align:center; padding:30px; color:#64748b;">${tHtml("interface.message.92b95073cb90")}<br>${tHtml("interface.message.1d20a0dab787")}</div>';
         return;
       }
 
       container.innerHTML = '';
       orders.forEach(ord => {
-        const dateStr = ord.createdAt ? new Date(ord.createdAt).toLocaleString('pt-BR') : 'Data não informada';
+        const dateStr = ord.createdAt ? new Date(ord.createdAt).toLocaleString(window.appLocale || 'pt-BR') : t("interface.message.d1c5ef5f6bd1");
         const statusMap = {
           'PENDING': { text: '⏳ Aguardando Viveiro', class: 'badge-pending' },
           'CONFIRMED': { text: '🌿 Confirmado / Separando', class: 'badge-confirmed' },
-          'DELIVERING': { text: '🛵 Saiu para Entrega', class: 'badge-delivering' },
-          'DELIVERED': { text: '✅ Concluído / Entregue', class: 'badge-delivered' },
+          'DELIVERING': { text: t("interface.message.0cf353692394"), class: 'badge-delivering' },
+          'DELIVERED': { text: t("interface.message.e67d7c849e6b"), class: 'badge-delivered' },
           'CANCELLED': { text: '❌ Cancelado', class: 'badge-cancelled' },
         };
         const st = statusMap[ord.status] || { text: ord.status || 'Pendente', class: 'badge-pending' };
@@ -2331,8 +2331,8 @@ function renderHomeHtml() {
         card.className = 'order-card';
 
         const itemsHtml = Array.isArray(ord.items)
-          ? ord.items.map(it => '• ' + (it.quantity || 1) + ' ' + (it.unit || 'UN') + ' de ' + (it.name || 'Produto') + ' (R$ ' + Number(it.price || 0).toFixed(2).replace('.', ',') + ')').join('<br>')
-          : 'Itens não detalhados';
+          ? ord.items.map(it => '• ' + (it.quantity || 1) + ' ' + (it.unit || 'UN') + ' de ' + (it.name || t("interface.message.a25a5e3451d3")) + ' (R$ ' + Number(it.price || 0).toFixed(2).replace('.', ',') + ')').join('<br>')
+          : t("interface.message.0f456153b5df");
 
         const safeItemsJson = JSON.stringify(ord.items || []).replace(/"/g, '&quot;');
 
@@ -2340,7 +2340,7 @@ function renderHomeHtml() {
           <div class="order-card-header">
             <div>
               <strong style="color:#0f172a; font-size:14px;">Pedido #\${ord.id}</strong>
-              <div style="font-size:11px; color:#64748b;">\${dateStr} • \${ord.orderType === 'DELIVERY' ? '🛵 Entrega' : '🏬 Retirada'}</div>
+              <div style="font-size:11px; color:#64748b;">\${dateStr} • \${ord.orderType === 'DELIVERY' ? t("interface.message.6e10cb62b5dc") : t("interface.message.ed2af590ac7a")}</div>
             </div>
             <span class="order-status-badge \${st.class}">\${st.text}</span>
           </div>
@@ -2355,8 +2355,8 @@ function renderHomeHtml() {
               <strong style="font-size:15px; color:#15803d;">Total: R$ \${Number(ord.total || 0).toFixed(2).replace('.', ',')}</strong>
             </div>
             <div style="display:flex; gap:6px;">
-              <button class="action-btn" onclick="reorderItems('\${safeItemsJson}')" style="background:#15803d; color:white; border:none; padding:5px 10px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer;" title="Colocar os mesmos itens na sacola">🔄 Repetir Pedido</button>
-              <a href="https://wa.me/5564999351616?text=\${encodeURIComponent('Olá Conflora! Gostaria de acompanhar o andamento do meu pedido #' + ord.id)}" target="_blank" style="background:#25d366; color:white; text-decoration:none; padding:5px 10px; border-radius:6px; font-size:11px; font-weight:700; display:inline-flex; align-items:center; gap:4px;">💬 WhatsApp</a>
+              <button class="action-btn" onclick="reorderItems('\${safeItemsJson}')" style="background:#15803d; color:white; border:none; padding:5px 10px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer;" title="Colocar os mesmos itens na sacola">${tHtml("interface.message.084f1f9059ec")}</button>
+              <a href="https://wa.me/5564999351616?text=\${encodeURIComponent(t("interface.text.2986880e61e0") + ord.id)}" target="_blank" style="background:#25d366; color:white; text-decoration:none; padding:5px 10px; border-radius:6px; font-size:11px; font-weight:700; display:inline-flex; align-items:center; gap:4px;">${tHtml("interface.label.114e6a2b004b")}</a>
             </div>
           </div>
         \`;
@@ -2367,7 +2367,7 @@ function renderHomeHtml() {
     function renderCustomerFavorites(favs) {
       const container = document.getElementById('customerFavsList');
       if (!favs || favs.length === 0) {
-        container.innerHTML = '<div style="text-align:center; padding:30px; color:#64748b;">Você ainda não possui histórico de produtos comprados.<br>Conforme você fizer compras, seus produtos favoritos aparecerão aqui para recompra rápida!</div>';
+        container.innerHTML = '<div style="text-align:center; padding:30px; color:#64748b;">${tHtml("interface.message.8b888630f068")}<br>${tHtml("interface.message.c4c96dbffb9e")}</div>';
         return;
       }
 
@@ -2381,7 +2381,7 @@ function renderHomeHtml() {
           <strong style="font-size:13px; color:#0f172a; line-height:1.2;">\${p.name}</strong>
           <span style="font-size:11px; color:#15803d; font-weight:700;">Comprado \${p.totalQuantityBought} \${p.unit} (\${p.purchaseCount}x)</span>
           <div style="font-size:13px; font-weight:800; color:#166534;">R$ \${Number(p.price || 0).toFixed(2).replace('.', ',')}</div>
-          <button class="action-btn" onclick="quickAddToCart('\${p.productId}', '\${p.name.replace(/'/g, "\\\\'")}', \${p.price || 0}, '\${p.unit || 'UN'}')" style="background:#15803d; color:white; border:none; padding:6px 10px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; margin-top:auto;">+ Adicionar à Sacola</button>
+          <button class="action-btn" onclick="quickAddToCart('\${p.productId}', '\${p.name.replace(/'/g, "\\\\'")}', \${p.price || 0}, '\${p.unit || 'UN'}')" style="background:#15803d; color:white; border:none; padding:6px 10px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; margin-top:auto;">${tHtml("interface.message.8cd60a9ab3e9")}</button>
         \`;
         grid.appendChild(card);
       });
@@ -2414,9 +2414,9 @@ function renderHomeHtml() {
         renderCart();
         closeCustomerPortalModal();
         scrollToCart();
-        alert('🛒 Itens do pedido adicionados à sua sacola!');
+        alert(t("interface.message.43f10612e125"));
       } catch (err) {
-        alert('Erro ao repetir pedido: ' + err.message);
+        alert(t("interface.text.0009ada32840") + err.message);
       }
     }
 
@@ -2440,7 +2440,7 @@ function renderHomeHtml() {
         };
       }
       renderCart();
-      alert('🌿 ' + name + ' adicionado à sua sacola!');
+      alert('🌿 ' + name + t("interface.text.48c343b4751d"));
     }
 
     // --- STATUS DASHBOARD (STATUS DAS CONEXÕES SHEETS & WHATSAPP) ---
@@ -2460,14 +2460,14 @@ function renderHomeHtml() {
     async function refreshStatusDashboard() {
       const body = document.getElementById('statusDashboardBody');
       if (!body) return;
-      body.innerHTML = '<div style="text-align:center; padding:30px; color:#64748b;">📡 Consultando status das conexões (Google Sheets API & WhatsApp)...</div>';
+      body.innerHTML = '<div style="text-align:center; padding:30px; color:#64748b;">${tHtml("interface.message.b64c06ae71b5")}</div>';
 
       try {
         const res = await fetch('/api/admin/system-status');
         const data = await res.json();
         renderStatusDashboardContent(data);
       } catch (err) {
-        body.innerHTML = '<div style="color:#ef4444; padding:20px; text-align:center;">Erro ao coletar status: ' + err.message + '</div>';
+        body.innerHTML = '<div style="color:#ef4444; padding:20px; text-align:center;">${tHtml("interface.message.49e64aaf0e18")}</div>';
       }
     }
 
@@ -2486,24 +2486,24 @@ function renderHomeHtml() {
           <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:10px; padding:16px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
               <span style="font-weight:700; font-size:14px; display:flex; align-items:center; gap:6px;">
-                📊 Google Sheets API
+                ${tHtml("interface.label.9b68943ea1bd")}
               </span>
               <span style="background:\${sheets.color || '#10b981'}; color:white; font-size:11px; font-weight:800; padding:2px 8px; border-radius:12px;">
                 \${sheets.badge || sheets.status || 'ONLINE'}
               </span>
             </div>
             <div style="font-size:12px; color:#475569; line-height:1.6;">
-              <div><strong>Planilha:</strong> \${sheets.spreadsheetId || 'Padrão Conflora'}</div>
-              <div><strong>Aba / Tabela:</strong> \${sheets.sheetName || 'PRODUTOS'}</div>
-              <div><strong>Itens Comerciais:</strong> <span style="font-weight:800; color:#15803d;">\${sheets.itemsActive || 111} produtos</span></div>
-              <div><strong>Latência de Resposta:</strong> \${sheets.latencyMs ?? 0} ms</div>
+              <div><strong>${tHtml("interface.label.c929ce0ebdd0")}</strong> \${sheets.spreadsheetId || t("interface.message.89bc07b2aad9")}</div>
+              <div><strong>${tHtml("interface.label.5c28943f9a5b")}</strong> \${sheets.sheetName || 'PRODUTOS'}</div>
+              <div><strong>${tHtml("interface.label.95b679db0e0d")}</strong> <span style="font-weight:800; color:#15803d;">\${sheets.itemsActive || 111} produtos</span></div>
+              <div><strong>${tHtml("interface.message.b26880294f1e")}</strong> \${sheets.latencyMs ?? 0} ms</div>
               <div style="margin-top:6px; font-size:11px; color:#64748b; background:#f1f5f9; padding:6px 8px; border-radius:6px;">
-                ℹ️ \${sheets.message || 'Conexão ativa.'}
+                ℹ️ \${sheets.message || t("interface.message.c8d03ab838f3")}
               </div>
             </div>
             <div style="margin-top:12px;">
               <button class="action-btn" onclick="testSheetsInModal()" style="width:100%; justify-content:center; background:#15803d; color:white; padding:7px 10px; border-radius:6px; font-size:11px; cursor:pointer;">
-                🧪 Testar Conexão Google Sheets
+                ${tHtml("interface.label.8fe02866a08b")}
               </button>
             </div>
           </div>
@@ -2512,25 +2512,25 @@ function renderHomeHtml() {
           <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:10px; padding:16px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
               <span style="font-weight:700; font-size:14px; display:flex; align-items:center; gap:6px;">
-                💬 WhatsApp Webhook
+                ${tHtml("interface.label.51072e31b357")}
               </span>
               <span style="background:\${wa.color || '#10b981'}; color:white; font-size:11px; font-weight:800; padding:2px 8px; border-radius:12px;">
                 \${wa.badge || wa.status || 'ONLINE'}
               </span>
             </div>
             <div style="font-size:12px; color:#475569; line-height:1.6;">
-              <div><strong>Rota do Webhook:</strong> <code>/webhook</code> (GET/POST)</div>
-              <div><strong>Telefone / ID:</strong> \${wa.phoneNumberId || 'Emulador Local'}</div>
-              <div><strong>Token de Verificação:</strong> \${wa.hasVerifyToken ? '✅ Configurado' : '⚠️ Não configurado'}</div>
-              <div><strong>Mensagens Recebidas:</strong> \${wa.totalReceivedCount || 0}</div>
-              <div><strong>Último Envio/Hit:</strong> \${wa.lastReceivedAt || 'Nenhum recente'}</div>
+              <div><strong>${tHtml("interface.label.11e28a0fc92d")}</strong> <code>${tHtml("interface.label.3bed6d2e3c21")}</code> ${tHtml("interface.label.f68de2fdbc94")}</div>
+              <div><strong>${tHtml("interface.label.adbe5a3c56b7")}</strong> \${wa.phoneNumberId || 'Emulador Local'}</div>
+              <div><strong>${tHtml("interface.message.36fa613fe9fb")}</strong> \${wa.hasVerifyToken ? '✅ Configurado' : t("interface.message.4dd3cead6337")}</div>
+              <div><strong>${tHtml("interface.label.7acb7d1a2006")}</strong> \${wa.totalReceivedCount || 0}</div>
+              <div><strong>${tHtml("interface.message.402c4375739b")}</strong> \${wa.lastReceivedAt || t("interface.message.9a3ea94f5e20")}</div>
               <div style="margin-top:6px; font-size:11px; color:#64748b; background:#f1f5f9; padding:6px 8px; border-radius:6px;">
-                ℹ️ \${wa.message || 'Webhook ouvindo requisições na rota /webhook.'}
+                ℹ️ \${wa.message || t("interface.message.cbc356059fd4")}
               </div>
             </div>
             <div style="margin-top:12px;">
               <button class="action-btn" onclick="testWebhookInModal()" style="width:100%; justify-content:center; background:#0284c7; color:white; padding:7px 10px; border-radius:6px; font-size:11px; cursor:pointer;">
-                🧪 Testar Rota & Ping do Webhook
+                ${tHtml("interface.label.797daa250071")}
               </button>
             </div>
           </div>
@@ -2539,16 +2539,16 @@ function renderHomeHtml() {
           <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:10px; padding:16px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
               <span style="font-weight:700; font-size:14px; display:flex; align-items:center; gap:6px;">
-                🔥 Cloud Firestore
+                ${tHtml("interface.label.72c4a129e835")}
               </span>
               <span style="background:\${fs.color || '#10b981'}; color:white; font-size:11px; font-weight:800; padding:2px 8px; border-radius:12px;">
                 \${fs.badge || fs.status || 'ONLINE'}
               </span>
             </div>
             <div style="font-size:12px; color:#475569; line-height:1.6;">
-              <div><strong>Projeto GCP:</strong> \${fs.projectId || 'confloraai'}</div>
-              <div><strong>Latência Consulta:</strong> \${fs.latencyMs ?? 0} ms</div>
-              <div><strong>Persistência:</strong> Firestore & Cache Local</div>
+              <div><strong>${tHtml("interface.label.26a405183ca4")}</strong> \${fs.projectId || 'confloraai'}</div>
+              <div><strong>${tHtml("interface.message.93d6c81bdc89")}</strong> \${fs.latencyMs ?? 0} ms</div>
+              <div><strong>${tHtml("interface.message.32ffee6e236d")}</strong> ${tHtml("interface.label.68ffc3e2ad7e")}</div>
               <div style="margin-top:6px; font-size:11px; color:#64748b; background:#f1f5f9; padding:6px 8px; border-radius:6px;">
                 ℹ️ \${fs.message || 'Firestore operacional.'}
               </div>
@@ -2559,18 +2559,18 @@ function renderHomeHtml() {
           <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:10px; padding:16px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
               <span style="font-weight:700; font-size:14px; display:flex; align-items:center; gap:6px;">
-                🌱 Planilha Padrão Conflora
+                ${tHtml("interface.label.57608f7f5c89")}
               </span>
               <span style="background:\${cat.color || '#10b981'}; color:white; font-size:11px; font-weight:800; padding:2px 8px; border-radius:12px;">
                 \${cat.badge || 'Planilha Ativa'}
               </span>
             </div>
             <div style="font-size:12px; color:#475569; line-height:1.6;">
-              <div><strong>Total de Produtos:</strong> <strong style="color:#15803d;">\${cat.totalItems || 111} produtos</strong></div>
-              <div><strong>Categorias Mapeadas:</strong> \${cat.categoriesCount || 6} categorias</div>
-              <div><strong>Contingência:</strong> Automática (Garante 100% de disponibilidade)</div>
+              <div><strong>${tHtml("interface.message.3c822ba8096a")}</strong> <strong style="color:#15803d;">\${cat.totalItems || 111} produtos</strong></div>
+              <div><strong>${tHtml("interface.label.36b4da28022f")}</strong> \${cat.categoriesCount || 6} categorias</div>
+              <div><strong>${tHtml("interface.message.20b97e2ef654")}</strong> ${tHtml("interface.message.a9bf9eab3256")}</div>
               <div style="margin-top:6px; font-size:11px; color:#64748b; background:#f1f5f9; padding:6px 8px; border-radius:6px;">
-                ℹ️ Planilha oficial LISTA DE PRODUTOS Conflora.
+                ${tHtml("interface.label.3237d40a62dc")}
               </div>
             </div>
           </div>
@@ -2586,7 +2586,7 @@ function renderHomeHtml() {
         box.style.display = 'block';
         box.style.background = '#f1f5f9';
         box.style.color = '#334155';
-        box.innerHTML = '⏳ Testando conexão com Google Sheets API...';
+        box.innerHTML = t("interface.message.febcd03e2f76");
       }
       try {
         const res = await fetch('/api/admin/test-sheets', { method: 'POST' });
@@ -2594,13 +2594,13 @@ function renderHomeHtml() {
         if (box) {
           box.style.background = '#dcfce7';
           box.style.color = '#166534';
-          box.innerHTML = '✅ <strong>Google Sheets OK:</strong> ' + (d.message || 'Sincronizado') + ' (Latência: ' + (d.latencyMs || 0) + 'ms)';
+          box.innerHTML = '✅ <strong>${tHtml("interface.label.e404b33333ba")}</strong> ' + (d.message || 'Sincronizado') + t("interface.text.81356a98d71b") + (d.latencyMs || 0) + 'ms)';
         }
       } catch (err) {
         if (box) {
           box.style.background = '#fee2e2';
           box.style.color = '#991b1b';
-          box.innerHTML = '❌ <strong>Erro no teste do Sheets:</strong> ' + err.message;
+          box.innerHTML = '❌ <strong>${tHtml("interface.message.bd534082af8f")}</strong> ' + err.message;
         }
       }
     }
@@ -2611,7 +2611,7 @@ function renderHomeHtml() {
         box.style.display = 'block';
         box.style.background = '#f1f5f9';
         box.style.color = '#334155';
-        box.innerHTML = '⏳ Enviando ping para WhatsApp Webhook...';
+        box.innerHTML = t("interface.message.9a3ec2dcdf2c");
       }
       try {
         const res = await fetch('/api/admin/test-webhook', { method: 'POST' });
@@ -2619,13 +2619,13 @@ function renderHomeHtml() {
         if (box) {
           box.style.background = '#dcfce7';
           box.style.color = '#166534';
-          box.innerHTML = '✅ <strong>Webhook WhatsApp OK:</strong> Rota <code>/webhook</code> respondendo em ' + (d.pingLatencyMs || 0) + 'ms. ' + (d.message || '');
+          box.innerHTML = '✅ <strong>${tHtml("interface.label.02c64587d8f8")}</strong> ${tHtml("interface.label.7c81b807e573")} <code>${tHtml("interface.label.3bed6d2e3c21")}</code> respondendo em ' + (d.pingLatencyMs || 0) + 'ms. ' + (d.message || '');
         }
       } catch (err) {
         if (box) {
           box.style.background = '#fee2e2';
           box.style.color = '#991b1b';
-          box.innerHTML = '❌ <strong>Erro no teste do Webhook:</strong> ' + err.message;
+          box.innerHTML = '❌ <strong>${tHtml("interface.message.45538e9b167b")}</strong> ' + err.message;
         }
       }
     }

@@ -82,19 +82,9 @@ class CatalogRepository {
     if (this.firestoreRepo && typeof this.firestoreRepo.getAllProducts === 'function') {
       try {
         const firestoreProducts = await this.firestoreRepo.getAllProducts();
-        if (firestoreProducts && firestoreProducts.length >= DEFAULT_CATALOG_ITEMS.length) {
+        if (firestoreProducts.length > 0 || await this.firestoreRepo.getProductCollectionPath() !== 'products') {
           this.loadItems(firestoreProducts);
-          Logger.info(`Catálogo carregado via Cloud Firestore. ${this.items.length} itens comerciais ativos.`);
-          return;
-        } else if (firestoreProducts && firestoreProducts.length > 0) {
-          const existingIds = new Set(firestoreProducts.map(p => String(p.id)));
-          const merged = [...firestoreProducts];
-          for (const defItem of DEFAULT_CATALOG_ITEMS) {
-            if (!existingIds.has(String(defItem.id))) {
-              merged.push(defItem);
-            }
-          }
-          this.loadItems(merged);
+          Logger.info(`Catálogo carregado via Firestore: ${this.items.length} produtos.`);
           return;
         }
       } catch (err) {

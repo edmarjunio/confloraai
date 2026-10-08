@@ -1,3 +1,4 @@
+const { t } = require("../i18n");
 const { randomUUID, createHash } = require("node:crypto");
 function fail(message, status = 400) {
   throw Object.assign(new Error(message), { status });
@@ -5,20 +6,20 @@ function fail(message, status = 400) {
 function money(value) {
   const n = Number(value);
   if (!Number.isFinite(n) || n < 0) {
-    fail("Valor inválido");
+    fail(t("interface.message.fe888f219977"));
   }
   return Math.round(n * 100);
 }
 function quantity(value) {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) {
-    fail("Quantidade deve ser maior que zero");
+    fail(t("validation.quantityPositive"));
   }
   return n;
 }
 function key(value) {
   if (!/^[a-zA-Z0-9_-]{8,120}$/.test(value || "")) {
-    fail("Identificador da operação inválido");
+    fail(t("interface.message.84ee9afa224d"));
   }
   return value;
 }
@@ -28,17 +29,22 @@ class Ledger {
   }
   get db() {
     if (!this.repo.firestore) {
-      fail("Firestore indisponível. Nenhum lançamento foi salvo.", 503);
+      fail(t("interface.message.fd01dc770501"), 503);
     }
     return this.repo.firestore;
   }
   async execute(requestId, actor, action) {
     const ref = this.db.collection("operation_requests").doc(key(requestId));
     return this.db.runTransaction(async (tx) => {
+      const catalog = await require("../import/product-catalog").catalogState(
+        this.db,
+        tx,
+      );
+      tx.productCollectionPath = catalog.collectionPath;
       const previous = await tx.get(ref);
       if (previous.exists) {
         if (previous.data().actorId !== actor.id) {
-          fail("Operação de outro usuário", 403);
+          fail(t("interface.message.33c1bcadd838"), 403);
         }
         return previous.data().result;
       }
@@ -90,7 +96,7 @@ class Ledger {
     const previousBalanceCents = Number(customer.balanceCents || 0);
     const balanceCents = previousBalanceCents + deltaCents;
     if (!Number.isSafeInteger(balanceCents) || balanceCents < 0) {
-      fail("Valor superior ao que o cliente deve");
+      fail(t("interface.message.24a32595fea6"));
     }
     const now = new Date().toISOString();
     tx.update(customerRef, { balanceCents, updatedAt: now });
@@ -112,7 +118,7 @@ class Ledger {
   async createCreditCustomer(input, actor) {
     const name = String(input.name || "").trim();
     if (!name || name.length > 200) {
-      fail("Informe o nome do cliente");
+      fail(t("interface.message.75926a3ca1ef"));
     }
     return this.execute(input.requestId, actor, async (tx) => {
       const customer = {
@@ -133,7 +139,7 @@ class Ledger {
   async receiveCredit(input, actor) {
     const amountCents = money(input.amount);
     if (!amountCents) {
-      fail("Informe o valor recebido");
+      fail(t("interface.message.3063f77694ec"));
     }
     return this.execute(input.requestId, actor, async (tx) => {
       const customerRef = this.db
@@ -141,11 +147,11 @@ class Ledger {
         .doc(String(input.customerId));
       const customerSnap = await tx.get(customerRef);
       if (!customerSnap.exists) {
-        fail("Cliente não encontrado");
+        fail(t("interface.message.77f22078da1b"));
       }
       const customer = customerSnap.data();
       if (amountCents > Number(customer.balanceCents || 0)) {
-        fail("Recebimento maior que a dívida do cliente");
+        fail(t("validation.receiptExceedsDebt"));
       }
       const snapshot = await tx.get(
         this.db
@@ -171,10 +177,7 @@ class Ledger {
         0,
       );
       if (openCents !== Number(customer.balanceCents || 0)) {
-        fail(
-          "Saldo divergente. Solicite conferência ao ADMIN antes de receber.",
-          409,
-        );
+        fail(t("interface.message.9c9e70e2d0f3"), 409);
       }
       let remaining = amountCents;
       const allocations = [];
@@ -222,14 +225,14 @@ class Ledger {
   }
   async cash(input, actor) {
     if (!["OPENING", "WITHDRAWAL", "EXPENSE", "REFUND"].includes(input.type)) {
-      fail("Movimentação de caixa inválida");
+      fail(t("interface.message.cc8f294d7212"));
     }
     const amountCents = money(input.amount);
     if (input.type !== "OPENING" && !amountCents) {
-      fail("Informe o valor da saída");
+      fail(t("interface.message.2099645dc4d7"));
     }
     if (!String(input.reason || "").trim()) {
-      fail("Informe o motivo da movimentação");
+      fail(t("interface.message.f561466f73ce"));
     }
     return this.execute(input.requestId, actor, async (tx) => {
       const day = require("./cash-report").businessDay();
@@ -237,10 +240,7 @@ class Ledger {
         const ref = this.db.collection("cash_openings").doc(day);
         const existing = await tx.get(ref);
         if (existing.exists) {
-          fail(
-            "O troco de hoje já foi registrado. Solicite conferência ao ADMIN.",
-            409,
-          );
+          fail(t("interface.message.54cac0f8226f"), 409);
         }
         // Abertura importada e abertura nova não podem coexistir no mesmo dia.
         const imported = await tx.get(
@@ -252,10 +252,10 @@ class Ledger {
               d.data().type === "OPENING" ||
               String(d.data().raw?.CATEGORIA || "")
                 .toUpperCase()
-                .includes("TROCO"),
+                .includes(t("interface.message.d0878c96c643")),
           )
         ) {
-          fail("Já existe troco importado para hoje", 409);
+          fail(t("interface.message.168b28750fee"), 409);
         }
         tx.create(ref, {
           businessDate: day,
@@ -284,29 +284,31 @@ class Ledger {
   async stock(input, actor) {
     const type = input.type;
     if (!["ENTRY", "LOSS", "COUNT"].includes(type)) {
-      fail("Movimentação inválida");
+      fail(t("interface.message.13075022b08b"));
     }
     if (type === "COUNT" && actor.role !== "ADMIN") {
-      fail("Somente ADMIN pode confirmar contagem", 403);
+      fail(t("validation.adminCountOnly"), 403);
     }
     if (!input.reason?.trim()) {
-      fail("Informe a origem ou o motivo");
+      fail(t("interface.message.0e42451d2028"));
     }
     return this.execute(input.requestId, actor, async (tx) => {
-      const ref = this.db.collection("products").doc(String(input.productId));
+      const ref = this.db
+        .collection(tx.productCollectionPath || "products")
+        .doc(String(input.productId));
       const snap = await tx.get(ref);
       if (!snap.exists) {
-        fail("Produto não encontrado");
+        fail(t("interface.message.9f5a2fd4316b"));
       }
       const p = snap.data();
       let delta;
       if (type === "COUNT") {
         if (Number(input.expectedVersion) !== Number(p.stockVersion || 0)) {
-          fail("O estoque mudou durante a contagem. Confira novamente.", 409);
+          fail(t("interface.message.435d91b19b10"), 409);
         }
         const counted = Number(input.quantity);
         if (!Number.isFinite(counted) || counted < 0) {
-          fail("Contagem inválida");
+          fail(t("interface.message.e90d99844248"));
         }
         delta = counted - Number(p.stockQuantity ?? p.estoque ?? 0);
       } else {
@@ -348,7 +350,7 @@ class Ledger {
       !input.items.length ||
       input.items.length > 100
     ) {
-      fail("Escolha de 1 a 100 produtos");
+      fail(t("interface.message.8b2c98c7c51a"));
     }
     return this.execute(input.requestId, actor, async (tx) => {
       const aggregated = new Map();
@@ -360,7 +362,7 @@ class Ledger {
         );
       }
       const refs = [...aggregated.keys()].map((id) =>
-        this.db.collection("products").doc(id),
+        this.db.collection(tx.productCollectionPath || "products").doc(id),
       );
       const snaps = await tx.getAll(...refs);
       const creditSale =
@@ -369,14 +371,14 @@ class Ledger {
         creditCustomer = null;
       if (creditSale) {
         if (!input.creditCustomerId) {
-          fail("Selecione o cliente cadastrado para vender fiado");
+          fail(t("credit.selectCustomer"));
         }
         creditCustomerRef = this.db
           .collection("credit_customers")
           .doc(String(input.creditCustomerId));
         const snap = await tx.get(creditCustomerRef);
         if (!snap.exists) {
-          fail("Cliente do fiado não encontrado");
+          fail(t("interface.message.a534787676d2"));
         }
         creditCustomer = snap.data();
       }
@@ -384,11 +386,11 @@ class Ledger {
       let subtotal = 0;
       const items = snaps.map((snap, i) => {
         if (!snap.exists) {
-          fail("Produto não encontrado");
+          fail(t("interface.message.9f5a2fd4316b"));
         }
         const p = snap.data();
         if (p.status === "INATIVO") {
-          fail("Produto inativo");
+          fail(t("interface.message.4f184974cb03"));
         }
         const priceCents = money(p.price ?? p.valor_num ?? p.VALOR);
         const qty = aggregated.get(refs[i].id);
@@ -411,7 +413,7 @@ class Ledger {
       });
       const discount = money(input.discount || 0);
       if (discount * 5 > subtotal) {
-        fail("Desconto máximo: 20% do valor dos produtos");
+        fail(t("validation.discountLimit"));
       }
       const insufficient = snaps.filter(
         (s, i) =>
@@ -419,10 +421,7 @@ class Ledger {
           items[i].quantity,
       );
       if (insufficient.length && input.confirmNegative !== true) {
-        fail(
-          "Estoque insuficiente. Confirme a quantidade para continuar.",
-          409,
-        );
+        fail(t("interface.message.97acd7792482"), 409);
       }
       // Rateio só para calcular lucro líquido estimado: não modifica preço ou subtotal do item.
       let allocatedDiscount = 0;
@@ -462,7 +461,9 @@ class Ledger {
         deliveryFee: money(input.deliveryFee || 0) / 100,
         total: (subtotal - discount + money(input.deliveryFee || 0)) / 100,
         customerName:
-          creditCustomer?.name || input.customerName || "Venda balcão",
+          creditCustomer?.name ||
+          input.customerName ||
+          t("interface.message.c2b1bad0c6b3"),
         customerPhone: input.customerPhone || "",
         paymentMethod: input.paymentMethod || "DINHEIRO",
         status: "CONFIRMED",
@@ -512,7 +513,7 @@ class Ledger {
           toRole: "ADMIN",
           type: "DISCOUNT",
           orderId: order.id,
-          title: "Desconto acima de 5%",
+          title: t("interface.message.3cdecc3ffede"),
           message: `${actor.name}: R$ ${order.discount} (${order.discountPercent.toFixed(2)}%)`,
           actorId: actor.id,
           read: false,
@@ -524,16 +525,16 @@ class Ledger {
   }
   async cancel(input, actor) {
     if (actor.role !== "ADMIN") {
-      fail("Somente ADMIN pode cancelar", 403);
+      fail(t("interface.message.a8d5f6d55653"), 403);
     }
     if (!input.reason?.trim()) {
-      fail("Informe o motivo");
+      fail(t("interface.message.efc55df645cd"));
     }
     return this.execute(input.requestId, actor, async (tx) => {
       const ref = this.db.collection("orders").doc(String(input.orderId));
       const snap = await tx.get(ref);
       if (!snap.exists) {
-        fail("Venda não encontrada");
+        fail(t("interface.message.15298cab0f58"));
       }
       const order = snap.data();
       if (order.status === "CANCELLED") {
@@ -542,12 +543,14 @@ class Ledger {
       const items =
         order.stockDeducted && !order.historical ? order.items || [] : [];
       const refs = items.map((it) =>
-        this.db.collection("products").doc(it.productId),
+        this.db
+          .collection(tx.productCollectionPath || "products")
+          .doc(it.productId),
       );
       const products = refs.length ? await tx.getAll(...refs) : [];
       products.forEach((p) => {
         if (!p.exists) {
-          fail("Produto removido. Regularize antes de cancelar");
+          fail(t("interface.message.22410583c7e6"));
         }
       });
       let creditCustomerRef = null,
@@ -558,7 +561,7 @@ class Ledger {
           .doc(order.creditCustomerId);
         const snap = await tx.get(creditCustomerRef);
         if (!snap.exists) {
-          fail("Cliente do fiado não encontrado");
+          fail(t("interface.message.a534787676d2"));
         }
         creditCustomer = snap.data();
       }
@@ -595,24 +598,24 @@ class Ledger {
   async receive(input, actor) {
     const cents = money(input.amount);
     if (!cents) {
-      fail("Informe o valor recebido");
+      fail(t("interface.message.3063f77694ec"));
     }
     return this.execute(input.requestId, actor, async (tx) => {
       const ref = this.db.collection("orders").doc(String(input.orderId));
       const snap = await tx.get(ref);
       if (!snap.exists) {
-        fail("Venda não encontrada");
+        fail(t("interface.message.15298cab0f58"));
       }
       const order = snap.data();
       if (order.status === "CANCELLED") {
-        fail("Venda cancelada");
+        fail(t("interface.message.8cac9da517d3"));
       }
       if (order.historical && order.receivablesReconciled !== true) {
-        fail("Concilie os recebimentos antigos antes de receber esta venda");
+        fail(t("interface.message.81ae9a61a391"));
       }
       const paid = money(order.paidAmount || 0) + cents;
       if (paid > money(order.total)) {
-        fail("Valor superior ao saldo pendente");
+        fail(t("interface.message.ba5364dbb4a1"));
       }
       let creditCustomerRef = null,
         creditCustomer = null;
@@ -622,11 +625,11 @@ class Ledger {
           .doc(order.creditCustomerId);
         const snap = await tx.get(creditCustomerRef);
         if (!snap.exists) {
-          fail("Cliente do fiado não encontrado");
+          fail(t("interface.message.a534787676d2"));
         }
         creditCustomer = snap.data();
         if (cents > Number(creditCustomer.balanceCents || 0)) {
-          fail("Recebimento maior que a dívida do cliente");
+          fail(t("validation.receiptExceedsDebt"));
         }
       }
       const receipt = {

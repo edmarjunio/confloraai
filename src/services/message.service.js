@@ -1,3 +1,4 @@
+const { t } = require('../i18n');
 const { INTENTS } = require('../router/message.router');
 const Logger = require('../shared/logger');
 const { formatCurrency } = require('../shared/string.util');
@@ -65,7 +66,7 @@ class MessageService {
     // 3. Garantir catálogo atualizado em memória
     if (!this.catalogRepo.isCacheValid()) {
       await this.catalogRepo.refreshCatalog().catch((err) => {
-        Logger.warn('Aviso: usando cache existente do catálogo', { error: err.message });
+        Logger.warn(t("interface.message.7e4c9092a8bc"), { error: err.message });
       });
     }
 
@@ -145,12 +146,12 @@ class MessageService {
           const priceText = prod.prices.map((p) => formatCurrency(p)).join(' e ');
           const caption = (
             `🌿 *${prod.canonicalName}*\n` +
-            `💰 *Opções de valores:* ${priceText}`
+            `${t("interface.message.5af3959ce0bb")}${priceText}`
           );
 
           for (const imgUrl of prod.images.slice(0, 2)) {
             await this.whatsappClient.sendImageMessage(phone, imgUrl, caption).catch((err) => {
-              Logger.warn('Falha ao enviar imagem do WhatsApp', { error: err.message });
+              Logger.warn(t("interface.message.1294e59da7fd"), { error: err.message });
             });
             imagesSentCount++;
           }
@@ -158,7 +159,7 @@ class MessageService {
       }
 
       if (imagesSentCount > 0) {
-        reply = `Enviei as fotos acima para você conferir! O que achou? Se quiser mais detalhes ou reservar alguma unidade, estou à disposição!`;
+        reply = `${t("interface.message.0e8c3f4901eb")}`;
       }
     }
 
@@ -183,7 +184,7 @@ class MessageService {
     }
 
     const latencyMs = Math.round((performance.now() - startTime) * 100) / 100;
-    Logger.info(`Mensagem processada para ${phone} em ${latencyMs}ms [intent: ${routingResult.intent}, imagesSent: ${imagesSentCount}]`);
+    Logger.info(`${t("interface.message.889cabaadaa4")}${phone} em ${latencyMs}ms [intent: ${routingResult.intent}, imagesSent: ${imagesSentCount}]`);
 
     return {
       reply,

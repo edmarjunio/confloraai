@@ -1,3 +1,4 @@
+const { t } = require('../i18n');
 const config = require('../config/env');
 const Logger = require('../shared/logger');
 const { DEFAULT_CATALOG_ITEMS } = require('../catalog/default-catalog');
@@ -37,10 +38,10 @@ class SystemStatusService {
       status: 'ONLINE',
       badge: 'Planilha Oficial Carregada',
       color: '#10b981',
-      title: 'Planilha Oficial LISTA DE PRODUTOS (Conflora)',
+      title: t("interface.message.ec570d76ace5"),
       totalItems: DEFAULT_CATALOG_ITEMS.length,
       categoriesCount: new Set(DEFAULT_CATALOG_ITEMS.map((i) => i.category || i.categoria)).size,
-      autoFallback: 'ATIVO (Garantia de 100% de disponibilidade no cardápio)',
+      autoFallback: t("interface.message.402e4e065e16"),
       lastVerified: new Date().toISOString(),
     };
 
@@ -63,14 +64,14 @@ class SystemStatusService {
     if (!hasSheetId) {
       return {
         status: 'FALLBACK_OFFICIAL',
-        badge: 'Contingência Padrão Ativa',
+        badge: t("interface.message.1510672d2ee2"),
         color: '#10b981',
-        spreadsheetId: 'Padrão Embutido (Planilha Oficial)',
+        spreadsheetId: t("interface.message.f57c8e75a070"),
         sheetName: 'PRODUTOS',
         itemsActive: this.catalogRepo ? this.catalogRepo.items.length : DEFAULT_CATALOG_ITEMS.length,
         source: 'Planilha Oficial Conflora (111 itens comerciais)',
         latencyMs: 1,
-        message: 'Ambiente operando com a Planilha Oficial LISTA DE PRODUTOS Conflora. Todos os produtos estão indexados.',
+        message: t("interface.message.08b1a603fed8"),
         lastSync: new Date().toISOString(),
       };
     }
@@ -88,29 +89,29 @@ class SystemStatusService {
           itemsActive: this.catalogRepo.items.length,
           source: 'Google Sheets API v4',
           latencyMs: latency,
-          message: `Conexão bem sucedida. ${this.catalogRepo.items.length} produtos comerciais sincronizados.`,
+          message: `${t("interface.message.2e1570b26355")}${this.catalogRepo.items.length}${t("interface.message.d3feb1f70ece")}`,
           lastSync: new Date().toISOString(),
         };
       }
     } catch (err) {
       return {
         status: 'FALLBACK_ERROR',
-        badge: 'Contingência Ativa (Sheets com Erro)',
+        badge: t("interface.message.aa80e258c4fd"),
         color: '#f59e0b',
         spreadsheetId: sheetId,
         sheetName: 'PRODUTOS',
         itemsActive: this.catalogRepo ? this.catalogRepo.items.length : DEFAULT_CATALOG_ITEMS.length,
-        source: 'Contingência Planilha Oficial Conflora',
+        source: t("interface.message.956773fbc951"),
         latencyMs: Date.now() - start,
         error: err.message,
-        message: `Falha ao consultar Google Sheets (${err.message}). O sistema ativou a contingência da Planilha Oficial com sucesso.`,
+        message: `${t("interface.message.6c8497ea7074")}${err.message}${t("interface.message.8ce793a96b4c")}`,
         lastSync: new Date().toISOString(),
       };
     }
 
     return {
       status: 'FALLBACK_OFFICIAL',
-      badge: 'Contingência Padrão Ativa',
+      badge: t("interface.message.1510672d2ee2"),
       color: '#10b981',
       spreadsheetId: sheetId || 'N/A',
       sheetName: 'PRODUTOS',
@@ -146,8 +147,8 @@ class SystemStatusService {
       lastReceivedAt: this.webhookStats.lastReceivedAt || 'Nenhuma mensagem recente',
       totalReceivedCount: this.webhookStats.totalReceived,
       message: isFullyConfigured
-        ? 'Webhook Meta operando na rota /webhook e token de verificação validado com sucesso.'
-        : 'Webhook ouvindo requisições na rota /webhook. Simulador do WhatsApp 100% ativo.',
+        ? t("interface.message.a8f40d503cbd")
+        : t("interface.message.e8ddc70c2dcb"),
     };
   }
 
@@ -161,19 +162,19 @@ class SystemStatusService {
         await this.firestoreRepo.firestore.collection('products').limit(2).get();
         isConnected = true;
       } catch (err) {
-        Logger.warn('Diagnóstico Firestore falhou', { error: err.message });
+        Logger.warn(t("interface.message.238ff61935d2"), { error: err.message });
       }
     }
 
     return {
       status: isConnected ? 'ONLINE' : 'FALLBACK_MEMORY',
-      badge: isConnected ? 'Firestore Conectado' : 'Modo Memória Ativo',
+      badge: isConnected ? 'Firestore Conectado' : t("interface.message.fc1e827eaa86"),
       color: isConnected ? '#10b981' : '#3b82f6',
       projectId,
       latencyMs: Date.now() - start,
       message: isConnected
-        ? `Banco de dados Firestore conectado com sucesso ao projeto [${projectId}].`
-        : 'Operando com repositório em memória e persistência em cache.',
+        ? `${t("interface.message.ca335cc846d0")}${projectId}].`
+        : t("interface.message.f4b6db3df364"),
     };
   }
 }

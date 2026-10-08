@@ -7,6 +7,8 @@ module.exports = [
       sourceType: "commonjs",
       globals: {
         Buffer: "readonly",
+        URL: "readonly",
+        TextEncoder: "readonly",
         console: "readonly",
         FormData: "readonly",
         Blob: "readonly",
@@ -23,7 +25,10 @@ module.exports = [
       },
     },
     rules: {
-      "no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
+      "no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
       "no-undef": "error",
       "no-var": "error",
       "prefer-const": "error",

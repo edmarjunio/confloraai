@@ -81,3 +81,13 @@ As fórmulas foram derivadas dos indicadores e valores visíveis no PDF; o PDF n
 - Testes cobrem descontos, estoque negativo, contagem com concorrência detectada, entradas, importação repetida, fiados parciais, bloqueio de excesso, custo opcional, margem, caixa, fuso e autenticação.
 - Os módulos alterados passam no ESLint; o lint global ainda contém problemas anteriores em outras partes do repositório.
 - Tentativa de validação visual automatizada não completou: Chromium do ambiente encerrou com SIGSEGV. O código JavaScript das telas passou no teste de análise de sintaxe; a validação visual e a integração com Firebase real ainda devem ocorrer antes do uso definitivo.
+
+## Atualização: internacionalização e teste local
+
+- Traduções centralizadas em JSON, chaves em inglês, seleção de idioma e formatação de moeda/datas por locale. Guia: `INTERNACIONALIZACAO.md`.
+- Produtos XLSX: simulação, substituição por catálogo versionado, preservação do catálogo anterior e estoque/custos por ID. Mudanças concorrentes do catálogo/estoque impedem a troca.
+- Histórico: seleção independente de vendas ou entradas; saídas da aba ITENS nunca reconstruem vendas de produtos.
+- Páginas carregam o catálogo efetivo; não misturam produtos de contingência ao catálogo importado.
+- `npm run test:local`: banco persistente isolado, operadores de teste e integrações simuladas. Guia: `TESTE-LOCAL.md` e atalho `teste-local.bat`.
+- Validação adicional: substituição/repetição de catálogo, uso do novo catálogo pelo ledger, persistência após reinício, autenticação HTTP, scripts de todas as páginas, idioma adicional e rejeição de tradução incompleta.
+- Lint global aprovado nesta atualização. Conferência visual e integração com Firebase real continuam pendentes.

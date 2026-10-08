@@ -1,3 +1,4 @@
+const { t } = require('../i18n');
 const { fail } = require("./ledger");
 function normalize(v) {
   return String(v || "")
@@ -35,7 +36,7 @@ function paymentKey(method) {
 function cents(v) {
   const n = Number(v || 0);
   if (!Number.isFinite(n)) {
-    fail("Valor financeiro inválido no relatório");
+    fail(t("interface.message.0f62ec2e6a32"));
   }
   return Math.round(n * 100);
 }
@@ -90,7 +91,7 @@ function dailyMetrics({
     ) {
       summary.creditSalesCents += total;
     }
-    const name = order.actorName || "Não informado";
+    const name = order.actorName || t("interface.message.01af1ecb8056");
     summary.byOperator[name] = (summary.byOperator[name] || 0) + total;
   }
   for (const receipt of [...receipts, ...historicalReceipts].filter(isDay)) {
@@ -105,7 +106,7 @@ function dailyMetrics({
   const openings = movements
     .filter(
       (m) =>
-        m.type === "OPENING" || normalize(m.raw?.CATEGORIA).includes("TROCO"),
+        m.type === "OPENING" || normalize(m.raw?.CATEGORIA).includes(t("interface.message.d0878c96c643")),
     )
     .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
   summary.openingCents = openings.length
@@ -145,7 +146,7 @@ async function loadDailyReport(db, date) {
     !/^\d{4}-\d{2}-\d{2}$/.test(day) ||
     Number.isNaN(Date.parse(day + "T12:00:00Z"))
   ) {
-    fail("Data inválida");
+    fail(t("interface.message.50643ae29fd0"));
   }
   const collections = [
     "orders",

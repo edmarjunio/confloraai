@@ -1,3 +1,4 @@
+const { t } = require("../i18n");
 const { hash, fail } = require("./ledger");
 function text(v) {
   return String(v ?? "").trim();
@@ -18,7 +19,12 @@ function value(cell) {
   }
   return v ?? null;
 }
-async function prepare(buffer, products, mapping = {}) {
+async function prepare(
+  buffer,
+  products,
+  mapping = {},
+  mode = "salesAndEntries",
+) {
   const ExcelJS = require("exceljs");
   const book = new ExcelJS.Workbook();
   await book.xlsx.load(buffer);
@@ -27,10 +33,19 @@ async function prepare(buffer, products, mapping = {}) {
   const errors = [];
   const warnings = [];
   const unresolved = [];
-  for (const sheetName of ["VENDAS HORTA", "ITENS"]) {
+  if (!["sales", "entries", "salesAndEntries"].includes(mode)) {
+    fail(t("interface.message.660dcd31e79b"));
+  }
+  const sheets =
+    mode === "sales"
+      ? ["VENDAS HORTA"]
+      : mode === "entries"
+        ? ["ITENS"]
+        : ["VENDAS HORTA", "ITENS"];
+  for (const sheetName of sheets) {
     const sheet = book.getWorksheet(sheetName);
     if (!sheet) {
-      fail("Aba obrigatória ausente: " + sheetName);
+      fail(t("interface.text.1f1d4b6be617") + sheetName);
     }
     const headers = sheet.getRow(1).values.slice(1);
     sheet.eachRow((row, line) => {
@@ -51,7 +66,8 @@ async function prepare(buffer, products, mapping = {}) {
         const category = normalize(raw.CATEGORIA),
           status = normalize(raw.Status);
         const collection =
-          category.includes("TROCO") || status.includes("TROCO")
+          category.includes(t("interface.message.d0878c96c643")) ||
+          status.includes(t("interface.message.d0878c96c643"))
             ? "cash_movements"
             : category.includes("RECEB")
               ? "historical_receipts"
@@ -59,11 +75,13 @@ async function prepare(buffer, products, mapping = {}) {
         const total = Number(raw.Valor ?? 0),
           discount = Number(raw.Desconto ?? 0);
         if (!Number.isFinite(total) || !Number.isFinite(discount)) {
-          errors.push(`VENDAS HORTA linha ${line}: valor inválido`);
+          errors.push(
+            `${t("interface.message.01be3d2c6020")}${line}${t("interface.message.7fd93ca8bb6b")}`,
+          );
         }
         if (discount < 0) {
           warnings.push(
-            `VENDAS HORTA linha ${line}: desconto negativo preservado (${discount}); conferir origem.`,
+            `${t("interface.message.01be3d2c6020")}${line}${t("interface.message.81d1c76afcc6")}${discount}); conferir origem.`,
           );
         }
         records.push({
@@ -114,7 +132,7 @@ async function prepare(buffer, products, mapping = {}) {
             quantity: raw.Quantidade,
           });
           errors.push(
-            `ITENS linha ${line}: associe o produto ${text(raw.Descrição)} a um ID válido e único`,
+            `ITENS linha ${line}${t("interface.message.63733ccc087e")}${text(raw.Descrição)}${t("interface.message.f8156f9bad2a")}`,
           );
         }
         const costValue = raw["Valor unitário"];
@@ -123,11 +141,15 @@ async function prepare(buffer, products, mapping = {}) {
             ? null
             : Number(costValue);
         if (unitCost !== null && (!Number.isFinite(unitCost) || unitCost < 0)) {
-          errors.push(`ITENS linha ${line}: custo unitário inválido`);
+          errors.push(
+            `ITENS linha ${line}${t("interface.message.b56a97d521f5")}`,
+          );
         }
         const qty = Number(raw.Quantidade);
         if (!Number.isFinite(qty) || qty <= 0) {
-          errors.push(`ITENS linha ${line}: quantidade inválida`);
+          errors.push(
+            `ITENS linha ${line}${t("interface.message.b5905b6dcd1e")}`,
+          );
         }
         records.push({
           collection: "initial_entries",
@@ -155,9 +177,7 @@ async function prepare(buffer, products, mapping = {}) {
     seen.add(k);
   }
   if (duplicateIds) {
-    warnings.push(
-      `${duplicateIds} IDs antigos repetidos preservados com novos IDs por arquivo/aba/linha.`,
-    );
+    warnings.push(`${duplicateIds}${t("interface.message.910d156b3e41")}`);
   }
   return {
     importId: digest,
@@ -173,10 +193,10 @@ async function prepare(buffer, products, mapping = {}) {
 }
 async function commit(db, preview, actor, offset = 0) {
   if (actor.role !== "ADMIN") {
-    fail("Somente ADMIN pode importar", 403);
+    fail(t("interface.message.f17bd086e69c"), 403);
   }
   if (preview.errors.length) {
-    fail("Resolva as pendências da simulação");
+    fail(t("interface.message.2d025fd5df90"));
   }
   let imported = 0;
   // Cada linha tem marcador atômico. Reexecução retoma sem duplicar entrada ou histórico.
@@ -185,20 +205,26 @@ async function commit(db, preview, actor, offset = 0) {
     offset < 0 ||
     offset > preview.records.length
   ) {
-    fail("Posição de importação inválida");
+    fail(t("interface.message.aa62148f08e1"));
   }
   const slice = preview.records.slice(offset, offset + 200);
   for (const record of slice) {
     await db.runTransaction(async (tx) => {
+      const state = await require("../import/product-catalog").catalogState(
+        db,
+        tx,
+      );
       const marker = db.collection("import_rows").doc(record.id);
       if ((await tx.get(marker)).exists) {
         return;
       }
       if (record.collection === "initial_entries") {
-        const ref = db.collection("products").doc(record.data.productId);
+        const ref = db
+          .collection(state.collectionPath)
+          .doc(record.data.productId);
         const snap = await tx.get(ref);
         if (!snap.exists) {
-          fail("Produto não encontrado: " + ref.id);
+          fail(t("interface.text.f78af3b1f3c4") + ref.id);
         }
         const p = snap.data();
         const before = Number(p.stockQuantity ?? p.estoque ?? 0);
