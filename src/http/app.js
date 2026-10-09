@@ -1118,12 +1118,28 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
   // Client Web Orders API
   app.post('/api/orders', async (req, res) => {
     try {
-      const { customerName, customerPhone, orderType, deliveryAddress, paymentMethod, items } = req.body;
+      const {
+        customerName,
+        customerPhone,
+        orderType,
+        deliveryAddress,
+        paymentMethod,
+        items,
+        coupon,
+        discount,
+        subtotal,
+        cashTendered,
+        changeDue,
+      } = req.body;
+
       if (!customerName || !customerPhone || !Array.isArray(items) || items.length === 0) {
         return res.status(400).json({ error: 'Dados do pedido incompletos.' });
       }
 
-      const total = items.reduce((acc, it) => acc + (Number(it.price || 0) * Number(it.quantity || 1)), 0);
+      const calculatedSubtotal = Number(subtotal) || items.reduce((acc, it) => acc + (Number(it.price || 0) * Number(it.quantity || 1)), 0);
+      const appliedDiscount = Math.max(0, Number(discount) || 0);
+      const finalTotal = Math.max(0, calculatedSubtotal - appliedDiscount);
+
       const order = await messageService.firestoreRepo.createDirectOrder({
         customerId: req.user?.id || '',
         customerEmail: req.user?.email || '',
@@ -1133,12 +1149,68 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
         deliveryAddress: deliveryAddress || 'Retirada no Viveiro Conflora',
         paymentMethod: paymentMethod || 'PIX',
         items,
-        total,
+        subtotal: calculatedSubtotal,
+        coupon: coupon || '',
+        discount: appliedDiscount,
+        total: finalTotal,
+        cashTendered: Number(cashTendered) || 0,
+        changeDue: Number(changeDue) || 0,
         status: 'PENDING',
         source: 'WEB_CATALOG',
       });
 
       await messageService.firestoreRepo.deductStock(items, customerPhone);
+
+      // Notificação para todos os usuários ADMIN sobre a venda finalizada
+      await messageService.firestoreRepo.notifyAllAdminUsersOfSale(order, { source: 'WEB_CATALOG' }).catch((err) => {
+        Logger.warn('Aviso: falha ao notificar administradores sobre nova venda web', { error: err.message });
+      });
+
+      // Notificação ao Proprietário via WhatsApp se o client estiver ativo
+      const ownerNumber = process.env.OWNER_WHATSAPP_NUMBER || '5564999351616';
+      if (messageService.whatsappClient && ownerNumber) {
+        try {
+          const itemsListText = items
+            .map((it) => `• ${it.quantity}x ${it.name} (R$ ${Number(it.price || 0).toFixed(2).replace('.', ',')} un) = R$ ${(Number(it.price || 0) * Number(it.quantity || 1)).toFixed(2).replace('.', ',')}`)
+            .join('\n');
+
+          const couponText = appliedDiscount > 0
+            ? `🎟️ *Cupom:* ${coupon} (-R$ ${appliedDiscount.toFixed(2).replace('.', ',')})\n`
+            : '';
+
+          let cashDetails = '';
+          if (paymentMethod === 'DINHEIRO') {
+            const tendered = Number(cashTendered) || 0;
+            const change = Number(changeDue) || 0;
+            if (change > 0) {
+              cashDetails = `💵 *Dinheiro em mãos:* R$ ${tendered.toFixed(2).replace('.', ',')}\n💰 *Levar de troco:* R$ ${change.toFixed(2).replace('.', ',')}\n`;
+            } else {
+              cashDetails = `💵 *Dinheiro em mãos:* R$ ${(tendered || finalTotal).toFixed(2).replace('.', ',')}\n✅ *Valor exato, não precisa de troco*\n`;
+            }
+          }
+
+          const notificationText = (
+            `🔔 *NOVO PEDIDO FECHADO - CONFLORA* 🔔\n\n` +
+            `📦 *Pedido:* #${order.id}\n` +
+            `📅 *Data:* ${new Date().toLocaleString('pt-BR')}\n\n` +
+            `👤 *Cliente:* ${customerName}\n` +
+            `📱 *WhatsApp:* ${customerPhone}\n` +
+            `📍 *Entrega:* ${orderType === 'DELIVERY' ? deliveryAddress : '🏬 Retirada no Viveiro Conflora'}\n\n` +
+            `🛒 *Itens do Pedido:*\n` +
+            `${itemsListText}\n\n` +
+            `💵 *Subtotal:* R$ ${calculatedSubtotal.toFixed(2).replace('.', ',')}\n` +
+            `${couponText}` +
+            `💰 *Total Final:* R$ ${finalTotal.toFixed(2).replace('.', ',')}\n` +
+            `💳 *Forma de Pagamento:* ${paymentMethod}\n` +
+            `${cashDetails}`
+          );
+
+          await messageService.whatsappClient.sendTextMessage(ownerNumber, notificationText).catch(() => {});
+        } catch {
+          // Mensagem opcional de WhatsApp para dono
+        }
+      }
+
       res.status(200).json({ success: true, order });
     } catch (err) {
       Logger.error('Erro ao registrar pedido web', err);
@@ -1193,6 +1265,12 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
         paymentMethod,
         notes,
       });
+
+      // Notificação para todos os usuários ADMIN sobre a venda manual no balcão
+      await messageService.firestoreRepo.notifyAllAdminUsersOfSale(order, { source: 'CAIXA_MANUAL' }).catch((err) => {
+        Logger.warn('Aviso: falha ao notificar administradores sobre venda manual no caixa', { error: err.message });
+      });
+
       res.status(200).json({ success: true, order });
     } catch (err) {
       Logger.error('Erro ao lançar pedido manual no caixa', err);
@@ -1227,41 +1305,62 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
     }
   });
 
-  // Admin: Enviar Foto de Produto Direto para o Firestore (com compressão, padrão de nomes e tags)
+  // Admin: Enviar Foto(s) de Produto Direto para o Firestore (com compressão inteligente, padrão Conflora e preservação para zoom)
   app.post('/api/admin/products/:id/photo', async (req, res) => {
     try {
       const { id } = req.params;
       const prod = (await messageService.firestoreRepo.getProductById(id)) || { id, name: req.body.name || 'Produto' };
-      const { photoBase64, contentType, maxWidth, maxHeight, quality, format } = req.body || {};
 
-      if (!photoBase64 || typeof photoBase64 !== 'string') {
+      const { photoBase64, photosBase64, photos, contentType, maxWidth, maxHeight, quality, format, append } = req.body || {};
+      const incomingList = Array.isArray(photosBase64) && photosBase64.length > 0
+        ? photosBase64
+        : (Array.isArray(photos) && photos.length > 0 ? photos : (photoBase64 ? [photoBase64] : null));
+
+      if (!incomingList || incomingList.length === 0) {
         return res.status(400).json({ error: 'Envie os dados da foto em base64.' });
       }
 
       const { buildOptimizedFirestorePhotoDocument } = require('../catalog/product-photo.service');
-      const cleanBase64 = photoBase64.replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, '');
-      const photoDoc = await buildOptimizedFirestorePhotoDocument(prod, {
-        base64Data: cleanBase64,
-        contentType: contentType || 'image/jpeg',
-        source: 'WEBSITE_DIRECT',
-        maxWidth: maxWidth ? parseInt(maxWidth, 10) : undefined,
-        maxHeight: maxHeight ? parseInt(maxHeight, 10) : undefined,
-        quality: quality ? parseInt(quality, 10) : undefined,
-        format,
-      });
+      const savedPhotos = [];
+      const existingImages = (append && Array.isArray(prod.images)) ? [...prod.images] : [];
+      const startIndex = existingImages.length;
 
-      await messageService.firestoreRepo.saveProductPhoto(photoDoc);
+      for (let i = 0; i < incomingList.length; i++) {
+        const item = incomingList[i];
+        const rawBase = typeof item === 'string' ? item : (item.photoBase64 || item.base64 || item.data || '');
+        const cType = (typeof item === 'object' && item.contentType) ? item.contentType : (contentType || 'image/jpeg');
+        const cleanBase64 = String(rawBase).replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, '');
+
+        const photoDoc = await buildOptimizedFirestorePhotoDocument(prod, {
+          base64Data: cleanBase64,
+          contentType: cType,
+          source: 'WEBSITE_DIRECT',
+          index: startIndex + i,
+          maxWidth: maxWidth ? parseInt(maxWidth, 10) : undefined,
+          maxHeight: maxHeight ? parseInt(maxHeight, 10) : undefined,
+          quality: quality ? parseInt(quality, 10) : undefined,
+          format,
+          preserveZoomQuality: true,
+        });
+
+        await messageService.firestoreRepo.saveProductPhoto(photoDoc);
+        savedPhotos.push(photoDoc);
+      }
+
+      const newUrls = savedPhotos.map((p) => `/api/images/${p.id}`);
+      const allUrls = append ? Array.from(new Set([...existingImages, ...newUrls])) : newUrls;
+      const primaryPhoto = savedPhotos[0];
 
       const updatedProduct = {
         ...prod,
-        imageUrl: `/api/images/${photoDoc.id}`,
-        images: [`/api/images/${photoDoc.id}`],
-        imageFileId: photoDoc.id,
-        imagePathCache: `/api/images/${photoDoc.id}`,
-        tagsAi: photoDoc.tagsAi,
-        tags_ia: photoDoc.tagsAi,
-        descriptionAi: photoDoc.descriptionAi,
-        descricao_ia: photoDoc.descriptionAi,
+        imageUrl: allUrls[0] || `/api/images/${primaryPhoto.id}`,
+        images: allUrls,
+        imageFileId: primaryPhoto.id,
+        imagePathCache: allUrls[0],
+        tagsAi: primaryPhoto.tagsAi,
+        tags_ia: primaryPhoto.tagsAi,
+        descriptionAi: primaryPhoto.descriptionAi,
+        descricao_ia: primaryPhoto.descriptionAi,
         updatedAt: new Date().toISOString(),
       };
 
@@ -1274,16 +1373,40 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       res.status(200).json({
         success: true,
         photo: {
-          id: photoDoc.id,
-          fileName: photoDoc.fileName,
-          tags: photoDoc.tagsAi,
+          id: primaryPhoto.id,
+          fileName: primaryPhoto.fileName,
+          tags: primaryPhoto.tagsAi,
           url: updatedProduct.imageUrl,
-          compression: photoDoc.compression || null,
+          compression: primaryPhoto.compression || null,
         },
+        photos: savedPhotos.map((p) => ({
+          id: p.id,
+          fileName: p.fileName,
+          tags: p.tagsAi,
+          url: `/api/images/${p.id}`,
+          compression: p.compression || null,
+        })),
         product: updatedProduct,
       });
     } catch (err) {
       Logger.error('Erro no upload de foto para o Firestore', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin: Upload múltiplo direto via /api/admin/products/:id/photos
+  app.post('/api/admin/products/:id/photos', async (req, res) => {
+    req.url = `/api/admin/products/${req.params.id}/photo`;
+    return app.handle(req, res);
+  });
+
+  // Público: Consulta fotos detalhadas de um produto
+  app.get('/api/products/:id/photos', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const photos = await messageService.firestoreRepo.getProductPhotos(id);
+      res.status(200).json({ success: true, count: photos.length, photos });
+    } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });

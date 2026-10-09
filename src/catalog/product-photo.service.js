@@ -238,11 +238,13 @@ function buildFirestorePhotoDocument(product, {
   contentType = 'image/jpeg',
   originalPath = null,
   source = 'WEBSITE_DIRECT',
+  index = 0,
 } = {}) {
   const id = String(product.id || `prod-${Date.now()}`);
-  const imageDocId = `img_${id}`;
+  const imageDocId = index > 0 ? `img_${id}_${index}` : `img_${id}`;
   const productName = product.name || product.descricao || 'Produto Conflora';
-  const fileName = generateStandardPhotoName(productName, id, contentType.includes('png') ? 'png' : 'jpg');
+  const nameSuffix = index > 0 ? `_${index}` : '';
+  const fileName = generateStandardPhotoName(productName, id + nameSuffix, contentType.includes('png') ? 'png' : 'jpg');
   const { tagsList, tagsString } = generateStandardTags(product);
   const description = generateStandardDescription(product);
   const now = new Date().toISOString();
@@ -254,6 +256,7 @@ function buildFirestorePhotoDocument(product, {
   return {
     id: imageDocId,
     productId: id,
+    index,
     fileName,
     name: fileName,
     title: productName,
@@ -291,6 +294,7 @@ async function buildOptimizedFirestorePhotoDocument(product, options = {}) {
       maxHeight: options.maxHeight,
       quality: options.quality,
       format: options.format,
+      preserveZoomQuality: options.preserveZoomQuality !== false,
     });
     if (comp.wasCompressed) {
       base64Data = comp.base64;
@@ -309,6 +313,7 @@ async function buildOptimizedFirestorePhotoDocument(product, options = {}) {
     ...options,
     base64Data,
     contentType,
+    index: options.index || 0,
   });
 
   if (compressionStats) {
@@ -318,6 +323,29 @@ async function buildOptimizedFirestorePhotoDocument(product, options = {}) {
   }
 
   return doc;
+}
+
+/**
+ * Monta e otimiza uma lista de documentos de fotos para um produto
+ */
+async function buildMultipleOptimizedFirestorePhotoDocuments(product, photos = [], options = {}) {
+  if (!Array.isArray(photos)) {
+    return [];
+  }
+  const results = [];
+  for (let i = 0; i < photos.length; i++) {
+    const item = photos[i];
+    const photoBase64 = typeof item === 'string' ? item : item.photoBase64 || item.base64 || item.data;
+    const itemContentType = typeof item === 'object' ? item.contentType : undefined;
+    const doc = await buildOptimizedFirestorePhotoDocument(product, {
+      ...options,
+      base64Data: photoBase64,
+      contentType: itemContentType || options.contentType,
+      index: i,
+    });
+    results.push(doc);
+  }
+  return results;
 }
 
 const {
@@ -339,6 +367,7 @@ module.exports = {
   createConfloraSvgFallback,
   buildFirestorePhotoDocument,
   buildOptimizedFirestorePhotoDocument,
+  buildMultipleOptimizedFirestorePhotoDocuments,
   IMAGE_PRESETS,
   compressImageBuffer,
   compressImageBase64,

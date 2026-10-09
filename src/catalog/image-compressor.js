@@ -20,6 +20,20 @@ const PRESETS = {
     format: 'jpeg',
     mozjpeg: true,
   },
+  ZOOM_HD: {
+    maxWidth: 1600,
+    maxHeight: 1600,
+    quality: 88,
+    format: 'jpeg',
+    mozjpeg: true,
+  },
+  FULL_HD: {
+    maxWidth: 1920,
+    maxHeight: 1920,
+    quality: 86,
+    format: 'jpeg',
+    mozjpeg: true,
+  },
   THUMBNAIL: {
     maxWidth: 320,
     maxHeight: 320,
@@ -148,9 +162,10 @@ async function compressImageBuffer(inputBuffer, options = {}) {
     return defaultResult;
   }
 
-  const maxWidth = options.maxWidth || PRESETS.CATALOG.maxWidth;
-  const maxHeight = options.maxHeight || PRESETS.CATALOG.maxHeight;
-  const quality = options.quality || PRESETS.CATALOG.quality;
+  const basePreset = options.preserveZoomQuality !== false ? PRESETS.ZOOM_HD : PRESETS.CATALOG;
+  const maxWidth = options.maxWidth || basePreset.maxWidth;
+  const maxHeight = options.maxHeight || basePreset.maxHeight;
+  const quality = options.quality || basePreset.quality;
   const targetFormat = (options.format || 'jpeg').toLowerCase();
 
   try {
@@ -177,7 +192,28 @@ async function compressImageBuffer(inputBuffer, options = {}) {
       mimeType = 'image/jpeg';
     }
 
-    const { data: outputBuffer, info } = await pipeline.toBuffer({ resolveWithObject: true });
+    let { data: outputBuffer, info } = await pipeline.toBuffer({ resolveWithObject: true });
+
+    // Salvaguarda Firestore: limite estrito de 1MB por documento.
+    // Se a foto binária comprimida passar de 600KB (~800KB em Base64),
+    // reduz suavemente mantendo máxima nitidez para zoom sem estourar o limite.
+    const MAX_FIRESTORE_SAFE_BYTES = 600000;
+    if (outputBuffer.length > MAX_FIRESTORE_SAFE_BYTES) {
+      try {
+        const safeWidth = Math.min(maxWidth, 1400);
+        const safeHeight = Math.min(maxHeight, 1400);
+        const safeQuality = Math.max(76, quality - 8);
+        const pass2 = await sharpInstance(inputBuffer, { failOnError: false })
+          .rotate()
+          .resize(safeWidth, safeHeight, { fit: 'inside', withoutEnlargement: true })
+          .jpeg({ quality: safeQuality, mozjpeg: true, chromaSubsampling: '4:2:0' })
+          .toBuffer({ resolveWithObject: true });
+        if (pass2.data.length < outputBuffer.length) {
+          outputBuffer = pass2.data;
+          info = pass2.info;
+        }
+      } catch {}
+    }
 
     // Se o buffer comprimido acabou ficando maior que o original, mantém o original
     if (outputBuffer.length >= originalSize) {

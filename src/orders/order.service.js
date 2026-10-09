@@ -213,6 +213,17 @@ class OrderService {
       Logger.warn('Aviso: falha ao notificar WhatsApp do dono', { error: err.message });
     });
 
+    // Enviar notificações internas para todos os usuários com perfil ADMIN
+    if (this.firestoreRepo && typeof this.firestoreRepo.notifyAllAdminUsersOfSale === 'function') {
+      await this.firestoreRepo.notifyAllAdminUsersOfSale({
+        ...order,
+        customerName: customerName || existingProfile?.name || 'Cliente WhatsApp',
+        source: 'WHATSAPP_BOT',
+      }).catch((err) => {
+        Logger.warn('Aviso: falha ao notificar administradores sobre pedido confirmado no WhatsApp', { error: err.message });
+      });
+    }
+
     // Mensagem de retorno para o cliente
     const addrText = order.deliveryAddress ? `📍 *Entrega:* ${order.deliveryAddress}\n` : '';
     const payText = order.paymentMethod ? `💳 *Pagamento:* ${order.paymentMethod}\n` : '💳 *Pagamento:* PIX\n';

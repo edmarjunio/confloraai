@@ -218,6 +218,7 @@ function renderAdminHtml() {
     .notif-card { border-left: 4px solid #0284c7; background: #f0f9ff; padding: 12px 16px; border-radius: 6px; margin-bottom: 10px; font-size: 13px; }
     .notif-card.rejected { border-left-color: #ef4444; background: #fef2f2; }
     .notif-card.approved { border-left-color: #15803d; background: #f0fdf4; }
+    .notif-card.sale { border-left-color: #16a34a; background: #f0fdf4; box-shadow: 0 1px 3px rgba(22,163,74,0.1); }
 
     /* MODAIS */
     .modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 100; padding: 16px; }
@@ -444,18 +445,22 @@ function renderAdminHtml() {
           <label style="font-size:12px; font-weight:bold;">Estoque Inicial:</label>
           <input type="number" id="formProdStock" required style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="15" />
         </div>
-        <div>
-          <label style="font-size:12px; font-weight:bold;">📸 Foto Direto pro Firestore (Upload Local):</label>
-          <input type="file" id="formProdPhotoFile" accept="image/*" onchange="handleProdPhotoFileSelect(event)" style="width:100%; padding:6px; border:1px solid #cbd5e1; border-radius:6px; background:#f8fafc;" />
-          <div style="font-size:10px; color:#15803d; margin-top:2px;">⚡ Compressão Inteligente Conflora: Fotos são automaticamente redimensionadas e otimizadas no servidor para carregamento ultrarrápido no catálogo.</div>
-          <div id="formProdPhotoPreviewBox" style="display:none; margin-top:6px; align-items:center; gap:10px;">
-            <img id="formProdPhotoPreviewImg" style="width:48px; height:48px; border-radius:6px; object-fit:cover; border:2px solid #22c55e;" />
-            <div>
-              <div id="formProdPhotoFileName" style="font-size:11px; font-weight:bold; color:#14532d;"></div>
-              <div id="formProdPhotoTags" style="font-size:10px; color:#64748b;"></div>
+        <div style="grid-column: 1/-1;">
+          <label style="font-size:12px; font-weight:bold;">📸 Fotos do Produto Direto pro Firestore (Upload Múltiplo Local):</label>
+          <input type="file" id="formProdPhotoFile" accept="image/*" multiple onchange="handleProdPhotoFileSelect(event)" style="width:100%; padding:6px; border:1px solid #cbd5e1; border-radius:6px; background:#f8fafc;" />
+          <div style="font-size:10px; color:#15803d; margin-top:2px;">⚡ <strong>Qualidade Máxima &amp; Zoom HD:</strong> Fotos são redimensionadas no servidor até 1600px com fidelidade botânica nítida para a funcionalidade de zoom no catálogo, mantendo o tamanho leve e seguro dentro do Firestore (&lt;1MB).</div>
+          <div id="formProdPhotoPreviewBox" style="display:none; margin-top:8px; padding:10px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <div style="font-size:12px; font-weight:bold; color:#14532d;">📸 Galeria de Fotos (<span id="formProdPhotoCount">0</span> foto(s)):</div>
+              <button type="button" onclick="clearAllPendingPhotos()" style="font-size:11px; background:none; border:none; color:#ef4444; cursor:pointer; text-decoration:underline;">Limpar todas as fotos</button>
             </div>
+            <div id="formProdPhotosGrid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(130px, 1fr)); gap:10px;"></div>
+            <div id="formProdPhotoTags" style="font-size:11px; color:#475569; margin-top:8px;"></div>
           </div>
+          <!-- Campos de compatibilidade -->
           <input type="hidden" id="formProdPhotoBase64" />
+          <img id="formProdPhotoPreviewImg" style="display:none;" />
+          <div id="formProdPhotoFileName" style="display:none;"></div>
         </div>
         <div>
           <label style="font-size:12px; font-weight:bold;">Ou URLs Externas de Fotos (separadas por vírgula):</label>
@@ -1097,14 +1102,16 @@ function renderAdminHtml() {
 
         list.forEach(n => {
           const div = document.createElement('div');
-          div.className = 'notif-card ' + (n.type === 'REJECTED' ? 'rejected' : (n.type === 'APPROVED' ? 'approved' : ''));
+          const isSale = n.type === 'SALE_COMPLETED';
+          div.className = 'notif-card ' + (n.type === 'REJECTED' ? 'rejected' : (isSale ? 'sale' : (n.type === 'APPROVED' ? 'approved' : '')));
           div.innerHTML = \`
             <div style="display:flex; justify-content:space-between; align-items:center;">
-              <strong>\${n.title || 'Aviso da Administração'}</strong>
+              <strong style="\${isSale ? 'color:#15803d; font-size:14px;' : ''}">\${n.title || 'Aviso da Administração'}</strong>
               <span style="font-size:11px; color:#64748b;">\${new Date(n.createdAt).toLocaleTimeString()}</span>
             </div>
             <div style="margin-top:6px;">\${n.message}</div>
             \${n.reason ? \`<div style="margin-top:6px; font-weight:bold; color:#991b1b;">Motivo do Cancelamento: "\${n.reason}"</div>\` : ''}
+            \${isSale ? \`<div style="margin-top:8px; display:flex; gap:8px;"><button type="button" class="btn" style="padding:4px 10px; font-size:11px; background:#15803d; color:white; border-radius:4px; border:none; cursor:pointer;" onclick="switchTab('orders')">Ver Pedidos ➔</button></div>\` : ''}
           \`;
           container.appendChild(div);
         });
@@ -1611,34 +1618,108 @@ function renderAdminHtml() {
       return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'produto';
     }
 
+    let pendingPhotosList = [];
+
+    function renderPendingPhotosGrid() {
+      const box = document.getElementById('formProdPhotoPreviewBox');
+      const grid = document.getElementById('formProdPhotosGrid');
+      const countSpan = document.getElementById('formProdPhotoCount');
+      const base64Input = document.getElementById('formProdPhotoBase64');
+      if (!box || !grid) return;
+
+      if (pendingPhotosList.length === 0) {
+        box.style.display = 'none';
+        if (base64Input) base64Input.value = '';
+        return;
+      }
+
+      box.style.display = 'block';
+      if (countSpan) countSpan.textContent = pendingPhotosList.length;
+      if (base64Input) base64Input.value = pendingPhotosList[0]?.dataUrl || '';
+
+      grid.innerHTML = '';
+      pendingPhotosList.forEach((item, index) => {
+        const card = document.createElement('div');
+        const isPrimary = index === 0;
+        card.style.cssText = 'position:relative; background:#ffffff; border:1px solid ' + (isPrimary ? '#22c55e' : '#cbd5e1') + '; border-radius:8px; padding:6px; display:flex; flex-direction:column; align-items:center; gap:4px; box-shadow:0 1px 3px rgba(0,0,0,0.05);';
+
+        const imgSrc = item.dataUrl || item.url || '';
+        const badge = isPrimary
+          ? '<span style="position:absolute; top:4px; left:4px; background:#16a34a; color:white; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:10px;">⭐ Capa</span>'
+          : '<span style="position:absolute; top:4px; left:4px; background:rgba(0,0,0,0.6); color:white; font-size:10px; padding:1px 5px; border-radius:10px;">#' + (index + 1) + '</span>';
+
+        const label = item.fileName || ('Foto ' + (index + 1));
+        const capaBtn = !isPrimary
+          ? '<button type="button" onclick="setPrimaryPendingPhoto(' + index + ')" title="Definir como foto principal" style="font-size:10px; padding:2px 6px; border:1px solid #cbd5e1; border-radius:4px; background:#f8fafc; cursor:pointer;">⭐ Capa</button>'
+          : '';
+
+        card.innerHTML =
+          '<div style="position:relative; width:100%; height:80px; border-radius:6px; overflow:hidden; background:#f1f5f9;">' +
+            '<img src="' + imgSrc + '" style="width:100%; height:100%; object-fit:cover;" alt="Foto" />' +
+            badge +
+          '</div>' +
+          '<div style="font-size:10px; font-weight:bold; color:#334155; width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:center;" title="' + label + '">' +
+            label +
+          '</div>' +
+          '<div style="display:flex; gap:4px; width:100%; justify-content:center; margin-top:2px;">' +
+            capaBtn +
+            '<button type="button" onclick="removePendingPhoto(' + index + ')" title="Remover esta foto" style="font-size:10px; padding:2px 6px; border:1px solid #fecaca; border-radius:4px; background:#fef2f2; color:#dc2626; cursor:pointer;">🗑️</button>' +
+          '</div>';
+
+        grid.appendChild(card);
+      });
+    }
+
+    function setPrimaryPendingPhoto(index) {
+      if (index <= 0 || index >= pendingPhotosList.length) return;
+      const [photo] = pendingPhotosList.splice(index, 1);
+      pendingPhotosList.unshift(photo);
+      renderPendingPhotosGrid();
+    }
+
+    function removePendingPhoto(index) {
+      if (index < 0 || index >= pendingPhotosList.length) return;
+      pendingPhotosList.splice(index, 1);
+      renderPendingPhotosGrid();
+    }
+
+    function clearAllPendingPhotos() {
+      pendingPhotosList = [];
+      const fileInput = document.getElementById('formProdPhotoFile');
+      if (fileInput) fileInput.value = '';
+      renderPendingPhotosGrid();
+    }
+
     function handleProdPhotoFileSelect(event) {
-      const file = event.target.files && event.target.files[0];
-      if (!file) return;
+      const files = event.target.files;
+      if (!files || files.length === 0) return;
 
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        const dataUrl = e.target.result;
-        document.getElementById('formProdPhotoBase64').value = dataUrl;
-        document.getElementById('formProdPhotoPreviewImg').src = dataUrl;
-        document.getElementById('formProdPhotoPreviewBox').style.display = 'flex';
+      const name = document.getElementById('formProdName').value || 'produto';
+      const id = document.getElementById('formProdId').value || 'novo';
+      const tagsInput = document.getElementById('formProdTags');
+      if (!tagsInput.value) {
+        const cat = document.getElementById('formProdCat').value;
+        const sub = document.getElementById('formProdSubcat').value;
+        const autoTags = [name.toLowerCase(), cat.toLowerCase(), sub.toLowerCase()].filter(Boolean).join(', ');
+        tagsInput.value = autoTags;
+        const tagsBox = document.getElementById('formProdPhotoTags');
+        if (tagsBox) tagsBox.textContent = '🏷️ Tags Conflora: ' + autoTags;
+      }
 
-        const name = document.getElementById('formProdName').value || file.name.split('.')[0];
-        const id = document.getElementById('formProdId').value || 'novo';
-        const stdName = slugifyClient(name) + '_' + id + '.jpg';
-        document.getElementById('formProdPhotoFileName').textContent = 'Padrão no Firestore: ' + stdName;
-
-        const tagsInput = document.getElementById('formProdTags');
-        if (!tagsInput.value) {
-          const cat = document.getElementById('formProdCat').value;
-          const sub = document.getElementById('formProdSubcat').value;
-          const autoTags = [name.toLowerCase(), cat.toLowerCase(), sub.toLowerCase()].filter(Boolean).join(', ');
-          tagsInput.value = autoTags;
-          document.getElementById('formProdPhotoTags').textContent = 'Tags: ' + autoTags;
-        } else {
-          document.getElementById('formProdPhotoTags').textContent = 'Tags: ' + tagsInput.value;
-        }
-      };
-      reader.readAsDataURL(file);
+      Array.from(files).forEach((file) => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const dataUrl = e.target.result;
+          const stdName = slugifyClient(name) + '_' + id + '_' + (pendingPhotosList.length + 1) + '.jpg';
+          pendingPhotosList.push({
+            dataUrl,
+            fileName: stdName,
+            isExisting: false,
+          });
+          renderPendingPhotosGrid();
+        };
+        reader.readAsDataURL(file);
+      });
     }
 
     function editProduct(id) {
@@ -1655,15 +1736,21 @@ function renderAdminHtml() {
       document.getElementById('formProdDesc').value = p.descriptionAi || p.descricao_ia || '';
       document.getElementById('formProdPhotoBase64').value = '';
 
-      const currentImg = (p.images && p.images[0]) || p.imageUrl || p.imageurl;
-      if (currentImg) {
-        document.getElementById('formProdPhotoPreviewImg').src = currentImg;
-        document.getElementById('formProdPhotoFileName').textContent = 'Foto atual salva no Firestore: ' + (p.imageFileId || p.fileName || slugifyClient(p.descricao || p.name) + '_' + p.id + '.jpg');
-        document.getElementById('formProdPhotoTags').textContent = 'Tags: ' + (p.tagsAi || p.tags_ia || 'padrão Conflora');
-        document.getElementById('formProdPhotoPreviewBox').style.display = 'flex';
-      } else {
-        document.getElementById('formProdPhotoPreviewBox').style.display = 'none';
-      }
+      // Carrega fotos existentes do produto no gerenciador de fotos
+      pendingPhotosList = [];
+      const existingImgs = (Array.isArray(p.images) && p.images.length > 0)
+        ? p.images.filter(Boolean)
+        : (p.imageUrl || p.imageurl ? [p.imageUrl || p.imageurl] : []);
+
+      existingImgs.forEach((url, i) => {
+        pendingPhotosList.push({
+          url,
+          dataUrl: url,
+          fileName: (p.imageFileId || slugifyClient(p.descricao || p.name)) + (i > 0 ? '_' + i : '') + '.jpg',
+          isExisting: true,
+        });
+      });
+      renderPendingPhotosGrid();
 
       document.getElementById('productFormTitle').textContent = 'Editar Produto #' + p.id;
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1674,7 +1761,7 @@ function renderAdminHtml() {
       document.getElementById('formProdId').value = '';
       document.getElementById('formProdPhotoBase64').value = '';
       document.getElementById('formProdTags').value = '';
-      document.getElementById('formProdPhotoPreviewBox').style.display = 'none';
+      clearAllPendingPhotos();
       document.getElementById('productFormTitle').textContent = 'Novo Produto no Catálogo';
     }
 
@@ -1692,10 +1779,13 @@ function renderAdminHtml() {
       const sub = document.getElementById('formProdSubcat').value;
       const price = parseFloat(document.getElementById('formProdPrice').value);
       const stock = parseInt(document.getElementById('formProdStock').value, 10);
-      const imgs = document.getElementById('formProdImages').value.split(',').map(s => s.trim()).filter(Boolean);
+      const externalImgs = document.getElementById('formProdImages').value.split(',').map(s => s.trim()).filter(Boolean);
       const tags = document.getElementById('formProdTags').value;
       const desc = document.getElementById('formProdDesc').value;
-      const photoBase64 = document.getElementById('formProdPhotoBase64').value;
+
+      const newUploads = pendingPhotosList.filter(p => p.dataUrl && !p.isExisting).map(p => p.dataUrl);
+      const existingUrls = pendingPhotosList.filter(p => p.isExisting && p.url).map(p => p.url);
+      const combinedImgs = [...existingUrls, ...externalImgs];
 
       const payload = {
         id,
@@ -1705,15 +1795,16 @@ function renderAdminHtml() {
         unit: document.getElementById('formProdUnit') ? document.getElementById('formProdUnit').value : 'UN',
         price,
         stockQuantity: stock,
-        images: imgs,
-        imageUrl: imgs[0] || '',
+        images: combinedImgs,
+        imageUrl: combinedImgs[0] || '',
         tagsAi: tags,
         tags_ia: tags,
         descriptionAi: desc,
       };
 
-      if (photoBase64) {
-        payload.photoBase64 = photoBase64;
+      if (newUploads.length > 0) {
+        payload.photosBase64 = newUploads;
+        payload.photoBase64 = newUploads[0];
       }
 
       const res = await fetch('/api/admin/products', {
@@ -1724,7 +1815,7 @@ function renderAdminHtml() {
       const data = await res.json();
 
       if (data.success) {
-        alert('✅ Produto e foto salvos com sucesso no Firestore com padrão de nomes e tags!');
+        alert('✅ Produto e fotos salvos com sucesso no Firestore com alta qualidade para zoom!');
         resetProdForm();
         loadAdminProducts();
         loadPriceProducts();

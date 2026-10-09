@@ -790,6 +790,19 @@ class FirestoreRepository {
     return this.inMemoryProductImages.get(cleanId) || null;
   }
 
+  async getProductPhotos(idOrProductId) {
+    if (!idOrProductId) {
+      return [];
+    }
+    const cleanId = String(idOrProductId).trim();
+    const allPhotos = await this.getAllProductPhotos();
+    const matches = allPhotos.filter(
+      (p) => String(p.productId) === cleanId || p.id === cleanId || (p.id && p.id.startsWith(`img_${cleanId}`))
+    );
+    matches.sort((a, b) => (a.index || 0) - (b.index || 0));
+    return matches;
+  }
+
   async getAllProductPhotos() {
     if (this.isInMemory) {
       return Array.from(new Set(this.inMemoryProductImages.values()));
@@ -905,8 +918,60 @@ class FirestoreRepository {
     if (product.category !== undefined) {Object.assign(dataWithTs, { categoria: product.category, CATEGORIA: product.category });}
     if (product.subcategory !== undefined) {Object.assign(dataWithTs, { subcategoria: product.subcategory, SUBCATEGORIA: product.subcategory });}
 
-    // Salva foto enviada diretamente no site pro Firestore com padrão oficial de nomes e tags
-    if (product.photoBase64 || product.photoData || product.photoDoc) {
+    // Salva foto(s) enviada(s) diretamente pro Firestore com padrão oficial de nomes, tags e compressão preservando qualidade de zoom
+    const rawPhotosList = Array.isArray(product.photosBase64) && product.photosBase64.length > 0
+      ? product.photosBase64
+      : (Array.isArray(product.photos) && product.photos.length > 0 ? product.photos : null);
+
+    if (rawPhotosList && rawPhotosList.length > 0) {
+      const { compressProductPhoto } = require('../catalog/image-compressor');
+      const savedUrls = [];
+      let firstPhotoDoc = null;
+
+      for (let idx = 0; idx < rawPhotosList.length; idx++) {
+        const pItem = rawPhotosList[idx];
+        const rawBase = typeof pItem === 'string' ? pItem : (pItem.base64 || pItem.photoBase64 || pItem.data || '');
+        const cType = (typeof pItem === 'object' && pItem.contentType) ? pItem.contentType : (product.photoContentType || 'image/jpeg');
+        let pDoc = (typeof pItem === 'object' && pItem.id && pItem.data) ? pItem : buildFirestorePhotoDocument(dataWithTs, {
+          base64Data: String(rawBase).replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, ''),
+          contentType: cType,
+          source: 'WEBSITE_DIRECT',
+          index: idx,
+        });
+
+        try {
+          pDoc = await compressProductPhoto(pDoc, { preserveZoomQuality: true });
+        } catch {
+          // Fallback silencioso
+        }
+
+        await this.saveProductPhoto(pDoc);
+        savedUrls.push(`/api/images/${pDoc.id}`);
+        if (idx === 0) {
+          firstPhotoDoc = pDoc;
+        }
+      }
+
+      const existingImgs = Array.isArray(product.images)
+        ? product.images.filter((x) => x && !savedUrls.includes(x))
+        : [];
+      dataWithTs.images = [...savedUrls, ...existingImgs];
+      dataWithTs.imageUrl = savedUrls[0] || existingImgs[0] || '';
+      if (firstPhotoDoc) {
+        dataWithTs.imageFileId = firstPhotoDoc.id;
+        dataWithTs.imagePathCache = `/api/images/${firstPhotoDoc.id}`;
+        dataWithTs.tagsAi = firstPhotoDoc.tagsAi;
+        dataWithTs.tags_ia = firstPhotoDoc.tagsAi;
+        dataWithTs.descriptionAi = firstPhotoDoc.descriptionAi;
+        dataWithTs.descricao_ia = firstPhotoDoc.descriptionAi;
+      }
+
+      delete dataWithTs.photosBase64;
+      delete dataWithTs.photos;
+      delete dataWithTs.photoBase64;
+      delete dataWithTs.photoData;
+      delete dataWithTs.photoDoc;
+    } else if (product.photoBase64 || product.photoData || product.photoDoc) {
       let photoDoc = product.photoDoc || buildFirestorePhotoDocument(dataWithTs, {
         base64Data: String(product.photoBase64 || product.photoData || '').replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, ''),
         contentType: product.photoContentType || 'image/jpeg',
@@ -915,15 +980,18 @@ class FirestoreRepository {
 
       try {
         const { compressProductPhoto } = require('../catalog/image-compressor');
-        photoDoc = await compressProductPhoto(photoDoc);
+        photoDoc = await compressProductPhoto(photoDoc, { preserveZoomQuality: true });
       } catch {
         // Fallback silencioso
       }
 
       await this.saveProductPhoto(photoDoc);
 
+      const existingImgs = Array.isArray(product.images)
+        ? product.images.filter((x) => x && x !== `/api/images/${photoDoc.id}`)
+        : [];
       dataWithTs.imageUrl = `/api/images/${photoDoc.id}`;
-      dataWithTs.images = [dataWithTs.imageUrl];
+      dataWithTs.images = [dataWithTs.imageUrl, ...existingImgs];
       dataWithTs.imageFileId = photoDoc.id;
       dataWithTs.imagePathCache = dataWithTs.imageUrl;
       dataWithTs.tagsAi = photoDoc.tagsAi;
@@ -2710,6 +2778,60 @@ class FirestoreRepository {
 
   // --- Notificações ---
 
+  /**
+   * Envia notificação de venda finalizada para todos os usuários com papel ADMIN.
+   * @param {Object} order Dados do pedido / venda finalizada
+   * @param {Object} [options] Informações adicionais de contexto (canal, notas)
+   * @returns {Promise<Array<Object>>} Lista de notificações criadas para os administradores
+   */
+  async notifyAllAdminUsersOfSale(order, options = {}) {
+    if (!order) {
+      return [];
+    }
+
+    let adminUsers = [];
+    try {
+      const allUsers = await this.getAllUsers();
+      adminUsers = allUsers.filter((u) => u.active !== false && u.role === 'ADMIN');
+    } catch (err) {
+      Logger.warn('Erro ao listar usuários para notificação de ADMIN', { error: err.message });
+    }
+
+    if (adminUsers.length === 0) {
+      adminUsers = [{ id: 'usr-edmar', name: 'Edmar Júnio (Admin)', role: 'ADMIN' }];
+    }
+
+    const orderId = order.id || `ord-${Date.now()}`;
+    const shortId = String(orderId).slice(-6);
+    const totalFormatted = Number(order.total || 0).toFixed(2).replace('.', ',');
+    const customer = order.customerName || 'Cliente';
+    const payment = order.paymentMethod || 'PIX';
+    const itemsCount = Array.isArray(order.items) ? order.items.length : 0;
+    const sourceLabel = order.source === 'CAIXA_MANUAL' ? 'Caixa / Balcão' : (order.source === 'WEB_CATALOG' ? 'Catálogo Digital' : 'WhatsApp');
+
+    const createdNotifications = [];
+
+    for (const admin of adminUsers) {
+      const notif = await this.createNotification({
+        toUserId: admin.id,
+        toUserName: admin.name,
+        targetRole: 'ADMIN',
+        type: 'SALE_COMPLETED',
+        orderId,
+        title: `🎉 Nova Venda Finalizada! (Pedido #${shortId})`,
+        message: `Venda de R$ ${totalFormatted} finalizada para ${customer} via ${payment} (${sourceLabel}). ${itemsCount} item(ns).`,
+        orderTotal: Number(order.total || 0),
+        paymentMethod: payment,
+        itemsCount,
+        customerName: customer,
+        source: order.source || options.source || 'CATALOG',
+      });
+      createdNotifications.push(notif);
+    }
+
+    return createdNotifications;
+  }
+
   async createNotification(notifData) {
     const now = new Date().toISOString();
 
@@ -2740,6 +2862,19 @@ class FirestoreRepository {
   }
 
   async getUserNotifications(userId) {
+    let isAdmin = false;
+    if (userId) {
+      try {
+        const users = await this.getAllUsers();
+        const user = users.find((u) => u.id === userId);
+        if (user && user.role === 'ADMIN') {
+          isAdmin = true;
+        }
+      } catch {
+        isAdmin = false;
+      }
+    }
+
     if (this.firestore) {
       try {
         const snap = await this.firestore
@@ -2759,6 +2894,7 @@ class FirestoreRepository {
               (n) =>
                 !n.toUserId ||
                 n.toUserId === userId ||
+                (isAdmin && n.targetRole === 'ADMIN') ||
                 userId === 'usr-edmar'
             );
           }
@@ -2773,11 +2909,12 @@ class FirestoreRepository {
       }
     }
 
-    if (userId && userId !== 'usr-edmar') {
+    if (userId && userId !== 'usr-edmar' && !isAdmin) {
       return this.inMemoryNotifications.filter(
         (n) =>
           !n.toUserId ||
-          n.toUserId === userId
+          n.toUserId === userId ||
+          (isAdmin && n.targetRole === 'ADMIN')
       );
     }
 
