@@ -29,6 +29,9 @@
     "express": "5.2.1",
     "firebase-admin": "13.10.0",
     "googleapis": "183.0.0",
+    "lucide-react": "^1.54.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
     "sharp": "^0.35.5"
   },
   "devDependencies": {

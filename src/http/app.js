@@ -1089,6 +1089,25 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
   app.get('/api/products', handleInventoryRequest);
   app.get('/api/catalog', handleInventoryRequest);
 
+  // Consultoria Botânica com Agente Conflora AI
+  app.post('/api/ai/botanical-consultant', async (req, res) => {
+    try {
+      const { query, history } = req.body || {};
+      const { BotanicalConsultantService } = require('../ai/botanical-consultant');
+      const catalogProducts = await messageService.firestoreRepo.getAllProducts();
+      const result = await BotanicalConsultantService.consult({
+        query: query || '',
+        history: history || [],
+        catalogProducts: catalogProducts || [],
+        agentService: messageService?.agentService || null,
+      });
+      res.status(200).json(result);
+    } catch (err) {
+      Logger.error('Erro na consultoria botânica Conflora AI', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // Servir Foto de Produto Armazenada no Cloud Firestore
   app.get('/api/images/:id', async (req, res) => {
     try {

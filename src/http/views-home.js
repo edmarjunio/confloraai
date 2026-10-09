@@ -80,18 +80,19 @@ function renderHomeHtml() {
     }
 
     :root {
-      --primary: #15803d;
-      --primary-dark: #14532d;
-      --primary-light: #dcfce7;
-      --accent: #22c55e;
+      --primary: #2E9348;
+      --primary-dark: #237438;
+      --primary-light: #eaf6ed;
+      --accent: #2E9348;
       --earth: #78350f;
-      --sand: #fef3c7;
-      --gold: #d97706;
-      --bg: #f8fafc;
+      --sand: #fef9c3;
+      --gold: #F5C518;
+      --accent-gold: #F5C518;
+      --bg: #F8F9FA;
       --card-bg: #ffffff;
-      --text: #0f172a;
+      --text: #1A1A1A;
       --text-muted: #64748b;
-      --border: #e2e8f0;
+      --border: #E5E7EB;
       --wa-color: #25d366;
       --danger: #ef4444;
 
@@ -675,8 +676,33 @@ function renderHomeHtml() {
       flex-direction: column;
       box-shadow: 0 4px 12px rgba(0,0,0,0.03);
       height: fit-content;
+      max-height: calc(100vh - 70px);
+      overflow-y: auto;
       position: sticky;
       top: 54px;
+    }
+    .bottom-sheet-handle-bar {
+      display: none;
+    }
+    .bottom-sheet-close-btn {
+      display: none;
+    }
+    .cart-bottom-sheet-backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(15, 23, 42, 0.55);
+      backdrop-filter: blur(2px);
+      z-index: 115;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease-out;
+    }
+    .cart-bottom-sheet-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
     }
     .cart-header {
       display: flex;
@@ -1039,6 +1065,432 @@ function renderHomeHtml() {
       .mobile-cart-float-bar {
         display: flex;
       }
+      .cart-panel {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        top: auto;
+        width: 100%;
+        max-height: 88vh;
+        border-radius: 24px 24px 0 0;
+        z-index: 120;
+        box-shadow: 0 -12px 36px rgba(0,0,0,0.22);
+        transform: translateY(105%);
+        transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+        padding: 12px 18px 24px 18px;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      .cart-panel.bottom-sheet-open {
+        transform: translateY(0);
+      }
+      .bottom-sheet-handle-bar {
+        display: flex;
+        justify-content: center;
+        padding-bottom: 8px;
+        cursor: grab;
+      }
+      .bottom-sheet-handle {
+        width: 44px;
+        height: 5px;
+        background: #cbd5e1;
+        border-radius: 4px;
+      }
+      .bottom-sheet-close-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: #f1f5f9;
+        border: none;
+        color: #64748b;
+        font-size: 15px;
+        font-weight: bold;
+        cursor: pointer;
+      }
+    }
+
+    /* CONFLORA AI - AGENTE BOTÂNICO */
+    .botanical-ai-fab {
+      position: fixed;
+      right: 18px;
+      bottom: 84px;
+      width: 54px;
+      height: 54px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #2E9348 0%, #1e6d33 100%);
+      border: 2px solid #F5C518;
+      box-shadow: 0 6px 20px rgba(46, 147, 72, 0.4), 0 2px 6px rgba(0,0,0,0.15);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 95;
+      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s;
+      outline: none;
+    }
+    @media (min-width: 981px) {
+      .botanical-ai-fab {
+        bottom: 24px;
+        right: 24px;
+        width: 58px;
+        height: 58px;
+      }
+    }
+    .botanical-ai-fab:hover {
+      transform: scale(1.08);
+      box-shadow: 0 8px 24px rgba(46, 147, 72, 0.5);
+    }
+    .botanical-ai-fab:active {
+      transform: scale(0.95);
+    }
+    .ai-fab-icon {
+      font-size: 24px;
+      line-height: 1;
+    }
+    .ai-fab-badge {
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      background: #F5C518;
+      color: #1A1A1A;
+      font-size: 10px;
+      font-weight: 900;
+      padding: 1px 5px;
+      border-radius: 8px;
+      border: 1px solid white;
+      letter-spacing: 0.3px;
+    }
+
+    /* CHAT DRAWER DO AGENTE BOTÂNICO */
+    .botanical-ai-drawer {
+      position: fixed;
+      right: 24px;
+      bottom: 92px;
+      width: 410px;
+      max-width: calc(100vw - 24px);
+      height: 600px;
+      max-height: calc(100vh - 110px);
+      background: #FFFFFF;
+      border: 1px solid #E5E7EB;
+      border-radius: 20px;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.22);
+      z-index: 125;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transform: scale(0.92) translateY(20px);
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .botanical-ai-drawer.open {
+      transform: scale(1) translateY(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    @media (max-width: 640px) {
+      .botanical-ai-drawer {
+        right: 0;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        max-width: 100%;
+        height: 85vh;
+        max-height: 85vh;
+        border-radius: 22px 22px 0 0;
+        transform: translateY(105%);
+      }
+      .botanical-ai-drawer.open {
+        transform: translateY(0);
+      }
+    }
+
+    .ai-drawer-header {
+      background: linear-gradient(135deg, #2E9348 0%, #1e6d33 100%);
+      color: white;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 2px solid #F5C518;
+    }
+    .ai-drawer-title-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .ai-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+      border: 2px solid #F5C518;
+    }
+    .ai-title-text h3 {
+      font-size: 14px;
+      font-weight: 800;
+      margin: 0;
+      color: white;
+      letter-spacing: 0.3px;
+    }
+    .ai-title-text span {
+      font-size: 11px;
+      color: #dcfce7;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .ai-status-dot {
+      width: 7px;
+      height: 7px;
+      background: #4ade80;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .ai-chat-messages {
+      flex: 1;
+      padding: 14px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      background: #F8F9FA;
+    }
+
+    .ai-msg {
+      display: flex;
+      flex-direction: column;
+      max-width: 88%;
+      animation: aiMsgFadeIn 0.2s ease-out;
+    }
+    @keyframes aiMsgFadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .ai-msg.bot {
+      align-self: flex-start;
+    }
+    .ai-msg.user {
+      align-self: flex-end;
+    }
+    .ai-bubble {
+      padding: 10px 14px;
+      border-radius: 14px;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .ai-msg.bot .ai-bubble {
+      background: white;
+      color: #1A1A1A;
+      border: 1px solid #E5E7EB;
+      border-bottom-left-radius: 4px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+    }
+    .ai-msg.user .ai-bubble {
+      background: #2E9348;
+      color: white;
+      border-bottom-right-radius: 4px;
+      box-shadow: 0 2px 6px rgba(46, 147, 72, 0.25);
+    }
+
+    /* MINI CARDS DE PRODUTOS RECOMENDADOS DENTRO DO CHAT */
+    .ai-recommendations-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 8px;
+      width: 100%;
+    }
+    .ai-product-mini-card {
+      background: white;
+      border: 1px solid #E5E7EB;
+      border-radius: 12px;
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+      transition: border-color 0.15s;
+    }
+    .ai-product-mini-card:hover {
+      border-color: #2E9348;
+    }
+    .ai-mini-card-img {
+      width: 50px;
+      height: 50px;
+      border-radius: 8px;
+      object-fit: cover;
+      background: #f1f5f9;
+      flex-shrink: 0;
+    }
+    .ai-mini-card-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .ai-mini-card-tag {
+      font-size: 10px;
+      color: #64748b;
+      text-transform: uppercase;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .ai-mini-card-name {
+      font-size: 12px;
+      font-weight: 700;
+      color: #1A1A1A;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin: 1px 0;
+    }
+    .ai-mini-card-price {
+      font-size: 13px;
+      font-weight: 800;
+      color: #2E9348;
+    }
+    .ai-mini-add-btn {
+      background: #2E9348;
+      color: white;
+      border: none;
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: all 0.15s;
+    }
+    .ai-mini-add-btn:hover {
+      background: #237438;
+      transform: scale(1.02);
+    }
+    .ai-mini-add-btn.added {
+      background: #14532d;
+    }
+
+    /* CHIPS DE SUGESTÃO RÁPIDA */
+    .ai-chips-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .ai-quick-chip {
+      background: white;
+      border: 1px solid #E5E7EB;
+      border-radius: 16px;
+      padding: 5px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #1A1A1A;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s;
+    }
+    .ai-quick-chip:hover {
+      border-color: #2E9348;
+      background: #eaf6ed;
+      color: #2E9348;
+    }
+
+    .ai-drawer-input-bar {
+      padding: 10px 12px;
+      background: white;
+      border-top: 1px solid #E5E7EB;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .ai-chat-input {
+      flex: 1;
+      padding: 9px 12px;
+      border: 1px solid #E5E7EB;
+      border-radius: 10px;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .ai-chat-input:focus {
+      border-color: #2E9348;
+    }
+    .ai-chat-send-btn {
+      background: #2E9348;
+      color: white;
+      border: none;
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      flex-shrink: 0;
+    }
+    .ai-chat-send-btn:hover {
+      background: #237438;
+      transform: scale(1.04);
+    }
+
+    /* COACH MARKS TOOLTIP */
+    .ai-coach-mark {
+      position: fixed;
+      right: 20px;
+      bottom: 148px;
+      background: #1A1A1A;
+      color: white;
+      padding: 12px 14px;
+      border-radius: 12px;
+      max-width: 250px;
+      font-size: 12px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+      z-index: 96;
+      border-left: 4px solid #F5C518;
+      animation: coachFade 0.3s ease-out;
+    }
+    @keyframes coachFade {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .ai-coach-mark strong {
+      display: block;
+      color: #F5C518;
+      margin-bottom: 2px;
+    }
+    .ai-coach-mark p {
+      margin: 0 0 8px 0;
+      color: #e2e8f0;
+      line-height: 1.35;
+    }
+    .coach-mark-dismiss-btn {
+      background: #2E9348;
+      color: white;
+      border: none;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
     }
 
     /* MODAIS */
@@ -1321,7 +1773,6 @@ function renderHomeHtml() {
         <img id="userHeaderPic" style="width:24px; height:24px; border-radius:50%; object-fit:cover;" src="" />
         <span id="userHeaderName" style="font-weight:700; font-size:12px; cursor:pointer;" onclick="openCustomerPortalModal()"></span>
         <span id="userHeaderBadge" style="font-size:10px; padding:2px 6px; border-radius:10px; color:white; font-weight:800;"></span>
-        <button type="button" class="google-auth-btn" onclick="logoutCurrentUser()">Sair</button>
       </div>
       <button type="button" class="admin-link-btn" onclick="handleAdminPanelClick()" data-i18n="header.adminPortal">
         ⚙️ Painel da Equipe
@@ -1379,7 +1830,6 @@ function renderHomeHtml() {
             <option value="nome_desc">Ordem: Z a A</option>
             <option value="preco_asc">Menor Preço</option>
             <option value="preco_desc">Maior Preço</option>
-            <option value="mais_vendidos" data-i18n="sort.bestSelling">MAIS VENDIDOS</option>
           </select>
         </div>
 
@@ -1392,16 +1842,29 @@ function renderHomeHtml() {
         <div id="catalogSentinel" style="height: 20px; width: 100%; pointer-events: none;"></div>
       </section>
 
-      <!-- PAINEL LATERAL: SACOLA & CHECKOUT -->
+      <!-- OVERLAY BACKDROP DA BOTTOM SHEET NO MOBILE -->
+      <div class="cart-bottom-sheet-backdrop" id="cartBottomSheetBackdrop" onclick="closeCartBottomSheet()"></div>
+
+      <!-- PAINEL LATERAL (DESKTOP) / BOTTOM SHEET (MOBILE): SACOLA & CHECKOUT -->
       <aside class="cart-panel" id="cartPanel">
+        <!-- BARRA / HANDLE DA BOTTOM SHEET MOBILE -->
+        <div class="bottom-sheet-handle-bar">
+          <div class="bottom-sheet-handle"></div>
+        </div>
+
         <div class="cart-header">
           <div style="display:flex; align-items:center; gap:8px;">
             <h2 class="panel-title" data-i18n="cart.title">Sua Sacola</h2>
             <span id="cartItemCounter" style="font-size:12px; background:var(--primary-light); color:var(--primary-dark); padding:2px 8px; border-radius:10px; font-weight:800;">0 itens</span>
           </div>
-          <button type="button" class="action-btn" id="clearCartBtn" onclick="clearCart()" style="display:none; background:none; border:none; color:#ef4444; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="cart.clearButton">
-            Limpar
-          </button>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button type="button" class="action-btn" id="clearCartBtn" onclick="clearCart()" style="display:none; background:none; border:none; color:#ef4444; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="cart.clearButton">
+              Limpar
+            </button>
+            <button type="button" class="bottom-sheet-close-btn" onclick="closeCartBottomSheet()" title="Fechar Sacola" aria-label="Fechar Sacola">
+              ✕
+            </button>
+          </div>
         </div>
 
         <!-- ITENS DA SACOLA -->
@@ -1448,13 +1911,13 @@ function renderHomeHtml() {
 
         <div class="form-group">
           <label class="form-label" data-i18n="customer.phoneLabel">WhatsApp com DDD:</label>
-          <input type="text" id="custPhone" class="form-input" placeholder="Ex: 5564999351616" data-i18n-placeholder="customer.phonePlaceholder" oninput="saveCustomerDataToStorage()" />
+          <input type="text" id="custPhone" class="form-input" placeholder="(64) 99935-1616" data-i18n-placeholder="customer.phonePlaceholder" oninput="applyPhoneMask(event); saveCustomerDataToStorage();" />
         </div>
 
         <div class="form-group">
           <label class="form-label" data-i18n="customer.deliveryTypeLabel">Como deseja receber?</label>
           <div class="type-switcher">
-            <button type="button" class="type-option-btn selected" id="typeDeliveryBtn" onclick="setOrderType('DELIVERY')" data-i18n="customer.deliveryOption">🛵 Entrega</button>
+            <button type="button" class="type-option-btn selected" id="typeDeliveryBtn" onclick="setOrderType('DELIVERY')" data-i18n="customer.deliveryOption">🛵 Entrega em Mineiros - GO</button>
             <button type="button" class="type-option-btn" id="typePickupBtn" onclick="setOrderType('PICKUP')" data-i18n="customer.pickupOption">🏬 Retirada no Viveiro</button>
           </div>
         </div>
@@ -1516,6 +1979,65 @@ function renderHomeHtml() {
       <span style="margin-left:8px; font-weight:800; color:#86efac;" id="mobCartTotal">R$ 0,00</span>
     </div>
     <span style="background:white; color:#14532d; padding:4px 12px; border-radius:14px; font-size:12px; font-weight:800;" data-i18n="cart.viewButton">Ver Sacola ➔</span>
+  </div>
+
+  <!-- COACH MARK ONBOARDING TOOLTIP DO AGENTE BOTÂNICO IA -->
+  <div id="aiOnboardingTooltip" class="ai-coach-mark" style="display:none;">
+    <strong>🌿 Conflora AI</strong>
+    <p>Peça dicas para o seu ambiente ou tire dúvidas botânicas em tempo real!</p>
+    <button type="button" class="coach-mark-dismiss-btn" onclick="dismissAiCoachMark(event)">Entendi</button>
+  </div>
+
+  <!-- FLOATING ACTION BUTTON (FAB) DO AGENTE BOTÂNICO IA -->
+  <button type="button" class="botanical-ai-fab" id="botanicalAiFab" onclick="toggleBotanicalAiChat()" title="Consultoria Botânica Conflora AI" aria-label="Consultoria Botânica Conflora AI">
+    <span class="ai-fab-icon">🌿✨</span>
+    <span class="ai-fab-badge">IA</span>
+  </button>
+
+  <!-- BACKDROP DO CHAT IA NO MOBILE -->
+  <div class="cart-bottom-sheet-backdrop" id="botanicalAiBackdrop" onclick="closeBotanicalAiChat()"></div>
+
+  <!-- GAVETA / DRAWER DO CHAT BOTÂNICO IA CONFLORA -->
+  <div class="botanical-ai-drawer" id="botanicalAiDrawer" role="dialog" aria-label="Consultoria Botânica Conflora AI">
+    <div class="ai-drawer-header">
+      <div class="ai-drawer-title-group">
+        <div class="ai-avatar">🌿</div>
+        <div class="ai-title-text">
+          <h3>Conflora AI</h3>
+          <span><i class="ai-status-dot"></i> Consultora Botânica • Online</span>
+        </div>
+      </div>
+      <button type="button" class="bottom-sheet-close-btn" onclick="closeBotanicalAiChat()" title="Fechar Chat" aria-label="Fechar Chat">
+        ✕
+      </button>
+    </div>
+
+    <!-- MENSAGENS DO CHAT -->
+    <div class="ai-chat-messages" id="aiChatMessages">
+      <div class="ai-msg bot">
+        <div class="ai-bubble">
+          Olá! Sou a <strong>Conflora AI</strong>, sua consultora botânica em Mineiros - GO! 🌿✨
+          <br><br>
+          Posso te ajudar a encontrar a planta perfeita para o seu ambiente, solo e rotina de rega no Cerrado. Escolha um tema abaixo ou pergunte livremente:
+          <div class="ai-chips-container" id="aiQuickChips">
+            <button type="button" class="ai-quick-chip" onclick="handleAiQuickChip('Planta para sombra')">🌿 Planta para sombra</button>
+            <button type="button" class="ai-quick-chip" onclick="handleAiQuickChip('Frutíferas para vasos')">🪴 Frutíferas para vasos</button>
+            <button type="button" class="ai-quick-chip" onclick="handleAiQuickChip('Plantas seguras para pets')">🐱 Pet-friendly</button>
+            <button type="button" class="ai-quick-chip" onclick="handleAiQuickChip('Horta para apartamento')">🏡 Horta em apê</button>
+            <button type="button" class="ai-quick-chip" onclick="handleAiQuickChip('Adubos e substratos')">🌱 Adubos & Substratos</button>
+            <button type="button" class="ai-quick-chip" onclick="handleAiQuickChip('Plantas para sol pleno')">☀️ Sol pleno</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BARRA DE INPUT DO CHAT -->
+    <div class="ai-drawer-input-bar">
+      <input type="text" id="aiChatInput" class="ai-chat-input" placeholder="Ex: Qual planta aguenta sol forte?" onkeydown="if(event.key==='Enter') sendAiChatMessage()" />
+      <button type="button" class="ai-chat-send-btn" id="aiChatSendBtn" onclick="sendAiChatMessage()" title="Enviar pergunta">
+        ➤
+      </button>
+    </div>
   </div>
 
   <!-- MODAL DE GALERIA DE FOTOS COM CARROSSEL E ZOOM HD -->
@@ -1665,79 +2187,24 @@ function renderHomeHtml() {
       </div>
 
       <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:8px; padding:10px 12px; margin-bottom:14px; font-size:12px; color:#166534; line-height:1.4;">
-        ✨ <strong>O login é 100% opcional!</strong> Você pode comprar à vontade sem conta. Ao entrar, você salva seu endereço, acompanha seus pedidos e vê os produtos que mais compra!
+        ✨ <strong>O login é 100% opcional!</strong> Você pode comprar à vontade sem conta.
       </div>
 
-      <!-- ABAS DO LOGIN -->
-      <div class="portal-tabs" style="margin-bottom:16px;">
-        <button class="portal-tab-btn active" id="authTabGoogleBtn" onclick="switchAuthTab('google')">🚀 Google (1-clique)</button>
-        <button class="portal-tab-btn" id="authTabLoginBtn" onclick="switchAuthTab('login')">🔑 Entrar</button>
-        <button class="portal-tab-btn" id="authTabRegisterBtn" onclick="switchAuthTab('register')">📝 Criar Conta</button>
-      </div>
-
-      <!-- ABA 1: GOOGLE SIGN-IN -->
-      <div id="authContentGoogle">
-        <p style="font-size:13px; color:#64748b; margin-bottom:12px;">
-          Faça login rápido com sua conta Google (Gmail ou Workspace):
-        </p>
-        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:14px; margin-bottom:14px;">
-          <p data-google-status role="status">Selecione sua conta na janela segura do Google.</p>
-          <button type="button" class="checkout-submit-btn" id="googleLoginButton" data-google-login disabled onclick="submitGoogleLogin()" style="display:flex; align-items:center; justify-content:center; gap:8px;">
-            <svg style="width:16px; height:16px;" viewBox="0 0 24 24"><path fill="#ffffff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#ffffff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#ffffff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#ffffff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
-            Entrar com Google
-          </button>
-        </div>
-      </div>
-
-      <!-- ABA 2: EMAIL E SENHA -->
-      <div id="authContentLogin" style="display:none;">
-        <form onsubmit="submitPasswordLogin(event)">
-          <div style="margin-bottom:10px;">
-            <label style="font-size:12px; font-weight:bold; color:#475569;">E-mail cadastrado:</label>
-            <input type="email" id="loginEmailInput" required placeholder="seuemail@exemplo.com" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; margin-top:4px;" />
-          </div>
-          <div style="margin-bottom:14px;">
-            <label style="font-size:12px; font-weight:bold; color:#475569;">Sua Senha:</label>
-            <input type="password" id="loginPassInput" required placeholder="••••••••" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; margin-top:4px;" />
-          </div>
-          <button type="submit" class="checkout-submit-btn" style="width:100%;">Acessar Minha Conta</button>
-        </form>
-      </div>
-
-      <!-- ABA 3: CRIAR CONTA DE CLIENTE -->
-      <div id="authContentRegister" style="display:none;">
-        <form onsubmit="submitRegisterAccount(event)">
-          <div style="margin-bottom:8px;">
-            <label style="font-size:12px; font-weight:bold; color:#475569;">Nome Completo:</label>
-            <input type="text" id="regNameInput" required placeholder="Ex: Mariana Silva" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;" />
-          </div>
-          <div style="margin-bottom:8px;">
-            <label style="font-size:12px; font-weight:bold; color:#475569;">E-mail:</label>
-            <input type="email" id="regEmailInput" required placeholder="mariana@exemplo.com" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;" />
-          </div>
-          <div style="margin-bottom:8px;">
-            <label style="font-size:12px; font-weight:bold; color:#475569;">Senha (mínimo 4 caracteres):</label>
-            <input type="password" id="regPassInput" required minlength="4" placeholder="Crie uma senha segura" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;" />
-          </div>
-          <div style="margin-bottom:8px;">
-            <label style="font-size:12px; font-weight:bold; color:#475569;">WhatsApp / Telefone com DDD:</label>
-            <input type="text" id="regPhoneInput" placeholder="64999990000" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;" />
-          </div>
-          <div style="margin-bottom:12px;">
-            <label style="font-size:12px; font-weight:bold; color:#475569;">Endereço de Entrega (Mineiros - GO):</label>
-            <input type="text" id="regAddressInput" placeholder="Rua, Número e Bairro" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;" />
-          </div>
-          <button type="submit" class="checkout-submit-btn" style="width:100%;">Criar Minha Conta Conflora</button>
-        </form>
+      <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:14px; margin-bottom:14px;">
+        <p data-google-status role="status" style="font-size:13px; margin-bottom:10px;">Acesso rápido com sua conta Google:</p>
+        <button type="button" class="checkout-submit-btn" id="googleLoginButton" data-google-login disabled onclick="submitGoogleLogin()" style="display:flex; align-items:center; justify-content:center; gap:8px;">
+          <svg style="width:16px; height:16px;" viewBox="0 0 24 24"><path fill="#ffffff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#ffffff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#ffffff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#ffffff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+          Entrar com Google
+        </button>
       </div>
 
       <div style="text-align:center; margin-top:14px;">
-        <button type="button" class="action-btn" onclick="closeAuthModal()" style="background:#f1f5f9; border:none; padding:8px 16px; border-radius:6px; cursor:pointer; color:#64748b; font-weight:600;">Fechar</button>
+        <button type="button" onclick="closeAuthModal()" style="background:#f1f5f9; border:none; padding:8px 16px; border-radius:6px; cursor:pointer; color:#64748b; font-weight:600;">Fechar</button>
       </div>
     </div>
   </div>
 
-  <!-- MODAL: PAINEL DO CLIENTE (HISTÓRICO, MAIS COMPRADOS E STATUS) -->
+  <!-- MODAL: PAINEL DO CLIENTE -->
   <div class="modal-overlay" id="customerPortalModal">
     <div class="modal-box" style="max-width:750px; padding:22px;">
       <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:12px; margin-bottom:14px;">
@@ -1829,7 +2296,6 @@ function renderHomeHtml() {
         'sort.nameDesc': 'Ordem: Z a A',
         'sort.priceAsc': 'Menor Preço',
         'sort.priceDesc': 'Maior Preço',
-        'sort.bestSelling': 'MAIS VENDIDOS',
         'cart.title': 'Sua Sacola',
         'cart.itemsCount': 'item(ns)',
         'cart.emptyMessage': 'Sua sacola está vazia.<br>Clique em <strong>+</strong> nos produtos para adicionar em 1 clique!',
@@ -1892,7 +2358,6 @@ function renderHomeHtml() {
         'sort.nameDesc': 'Order: Z to A',
         'sort.priceAsc': 'Lowest Price',
         'sort.priceDesc': 'Highest Price',
-        'sort.bestSelling': 'BEST SELLERS',
         'cart.title': 'Your Cart',
         'cart.itemsCount': 'item(s)',
         'cart.emptyMessage': 'Your cart is empty.<br>Click <strong>+</strong> on items to add with 1 click!',
@@ -1955,7 +2420,6 @@ function renderHomeHtml() {
         'sort.nameDesc': 'Orden: Z a A',
         'sort.priceAsc': 'Menor Precio',
         'sort.priceDesc': 'Mayor Precio',
-        'sort.bestSelling': 'MÁS VENDIDOS',
         'cart.title': 'Tu Cesta',
         'cart.itemsCount': 'artículo(s)',
         'cart.emptyMessage': 'Tu cesta está vacía.<br>¡Haz clic en <strong>+</strong> en los produtos para añadir en 1 clic!',
@@ -2075,6 +2539,7 @@ function renderHomeHtml() {
     function setLanguage(locale) {
       localization.setLocale(locale);
     }
+    window.setLanguage = setLanguage;
 
     function updateLanguageButtons(activeLocale) {
       const ptBtn = document.getElementById('langPtBtn');
@@ -2461,10 +2926,7 @@ function renderHomeHtml() {
       }
 
       // ORDENAÇÃO (PADRÃO A-Z via localeCompare("pt-BR"))
-      if (sort === 'mais_vendidos') {
-        list.sort((a, b) => (Number(b.salesCount) || 0) - (Number(a.salesCount) || 0)
-          || (a.descricao || a.name || '').localeCompare(b.descricao || b.name || '', 'pt-BR'));
-      } else if (sort === 'nome_desc') {
+      if (sort === 'nome_desc') {
         list.sort((a, b) => (b.descricao || b.name || '').localeCompare(a.descricao || a.name || '', 'pt-BR'));
       } else if (sort === 'preco_asc') {
         list.sort((a, b) => (Number(a.valor_num || a.price || 0)) - (Number(b.valor_num || b.price || 0)));
@@ -3064,7 +3526,7 @@ function renderHomeHtml() {
             </div>
             <div class="cart-qty-ctrl-row">
               <button class="qty-btn" onclick="changeQty('\${item.id}', -1)" title="Diminuir">-</button>
-              <span style="font-weight:bold; min-width:38px; text-align:center; font-size:12px; cursor:\${item.isKg ? 'pointer' : 'default'};" \${item.isKg ? ('onclick="openKgModal(\\\'' + item.id + '\\\')"') : ''}>
+              <span style="font-weight:bold; min-width:38px; text-align:center; font-size:12px; cursor:\${item.isKg ? 'pointer' : 'default'};" \${item.isKg ? ('onclick="openKgModal(&quot;' + item.id + '&quot;)"') : ''}>
                 \${qtyDisplay}
               </span>
               <button class="qty-btn" onclick="changeQty('\${item.id}', 1)" title="Aumentar">+</button>
@@ -3513,7 +3975,25 @@ function renderHomeHtml() {
       window.print();
     }
 
-    // 8. CONTROLES DE SCROLL FLUTUANTES (FABs)
+    // 8. CONTROLES DE SCROLL FLUTUANTES (FABs) & BOTTOM SHEET MOBILE
+    function openCartBottomSheet() {
+      const panel = document.getElementById('cartPanel');
+      const backdrop = document.getElementById('cartBottomSheetBackdrop');
+      if (panel) panel.classList.add('bottom-sheet-open');
+      if (backdrop) backdrop.classList.add('open');
+      if (window.innerWidth <= 980) {
+        document.body.style.overflow = 'hidden';
+      }
+    }
+
+    function closeCartBottomSheet() {
+      const panel = document.getElementById('cartPanel');
+      const backdrop = document.getElementById('cartBottomSheetBackdrop');
+      if (panel) panel.classList.remove('bottom-sheet-open');
+      if (backdrop) backdrop.classList.remove('open');
+      document.body.style.overflow = '';
+    }
+
     function scrollToTop() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -3522,9 +4002,214 @@ function renderHomeHtml() {
       if (bar) bar.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
     function scrollToCart() {
-      const panel = document.getElementById('cartPanel');
-      if (panel) panel.scrollIntoView({ behavior: 'smooth' });
+      if (window.innerWidth <= 980) {
+        openCartBottomSheet();
+      } else {
+        const panel = document.getElementById('cartPanel');
+        if (panel) panel.scrollIntoView({ behavior: 'smooth' });
+      }
     }
+
+    function applyPhoneMask(e) {
+      if (!e || !e.target) return;
+      let val = e.target.value.replace(/[^0-9]/g, '');
+      if (val.length > 11) val = val.substring(0, 11);
+      if (val.length <= 2) {
+        e.target.value = val.length ? '(' + val : '';
+      } else if (val.length <= 6) {
+        e.target.value = '(' + val.substring(0, 2) + ') ' + val.substring(2);
+      } else if (val.length <= 10) {
+        e.target.value = '(' + val.substring(0, 2) + ') ' + val.substring(2, 6) + '-' + val.substring(6);
+      } else {
+        e.target.value = '(' + val.substring(0, 2) + ') ' + val.substring(2, 7) + '-' + val.substring(7, 11);
+      }
+    }
+
+    // --- AGENTE BOTÂNICO IA (CONFLORA AI) ---
+    let isAiChatOpen = false;
+
+    function toggleBotanicalAiChat() {
+      if (isAiChatOpen) {
+        closeBotanicalAiChat();
+      } else {
+        openBotanicalAiChat();
+      }
+    }
+
+    function openBotanicalAiChat() {
+      const drawer = document.getElementById('botanicalAiDrawer');
+      const backdrop = document.getElementById('botanicalAiBackdrop');
+      if (drawer) drawer.classList.add('open');
+      if (backdrop && window.innerWidth <= 640) backdrop.classList.add('open');
+      isAiChatOpen = true;
+      dismissAiCoachMark();
+      const input = document.getElementById('aiChatInput');
+      if (input) setTimeout(() => input.focus(), 150);
+    }
+
+    function closeBotanicalAiChat() {
+      const drawer = document.getElementById('botanicalAiDrawer');
+      const backdrop = document.getElementById('botanicalAiBackdrop');
+      if (drawer) drawer.classList.remove('open');
+      if (backdrop) backdrop.classList.remove('open');
+      isAiChatOpen = false;
+    }
+
+    function dismissAiCoachMark(e) {
+      if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+      const tooltip = document.getElementById('aiOnboardingTooltip');
+      if (tooltip) tooltip.style.display = 'none';
+      try {
+        localStorage.setItem('conflora_coachmark_ai_seen', 'true');
+      } catch (_) {}
+    }
+
+    function checkAiCoachMark() {
+      try {
+        const seen = localStorage.getItem('conflora_coachmark_ai_seen');
+        if (!seen) {
+          setTimeout(() => {
+            const tooltip = document.getElementById('aiOnboardingTooltip');
+            if (tooltip) tooltip.style.display = 'block';
+          }, 1500);
+        }
+      } catch (_) {}
+    }
+
+    function handleAiQuickChip(topicText) {
+      const input = document.getElementById('aiChatInput');
+      if (input) input.value = topicText;
+      sendAiChatMessage();
+    }
+
+    async function sendAiChatMessage() {
+      const input = document.getElementById('aiChatInput');
+      const messagesBox = document.getElementById('aiChatMessages');
+      if (!input || !messagesBox) return;
+
+      const query = input.value.trim();
+      if (!query) return;
+
+      // Adiciona balão do usuário
+      const userDiv = document.createElement('div');
+      userDiv.className = 'ai-msg user';
+      userDiv.innerHTML = '<div class="ai-bubble">' + escapeHtml(query) + '</div>';
+      messagesBox.appendChild(userDiv);
+      input.value = '';
+      messagesBox.scrollTop = messagesBox.scrollHeight;
+
+      // Indicador de digitação
+      const typingDiv = document.createElement('div');
+      typingDiv.className = 'ai-msg bot';
+      typingDiv.id = 'aiTypingIndicator';
+      typingDiv.innerHTML = '<div class="ai-bubble" style="color:#64748b; font-style:italic;">🌿 Conflora AI consultando o catálogo do viveiro...</div>';
+      messagesBox.appendChild(typingDiv);
+      messagesBox.scrollTop = messagesBox.scrollHeight;
+
+      try {
+        const res = await fetch('/api/ai/botanical-consultant', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: query }),
+        });
+
+        const data = await res.json();
+        if (typingDiv.parentNode) typingDiv.parentNode.removeChild(typingDiv);
+
+        const botDiv = document.createElement('div');
+        botDiv.className = 'ai-msg bot';
+
+        let recommendationsHtml = '';
+        if (Array.isArray(data.recommendations) && data.recommendations.length > 0) {
+          recommendationsHtml = '<div class="ai-recommendations-grid">' + data.recommendations.map(function(p) {
+            return '<div class="ai-product-mini-card" data-prod-id="' + p.id + '">' +
+              '<img src="' + p.imageUrl + '" alt="' + escapeHtml(p.name) + '" class="ai-mini-card-img" loading="lazy" decoding="async" />' +
+              '<div class="ai-mini-card-info">' +
+                '<span class="ai-mini-card-tag">' + escapeHtml(p.category) + '</span>' +
+                '<div class="ai-mini-card-name">' + escapeHtml(p.name) + '</div>' +
+                '<div class="ai-mini-card-price">' + p.formattedPrice + '</div>' +
+              '</div>' +
+              '<button type="button" class="ai-mini-add-btn" data-add-id="' + p.id + '" onclick="addFromAiChat(this.dataset.addId, event)">' +
+                '+ Sacola' +
+              '</button>' +
+            '</div>';
+          }).join('') + '</div>';
+        }
+
+        let formattedReply = (data.reply || 'Aqui estão algumas opções especiais do nosso viveiro!');
+        const nl = String.fromCharCode(10);
+        formattedReply = formattedReply
+          .split(nl + nl).join('<br><br>')
+          .split(nl).join('<br>');
+        while (formattedReply.indexOf('**') !== -1) {
+          const firstIdx = formattedReply.indexOf('**');
+          const nextIdx = formattedReply.indexOf('**', firstIdx + 2);
+          if (nextIdx === -1) break;
+          formattedReply = formattedReply.substring(0, firstIdx) + '<strong>' + formattedReply.substring(firstIdx + 2, nextIdx) + '</strong>' + formattedReply.substring(nextIdx + 2);
+        }
+
+        botDiv.innerHTML = '<div class="ai-bubble">' + formattedReply + recommendationsHtml + '</div>';
+        messagesBox.appendChild(botDiv);
+        messagesBox.scrollTop = messagesBox.scrollHeight;
+      } catch (err) {
+        if (typingDiv.parentNode) typingDiv.parentNode.removeChild(typingDiv);
+
+        // Fallback no catálogo local do cliente
+        const cached = typeof CatalogRepository !== 'undefined' ? CatalogRepository.getCachedProducts() : (Array.isArray(rawProducts) ? rawProducts : []);
+        const fallbackProducts = cached.filter(function(p) {
+          const text = ((p.descricao || p.name || '') + ' ' + (p.subcategoria || p.subcategory || '')).toLowerCase();
+          return query.toLowerCase().split(' ').some(function(token) { return token.trim().length > 2 && text.includes(token.trim()); });
+        }).slice(0, 3);
+
+        const botDiv = document.createElement('div');
+        botDiv.className = 'ai-msg bot';
+        let recommendationsHtml = '';
+        if (fallbackProducts.length > 0) {
+          recommendationsHtml = '<div class="ai-recommendations-grid">' + fallbackProducts.map(function(p) {
+            const price = Number(p.valor_num || p.price || 0);
+            const img = (p.images && p.images[0]) || p.imageUrl || p.imageurl || 'https://images.unsplash.com/photo-1512428813834-c702c7702b78?w=800';
+            return '<div class="ai-product-mini-card" data-prod-id="' + p.id + '">' +
+              '<img src="' + img + '" alt="' + escapeHtml(p.descricao || p.name) + '" class="ai-mini-card-img" loading="lazy" decoding="async" />' +
+              '<div class="ai-mini-card-info">' +
+                '<span class="ai-mini-card-tag">' + escapeHtml(p.subcategoria || p.categoria || 'Plantas') + '</span>' +
+                '<div class="ai-mini-card-name">' + escapeHtml(p.descricao || p.name) + '</div>' +
+                '<div class="ai-mini-card-price">R$ ' + price.toFixed(2).replace('.', ',') + '</div>' +
+              '</div>' +
+              '<button type="button" class="ai-mini-add-btn" data-add-id="' + p.id + '" onclick="addFromAiChat(this.dataset.addId, event)">' +
+                '+ Sacola' +
+              '</button>' +
+            '</div>';
+          }).join('') + '</div>';
+        }
+
+        botDiv.innerHTML = '<div class="ai-bubble">🌿 Encontrei estas opções no viveiro Conflora que atendem ao que você procura:' + recommendationsHtml + '</div>';
+        messagesBox.appendChild(botDiv);
+        messagesBox.scrollTop = messagesBox.scrollHeight;
+      }
+    }
+
+    function addFromAiChat(productId, event) {
+      if (event) event.stopPropagation();
+      cartStore.addItem(productId, 1);
+      const targetBtn = event ? event.currentTarget : null;
+      if (targetBtn) {
+        const originalText = targetBtn.innerHTML;
+        targetBtn.classList.add('added');
+        targetBtn.innerHTML = '✓ Adicionado!';
+        setTimeout(function() {
+          targetBtn.classList.remove('added');
+          targetBtn.innerHTML = originalText;
+        }, 1400);
+      }
+    }
+
+    window.addFromAiChat = addFromAiChat;
+    window.toggleBotanicalAiChat = toggleBotanicalAiChat;
+    window.openBotanicalAiChat = openBotanicalAiChat;
+    window.closeBotanicalAiChat = closeBotanicalAiChat;
+    window.sendAiChatMessage = sendAiChatMessage;
+    window.handleAiQuickChip = handleAiQuickChip;
+    window.dismissAiCoachMark = dismissAiCoachMark;
 
     window.addEventListener('scroll', () => {
       const fabs = document.getElementById('fabsGroup');
@@ -3586,79 +4271,6 @@ function renderHomeHtml() {
     }
     const openGoogleLoginModal = openAuthModal;
     const closeGoogleLoginModal = closeAuthModal;
-
-    function switchAuthTab(tab) {
-      const gTab = document.getElementById('authTabGoogleBtn');
-      const lTab = document.getElementById('authTabLoginBtn');
-      const rTab = document.getElementById('authTabRegisterBtn');
-      const gC = document.getElementById('authContentGoogle');
-      const lC = document.getElementById('authContentLogin');
-      const rC = document.getElementById('authContentRegister');
-
-      if (gTab) gTab.classList.toggle('active', tab === 'google');
-      if (lTab) lTab.classList.toggle('active', tab === 'login');
-      if (rTab) rTab.classList.toggle('active', tab === 'register');
-
-      if (gC) gC.style.display = tab === 'google' ? 'block' : 'none';
-      if (lC) lC.style.display = tab === 'login' ? 'block' : 'none';
-      if (rC) rC.style.display = tab === 'register' ? 'block' : 'none';
-    }
-
-    async function submitPasswordLogin(e) {
-      if (e) e.preventDefault();
-      const email = document.getElementById('loginEmailInput').value.trim();
-      const password = document.getElementById('loginPassInput').value.trim();
-
-      try {
-        const res = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password }),
-        });
-        const data = await res.json();
-        if (data.success && data.user) {
-          currentUser = data.user;
-          if (data.user.role === 'ADMIN') {
-            localStorage.setItem('conflora_op', JSON.stringify(data.user));
-          }
-          applyUserUI(currentUser);
-          closeAuthModal();
-          alert('🌿 Bem-vindo(a), ' + (currentUser.name || 'Cliente') + '! Login efetuado com sucesso.');
-        } else {
-          alert('Erro no login: ' + (data.error || 'Verifique seus dados'));
-        }
-      } catch (err) {
-        alert('Erro de conexão ao entrar: ' + err.message);
-      }
-    }
-
-    async function submitRegisterAccount(e) {
-      if (e) e.preventDefault();
-      const name = document.getElementById('regNameInput').value.trim();
-      const email = document.getElementById('regEmailInput').value.trim();
-      const password = document.getElementById('regPassInput').value.trim();
-      const phone = document.getElementById('regPhoneInput').value.trim();
-      const address = document.getElementById('regAddressInput').value.trim();
-
-      try {
-        const res = await fetch('/api/auth/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, email, password, phone, address }),
-        });
-        const data = await res.json();
-        if (data.success && data.user) {
-          currentUser = data.user;
-          applyUserUI(currentUser);
-          closeAuthModal();
-          alert('🌿 Conta criada com sucesso! Perfil: CLIENTE. Você pode acompanhar suas compras e acumular pontos.');
-        } else {
-          alert('Erro no cadastro: ' + (data.error || 'Tente novamente'));
-        }
-      } catch (err) {
-        alert('Erro de conexão ao cadastrar: ' + err.message);
-      }
-    }
 
     async function submitGoogleLogin() {
       const button = document.getElementById('googleLoginButton');
@@ -3783,6 +4395,7 @@ function renderHomeHtml() {
     initCurrentUser();
     loadSavedCustomerData();
     loadCatalog();
+    checkAiCoachMark();
   </script>
 ${renderFirebaseAuthScript()}
 </body>
