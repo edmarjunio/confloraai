@@ -1,8 +1,0 @@
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    // Todas as operações passam pelo backend, que verifica identidade e papel.
-    // Firebase Admin SDK usa IAM e não depende de acesso direto do cliente.
-    match /{document=**} { allow read, write: if false; }
-  }
-}

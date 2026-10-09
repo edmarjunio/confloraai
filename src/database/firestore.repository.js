@@ -1,4 +1,6 @@
-const { t } = require('../i18n');
+const { TextEncoder } = require('node:util');
+const { URL } = require('node:url');
+const { safeUser } = require('../security/web-session');
 const config = require('../config/env');
 const Logger = require('../shared/logger');
 
@@ -120,7 +122,7 @@ function auditProductRecords(records) {
     return {
       products,
       errors: [
-        t("interface.message.6b842d0e27f7"),
+        'Nenhum registro para importar. Envie uma lista JSON [ ... ].',
       ],
       warnings,
     };
@@ -135,7 +137,7 @@ function auditProductRecords(records) {
       typeof record !== 'object' ||
       Array.isArray(record)
     ) {
-      errors.push(prefix + t("interface.text.dd894729f222"));
+      errors.push(prefix + 'O produto deve ser um objeto.');
       return;
     }
 
@@ -162,7 +164,7 @@ function auditProductRecords(records) {
     if (!isImportDocumentId(id)) {
       errors.push(
         prefix +
-          t("interface.text.3d046470796d")
+          'Product ID é obrigatório e deve ser um ID válido do Firestore.'
       );
     }
 
@@ -173,15 +175,15 @@ function auditProductRecords(records) {
     ids.add(id);
 
     if (!name) {
-      errors.push(prefix + t("interface.text.19e504849110"));
+      errors.push(prefix + 'DESCRIÇÃO é obrigatória.');
     }
 
     if (!category) {
-      errors.push(prefix + t("interface.text.99ab4c2107a3"));
+      errors.push(prefix + 'CATEGORIA é obrigatória.');
     }
 
     if (!Number.isFinite(price) || price <= 0) {
-      errors.push(prefix + t("interface.text.bbb173d1d692"));
+      errors.push(prefix + 'VALOR deve ser um número maior que zero.');
     }
 
     if (!['ATIVO', 'INATIVO'].includes(status)) {
@@ -217,7 +219,7 @@ function auditProductRecords(records) {
 
     const optionalFields = [
       [['SUBCATEGORIA', 'subcategory'], 'subcategory'],
-      [[t("interface.message.babbbe39d957"), 'address'], 'address'],
+      [['ENDEREÇO', 'address'], 'address'],
       [['VARIACAO', 'variation'], 'variation'],
       [['ImageFileId'], 'imageFileId'],
       [['ImagePathCache'], 'imagePathCache'],
@@ -239,7 +241,7 @@ function auditProductRecords(records) {
 
     const stock = readImportField(record, [
       'stockQuantity',
-      t("interface.message.77b86589aa02"),
+      'ESTOQUE',
     ]);
 
     if (stock !== undefined) {
@@ -247,7 +249,7 @@ function auditProductRecords(records) {
 
       if (!Number.isFinite(quantity) || quantity < 0) {
         errors.push(
-          prefix + t("interface.text.59f4fe1d056f")
+          prefix + 'Estoque deve ser um número maior ou igual a zero.'
         );
       } else {
         Object.assign(product, {
@@ -275,7 +277,7 @@ function auditProductRecords(records) {
       Array.isArray(imageList) &&
       images.length !== imageList.length
     ) {
-      errors.push(prefix + t("interface.text.3ca8475aa7d3"));
+      errors.push(prefix + 'images contém uma URL inválida.');
     }
 
     if (isImportImageUrl(imageValue)) {
@@ -297,7 +299,7 @@ function auditProductRecords(records) {
       warnings.push(
         prefix +
           name +
-          t("interface.text.f7018c4deeb4")
+          ': sem URL pública de imagem; não será gerada foto automaticamente.'
       );
     }
 
@@ -348,7 +350,7 @@ class FirestoreRepository {
       {
         id: 'usr-edmar',
         name: 'Edmar Júnio (Izibola)',
-        email: t("interface.message.ef748fa607f2"),
+        email: 'edmarjuniob@gmail.com',
         role: 'ADMIN',
         pin: '1234',
         active: true,
@@ -357,7 +359,7 @@ class FirestoreRepository {
       {
         id: 'usr-caixa1',
         name: 'Atendente do Caixa',
-        email: t("interface.message.e60c1293832f"),
+        email: 'caixa1@conflora.com.br',
         role: 'CAIXA',
         pin: '0000',
         active: true,
@@ -365,7 +367,7 @@ class FirestoreRepository {
       },
     ];
 
-    for (const u of defaultUsers) {
+    for (const u of this.isInMemory ? defaultUsers : []) {
       this.inMemoryUsers.set(u.id, u);
     }
 
@@ -403,16 +405,11 @@ class FirestoreRepository {
 
   // --- Produtos e Estoque (AppSheet & WhatsApp) ---
 
-  async getProductCollectionPath() {
-    if (!this.firestore) { return 'products'; }
-    const state = await require('../import/product-catalog').catalogState(this.firestore);
-    return state.collectionPath;
-  }
   async getAllProducts() {
     if (this.firestore) {
       try {
         const snapshot = await this.firestore
-          .collection(await this.getProductCollectionPath())
+          .collection('products')
           .get();
 
         // ID do documento é a identidade.
@@ -430,7 +427,7 @@ class FirestoreRepository {
 
         return products;
       } catch (err) {
-        Logger.warn(t("interface.message.aceb9c0cefb9"), {
+        Logger.warn('Erro ao buscar produtos no Firestore', {
           error: err.message,
         });
 
@@ -446,25 +443,27 @@ class FirestoreRepository {
       return;
     }
 
-    const dataWithTs = {
-      ...product,
-      updatedAt: new Date().toISOString(),
-    };
+    const dataWithTs = { ...product, updatedAt: new Date().toISOString() };
+    if (product.name !== undefined) {Object.assign(dataWithTs, { canonicalName: product.name, descricao: product.name, 'DESCRIÇÃO': product.name });}
+    if (product.price !== undefined) {Object.assign(dataWithTs, { valor_num: product.price, VALOR: product.price });}
+    if (product.category !== undefined) {Object.assign(dataWithTs, { categoria: product.category, CATEGORIA: product.category });}
+    if (product.subcategory !== undefined) {Object.assign(dataWithTs, { subcategoria: product.subcategory, SUBCATEGORIA: product.subcategory });}
 
     if (this.firestore) {
       try {
         await this.firestore
-          .collection(await this.getProductCollectionPath())
+          .collection('products')
           .doc(String(product.id))
           .set(dataWithTs, { merge: true });
       } catch (err) {
-        Logger.warn(t("interface.message.83c1a480eae0"), {
+        Logger.warn('Erro ao salvar produto no Firestore', {
           error: err.message,
         });
+        throw err;
       }
     }
 
-    this.inMemoryProducts.set(String(product.id), dataWithTs);
+    this.inMemoryProducts.set(String(product.id), { ...this.inMemoryProducts.get(String(product.id)), ...dataWithTs });
   }
 
   async deleteProduct(productId) {
@@ -475,13 +474,14 @@ class FirestoreRepository {
     if (this.firestore) {
       try {
         await this.firestore
-          .collection(await this.getProductCollectionPath())
+          .collection('products')
           .doc(String(productId))
           .delete();
       } catch (err) {
-        Logger.warn(t("interface.message.f8c0743c2b37"), {
+        Logger.warn('Erro ao excluir produto no Firestore', {
           error: err.message,
         });
+        throw err;
       }
     }
 
@@ -506,10 +506,10 @@ class FirestoreRepository {
     );
 
     const orderData = {
-      customerName: customerName || t("interface.message.ab04009d0837"),
+      customerName: customerName || 'Venda Balcão / Caixa',
       customerPhone: customerPhone || 'Presencial',
       orderType: 'PICKUP',
-      deliveryAddress: t("interface.message.b653ac70e067"),
+      deliveryAddress: 'Venda Presencial no Balcão Conflora',
       paymentMethod: paymentMethod || 'DINHEIRO',
       items: items || [],
       total,
@@ -522,7 +522,7 @@ class FirestoreRepository {
 
     await this.deductStock(
       items,
-      customerPhone || t("interface.message.8f051f37a16e")
+      customerPhone || 'Balcão'
     );
 
     return order;
@@ -538,7 +538,7 @@ class FirestoreRepository {
       return {
         success: false,
         count: 0,
-        message: t("interface.message.0cf48fa56719"),
+        message: 'Nenhum registro para importar',
       };
     }
 
@@ -620,8 +620,46 @@ class FirestoreRepository {
 
     return {
       success: false,
-      message: t("interface.message.d74fb7bd1678"),
+      message: 'Tipo de dados desconhecido',
     };
+  }
+
+  async replaceProducts(records) {
+    const audit = auditProductRecords(records);
+    if (audit.errors.length) {return { success: false, count: 0, errors: audit.errors, message: audit.errors.join('\n') };}
+    if (!this.firestore && !this.isInMemory) {throw new Error('Firestore indisponível.');}
+    const previous = await this.getAllProducts();
+    const ids = new Set(audit.products.map(p => p.id));
+    const obsolete = previous.filter(p => !ids.has(p.id));
+    const prepared = audit.products.map(p => ({ ...p, stockQuantity: p.stockQuantity ?? 0, updatedAt: new Date().toISOString() }));
+    let count = 0;
+    let removed = 0;
+    try {
+      // Grava todos os novos dados antes de remover IDs ausentes na planilha.
+      for (let offset = 0; offset < prepared.length; offset += 200) {
+        const chunk = prepared.slice(offset, offset + 200);
+        if (this.firestore) {
+          const batch = this.firestore.batch();
+          for (const item of chunk) {batch.set(this.firestore.collection('products').doc(item.id), item);}
+          await batch.commit();
+        }
+        for (const item of chunk) {this.inMemoryProducts.set(item.id, item);}
+        count += chunk.length;
+      }
+      for (let offset = 0; offset < obsolete.length; offset += 200) {
+        const chunk = obsolete.slice(offset, offset + 200);
+        if (this.firestore) {
+          const batch = this.firestore.batch();
+          for (const item of chunk) {batch.delete(this.firestore.collection('products').doc(item.id));}
+          await batch.commit();
+        }
+        for (const item of chunk) {this.inMemoryProducts.delete(item.id);}
+        removed += chunk.length;
+      }
+      return { success: true, count, removed, mode: 'replace', storage: this.firestore ? 'firestore' : 'memory' };
+    } catch (error) {
+      return { success: false, count, removed, partial: true, message: 'A substituição não foi concluída. Confira o catálogo e reenvie a mesma planilha para concluir. ' + error.message };
+    }
   }
 
   async batchUpsertProducts(products) {
@@ -634,7 +672,7 @@ class FirestoreRepository {
 
     if (!this.firestore && !this.isInMemory) {
       throw new Error(
-        t("interface.message.a3d76f699c84")
+        'Firestore indisponível. Nenhum produto foi gravado.'
       );
     }
 
@@ -651,7 +689,7 @@ class FirestoreRepository {
 
       if (!isImportDocumentId(id) || ids.has(id)) {
         throw new Error(
-          t("interface.text.97b72ac92175") + id
+          'ID inválido ou duplicado no lote: ' + id
         );
       }
 
@@ -684,7 +722,7 @@ class FirestoreRepository {
           for (const item of chunk) {
             batch.set(
               this.firestore
-                .collection(await this.getProductCollectionPath())
+                .collection('products')
                 .doc(item.id),
               item,
               { merge: true }
@@ -694,7 +732,7 @@ class FirestoreRepository {
           await batch.commit();
         } catch (err) {
           Logger.warn(
-            t("interface.message.208af56b464b"),
+            'Erro na importação de produtos no Firestore',
             {
               error: err.message,
               committedCount,
@@ -702,7 +740,7 @@ class FirestoreRepository {
           );
 
           const failure = new Error(
-            t("interface.text.97691d620d2a") +
+            'Falha ao gravar produtos no Firestore: ' +
               err.message
           );
 
@@ -732,7 +770,7 @@ class FirestoreRepository {
 
     if (this.firestore) {
       Logger.info(
-        `${committedCount}${t("interface.message.caa8aa8ac923")}`
+        `${committedCount} produtos sincronizados no Firestore.`
       );
     }
 
@@ -775,7 +813,7 @@ class FirestoreRepository {
 
               if (item.productId) {
                 docRef = this.firestore
-                  .collection(await this.getProductCollectionPath())
+                  .collection('products')
                   .doc(String(item.productId));
 
                 const snap = await transaction.get(docRef);
@@ -787,7 +825,7 @@ class FirestoreRepository {
 
               if (!currentData) {
                 const querySnap = await this.firestore
-                  .collection(await this.getProductCollectionPath())
+                  .collection('products')
                   .where('name', '==', item.name)
                   .limit(1)
                   .get();
@@ -847,7 +885,7 @@ class FirestoreRepository {
         );
 
         Logger.info(
-          `${t("interface.message.18acdfa9cbe8")}${deductedList.length} itens.`
+          `Baixa atômica de estoque concluída no Firestore para ${deductedList.length} itens.`
         );
 
         return {
@@ -856,7 +894,7 @@ class FirestoreRepository {
         };
       } catch (err) {
         Logger.warn(
-          t("interface.message.bf97e5073674"),
+          'Erro ao realizar baixa atômica no Firestore; aplicando em memória',
           { error: err.message }
         );
       }
@@ -917,7 +955,7 @@ class FirestoreRepository {
         }));
       } catch (err) {
         Logger.warn(
-          t("interface.message.ac59a73926a5"),
+          'Erro ao buscar stock_movements no Firestore',
           { error: err.message }
         );
       }
@@ -933,7 +971,7 @@ class FirestoreRepository {
     if (this.firestore) {
       try {
         const docRef = this.firestore
-          .collection(await this.getProductCollectionPath())
+          .collection('products')
           .doc(String(productId));
 
         const snap = await docRef.get();
@@ -975,7 +1013,7 @@ class FirestoreRepository {
         }
       } catch (err) {
         Logger.warn(
-          t("interface.message.aef920bb8f66"),
+          'Erro ao dar entrada rápida no Firestore',
           { error: err.message }
         );
       }
@@ -1004,7 +1042,7 @@ class FirestoreRepository {
 
     return {
       success: false,
-      error: t("interface.message.9f5a2fd4316b"),
+      error: 'Produto não encontrado',
     };
   }
 
@@ -1030,7 +1068,7 @@ class FirestoreRepository {
         };
       } catch (err) {
         Logger.warn(
-          t("interface.message.6d3873a88841"),
+          'Erro ao salvar pedido direto no Firestore',
           { error: err.message }
         );
       }
@@ -1065,7 +1103,7 @@ class FirestoreRepository {
         }
       } catch (err) {
         Logger.warn(
-          t("interface.message.539bd8378739"),
+          'Erro ao buscar pedidos no Firestore',
           { error: err.message }
         );
       }
@@ -1098,7 +1136,7 @@ class FirestoreRepository {
         };
       } catch (err) {
         Logger.warn(
-          t("interface.message.09782b38904b"),
+          'Erro ao atualizar status do pedido no Firestore',
           { error: err.message }
         );
       }
@@ -1139,7 +1177,7 @@ class FirestoreRepository {
         return doc.exists;
       } catch (err) {
         Logger.warn(
-          t("interface.message.a568616f81d5"),
+          'Erro ao verificar mensagem no Firestore; usando fallback',
           { error: err.message }
         );
       }
@@ -1165,7 +1203,7 @@ class FirestoreRepository {
         return;
       } catch (err) {
         Logger.warn(
-          t("interface.message.1100abb0857f"),
+          'Erro ao registrar mensagem no Firestore; usando fallback',
           { error: err.message }
         );
       }
@@ -1192,7 +1230,7 @@ class FirestoreRepository {
         return snapshot.docs.map((doc) => doc.data());
       } catch (err) {
         Logger.warn(
-          t("interface.message.3af88edb4a09"),
+          'Erro ao buscar histórico no Firestore; usando fallback',
           { error: err.message }
         );
       }
@@ -1226,7 +1264,7 @@ class FirestoreRepository {
         return;
       } catch (err) {
         Logger.warn(
-          t("interface.message.d3c30966ac31"),
+          'Erro ao salvar mensagem no Firestore; usando fallback',
           { error: err.message }
         );
       }
@@ -1251,14 +1289,14 @@ class FirestoreRepository {
     if (this.firestore) {
       try {
         await this.firestore
-          .collection('pending_orders')
+          .collection('orders')
           .doc(phone)
           .set(dataWithTs, { merge: true });
 
         return;
       } catch (err) {
         Logger.warn(
-          t("interface.message.bcd0d9977c29"),
+          'Erro ao salvar pedido no Firestore; usando fallback',
           { error: err.message }
         );
       }
@@ -1275,14 +1313,14 @@ class FirestoreRepository {
     if (this.firestore) {
       try {
         const doc = await this.firestore
-          .collection('pending_orders')
+          .collection('orders')
           .doc(phone)
           .get();
 
         return doc.exists ? doc.data() : null;
       } catch (err) {
         Logger.warn(
-          t("interface.message.edc1b4506ef5"),
+          'Erro ao buscar pedido no Firestore; usando fallback',
           { error: err.message }
         );
       }
@@ -1306,7 +1344,7 @@ class FirestoreRepository {
         return doc.exists ? doc.data() : null;
       } catch (err) {
         Logger.warn(
-          t("interface.message.7cc880c2a254"),
+          'Erro ao buscar perfil do cliente no Firestore; usando fallback',
           { error: err.message }
         );
       }
@@ -1336,7 +1374,7 @@ class FirestoreRepository {
         return;
       } catch (err) {
         Logger.warn(
-          t("interface.message.55a46aeeb01b"),
+          'Erro ao salvar perfil do cliente no Firestore; usando fallback',
           { error: err.message }
         );
       }
@@ -1355,31 +1393,10 @@ class FirestoreRepository {
 
   async getAllUsers() {
     if (this.firestore) {
-      try {
-        const snap = await this.firestore
-          .collection('users')
-          .get();
-
-        if (!snap.empty) {
-          const list = snap.docs.map((d) => ({
-            id: d.id,
-            ...d.data(),
-          }));
-
-          for (const u of list) {
-            this.inMemoryUsers.set(u.id, u);
-          }
-
-          return list;
-        }
-      } catch (err) {
-        Logger.warn(
-          t("interface.message.406f0bb521a3"),
-          { error: err.message }
-        );
-      }
+      const snap = await this.firestore.collection('users').get();
+      return snap.docs.map(d => ({ ...d.data(), id: d.id }));
     }
-
+    if (!this.isInMemory) {throw new Error('Cadastro de usuários indisponível.');}
     return Array.from(this.inMemoryUsers.values());
   }
 
@@ -1400,9 +1417,6 @@ class FirestoreRepository {
       role = 'CLIENTE';
     }
 
-    if (email === 'edmarjuniob@gmail.com') {
-      role = 'ADMIN';
-    }
 
     const dataWithTs = {
       ...userData,
@@ -1421,9 +1435,10 @@ class FirestoreRepository {
           .set(dataWithTs, { merge: true });
       } catch (err) {
         Logger.warn(
-          t("interface.message.f5fefdbe6288"),
+          'Erro ao salvar usuário no Firestore',
           { error: err.message }
         );
+        throw err;
       }
     }
 
@@ -1445,20 +1460,24 @@ class FirestoreRepository {
     if (!email || !email.includes('@')) {
       return {
         success: false,
-        error: t("interface.message.3660cbe95340"),
+        error: 'E-mail inválido.',
       };
     }
 
     if (!password || password.length < 4) {
       return {
         success: false,
-        error: t("interface.message.df2e6afb065a"),
+        error: 'A senha deve conter pelo menos 4 caracteres.',
       };
     }
 
     const normalizedEmail = email
       .toLowerCase()
       .trim();
+
+    if (normalizedEmail === 'edmarjuniob@gmail.com') {
+      return { success: false, error: 'Use o Google para acessar a conta do administrador.' };
+    }
 
     const users = await this.getAllUsers();
 
@@ -1469,40 +1488,14 @@ class FirestoreRepository {
     );
 
     if (existing) {
-      // Se já existia e não tinha senha definida, vincula a senha.
-      if (!existing.password) {
-        existing.password = password;
-
-        if (phone) {existing.phone = phone;}
-        if (address) {existing.address = address;}
-
-        existing.updatedAt = new Date().toISOString();
-
-        await this.saveUser(existing);
-
-        const {
-          password: _p,
-          ...safeUser
-        } = existing;
-
-        return {
-          success: true,
-          user: safeUser,
-        };
-      }
-
       return {
         success: false,
         error:
-          t("interface.message.2786eadea14b"),
+          'Este e-mail já possui cadastro. Faça login com sua senha ou com o Google.',
       };
     }
 
-    const isSuperAdmin =
-      normalizedEmail === 'edmarjuniob@gmail.com';
-
-    const role =
-      isSuperAdmin ? 'ADMIN' : 'CLIENTE';
+    const role = 'CLIENTE';
 
     const newUser = {
       id: `usr-${Date.now()}`,
@@ -1520,14 +1513,11 @@ class FirestoreRepository {
 
     await this.saveUser(newUser);
 
-    const {
-      password: _p,
-      ...safeUser
-    } = newUser;
+    const userWithoutSecrets = safeUser(newUser);
 
     return {
       success: true,
-      user: safeUser,
+      user: userWithoutSecrets,
     };
   }
 
@@ -1535,7 +1525,7 @@ class FirestoreRepository {
     if (!email || !password) {
       return {
         success: false,
-        error: t("interface.message.4e158e19126a"),
+        error: 'Informe e-mail e senha.',
       };
     }
 
@@ -1555,14 +1545,14 @@ class FirestoreRepository {
       return {
         success: false,
         error:
-          t("interface.message.6d62651fde6e"),
+          'Usuário não encontrado com este e-mail. Crie sua conta primeiro!',
       };
     }
 
     if (user.active === false) {
       return {
         success: false,
-        error: t("interface.message.9776f063ac9c"),
+        error: 'Usuário inativo. Entre em contato com a Conflora.',
       };
     }
 
@@ -1578,19 +1568,15 @@ class FirestoreRepository {
     if (!isPasswordMatch && !isPinMatch) {
       return {
         success: false,
-        error: t("interface.message.87b42da84d33"),
+        error: 'Senha incorreta.',
       };
     }
 
-    const {
-      password: _p,
-      pin: _pin,
-      ...safeUser
-    } = user;
+    const userWithoutSecrets = safeUser(user);
 
     return {
       success: true,
-      user: safeUser,
+      user: userWithoutSecrets,
     };
   }
 
@@ -1604,7 +1590,7 @@ class FirestoreRepository {
       return {
         success: false,
         error:
-          t("interface.message.422ab444d7d7"),
+          'Perfil inválido. Escolha ADMIN, CAIXA ou CLIENTE.',
       };
     }
 
@@ -1617,7 +1603,7 @@ class FirestoreRepository {
     if (!user) {
       return {
         success: false,
-        error: t("interface.message.db7545469a0b"),
+        error: 'Usuário não encontrado.',
       };
     }
 
@@ -1626,14 +1612,11 @@ class FirestoreRepository {
 
     await this.saveUser(user);
 
-    const {
-      password: _p,
-      ...safeUser
-    } = user;
+    const userWithoutSecrets = safeUser(user);
 
     return {
       success: true,
-      user: safeUser,
+      user: userWithoutSecrets,
     };
   }
 
@@ -1650,7 +1633,7 @@ class FirestoreRepository {
           .delete();
       } catch (err) {
         Logger.warn(
-          t("interface.message.ba02d46b397a"),
+          'Erro ao excluir usuário no Firestore',
           { error: err.message }
         );
       }
@@ -1673,24 +1656,23 @@ class FirestoreRepository {
     if (!user) {
       return {
         success: false,
-        error: t("interface.message.160c07d98620"),
+        error: 'Usuário não encontrado',
       };
     }
 
     if (!user.active) {
       return {
         success: false,
-        error: t("interface.message.b8b7a568ff0b"),
+        error: 'Usuário inativo',
       };
     }
 
-    const hasCredential = Boolean(user.pin || user.password);
-    const matchesPin = Boolean(user.pin) && String(user.pin) === String(pin);
-    const matchesPassword = Boolean(user.password) && String(user.password) === String(pin);
-    if (!hasCredential || (!matchesPin && !matchesPassword)) {
+    if (!['ADMIN', 'CAIXA'].includes(user.role) || !pin ||
+      !((user.pin && String(user.pin) === String(pin)) ||
+        (user.password && String(user.password) === String(pin)))) {
       return {
         success: false,
-        error: t("interface.message.0a1c1dc8667a"),
+        error: 'PIN de segurança incorreto',
       };
     }
 
@@ -1781,7 +1763,7 @@ class FirestoreRepository {
           if (!productsMap.has(key)) {
             productsMap.set(key, {
               productId: item.productId || key,
-              name: item.name || t("interface.message.c09621194df1"),
+              name: item.name || 'Produto Conflora',
               unit: item.unit || 'UN',
               price,
               totalQuantityBought: 0,
@@ -1838,7 +1820,7 @@ class FirestoreRepository {
     diffLines.push({
       type: 'info',
       text:
-        `${t("interface.message.5e0f2d30e929")}${String(orderId).slice(-6)}${t("interface.message.b2fa641b01d2")}${requestedByName || 'Caixa'} @@`,
+        `@@ Pedido #${String(orderId).slice(-6)} - Alteração Solicitada por ${requestedByName || 'Caixa'} @@`,
     });
 
     if (
@@ -1848,13 +1830,13 @@ class FirestoreRepository {
       diffLines.push({
         type: 'del',
         text:
-          `${t("interface.message.96cc83caae49")}${originalOrder.paymentMethod || t("interface.message.01af1ecb8056")}`,
+          `- Forma de Pagamento: ${originalOrder.paymentMethod || 'Não informado'}`,
       });
 
       diffLines.push({
         type: 'add',
         text:
-          `${t("interface.message.15a482045530")}${proposedOrder.paymentMethod}`,
+          `+ Forma de Pagamento: ${proposedOrder.paymentMethod}`,
       });
     }
 
@@ -1882,13 +1864,13 @@ class FirestoreRepository {
       diffLines.push({
         type: 'del',
         text:
-          `${t("interface.message.019c2d651027")}${originalOrder.customerName || t("interface.message.01af1ecb8056")}`,
+          `- Cliente: ${originalOrder.customerName || 'Não informado'}`,
       });
 
       diffLines.push({
         type: 'add',
         text:
-          `${t("interface.message.18b4c4a99822")}${proposedOrder.customerName}`,
+          `+ Cliente: ${proposedOrder.customerName}`,
       });
     }
 
@@ -1914,13 +1896,13 @@ class FirestoreRepository {
         diffLines.push({
           type: 'del',
           text:
-            `${t("interface.message.9e0ccfe58b6e")}${it.quantity}x ${it.name}`,
+            `- Quantidade Anterior: ${it.quantity}x ${it.name}`,
         });
 
         diffLines.push({
           type: 'add',
           text:
-            `${t("interface.message.6c09979c512b")}${match.quantity}x ${it.name}`,
+            `+ Nova Quantidade: ${match.quantity}x ${it.name}`,
         });
       }
     });
@@ -1951,7 +1933,7 @@ class FirestoreRepository {
       requestedByName:
         requestedByName || 'Atendente do Caixa',
       reason:
-        reason || t("interface.message.387cd58c8af9"),
+        reason || 'Correção de lançamento de venda',
       diffLines,
       status: 'PENDING',
       createdAt: now,
@@ -1973,7 +1955,7 @@ class FirestoreRepository {
           );
       } catch (err) {
         Logger.warn(
-          t("interface.message.8f5d09f7042b"),
+          'Erro ao salvar solicitação de alteração no Firestore',
           { error: err.message }
         );
       }
@@ -2003,7 +1985,7 @@ class FirestoreRepository {
         }
       } catch (err) {
         Logger.warn(
-          t("interface.message.c9e9ec3a06da"),
+          'Erro ao buscar alterações no Firestore',
           { error: err.message }
         );
       }
@@ -2040,7 +2022,7 @@ class FirestoreRepository {
         }
       } catch (err) {
         Logger.warn(
-          t("interface.message.cbe7f79f2371"),
+          'Erro ao buscar pedido de alteração no Firestore',
           { error: err.message }
         );
       }
@@ -2055,14 +2037,14 @@ class FirestoreRepository {
     if (!reqObj) {
       return {
         success: false,
-        error: t("interface.message.1d513b038293"),
+        error: 'Solicitação não encontrada',
       };
     }
 
     if (action === 'APPROVED') {
       reqObj.status = 'APPROVED';
       reqObj.reviewedAt = now;
-      reqObj.reviewedBy = reviewedBy || t("interface.message.492128a33b96");
+      reqObj.reviewedBy = reviewedBy || 'Edmar Júnio';
 
       const updatedOrderData = {
         ...reqObj.proposedOrder,
@@ -2092,7 +2074,7 @@ class FirestoreRepository {
             });
         } catch (err) {
           Logger.warn(
-            t("interface.message.2f5addb9e2dd"),
+            'Erro ao aplicar alteração aprovada no Firestore',
             { error: err.message }
           );
         }
@@ -2110,9 +2092,9 @@ class FirestoreRepository {
         type: 'APPROVED',
         orderId: reqObj.orderId,
         title:
-          `${t("interface.message.53dcc240faaf")}${String(reqObj.orderId).slice(-6)})`,
+          `✅ Alteração Aprovada (Pedido #${String(reqObj.orderId).slice(-6)})`,
         message:
-          `${t("interface.message.61ba7b272021")}${Number(reqObj.proposedOrder.total || 0).toFixed(2).replace('.', ',')}${t("interface.fragment.c6b2b02da0c5")}`,
+          `Sua solicitação de alteração no valor de R$ ${Number(reqObj.proposedOrder.total || 0).toFixed(2).replace('.', ',')} foi aceita e consolidada pelo Administrador.`,
       });
 
       return {
@@ -2123,10 +2105,10 @@ class FirestoreRepository {
     } else {
       reqObj.status = 'REJECTED';
       reqObj.rejectionReason =
-        rejectionReason || t("interface.message.0b8a2cd5c982");
+        rejectionReason || 'Não autorizado pelo Administrador.';
       reqObj.reviewedAt = now;
       reqObj.reviewedBy =
-        reviewedBy || t("interface.message.492128a33b96");
+        reviewedBy || 'Edmar Júnio';
 
       if (this.firestore) {
         try {
@@ -2149,7 +2131,7 @@ class FirestoreRepository {
             );
         } catch (err) {
           Logger.warn(
-            t("interface.message.8c6c88672425"),
+            'Erro ao registrar recusa no Firestore',
             { error: err.message }
           );
         }
@@ -2162,9 +2144,9 @@ class FirestoreRepository {
         type: 'REJECTED',
         orderId: reqObj.orderId,
         title:
-          `${t("interface.message.3d4221292080")}${String(reqObj.orderId).slice(-6)})`,
+          `❌ Alteração Recusada (Pedido #${String(reqObj.orderId).slice(-6)})`,
         message:
-          `${t("interface.message.d829717d4a81")}${reqObj.rejectionReason}"`,
+          `Sua solicitação de alteração foi cancelada pelo Administrador. Motivo informado: "${reqObj.rejectionReason}"`,
         reason: reqObj.rejectionReason,
       });
 
@@ -2196,7 +2178,7 @@ class FirestoreRepository {
           .add(notif);
       } catch (err) {
         Logger.warn(
-          t("interface.message.4be378985d76"),
+          'Erro ao salvar notificação no Firestore',
           { error: err.message }
         );
       }
@@ -2235,7 +2217,7 @@ class FirestoreRepository {
         }
       } catch (err) {
         Logger.warn(
-          t("interface.message.15e40a4313bb"),
+          'Erro ao buscar notificações no Firestore',
           { error: err.message }
         );
       }
@@ -2263,7 +2245,7 @@ class FirestoreRepository {
           });
       } catch (err) {
         Logger.warn(
-          t("interface.message.b8232294f688"),
+          'Erro ao marcar notificação como lida no Firestore',
           { error: err.message }
         );
       }

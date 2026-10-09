@@ -448,7 +448,7 @@ test('16. Cardápio Digital & Painel Admin: Renderização e elementos essenciai
 
   const adminHtml = renderAdminHtml();
   assert.match(adminHtml, /Painel Operacional Conflora/);
-  assert.match(adminHtml, /Caixa &amp; Pedidos/);
+  assert.match(adminHtml, /Caixa & Pedidos/);
   assert.match(adminHtml, /Entrada Rápida de Estoque/);
   assert.match(adminHtml, /Cadastro de Produtos/);
   assert.match(adminHtml, /Importar Planilhas/);
@@ -588,7 +588,7 @@ test('18. Status Dashboard & Google Auth: Diagnóstico de conexões e autentica�
     const invData = await invRes.json();
     assert.strictEqual(invRes.status, 200);
     assert.ok(Array.isArray(invData.products));
-    assert.ok(invData.products.length >= 100);
+    assert.deepEqual(invData.products, [], 'Base vazia não deve ressuscitar catálogo padrão');
   } finally {
     server.close();
   }

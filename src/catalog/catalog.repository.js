@@ -65,6 +65,7 @@ class CatalogRepository {
       this.loadItems(this.mockData);
     } else {
       this.loadItems(DEFAULT_CATALOG_ITEMS);
+      this.lastCacheTime = 0;
     }
   }
 
@@ -82,13 +83,10 @@ class CatalogRepository {
     if (this.firestoreRepo && typeof this.firestoreRepo.getAllProducts === 'function') {
       try {
         const firestoreProducts = await this.firestoreRepo.getAllProducts();
-        if (firestoreProducts.length > 0 || await this.firestoreRepo.getProductCollectionPath() !== 'products') {
-          this.loadItems(firestoreProducts);
-          Logger.info(`Catálogo carregado via Firestore: ${this.items.length} produtos.`);
-          return;
-        }
+        this.loadItems(firestoreProducts || []);
+        return;
       } catch (err) {
-        Logger.warn('Aviso: falha ao consultar Firestore no catálogo; usando contingência padrão', { error: err.message });
+        throw err;
       }
     }
 

@@ -1,4 +1,3 @@
-const { tHtml } = require('../i18n');
 const { renderFirebaseAuthScript } = require('./firebase-client');
 const { GOOGLE_ANALYTICS_TAG } = require('./analytics');
 
@@ -20,7 +19,7 @@ function renderAdminHtml() {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${tHtml("interface.label.f9e271a4df57")}</title>
+  <title>Conflora AI — Painel Operacional, Caixa, Analytics & Equipe</title>
   ${GOOGLE_ANALYTICS_TAG}
   ${FETCH_SHIM_SCRIPT}
 
@@ -30,6 +29,7 @@ function renderAdminHtml() {
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,800;0,900;1,800&family=Plus+Jakarta+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 
   <style>
+    .action-btn:disabled { opacity: .45; cursor: not-allowed; }
     @font-face {
       font-family: 'Intro Rust';
       src: local('Intro Rust'), local('IntroRust-Base'), local('Montserrat-Black');
@@ -235,87 +235,86 @@ function renderAdminHtml() {
     <header>
       <div>
         <h1 style="font-size: 18px; display:flex; align-items:center; gap:8px;">
-          ${tHtml("interface.label.d3b681f2bd45")}
-          <span style="font-size:12px; font-weight:normal; background:rgba(255,255,255,0.2); padding:2px 8px; border-radius:10px;">${tHtml("interface.label.fd3f1f75de5f")}</span>
+          ⚙️ Painel Operacional Conflora
+          <span style="font-size:12px; font-weight:normal; background:rgba(255,255,255,0.2); padding:2px 8px; border-radius:10px;">Horta & Viveiro</span>
         </h1>
-        <p style="font-size: 11px; color: #bbf7d0; margin-top:2px;">${tHtml("interface.message.07c896303594")}</p>
+        <p style="font-size: 11px; color: #bbf7d0; margin-top:2px;">Controle de Caixa, Estoque, Auditoria de Vendas e Google Analytics</p>
       </div>
 
       <div class="header-actions">
         <div class="user-pill" id="userHeaderPill">
-          <span>${tHtml("interface.label.92aa31bd77ad")}</span>
+          <span>Operador:</span>
           <img id="loggedUserPhoto" alt="Foto do operador" referrerpolicy="no-referrer" hidden style="width:28px; height:28px; border-radius:50%; object-fit:cover;" />
-          <strong id="loggedUserName">${tHtml("interface.label.1258573b225a")}</strong>
-          <span class="role-badge" id="loggedUserRole">${tHtml("interface.label.835d6dc88b70")}</span>
+          <strong id="loggedUserName">Carregando...</strong>
+          <span class="role-badge" id="loggedUserRole">ADMIN</span>
         </div>
-        <button class="header-btn" onclick="openLoginModal()">${tHtml("interface.label.327e044293ae")}</button>
-        <button class="header-btn" onclick="logoutAdmin()" style="background:rgba(239,68,68,0.25); border:1px solid rgba(239,68,68,0.4);" title="${tHtml("interface.message.1bf69dca63ac")}">${tHtml("interface.message.09454f39c6ed")}</button>
+        <button class="header-btn" onclick="openLoginModal()">🔑 Trocar Operador</button>
+        <button class="header-btn" onclick="logoutAdmin()" style="background:rgba(239,68,68,0.25); border:1px solid rgba(239,68,68,0.4);" title="Sair da conta de operador/admin">🚪 Sair</button>
         <button class="header-btn" onclick="showTab('notifs')">🔔 <span id="notifBadge">0</span></button>
-        <a href="/" class="header-btn">${tHtml("interface.message.344ba51acfba")}</a>
+        <a href="/" class="header-btn">🌱 Ver Cardápio</a>
       </div>
     </header>
 
     <!-- NAVEGAÇÃO POR ABAS (FILTRADAS AUTOMATICAMENTE POR CARGO) -->
     <div class="nav-tabs" id="navTabsContainer">
       <!-- Abas ADMIN -->
-      <button class="nav-btn active" id="tabBtn-analytics" onclick="showTab('analytics')">${tHtml("interface.label.dfca290b852a")}</button>
-      <button class="nav-btn" id="tabBtn-cashier" onclick="showTab('cashier')">${tHtml("interface.message.c3bf0d0d1b44")}</button>
-      <button class="nav-btn" id="tabBtn-diff" onclick="showTab('diff')">${tHtml("interface.message.4771a9016dc6")} <span id="diffCountBadge" style="background:#ef4444; color:white; padding:1px 6px; border-radius:10px; font-size:10px; margin-left:4px; display:none;">0</span></button>
-      <button class="nav-btn" id="tabBtn-orders" onclick="showTab('orders')">${tHtml("interface.message.97c3c95bd5ed")}</button>
-      <a class="nav-btn" href="/lancamentos">${tHtml("interface.message.fb753ddf0084")}</a><a class="nav-btn" href="/fiados">${tHtml("interface.label.3eda97d0a64b")}</a><a class="nav-btn" href="/caixa">${tHtml("interface.message.5a3ac9c3b984")}</a>
-      <button class="nav-btn" id="tabBtn-stock" onclick="showTab('stock')">${tHtml("interface.message.6de89ed96183")}</button>
-      <button class="nav-btn" id="tabBtn-price" onclick="showTab('price')">${tHtml("interface.message.693410157af0")}</button>
-      <button class="nav-btn" id="tabBtn-products" onclick="showTab('products')">${tHtml("interface.message.2f828dde928a")}</button>
-      <button class="nav-btn" id="tabBtn-team" onclick="showTab('team')">${tHtml("interface.message.65f807e6587b")}</button>
-      <button class="nav-btn" id="tabBtn-import" onclick="showTab('import')">${tHtml("interface.message.3143b313236a")}</button>
-      <button class="nav-btn" id="tabBtn-notifs" onclick="showTab('notifs')">${tHtml("interface.message.d79b33802d7d")}</button>
-      <button class="nav-btn" id="tabBtn-status" onclick="showTab('status')">${tHtml("interface.message.0f5412629907")}</button>
+      <button class="nav-btn active" id="tabBtn-analytics" onclick="showTab('analytics')">📊 Analytics GA4</button>
+      <button class="nav-btn" id="tabBtn-cashier" onclick="showTab('cashier')">💰 Caixa & Pedidos / Vendas</button>
+      <button class="nav-btn" id="tabBtn-diff" onclick="showTab('diff')">🔀 Alterações (Git Diff) <span id="diffCountBadge" style="background:#ef4444; color:white; padding:1px 6px; border-radius:10px; font-size:10px; margin-left:4px; display:none;">0</span></button>
+      <button class="nav-btn" id="tabBtn-orders" onclick="showTab('orders')">📜 Histórico de Pedidos</button>
+      <button class="nav-btn" id="tabBtn-stock" onclick="showTab('stock')">📦 Entrada Rápida de Estoque</button>
+      <button class="nav-btn" id="tabBtn-price" onclick="showTab('price')">🔍 Consulta Rápida de Preço</button>
+      <button class="nav-btn" id="tabBtn-products" onclick="showTab('products')">🌱 Cadastro de Produtos</button>
+      <button class="nav-btn" id="tabBtn-team" onclick="showTab('team')">👥 Equipe & Permissões</button>
+      <button class="nav-btn" id="tabBtn-import" onclick="showTab('import')">📥 Importar Planilhas</button>
+      <button class="nav-btn" id="tabBtn-notifs" onclick="showTab('notifs')">🔔 Notificações</button>
+      <button class="nav-btn" id="tabBtn-status" onclick="showTab('status')">📡 Status das Conexões (Sheets & Webhook)</button>
     </div>
 
     <!-- ABA 1: ANALYTICS & MÉTRICAS (EXCLUSIVA ADMIN) -->
     <div id="tab-analytics" class="tab-content active">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
         <div>
-          <h2>${tHtml("interface.message.426ad02e4a6a")}</h2>
-          <p style="font-size:12px; color:#64748b;">${tHtml("interface.label.b61c7238dcb0")} <strong>${tHtml("interface.label.d98486448988")}</strong></p>
+          <h2>📊 Desempenho e Tráfego do Catálogo Digital</h2>
+          <p style="font-size:12px; color:#64748b;">Monitoramento em tempo real via <strong>Google tag (gtag.js): G-TX7SZBP9J8</strong></p>
         </div>
         <div style="display:flex; gap:8px; align-items:center;">
-          <span style="font-size:12px; background:#dcfce7; color:#166534; font-weight:bold; padding:4px 10px; border-radius:12px;">${tHtml("interface.label.68addf807195")}</span>
-          <button class="action-btn btn-blue" onclick="testGaEvent()">${tHtml("interface.label.a3ba68ed05f4")}</button>
+          <span style="font-size:12px; background:#dcfce7; color:#166534; font-weight:bold; padding:4px 10px; border-radius:12px;">🟢 GA4 Tag Ativa</span>
+          <button class="action-btn btn-blue" onclick="testGaEvent()">⚡ Testar Evento GA4</button>
         </div>
       </div>
 
       <div class="stat-grid">
         <div class="stat-card">
-          <div class="stat-label">${tHtml("interface.message.0fa32cae7498")}</div>
+          <div class="stat-label">Visitantes no Cardápio (Hoje)</div>
           <div class="stat-val" id="analyticsVisitors">142</div>
-          <div style="font-size:11px; color:#166534; margin-top:4px;">${tHtml("interface.message.1993fff39939")}</div>
+          <div style="font-size:11px; color:#166534; margin-top:4px;">↗ +18% em relação a ontem</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">${tHtml("interface.message.056d31a7d190")}</div>
+          <div class="stat-label">Visualizações de Produtos</div>
           <div class="stat-val" id="analyticsViews">684</div>
-          <div style="font-size:11px; color:#64748b; margin-top:4px;">${tHtml("interface.label.699336c35d6a")}</div>
+          <div style="font-size:11px; color:#64748b; margin-top:4px;">Fotos de plantas ampliadas</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">${tHtml("interface.message.06322a14c96f")}</div>
+          <div class="stat-label">Taxa de Conversão da Sacola</div>
           <div class="stat-val" id="analyticsConversion">12.4%</div>
-          <div style="font-size:11px; color:#166534; margin-top:4px;">${tHtml("interface.message.7b2ca4d556b1")}</div>
+          <div style="font-size:11px; color:#166534; margin-top:4px;">Visitantes que finalizam pedido</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">${tHtml("interface.label.ae67763c1c41")}</div>
+          <div class="stat-label">Faturamento do Dia</div>
           <div class="stat-val" id="analyticsRevenue">R$ 0,00</div>
-          <div style="font-size:11px; color:#64748b; margin-top:4px;">${tHtml("interface.message.a6272027d2c3")}</div>
+          <div style="font-size:11px; color:#64748b; margin-top:4px;">Vendas Web + Balcão Caixa</div>
         </div>
       </div>
 
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px;">
         <div style="border:1px solid var(--border); border-radius:8px; padding:16px;">
-          <h3 style="font-size:14px; margin-bottom:12px;">${tHtml("interface.message.64693bbe3b83")}</h3>
-          <div id="analyticsTopProducts" style="font-size:13px; color:#334155;">${tHtml("interface.message.f0e80c74ead9")}</div>
+          <h3 style="font-size:14px; margin-bottom:12px;">🏆 Mudas & Produtos Mais Acessados (GA4 view_item)</h3>
+          <div id="analyticsTopProducts" style="font-size:13px; color:#334155;">Carregando métricas...</div>
         </div>
         <div style="border:1px solid var(--border); border-radius:8px; padding:16px;">
-          <h3 style="font-size:14px; margin-bottom:12px;">${tHtml("interface.message.6860f33a60ca")}</h3>
-          <div id="analyticsPaymentSplit" style="font-size:13px; color:#334155;">${tHtml("interface.message.60c6adbfabc1")}</div>
+          <h3 style="font-size:14px; margin-bottom:12px;">💳 Divisão de Vendas por Canal & Pagamento</h3>
+          <div id="analyticsPaymentSplit" style="font-size:13px; color:#334155;">Carregando divisões...</div>
         </div>
       </div>
     </div>
@@ -324,45 +323,45 @@ function renderAdminHtml() {
     <div id="tab-cashier" class="tab-content">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
         <div>
-          <h2>${tHtml("interface.message.eada9e49ecdd")}</h2>
-          <p style="font-size:12px; color:#64748b;">${tHtml("interface.message.8cdc94c33e53")}</p>
+          <h2>💰 Frente de Caixa & Vendas de Hoje</h2>
+          <p style="font-size:12px; color:#64748b;">Conferência de lançamentos do dia e registro de vendas no balcão.</p>
         </div>
         <div style="display:flex; gap:8px;">
-          <button class="action-btn btn-green" onclick="openManualOrderModal()">${tHtml("interface.message.1d5dcae23f4b")}</button>
-          <button class="action-btn btn-gray" onclick="loadCashierDaily()">${tHtml("interface.label.0c20213b9434")}</button>
+          <button class="action-btn btn-green" onclick="openManualOrderModal()">➕ Lançar Venda no Balcão</button>
+          <button class="action-btn btn-gray" onclick="loadCashierDaily()">🔄 Atualizar</button>
         </div>
       </div>
 
       <div class="stat-grid" style="grid-template-columns: repeat(4, 1fr);">
         <div class="stat-card">
-          <div class="stat-label">${tHtml("interface.message.39a75a7a759d")}</div>
+          <div class="stat-label">Vendas Totais Hoje</div>
           <div class="stat-val" id="cashierTotalToday">R$ 0,00</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">${tHtml("interface.label.ed69a41041e6")}</div>
+          <div class="stat-label">PIX Recebido</div>
           <div class="stat-val" id="cashierPixToday" style="color:#15803d;">R$ 0,00</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">${tHtml("interface.message.b8b2fc796fba")}</div>
+          <div class="stat-label">Cartão (Débito/Crédito)</div>
           <div class="stat-val" id="cashierCardToday" style="color:#0284c7;">R$ 0,00</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">${tHtml("interface.message.a3cdad6f5317")}</div>
+          <div class="stat-label">Dinheiro em Caixa</div>
           <div class="stat-val" id="cashierCashToday" style="color:#d97706;">R$ 0,00</div>
         </div>
       </div>
 
-      <h3 style="margin-top:16px; font-size:14px;">${tHtml("interface.message.fc4d61570359")}</h3>
+      <h3 style="margin-top:16px; font-size:14px;">Lista de Vendas Realizadas Hoje</h3>
       <table id="todayOrdersTable">
         <thead>
           <tr>
-            <th>${tHtml("interface.message.9e9ea5774a2d")}</th>
-            <th>${tHtml("interface.message.f851d9a83ab0")}</th>
-            <th>${tHtml("interface.label.120266e0386d")}</th>
-            <th>${tHtml("interface.message.de58da2b5fd7")}</th>
-            <th>${tHtml("interface.label.c9b3c38247f7")}</th>
-            <th>${tHtml("interface.label.920e413c7d41")}</th>
-            <th>${tHtml("interface.message.cb36b9d842f3")}</th>
+            <th>Pedido</th>
+            <th>Cliente</th>
+            <th>Itens Vendidos</th>
+            <th>Pagamento</th>
+            <th>Total</th>
+            <th>Status</th>
+            <th>Ações do Caixa</th>
           </tr>
         </thead>
         <tbody id="todayOrdersBody"></tbody>
@@ -373,47 +372,47 @@ function renderAdminHtml() {
     <div id="tab-diff" class="tab-content">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
         <div>
-          <h2>${tHtml("interface.message.c13f40d2ae9d")}</h2>
+          <h2>🔀 Central de Auditoria & Alterações de Venda (Estilo Git Diff)</h2>
           <p style="font-size:12px; color:#64748b;">
-            ${tHtml("interface.label.66e30c4a01f4")}
+            Quando o caixa erra um lançamento, ele solicita a alteração. O Administrador confere o Diff (linhas vermelhas e verdes) e aprova ou recusa com justificativa.
           </p>
         </div>
-        <button class="action-btn btn-gray" onclick="loadAlterations()">${tHtml("interface.message.fc84ac3d656d")}</button>
+        <button class="action-btn btn-gray" onclick="loadAlterations()">🔄 Atualizar Solicitações</button>
       </div>
 
-      <div id="alterationsListContainer">${tHtml("interface.message.0f3e76255f3a")}</div>
+      <div id="alterationsListContainer">Carregando solicitações...</div>
     </div>
 
     <!-- ABA 4: HISTÓRICO COMPLETO DE PEDIDOS (ADMIN) -->
     <div id="tab-orders" class="tab-content">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
-        <h2>${tHtml("interface.message.2371fa2f3d70")}</h2>
-        <button class="action-btn btn-gray" onclick="loadAllOrders()">${tHtml("interface.label.0c20213b9434")}</button>
+        <h2>📜 Histórico Geral de Pedidos (Web, WhatsApp e Balcão)</h2>
+        <button class="action-btn btn-gray" onclick="loadAllOrders()">🔄 Atualizar</button>
       </div>
-      <div id="allOrdersListContainer">${tHtml("interface.message.a433f1ed73f2")}</div>
+      <div id="allOrdersListContainer">Carregando histórico...</div>
     </div>
 
     <!-- ABA 5: ENTRADA ÁGIL DE ESTOQUE (ADMIN E CAIXA) -->
     <div id="tab-stock" class="tab-content">
-      <h2>${tHtml("interface.message.ef0f2424624d")}</h2>
-      <p style="font-size:12px; color:#64748b; margin-bottom:12px;">${tHtml("interface.message.da5404588f99")}</p>
-      <input type="text" id="stockSearchInput" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px;" placeholder="${tHtml("interface.message.d74c2309afbc")}" oninput="filterStockCards()" />
+      <h2>📦 Entrada Rápida de Estoque (1 Toque para Somar)</h2>
+      <p style="font-size:12px; color:#64748b; margin-bottom:12px;">Para funcionários do viveiro: busque a planta e aperte no botão para somar unidades no Firestore.</p>
+      <input type="text" id="stockSearchInput" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px;" placeholder="Digitar nome da planta para achar rápido..." oninput="filterStockCards()" />
       <div class="quick-stock-grid" id="stockCardsGrid"></div>
     </div>
 
     <!-- ABA 6: CONSULTA RÁPIDA DE PREÇO (ADMIN E CAIXA) -->
     <div id="tab-price" class="tab-content">
-      <h2>${tHtml("interface.message.3e6a9b28609c")}</h2>
-      <p style="font-size:12px; color:#64748b; margin-bottom:12px;">${tHtml("interface.message.eaa333d7b39f")}</p>
-      <input type="text" id="priceSearchInput" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px; font-size:15px;" placeholder="${tHtml("interface.message.e3ac7530f177")}" oninput="filterPriceTable()" />
+      <h2>🔍 Consulta Rápida de Preço e Disponibilidade</h2>
+      <p style="font-size:12px; color:#64748b; margin-bottom:12px;">Busca instantânea para informar clientes no balcão sem demora.</p>
+      <input type="text" id="priceSearchInput" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px; font-size:15px;" placeholder="Buscar qualquer produto ou muda (ex: rabo de raposa, jabuticaba, eucalipto, alface...)" oninput="filterPriceTable()" />
       <table style="margin-top:14px;">
         <thead>
           <tr>
-            <th>${tHtml("interface.label.494e0843d958")}</th>
-            <th>${tHtml("interface.message.ba1c87cedbc4")}</th>
-            <th>${tHtml("interface.label.3b88e98ed63c")}</th>
-            <th>${tHtml("interface.message.5d2a9297ceda")}</th>
-            <th>${tHtml("interface.message.cfe73f31661d")}</th>
+            <th>Foto</th>
+            <th>Nome do Produto</th>
+            <th>Categoria / Subcategoria</th>
+            <th>Valor Unitário</th>
+            <th>Estoque Atual</th>
           </tr>
         </thead>
         <tbody id="priceTableBody"></tbody>
@@ -422,56 +421,56 @@ function renderAdminHtml() {
 
     <!-- ABA 7: CADASTRO DE PRODUTOS COM MÚLTIPLAS IMAGENS (ADMIN) -->
     <div id="tab-products" class="tab-content">
-      <h2 id="productFormTitle">${tHtml("interface.message.f3e1f6158751")}</h2>
+      <h2 id="productFormTitle">🌱 Cadastro & Alteração de Produtos</h2>
       <form id="prodForm" onsubmit="handleProductSubmit(event)" style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px;">
         <input type="hidden" id="formProdId" />
         <div>
-          <label style="font-size:12px; font-weight:bold;">${tHtml("interface.message.612d4482d2e1")}</label>
-          <input type="text" id="formProdName" required style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="${tHtml("interface.message.ade6d16b0d2c")}" />
+          <label style="font-size:12px; font-weight:bold;">Nome do Produto:</label>
+          <input type="text" id="formProdName" required style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="Ex: Jabuticaba Sabará" />
         </div>
         <div>
-          <label style="font-size:12px; font-weight:bold;">${tHtml("interface.label.8a4cbf5a2478")}</label>
-          <input type="text" id="formProdCat" required style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="${tHtml("interface.message.2dd369472379")}" />
+          <label style="font-size:12px; font-weight:bold;">Categoria:</label>
+          <input type="text" id="formProdCat" required style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="Ex: Frutíferas, Palmeiras..." />
         </div>
         <div>
-          <label style="font-size:12px; font-weight:bold;">${tHtml("interface.label.59bb2a433a1b")}</label>
-          <input type="text" id="formProdSubcat" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="${tHtml("interface.message.3c329c8c5f13")}" />
+          <label style="font-size:12px; font-weight:bold;">Subcategoria:</label>
+          <input type="text" id="formProdSubcat" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="Ex: Cítricos, Nativas..." />
         </div>
         <div>
           <label style="font-size:12px; font-weight:bold;">Preço de Venda (R$):</label>
           <input type="number" step="0.01" id="formProdPrice" required style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="190.00" />
         </div>
         <div>
-          <label style="font-size:12px; font-weight:bold;">${tHtml("interface.message.2903a5bdd3ba")}</label>
+          <label style="font-size:12px; font-weight:bold;">Estoque Inicial:</label>
           <input type="number" id="formProdStock" required style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="15" />
         </div>
         <div>
-          <label style="font-size:12px; font-weight:bold;">${tHtml("interface.message.1ab02ba817ad")}</label>
+          <label style="font-size:12px; font-weight:bold;">Fotos (Múltiplas URLs separadas por vírgula):</label>
           <input type="text" id="formProdImages" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="https://..., https://..." />
         </div>
         <div style="grid-column: 1/-1;">
-          <label style="font-size:12px; font-weight:bold;">${tHtml("interface.message.406314cebb40")}</label>
+          <label style="font-size:12px; font-weight:bold;">Descrição Botânica & Cuidados:</label>
           <textarea id="formProdDesc" style="width:100%; height:60px; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="Porte da muda, rega, sol pleno ou meia sombra..."></textarea>
         </div>
         <div style="grid-column: 1/-1; display:flex; gap:8px;">
-          <button type="submit" class="action-btn btn-green">${tHtml("interface.label.56a824832285")}</button>
-          <button type="button" class="action-btn btn-gray" onclick="resetProdForm()">${tHtml("interface.message.a104cdf1ec8c")}</button>
+          <button type="submit" class="action-btn btn-green">💾 Salvar no Firestore</button>
+          <button type="button" class="action-btn btn-gray" onclick="resetProdForm()">Limpar / Cancelar</button>
         </div>
       </form>
 
       <div style="display:flex; justify-content:space-between; align-items:center; margin-top:28px; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
-        <h3 style="margin:0;">${tHtml("interface.message.29328c72ec1c")}</h3>
-        <button type="button" class="action-btn btn-green" onclick="seedDefaultConflora()">${tHtml("interface.message.1c4b0457199f")}</button>
+        <h3 style="margin:0;">Produtos no Banco de Dados</h3>
+        <button type="button" class="action-btn btn-green" onclick="showTab('import')">Importar LISTA DE PRODUTOS</button>
       </div>
       <table>
         <thead>
           <tr>
-            <th>${tHtml("interface.label.494e0843d958")}</th>
-            <th>${tHtml("interface.label.5086900635fe")}</th>
-            <th>${tHtml("interface.label.54276aa0307f")}</th>
-            <th>${tHtml("interface.message.9586221ed35b")}</th>
-            <th>${tHtml("interface.message.170dc34ba4a3")}</th>
-            <th>${tHtml("interface.message.7d3e4d6dc900")}</th>
+            <th>Foto</th>
+            <th>Nome</th>
+            <th>Categoria</th>
+            <th>Preço</th>
+            <th>Estoque</th>
+            <th>Ações</th>
           </tr>
         </thead>
         <tbody id="adminProductsTableBody"></tbody>
@@ -482,21 +481,21 @@ function renderAdminHtml() {
     <div id="tab-team" class="tab-content">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
         <div>
-          <h2>${tHtml("interface.message.9ff8d18aff22")}</h2>
-          <p style="font-size:12px; color:#64748b;">${tHtml("interface.message.dd69a2c3623e")}</p>
+          <h2>👥 Gestão de Funcionários & Controle de Permissões</h2>
+          <p style="font-size:12px; color:#64748b;">Cadastre atendentes de caixa e administradores com PIN de acesso.</p>
         </div>
-        <button class="action-btn btn-green" onclick="openNewUserModal()">${tHtml("interface.message.81c1e21b03d4")}</button>
+        <button class="action-btn btn-green" onclick="openNewUserModal()">➕ Novo Funcionário</button>
       </div>
 
       <table>
         <thead>
           <tr>
-            <th>${tHtml("interface.label.5086900635fe")}</th>
-            <th>${tHtml("interface.message.7c3e0a691adc")}</th>
-            <th>${tHtml("interface.message.038ab4d01ff9")}</th>
-            <th>${tHtml("interface.label.709e58acb65e")}</th>
-            <th>${tHtml("interface.label.920e413c7d41")}</th>
-            <th>${tHtml("interface.message.7d3e4d6dc900")}</th>
+            <th>Nome</th>
+            <th>E-mail / Usuário</th>
+            <th>Cargo / Permissão</th>
+            <th>PIN</th>
+            <th>Status</th>
+            <th>Ações</th>
           </tr>
         </thead>
         <tbody id="teamTableBody"></tbody>
@@ -505,51 +504,46 @@ function renderAdminHtml() {
 
     <!-- ABA 9: IMPORTAR PLANILHAS (ADMIN) -->
     <div id="tab-import" class="tab-content">
-      <h2>${tHtml("interface.message.468fa0f036dc")}</h2>
-      <p style="font-size:12px; color:#64748b; margin-top:4px;">${tHtml("interface.message.bb2c516c63a4")}</p>
-
-      <div style="background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:16px; margin-top:14px;">
-        <label style="font-weight:bold; font-size:13px;">${tHtml("interface.label.96ef12c1ea1e")}</label>
-        <select id="importTypeSelect" style="padding:6px; border-radius:6px; border:1px solid #cbd5e1; margin-left:8px;">
-          <option value="products">${tHtml("interface.message.1589f260c817")}</option>
-          <option value="orders">${tHtml("interface.message.52687145099f")}</option>
-          <option value="movements">${tHtml("interface.message.c4fbc3ebba41")}</option>
+      <h2>Importar LISTA DE PRODUTOS</h2>
+      <p>Selecione seu Excel como está. Usaremos somente a aba PRODUTOS, mantendo os IDs e os status.</p>
+      <div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:16px;margin-top:14px;">
+        <label for="importFile">Arquivo Excel (.xlsx)</label>
+        <input id="importFile" type="file" accept=".xlsx" onchange="resetImportPreview()" style="display:block;margin:12px 0;" />
+        <label for="importMode">O que deseja fazer?</label>
+        <select id="importMode" onchange="resetImportPreview()" style="display:block;padding:10px;margin:12px 0;max-width:100%;">
+          <option value="replace">Substituir todos os produtos pelos da planilha</option>
+          <option value="merge">Adicionar ou atualizar, mantendo os demais produtos</option>
         </select>
-
-        <div style="margin-top:12px;">
-          <textarea id="importRawTextarea" style="width:100%; height:120px; font-family:monospace; font-size:12px; padding:8px; border:1px solid #cbd5e1; border-radius:6px;" placeholder='[{"name": "Palmeira Imperial", "category": "Palmeiras", "price": 180, "stockQuantity": 15}]'></textarea>
-        </div>
-
-        <div style="display:flex; gap:8px; margin-top:12px;">
-          <button class="action-btn btn-blue" onclick="validateImportPayload()">${tHtml("interface.label.fce838dcd15a")}</button>
-          <button class="action-btn btn-green" onclick="submitImportPayload()">${tHtml("interface.label.692720baf89b")}</button>
-          <button class="action-btn btn-green" onclick="seedDefaultConflora()">${tHtml("interface.message.1c4b0457199f")}</button>
-        </div>
-        <div id="importFeedback" style="margin-top:10px; font-size:13px;"></div>
+        <p>Ao substituir, fotos e estoques que não estão na planilha serão removidos ou zerados. Pedidos, vendas e usuários serão mantidos.</p>
+        <button class="action-btn btn-blue" id="btnValidateImport" onclick="validateImportPayload()">1. Conferir planilha</button>
+        <button class="action-btn btn-gray" onclick="downloadCatalogBackup()">Baixar cópia dos produtos atuais</button>
+        <div id="importFeedback" role="status" aria-live="polite" style="white-space:pre-wrap;margin:16px 0;"></div>
+        <label style="display:block;margin:12px 0;"><input id="confirmReplace" type="checkbox" onchange="updateImportButton()" /> Conferi a prévia e confirmo a operação selecionada.</label>
+        <button class="action-btn btn-green" id="btnSubmitImport" disabled onclick="submitImportPayload()">2. Importar planilha</button>
       </div>
     </div>
 
     <!-- ABA 10: NOTIFICAÇÕES (CAIXA E ADMIN) -->
     <div id="tab-notifs" class="tab-content">
-      <h2>${tHtml("interface.message.cca604a944e1")}</h2>
-      <p style="font-size:12px; color:#64748b; margin-bottom:14px;">${tHtml("interface.message.c67995b4080f")}</p>
-      <div id="notificationsContainer">${tHtml("interface.label.563d37925e08")}</div>
+      <h2>🔔 Central de Notificações & Avisos do Sistema</h2>
+      <p style="font-size:12px; color:#64748b; margin-bottom:14px;">Avisos sobre solicitações de alteração de vendas aceitas ou canceladas com o motivo.</p>
+      <div id="notificationsContainer">Carregando avisos...</div>
     </div>
 
     <!-- ABA 11: STATUS DAS CONEXÕES & DIAGNÓSTICO (EXCLUSIVA ADMIN) -->
     <div id="tab-status" class="tab-content">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
         <div>
-          <h2>${tHtml("interface.message.3439510af938")}</h2>
-          <p style="font-size:12px; color:#64748b;">${tHtml("interface.message.dd1e26d4b424")}</p>
+          <h2>📡 Status das Conexões & Diagnóstico do Sistema</h2>
+          <p style="font-size:12px; color:#64748b;">Monitoramento de comunicação em tempo real com Google Sheets API, Meta WhatsApp Webhook e Cloud Firestore.</p>
         </div>
         <button class="action-btn btn-green" onclick="loadAdminStatusData()" style="padding:10px 16px; font-size:13px;">
-          ${tHtml("interface.label.621be55ca907")}
+          🔄 Atualizar Diagnósticos
         </button>
       </div>
 
       <div id="adminStatusDashboardContainer">
-        <div style="padding:30px; text-align:center; color:#64748b;">${tHtml("interface.message.4665ca143a57")}</div>
+        <div style="padding:30px; text-align:center; color:#64748b;">Carregando diagnósticos em tempo real...</div>
       </div>
     </div>
   </div>
@@ -558,37 +552,37 @@ function renderAdminHtml() {
   <div class="modal" id="loginModal">
     <div class="modal-card" style="max-width:480px;">
       <h3 style="margin-bottom:6px; display:flex; align-items:center; gap:8px;">
-        ${tHtml("interface.label.c4ae10c857d7")}
+        🔐 Identificação & Acesso Administrativo
       </h3>
       <p style="font-size:12px; color:#64748b; margin-bottom:16px;">
-        ${tHtml("interface.label.b5f59b8a2741")}
+        Acesso restrito ao viveiro. Faça login com sua conta Google de administrador ou utilize seu PIN de operador de caixa.
       </p>
 
       <!-- SEÇÃO 1: LOGIN COM GOOGLE -->
       <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:10px; padding:14px; margin-bottom:18px;">
         <div style="font-size:13px; font-weight:800; color:#14532d; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
           <svg style="width:16px; height:16px;" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
-          ${tHtml("interface.label.3e39a50641ee")}
+          Entrar com Conta Google (Admin)
         </div>
-        <p data-google-status role="status">${tHtml("interface.message.a08d8558a271")}</p>
+        <p data-google-status role="status">Selecione sua conta na janela segura do Google.</p>
         <button type="button" class="action-btn btn-green" id="adminGoogleLoginButton" data-google-login disabled onclick="submitAdminGoogleLogin()" style="width:100%; justify-content:center; padding:9px; font-size:13px;">
-          ${tHtml("interface.label.a1b27e47851e")}
+          🚀 Entrar como Administrador Google
         </button>
       </div>
 
       <!-- SEÇÃO 2: LOGIN COM PIN DE OPERADOR -->
       <div style="border-top:1px dashed #cbd5e1; padding-top:14px;">
         <div style="font-size:12px; font-weight:700; color:#475569; margin-bottom:8px;">
-          ${tHtml("interface.label.c459e8d25a6c")}
+          Ou selecione o operador local com PIN:
         </div>
         <div id="userSelectList" style="display:flex; flex-direction:column; gap:6px; margin-bottom:12px;"></div>
         <div style="margin-bottom:14px;">
-          <label style="font-size:11px; font-weight:bold; color:#475569;">${tHtml("interface.label.9a7a292dad13")}</label>
+          <label style="font-size:11px; font-weight:bold; color:#475569;">PIN de Acesso:</label>
           <input type="password" id="loginPinInput" maxlength="6" style="width:100%; padding:8px; font-size:18px; text-align:center; letter-spacing:4px; border:1px solid #cbd5e1; border-radius:6px;" placeholder="••••" />
         </div>
         <div style="display:flex; justify-content:flex-end; gap:8px;">
-          <button class="action-btn btn-gray" onclick="closeLoginModal()">${tHtml("interface.label.0f2bd88ef0ac")}</button>
-          <button class="action-btn btn-green" onclick="performLogin()">${tHtml("interface.message.4311d253ee6f")}</button>
+          <button class="action-btn btn-gray" onclick="closeLoginModal()">Fechar</button>
+          <button class="action-btn btn-green" onclick="performLogin()">Entrar com PIN</button>
         </div>
       </div>
     </div>
@@ -597,22 +591,22 @@ function renderAdminHtml() {
   <!-- MODAL: SOLICITAÇÃO DE ALTERAÇÃO PELO CAIXA -->
   <div class="modal" id="alterationRequestModal">
     <div class="modal-card">
-      <h3 style="margin-bottom:8px;">${tHtml("interface.message.293a3d8c77f6")}</h3>
+      <h3 style="margin-bottom:8px;">✏️ Solicitar Correção de Venda</h3>
       <p style="font-size:12px; color:#64748b; margin-bottom:12px;">
-        ${tHtml("interface.label.67234ef61fa4")}
+        Caso tenha errado no lançamento, informe o que mudou e o motivo. Edmar receberá uma notificação estilo Git Diff para aprovar.
       </p>
       <input type="hidden" id="altOrderId" />
       <div style="margin-bottom:10px;">
-        <label style="font-size:12px; font-weight:bold;">${tHtml("interface.message.07dc559c3d74")}</label>
+        <label style="font-size:12px; font-weight:bold;">Cliente:</label>
         <input type="text" id="altCustName" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" />
       </div>
       <div style="margin-bottom:10px;">
-        <label style="font-size:12px; font-weight:bold;">${tHtml("interface.message.86fa1bf5b8c2")}</label>
+        <label style="font-size:12px; font-weight:bold;">Forma de Pagamento Correta:</label>
         <select id="altPayMethod" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;">
-          <option value="DINHEIRO">${tHtml("interface.message.f74b4c3d0e62")}</option>
-          <option value="PIX">${tHtml("interface.label.41b0635bb279")}</option>
-          <option value="CARTAO_DEBITO">${tHtml("interface.message.d072ee1e3af9")}</option>
-          <option value="CARTAO_CREDITO">${tHtml("interface.message.3a23123ab237")}</option>
+          <option value="DINHEIRO">Dinheiro</option>
+          <option value="PIX">PIX</option>
+          <option value="CARTAO_DEBITO">Cartão Débito</option>
+          <option value="CARTAO_CREDITO">Cartão Crédito</option>
         </select>
       </div>
       <div style="margin-bottom:10px;">
@@ -620,12 +614,12 @@ function renderAdminHtml() {
         <input type="number" step="0.01" id="altTotal" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" />
       </div>
       <div style="margin-bottom:14px;">
-        <label style="font-size:12px; font-weight:bold; color:#b45309;">${tHtml("interface.message.e9c5b13e43d3")}</label>
+        <label style="font-size:12px; font-weight:bold; color:#b45309;">💬 Motivo da Alteração (Obrigatório):</label>
         <textarea id="altReason" required style="width:100%; height:60px; padding:8px; border:1px solid #cbd5e1; border-radius:6px;" placeholder="Ex: Cliente devolveu 1 muda e pegou outra de R$ 50,00 no dinheiro..."></textarea>
       </div>
       <div style="display:flex; justify-content:flex-end; gap:8px;">
-        <button class="action-btn btn-gray" onclick="closeAlterationModal()">${tHtml("interface.message.bb9dbb406dcb")}</button>
-        <button class="action-btn btn-amber" onclick="submitAlterationRequest()">${tHtml("interface.message.7cfa8195b8c9")}</button>
+        <button class="action-btn btn-gray" onclick="closeAlterationModal()">Cancelar</button>
+        <button class="action-btn btn-amber" onclick="submitAlterationRequest()">Enviar para Edmar (Git Diff)</button>
       </div>
     </div>
   </div>
@@ -633,18 +627,18 @@ function renderAdminHtml() {
   <!-- MODAL: RECUSAR ALTERAÇÃO (EDMAR DIGITA O MOTIVO) -->
   <div class="modal" id="rejectReasonModal">
     <div class="modal-card">
-      <h3 style="margin-bottom:8px; color:#991b1b;">${tHtml("interface.message.5c2886640cb4")}</h3>
+      <h3 style="margin-bottom:8px; color:#991b1b;">❌ Recusar Solicitação de Alteração</h3>
       <p style="font-size:12px; color:#64748b; margin-bottom:12px;">
-        ${tHtml("interface.label.af4239bbb159")}
+        Digite o motivo da recusa. O atendente do caixa receberá uma notificação na tela explicando o cancelamento.
       </p>
       <input type="hidden" id="rejectRequestId" />
       <div style="margin-bottom:14px;">
-        <label style="font-size:12px; font-weight:bold;">${tHtml("interface.label.092f6e84e912")}</label>
-        <textarea id="rejectionReasonText" required style="width:100%; height:80px; padding:8px; border:1px solid #ef4444; border-radius:6px;" placeholder="${tHtml("interface.message.8aad3647f89a")}"></textarea>
+        <label style="font-size:12px; font-weight:bold;">Motivo do Cancelamento:</label>
+        <textarea id="rejectionReasonText" required style="width:100%; height:80px; padding:8px; border:1px solid #ef4444; border-radius:6px;" placeholder="Ex: Comprovante fiscal já foi fechado e não bate com o valor informado..."></textarea>
       </div>
       <div style="display:flex; justify-content:flex-end; gap:8px;">
-        <button class="action-btn btn-gray" onclick="closeRejectModal()">${tHtml("interface.label.59dc926760d0")}</button>
-        <button class="action-btn btn-red" onclick="confirmRejectAlteration()">${tHtml("interface.message.f3f52c66bb2c")}</button>
+        <button class="action-btn btn-gray" onclick="closeRejectModal()">Voltar</button>
+        <button class="action-btn btn-red" onclick="confirmRejectAlteration()">Confirmar Cancelamento & Notificar Caixa</button>
       </div>
     </div>
   </div>
@@ -652,36 +646,36 @@ function renderAdminHtml() {
   <!-- MODAL: LANÇAR VENDA MANUAL NO BALCÃO -->
   <div class="modal" id="manualOrderModal">
     <div class="modal-card">
-      <h3 style="margin-bottom:12px;">${tHtml("interface.message.7d8a722d615b")}</h3>
+      <h3 style="margin-bottom:12px;">➕ Nova Venda no Balcão</h3>
       <form onsubmit="submitManualOrder(event)">
         <div style="margin-bottom:10px;">
-          <label style="font-size:12px; font-weight:bold;">${tHtml("interface.message.2144f9321d51")}</label>
-          <input type="text" id="mCustName" required style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="${tHtml("interface.message.033a7f5bde38")}" />
+          <label style="font-size:12px; font-weight:bold;">Nome do Cliente:</label>
+          <input type="text" id="mCustName" required style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="Cliente Balcão" />
         </div>
         <div style="margin-bottom:10px;">
-          <label style="font-size:12px; font-weight:bold;">${tHtml("interface.label.f867611159c2")}</label>
+          <label style="font-size:12px; font-weight:bold;">WhatsApp / Telefone:</label>
           <input type="text" id="mCustPhone" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="64999990000" />
         </div>
         <div style="margin-bottom:10px;">
-          <label style="font-size:12px; font-weight:bold;">${tHtml("interface.message.3fa2b9070e87")}</label>
+          <label style="font-size:12px; font-weight:bold;">Produto Vendido:</label>
           <select id="mProdSelect" required style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;"></select>
         </div>
         <div style="margin-bottom:10px;">
-          <label style="font-size:12px; font-weight:bold;">${tHtml("interface.message.7a0f29ee272a")}</label>
+          <label style="font-size:12px; font-weight:bold;">Quantidade:</label>
           <input type="number" id="mQty" min="1" value="1" required style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" />
         </div>
         <div style="margin-bottom:14px;">
-          <label style="font-size:12px; font-weight:bold;">${tHtml("interface.message.fdef49897d85")}</label>
+          <label style="font-size:12px; font-weight:bold;">Forma de Pagamento:</label>
           <select id="mPayMethod" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;">
-            <option value="DINHEIRO">${tHtml("interface.message.f74b4c3d0e62")}</option>
-            <option value="PIX">${tHtml("interface.label.41b0635bb279")}</option>
-            <option value="CARTAO_DEBITO">${tHtml("interface.message.d072ee1e3af9")}</option>
-            <option value="CARTAO_CREDITO">${tHtml("interface.message.3a23123ab237")}</option>
+            <option value="DINHEIRO">Dinheiro</option>
+            <option value="PIX">PIX</option>
+            <option value="CARTAO_DEBITO">Cartão Débito</option>
+            <option value="CARTAO_CREDITO">Cartão Crédito</option>
           </select>
         </div>
         <div style="display:flex; justify-content:flex-end; gap:8px;">
-          <button type="button" class="action-btn btn-gray" onclick="closeManualOrderModal()">${tHtml("interface.message.bb9dbb406dcb")}</button>
-          <button type="submit" class="action-btn btn-green">${tHtml("interface.message.47e31eb7b701")}</button>
+          <button type="button" class="action-btn btn-gray" onclick="closeManualOrderModal()">Cancelar</button>
+          <button type="submit" class="action-btn btn-green">Confirmar Venda & Baixar Estoque</button>
         </div>
       </form>
     </div>
@@ -690,32 +684,32 @@ function renderAdminHtml() {
   <!-- MODAL: NOVO FUNCIONÁRIO -->
   <div class="modal" id="userModal">
     <div class="modal-card">
-      <h3 style="margin-bottom:12px;">${tHtml("interface.message.ad7d8ec3160d")}</h3>
+      <h3 style="margin-bottom:12px;">👥 Cadastrar / Editar Funcionário</h3>
       <form onsubmit="handleUserSubmit(event)">
         <input type="hidden" id="uId" />
         <div style="margin-bottom:10px;">
-          <label style="font-size:12px; font-weight:bold;">${tHtml("interface.label.f5350d7d8446")}</label>
+          <label style="font-size:12px; font-weight:bold;">Nome Completo:</label>
           <input type="text" id="uName" required style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="Ex: Maria Atendente" />
         </div>
         <div style="margin-bottom:10px;">
-          <label style="font-size:12px; font-weight:bold;">${tHtml("interface.message.df52daac8d59")}</label>
-          <input type="email" id="uEmail" required style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="${tHtml("interface.message.5ddb37787786")}" />
+          <label style="font-size:12px; font-weight:bold;">E-mail / Usuário:</label>
+          <input type="email" id="uEmail" required style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="maria@conflora.com.br" />
         </div>
         <div style="margin-bottom:10px;">
-          <label style="font-size:12px; font-weight:bold;">${tHtml("interface.message.68c788ae147b")}</label>
+          <label style="font-size:12px; font-weight:bold;">Cargo / Nível de Acesso:</label>
           <select id="uRole" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;">
-            <option value="CLIENTE">${tHtml("interface.message.4b8a354eee3f")}</option>
-            <option value="CAIXA">${tHtml("interface.message.2c6fc9fd5064")}</option>
-            <option value="ADMIN">${tHtml("interface.message.e9820876a0ab")}</option>
+            <option value="CLIENTE">CLIENTE (Perfil de Compras da Loja)</option>
+            <option value="CAIXA">CAIXA (Acesso Somente ao Caixa e Vendas de Hoje)</option>
+            <option value="ADMIN">ADMIN (Acesso Total: Analytics, Aprovação Diff, Produtos)</option>
           </select>
         </div>
         <div style="margin-bottom:14px;">
-          <label style="font-size:12px; font-weight:bold;">${tHtml("interface.message.f2db7a952e0d")}</label>
+          <label style="font-size:12px; font-weight:bold;">PIN de Acesso (4 dígitos numéricos):</label>
           <input type="text" id="uPin" maxlength="6" required style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="Ex: 1111" />
         </div>
         <div style="display:flex; justify-content:flex-end; gap:8px;">
-          <button type="button" class="action-btn btn-gray" onclick="closeUserModal()">${tHtml("interface.message.bb9dbb406dcb")}</button>
-          <button type="submit" class="action-btn btn-green">${tHtml("interface.message.321eb4459815")}</button>
+          <button type="button" class="action-btn btn-gray" onclick="closeUserModal()">Cancelar</button>
+          <button type="submit" class="action-btn btn-green">Salvar Funcionário</button>
         </div>
       </form>
     </div>
@@ -723,16 +717,14 @@ function renderAdminHtml() {
 
   <script>
     // ESTADO GLOBAL
-    const DEFAULT_OFFICIAL_CATALOG = [];
     let currentUser = null;
-    try {
-      const saved = localStorage.getItem('conflora_user') || localStorage.getItem('conflora_op');
-      if (saved) {
-        currentUser = JSON.parse(saved);
-      }
-    } catch (_) {}
+    fetch('/api/auth/me').then(res => res.json()).then(data => {
+      currentUser = data.user;
+      if (currentUser && ['ADMIN', 'CAIXA'].includes(currentUser.role)) closeLoginModal();
+      applyUserRoleUI();
+    }).catch(() => { currentUser = null; applyUserRoleUI(); });
 
-    let allProducts = DEFAULT_OFFICIAL_CATALOG;
+    let allProducts = [];
     let allOrders = [];
     let currentSelectedUserIdForLogin = '';
 
@@ -741,8 +733,8 @@ function renderAdminHtml() {
       photo.hidden = !currentUser?.picture;
       if (currentUser?.picture) photo.src = currentUser.picture;
       else photo.removeAttribute('src');
-      if (!currentUser) {
-        document.getElementById('loggedUserName').innerText = t("interface.message.4430f025f85f");
+      if (!currentUser || !['ADMIN', 'CAIXA'].includes(currentUser.role)) {
+        document.getElementById('loggedUserName').innerText = 'Não autenticado';
         const roleEl = document.getElementById('loggedUserRole');
         roleEl.innerText = 'BLOQUEADO';
         roleEl.className = 'role-badge caixa';
@@ -754,7 +746,7 @@ function renderAdminHtml() {
         });
 
         // Abre o modal de identificação obrigatório
-        openLoginModal();
+        openLoginModal(true);
         return;
       }
 
@@ -790,6 +782,8 @@ function renderAdminHtml() {
     }
 
     function showTab(tab) {
+      if (!currentUser || !['ADMIN', 'CAIXA'].includes(currentUser.role)) return;
+      if (currentUser.role !== 'ADMIN' && !['cashier', 'diff', 'stock', 'price', 'notifs'].includes(tab)) return;
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
       document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
       
@@ -820,29 +814,29 @@ function renderAdminHtml() {
         // Split de pagamento
         const pEl = document.getElementById('analyticsPaymentSplit');
         pEl.innerHTML = \`
-          <div style="margin-bottom:6px;">• <strong>${tHtml("interface.label.d03d4dc16e93")}</strong> R$ \${Number(m.byPayment?.PIX || 0).toFixed(2)}</div>
-          <div style="margin-bottom:6px;">• <strong>${tHtml("interface.message.475a4f48060e")}</strong> R$ \${Number(m.byPayment?.CARTAO || 0).toFixed(2)}</div>
-          <div style="margin-bottom:6px;">• <strong>${tHtml("interface.message.5f3593fe766b")}</strong> R$ \${Number(m.byPayment?.DINHEIRO || 0).toFixed(2)}</div>
+          <div style="margin-bottom:6px;">• <strong>PIX:</strong> R$ \${Number(m.byPayment?.PIX || 0).toFixed(2)}</div>
+          <div style="margin-bottom:6px;">• <strong>Cartão:</strong> R$ \${Number(m.byPayment?.CARTAO || 0).toFixed(2)}</div>
+          <div style="margin-bottom:6px;">• <strong>Dinheiro:</strong> R$ \${Number(m.byPayment?.DINHEIRO || 0).toFixed(2)}</div>
           <div style="margin-top:10px; font-weight:bold; color:#15803d;">Ticket Médio: R$ \${Number(m.ticketMedio || 0).toFixed(2)}</div>
         \`;
 
         // Produtos mais buscados
         const topEl = document.getElementById('analyticsTopProducts');
         topEl.innerHTML = \`
-          <div style="margin-bottom:6px;">${tHtml("interface.message.cc9b4ed21d6b")}</div>
-          <div style="margin-bottom:6px;">${tHtml("interface.message.7a57dd7f9b6e")}</div>
-          <div style="margin-bottom:6px;">${tHtml("interface.message.54da7b2637f0")}</div>
-          <div style="margin-bottom:6px;">${tHtml("interface.message.640a5056e0b8")}</div>
+          <div style="margin-bottom:6px;">1. 🌴 Palmeira Rabo de Raposa (214 visualizações)</div>
+          <div style="margin-bottom:6px;">2. 🥗 Alface Crespa Hidropônica (188 visualizações)</div>
+          <div style="margin-bottom:6px;">3. 🍋 Jabuticaba Sabará Enxertada (142 visualizações)</div>
+          <div style="margin-bottom:6px;">4. 🪵 Poste de Eucalipto Tratado (96 visualizações)</div>
         \`;
       } catch (err) {
-        console.error(t("interface.message.66db3d589491"), err);
+        console.error('Erro ao carregar analytics', err);
       }
     }
 
     function testGaEvent() {
       if (typeof gtag === 'function') {
         gtag('event', 'admin_analytics_test', { event_category: 'admin', user: currentUser.name });
-        alert(t("interface.message.e859402ae20b"));
+        alert('⚡ Evento enviado com sucesso para a tag G-TX7SZBP9J8 do Google Analytics!');
       } else {
         alert('Google Analytics tag G-TX7SZBP9J8 ativa em background.');
       }
@@ -862,7 +856,7 @@ function renderAdminHtml() {
         tbody.innerHTML = '';
         const list = m.todayOrders || [];
         if (list.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:#64748b;">${tHtml("interface.message.c0c5d3a99f11")}</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:#64748b;">Nenhuma venda realizada hoje ainda.</td></tr>';
           return;
         }
 
@@ -871,19 +865,19 @@ function renderAdminHtml() {
           const itemsTxt = (o.items || []).map(i => i.name + ' (' + (i.quantity || 1) + 'x)').join(', ');
           tr.innerHTML = \`
             <td><strong>#\${(o.id || '').slice(-6)}</strong></td>
-            <td>\${o.customerName || t("interface.message.033a7f5bde38")}</td>
+            <td>\${o.customerName || 'Cliente Balcão'}</td>
             <td>\${itemsTxt}</td>
             <td>\${o.paymentMethod || 'PIX'}</td>
             <td><strong>R$ \${Number(o.total || 0).toFixed(2).replace('.', ',')}</strong></td>
             <td><span class="badge \${o.status === 'CONFIRMED' ? 'badge-confirmed' : 'badge-pending'}">\${o.status}</span></td>
             <td>
-              <button class="action-btn btn-amber" style="padding:4px 8px;" onclick="openAlterationModal('\${o.id}')" title="${tHtml("interface.message.25a448bb1fd1")}">${tHtml("interface.message.aa7307b3616f")}</button>
+              <button class="action-btn btn-amber" style="padding:4px 8px;" onclick="openAlterationModal('\${o.id}')" title="Corrigir se errou no lançamento">✏️ Corrigir Venda</button>
             </td>
           \`;
           tbody.appendChild(tr);
         });
       } catch (err) {
-        console.error(t("interface.message.8c895e794975"), err);
+        console.error('Erro ao carregar caixa', err);
       }
     }
 
@@ -905,7 +899,7 @@ function renderAdminHtml() {
         }
 
         if (list.length === 0) {
-          container.innerHTML = '<div style="padding:20px; color:#64748b; text-align:center;">${tHtml("interface.message.32ed50ec392b")}</div>';
+          container.innerHTML = '<div style="padding:20px; color:#64748b; text-align:center;">Nenhuma solicitação de alteração registrada.</div>';
           return;
         }
 
@@ -924,7 +918,7 @@ function renderAdminHtml() {
           card.innerHTML = \`
             <div class="diff-header">
               <div>
-                <strong>Pedido #\${(alt.orderId || '').slice(-6)}</strong> ${tHtml("interface.label.b3586ba606a0")} <strong>\${alt.requestedByName || 'Caixa'}</strong> em \${new Date(alt.createdAt).toLocaleTimeString()}
+                <strong>Pedido #\${(alt.orderId || '').slice(-6)}</strong> • Solicitado por: <strong>\${alt.requestedByName || 'Caixa'}</strong> em \${new Date(alt.createdAt).toLocaleTimeString()}
               </div>
               <div>
                 <span class="badge \${alt.status === 'APPROVED' ? 'badge-confirmed' : (alt.status === 'REJECTED' ? 'badge-cancelled' : 'badge-pending')}">
@@ -934,8 +928,8 @@ function renderAdminHtml() {
             </div>
 
             <div class="diff-reason-box">
-              <strong>${tHtml("interface.label.0d764aeb47c7")}</strong> "\${alt.reason || t("interface.message.0d0beb5744d7")}"
-              \${alt.rejectionReason ? \`<div style="margin-top:6px; color:#991b1b;"><strong>${tHtml("interface.label.1574a42eaa1d")}</strong> "\${alt.rejectionReason}"</div>\` : ''}
+              <strong>💬 Justificativa do Atendente:</strong> "\${alt.reason || 'Correção de erro'}"
+              \${alt.rejectionReason ? \`<div style="margin-top:6px; color:#991b1b;"><strong>❌ Motivo do Cancelamento de Edmar:</strong> "\${alt.rejectionReason}"</div>\` : ''}
             </div>
 
             <div class="diff-body">
@@ -944,20 +938,20 @@ function renderAdminHtml() {
 
             \${isAdmin && alt.status === 'PENDING' ? \`
               <div class="diff-actions">
-                <button class="action-btn btn-red" onclick="openRejectModal('\${alt.id}')">${tHtml("interface.message.5f82d9cdc16c")}</button>
-                <button class="action-btn btn-green" onclick="approveAlteration('\${alt.id}')">${tHtml("interface.message.45c3722acbb4")}</button>
+                <button class="action-btn btn-red" onclick="openRejectModal('\${alt.id}')">❌ Recusar Alteração (Enviar Motivo)</button>
+                <button class="action-btn btn-green" onclick="approveAlteration('\${alt.id}')">✅ Aceitar Alteração (Merge)</button>
               </div>
             \` : ''}
           \`;
           container.appendChild(card);
         });
       } catch (err) {
-        container.innerHTML = t("interface.text.9ff2788cf5f5") + err.message;
+        container.innerHTML = 'Erro ao carregar alterações: ' + err.message;
       }
     }
 
     async function approveAlteration(requestId) {
-      if (!confirm(t("interface.message.cfbd40051b1c"))) return;
+      if (!confirm('Deseja consolidar esta alteração no pedido e atualizar o estoque?')) return;
       const res = await fetch('/api/admin/alterations/' + requestId + '/review', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -965,7 +959,7 @@ function renderAdminHtml() {
       });
       const data = await res.json();
       if (data.success) {
-        alert(t("interface.message.2e28a159bc3c"));
+        alert('✅ Alteração consolidada no Firestore com sucesso! Notificação enviada para o caixa.');
         loadAlterations();
         loadCashierDaily();
       }
@@ -984,7 +978,7 @@ function renderAdminHtml() {
     async function confirmRejectAlteration() {
       const id = document.getElementById('rejectRequestId').value;
       const reason = document.getElementById('rejectionReasonText').value.trim();
-      if (!reason) { alert(t("interface.message.7f1b1be6657d")); return; }
+      if (!reason) { alert('Por favor, informe o motivo do cancelamento para o atendente.'); return; }
 
       const res = await fetch('/api/admin/alterations/' + id + '/review', {
         method: 'POST',
@@ -993,7 +987,7 @@ function renderAdminHtml() {
       });
       const data = await res.json();
       if (data.success) {
-        alert(t("interface.message.800d0127ab7e"));
+        alert('Solicitação recusada. A notificação com o motivo foi enviada diretamente para o atendente do caixa.');
         closeRejectModal();
         loadAlterations();
       }
@@ -1029,7 +1023,7 @@ function renderAdminHtml() {
       const newTot = parseFloat(document.getElementById('altTotal').value);
       const reason = document.getElementById('altReason').value.trim();
 
-      if (!reason) { alert(t("interface.message.9487e40f9d06")); return; }
+      if (!reason) { alert('Informe a justificativa do erro para que Edmar possa avaliar.'); return; }
 
       const proposed = { ...orig, customerName: newCust, paymentMethod: newPay, total: newTot };
 
@@ -1046,7 +1040,7 @@ function renderAdminHtml() {
         })
       });
 
-      alert(t("interface.message.4f7c3264132c"));
+      alert('🚀 Solicitação de alteração enviada para o Administrador! Ele analisará as diferenças no visualizador Git Diff.');
       closeAlterationModal();
       loadAlterations();
     }
@@ -1063,7 +1057,7 @@ function renderAdminHtml() {
         document.getElementById('notifBadge').innerText = unreadCount;
 
         if (list.length === 0) {
-          container.innerHTML = '<div style="color:#64748b; padding:20px;">${tHtml("interface.message.7fbc608298aa")}</div>';
+          container.innerHTML = '<div style="color:#64748b; padding:20px;">Nenhuma notificação no momento.</div>';
           return;
         }
 
@@ -1072,7 +1066,7 @@ function renderAdminHtml() {
           div.className = 'notif-card ' + (n.type === 'REJECTED' ? 'rejected' : (n.type === 'APPROVED' ? 'approved' : ''));
           div.innerHTML = \`
             <div style="display:flex; justify-content:space-between; align-items:center;">
-              <strong>\${n.title || t("interface.message.2cae02ad356c")}</strong>
+              <strong>\${n.title || 'Aviso da Administração'}</strong>
               <span style="font-size:11px; color:#64748b;">\${new Date(n.createdAt).toLocaleTimeString()}</span>
             </div>
             <div style="margin-top:6px;">\${n.message}</div>
@@ -1081,18 +1075,18 @@ function renderAdminHtml() {
           container.appendChild(div);
         });
       } catch (err) {
-        container.innerHTML = t("interface.text.91a981ac2323") + err.message;
+        container.innerHTML = 'Erro ao carregar notificações: ' + err.message;
       }
     }
 
     function safeExtractProductsAdmin(data) {
-      if (!data) return DEFAULT_OFFICIAL_CATALOG;
+      if (!data) return [];
       if (Array.isArray(data)) return data;
       if (data && typeof data === 'object') {
         if (Array.isArray(data.products)) return data.products;
         if (data.products && typeof data.products === 'object') return Object.values(data.products);
       }
-      return DEFAULT_OFFICIAL_CATALOG;
+      return [];
     }
 
     // 6. CONSULTA RÁPIDA DE PREÇO
@@ -1102,33 +1096,33 @@ function renderAdminHtml() {
         if (res.ok) {
           const data = await res.json();
           const list = safeExtractProductsAdmin(data);
-          allProducts = (Array.isArray(list) && list.length > 0) ? list : DEFAULT_OFFICIAL_CATALOG;
+          allProducts = Array.isArray(list) ? list : [];
         } else {
-          allProducts = DEFAULT_OFFICIAL_CATALOG;
+          allProducts = [];
         }
       } catch (e) {
-        console.warn(t("interface.message.2425d7dc4ef8"), e);
-        allProducts = DEFAULT_OFFICIAL_CATALOG;
+        console.warn('Falha na consulta de preços:', e);
+        allProducts = [];
       }
-      if (!Array.isArray(allProducts)) allProducts = DEFAULT_OFFICIAL_CATALOG;
+      if (!Array.isArray(allProducts)) allProducts = [];
       filterPriceTable();
     }
 
     function filterPriceTable() {
-      if (!Array.isArray(allProducts)) allProducts = DEFAULT_OFFICIAL_CATALOG;
+      if (!Array.isArray(allProducts)) allProducts = [];
       const q = document.getElementById('priceSearchInput').value.toLowerCase();
       const tbody = document.getElementById('priceTableBody');
       tbody.innerHTML = '';
 
       allProducts.filter(p => !q || (p.name || p.descricao || '').toLowerCase().includes(q) || (p.categoria || '').toLowerCase().includes(q)).forEach(p => {
         const tr = document.createElement('tr');
-        const img = (p.images && p.images[0]) || p.imageUrl || p.imageurl || t("interface.text.671028bdaaed");
+        const img = (p.images && p.images[0]) || p.imageUrl || p.imageurl || 'https://images.unsplash.com/photo-1512428813834-c702c7702b78?w=600';
         tr.innerHTML = \`
           <td><img src="\${img}" class="prod-thumb" /></td>
           <td><strong>\${p.descricao || p.name}</strong></td>
           <td>\${p.categoria || p.category || ''} • \${p.subcategoria || ''}</td>
           <td><strong style="color:#15803d; font-size:15px;">R$ \${Number(p.valor_num || p.price || 0).toFixed(2).replace('.', ',')}</strong></td>
-          <td><span style="font-weight:bold;">\${p.stockQuantity ?? p.estoque ?? 0}</span> ${tHtml("interface.message.31939750f55e")}</td>
+          <td><span style="font-weight:bold;">\${p.stockQuantity ?? p.estoque ?? 0}</span> em estoque</td>
         \`;
         tbody.appendChild(tr);
       });
@@ -1149,15 +1143,15 @@ function renderAdminHtml() {
           <td>\${u.email}</td>
           <td>
             <select onchange="changeUserRole('\${u.id}', this.value)" style="padding:4px 8px; border-radius:6px; font-weight:700; font-size:12px; border:1px solid #cbd5e1; background:\${role === 'ADMIN' ? '#dcfce7' : (role === 'CAIXA' ? '#e0f2fe' : '#f8fafc')}; color:\${role === 'ADMIN' ? '#166534' : (role === 'CAIXA' ? '#0369a1' : '#475569')}; cursor:pointer;" \${u.id === 'usr-edmar' ? 'disabled' : ''}>
-              <option value="CLIENTE" \${role === 'CLIENTE' ? 'selected' : ''}>${tHtml("interface.message.8b4140d0ce15")}</option>
-              <option value="CAIXA" \${role === 'CAIXA' ? 'selected' : ''}>${tHtml("interface.message.4cbb417d7b39")}</option>
-              <option value="ADMIN" \${role === 'ADMIN' ? 'selected' : ''}>${tHtml("interface.label.f9a6e8d91e0b")}</option>
+              <option value="CLIENTE" \${role === 'CLIENTE' ? 'selected' : ''}>👤 CLIENTE (Padrão)</option>
+              <option value="CAIXA" \${role === 'CAIXA' ? 'selected' : ''}>🛒 CAIXA (Balcão)</option>
+              <option value="ADMIN" \${role === 'ADMIN' ? 'selected' : ''}>👑 ADMIN (Total)</option>
             </select>
           </td>
-          <td>\${u.pin ? '••••' : (u.password ? t("interface.message.35f27f1d1a9e") : '🌐 Google')}</td>
+          <td>\${u.hasPin ? '••••' : (u.hasPassword ? '🔑 Senha' : '🌐 Google')}</td>
           <td>\${u.active !== false ? '🟢 Ativo' : '🔴 Inativo'}</td>
           <td>
-            \${u.id !== 'usr-edmar' ? \`<button class="action-btn btn-red" style="padding:4px 8px;" onclick="deleteUser('\${u.id}')">${tHtml("interface.label.8b19518ff49b")}</button>\` : '<em>${tHtml("interface.label.7964bc5d411b")}</em>'}
+            \${u.id !== 'usr-edmar' ? \`<button class="action-btn btn-red" style="padding:4px 8px;" onclick="deleteUser('\${u.id}')">Excluir</button>\` : '<em>Administrador Geral</em>'}
           </td>
         \`;
         tbody.appendChild(tr);
@@ -1173,14 +1167,14 @@ function renderAdminHtml() {
         });
         const data = await res.json();
         if (data.success) {
-          alert(t("interface.text.16f0f4d2f7c1") + newRole + t("interface.text.e1cb17404b4c"));
+          alert('✅ Perfil atualizado para ' + newRole + ' com sucesso!');
           loadTeam();
         } else {
-          alert(t("interface.text.0a2492fb394d") + (data.error || t("interface.message.b02b6687f852")));
+          alert('Erro ao alterar perfil: ' + (data.error || 'Falha'));
           loadTeam();
         }
       } catch (err) {
-        alert(t("interface.text.b458aa19769d") + err.message);
+        alert('Erro ao conectar com servidor: ' + err.message);
         loadTeam();
       }
     }
@@ -1212,19 +1206,19 @@ function renderAdminHtml() {
         body: JSON.stringify({ id, name, email, role, pin, active: true })
       });
 
-      alert(t("interface.message.d42c3d346141"));
+      alert('Colaborador cadastrado com sucesso!');
       closeUserModal();
       loadTeam();
     }
 
     async function deleteUser(id) {
-      if (!confirm(t("interface.message.c28dc732a62e"))) return;
+      if (!confirm('Deseja excluir o acesso deste funcionário?')) return;
       await fetch('/api/admin/users/' + id, { method: 'DELETE' });
       loadTeam();
     }
 
     // 8. LOGIN / TROCA DE OPERADOR
-    async function openLoginModal() {
+    async function openLoginModal(automatic = false) {
       const res = await fetch('/api/admin/auth/users');
       const users = await res.json();
       const listEl = document.getElementById('userSelectList');
@@ -1238,7 +1232,7 @@ function renderAdminHtml() {
             <strong>\${u.name}</strong><br>
             <span style="font-size:11px; color:#64748b;">\${u.role}</span>
           </div>
-          <span style="font-size:12px; color:#15803d; font-weight:bold;">${tHtml("interface.label.41d4b4ecb2db")}</span>
+          <span style="font-size:12px; color:#15803d; font-weight:bold;">Selecionar ➔</span>
         \`;
         btn.onclick = () => {
           document.querySelectorAll('#userSelectList div').forEach(d => d.style.borderColor = '#cbd5e1');
@@ -1256,7 +1250,7 @@ function renderAdminHtml() {
         listEl.children[0].style.background = '#f0fdf4';
       }
 
-      document.getElementById('loginModal').classList.add('open');
+      if (!automatic || !currentUser || !['ADMIN', 'CAIXA'].includes(currentUser.role)) document.getElementById('loginModal').classList.add('open');
     }
 
     function closeLoginModal() {
@@ -1277,9 +1271,9 @@ function renderAdminHtml() {
         localStorage.setItem('conflora_op', JSON.stringify(currentUser));
         closeLoginModal();
         applyUserRoleUI();
-        alert(t("interface.text.b6db26817503") + currentUser.name + ' (' + currentUser.role + ')!');
+        alert('Bem-vindo(a), ' + currentUser.name + ' (' + currentUser.role + ')!');
       } else {
-        alert(t("interface.text.7d357221362c") + (data.error || 'PIN incorreto.'));
+        alert('Erro ao autenticar: ' + (data.error || 'PIN incorreto.'));
       }
     }
 
@@ -1296,25 +1290,26 @@ function renderAdminHtml() {
           closeLoginModal();
           applyUserRoleUI();
           if (currentUser.role === 'ADMIN') {
-            alert(t("interface.message.bd1078b717bb"));
+            alert('🌿 Autenticado com sucesso como Administrador Google! Painel e configurações liberados.');
           } else {
-            alert(t("interface.text.e998d780aab5") + currentUser.name + '! Perfil identificado: ' + currentUser.role);
+            alert('🌿 Bem-vindo(a), ' + currentUser.name + '! Perfil identificado: ' + currentUser.role);
           }
         } else {
-          alert(t("interface.text.da3d1857fa76") + (data.error || t("interface.text.b33f0647fdda")));
+          alert('Erro ao autenticar via Google: ' + (data.error || 'Tente novamente'));
         }
       } catch (err) {
-        alert(err.code === 'auth/popup-closed-by-user' ? 'Login cancelado.' : err.code === 'auth/popup-blocked' ? t("interface.message.89c6789636b3") : t("interface.text.7d357221362c") + err.message);
+        alert(err.code === 'auth/popup-closed-by-user' ? 'Login cancelado.' : err.code === 'auth/popup-blocked' ? 'Permita pop-ups para entrar com o Google.' : 'Erro ao autenticar: ' + err.message);
       } finally {
         button.disabled = false;
       }
     }
 
     async function logoutAdmin() {
-      if (confirm(t("interface.message.88902a3b8e82"))) {
+      if (confirm('Deseja realmente sair da sua conta administrativa?')) {
         if (window.signOutGoogle) {
-          try { await window.signOutGoogle(); } catch (error) { alert(t("interface.text.346a2f78875a") + error.message); return; }
+          try { await window.signOutGoogle(); } catch (error) { alert('Erro ao sair: ' + error.message); return; }
         }
+        await fetch('/api/auth/logout', { method: 'POST' });
         currentUser = null;
         localStorage.removeItem('conflora_user');
         localStorage.removeItem('conflora_op');
@@ -1326,7 +1321,7 @@ function renderAdminHtml() {
     async function loadAdminStatusData() {
       const container = document.getElementById('adminStatusDashboardContainer');
       if (!container) return;
-      container.innerHTML = '<div style="padding:30px; text-align:center; color:#64748b;">${tHtml("interface.message.067510ce6ef3")}</div>';
+      container.innerHTML = '<div style="padding:30px; text-align:center; color:#64748b;">📡 Consultando diagnóstico em tempo real (Google Sheets & WhatsApp)...</div>';
 
       try {
         const res = await fetch('/api/admin/system-status');
@@ -1341,24 +1336,24 @@ function renderAdminHtml() {
             <!-- GOOGLE SHEETS API STATUS -->
             <div style="background:#f8fafc; border:1px solid var(--border); border-radius:10px; padding:18px;">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <h3 style="font-size:15px; display:flex; align-items:center; gap:6px;">${tHtml("interface.label.9b68943ea1bd")}</h3>
+                <h3 style="font-size:15px; display:flex; align-items:center; gap:6px;">📊 Google Sheets API</h3>
                 <span style="background:\${sheets.color || '#10b981'}; color:white; font-size:11px; font-weight:800; padding:2px 8px; border-radius:10px;">
                   \${sheets.badge || sheets.status || 'ONLINE'}
                 </span>
               </div>
               <div style="font-size:13px; color:#475569; line-height:1.7;">
-                <div><strong>${tHtml("interface.label.3b82787eed4b")}</strong> <code>\${sheets.spreadsheetId || t("interface.message.89bc07b2aad9")}</code></div>
-                <div><strong>${tHtml("interface.label.a41f24a4a854")}</strong> <strong>\${sheets.sheetName || 'PRODUTOS'}</strong></div>
-                <div><strong>${tHtml("interface.message.6dc56ee6d1b8")}</strong> <span style="font-weight:800; color:#15803d;">\${sheets.itemsActive || 111} itens</span></div>
-                <div><strong>${tHtml("interface.message.fc47b3208438")}</strong> \${sheets.latencyMs ?? 0} ms</div>
-                <div><strong>${tHtml("interface.message.a40441802c9d")}</strong> \${sheets.source || 'Planilha'}</div>
+                <div><strong>ID da Planilha:</strong> <code>\${sheets.spreadsheetId || 'Padrão Conflora'}</code></div>
+                <div><strong>Aba Configurada:</strong> <strong>\${sheets.sheetName || 'PRODUTOS'}</strong></div>
+                <div><strong>Produtos Indexados:</strong> <span style="font-weight:800; color:#15803d;">\${sheets.itemsActive || 111} itens</span></div>
+                <div><strong>Latência API:</strong> \${sheets.latencyMs ?? 0} ms</div>
+                <div><strong>Fonte dos Dados:</strong> \${sheets.source || 'Planilha'}</div>
                 <div style="margin-top:8px; font-size:12px; color:#64748b; background:#f1f5f9; padding:8px 10px; border-radius:6px;">
-                  ℹ️ \${sheets.message || t("interface.message.de7672e3c15b")}
+                  ℹ️ \${sheets.message || 'Operação normal.'}
                 </div>
               </div>
               <div style="margin-top:14px;">
                 <button class="action-btn btn-green" onclick="testSheetsFromAdmin()" style="width:100%; justify-content:center; padding:8px;">
-                  ${tHtml("interface.label.f5d777de4812")}
+                  🧪 Testar Conexão Google Sheets Agora
                 </button>
               </div>
             </div>
@@ -1366,25 +1361,25 @@ function renderAdminHtml() {
             <!-- WHATSAPP WEBHOOK STATUS -->
             <div style="background:#f8fafc; border:1px solid var(--border); border-radius:10px; padding:18px;">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <h3 style="font-size:15px; display:flex; align-items:center; gap:6px;">${tHtml("interface.label.facfdad38948")}</h3>
+                <h3 style="font-size:15px; display:flex; align-items:center; gap:6px;">💬 WhatsApp Webhook & API</h3>
                 <span style="background:\${wa.color || '#10b981'}; color:white; font-size:11px; font-weight:800; padding:2px 8px; border-radius:10px;">
                   \${wa.badge || wa.status || 'ONLINE'}
                 </span>
               </div>
               <div style="font-size:13px; color:#475569; line-height:1.7;">
-                <div><strong>${tHtml("interface.label.11c78449294d")}</strong> <code>${tHtml("interface.label.3bed6d2e3c21")}</code> ${tHtml("interface.message.95613fda7f98")}</div>
-                <div><strong>${tHtml("interface.message.4f27bba1ed5f")}</strong> \${wa.phoneNumberId || 'Emulador Local'}</div>
-                <div><strong>${tHtml("interface.label.bc9189b80d43")}</strong> \${wa.hasVerifyToken ? '✅ Configurado' : t("interface.message.4dd3cead6337")}</div>
-                <div><strong>${tHtml("interface.label.3bb6fab4a20c")}</strong> \${wa.hasAccessToken ? '✅ Ativo' : '⚠️ Emulador'}</div>
-                <div><strong>${tHtml("interface.label.a93978289509")}</strong> \${wa.totalReceivedCount || 0}</div>
-                <div><strong>${tHtml("interface.message.a179de2498c6")}</strong> \${wa.lastReceivedAt || t("interface.message.9a3ea94f5e20")}</div>
+                <div><strong>Rota Ativa:</strong> <code>/webhook</code> (GET verificação / POST mensagens)</div>
+                <div><strong>Número / Phone ID:</strong> \${wa.phoneNumberId || 'Emulador Local'}</div>
+                <div><strong>Verify Token:</strong> \${wa.hasVerifyToken ? '✅ Configurado' : '⚠️ Não configurado'}</div>
+                <div><strong>Access Token Graph:</strong> \${wa.hasAccessToken ? '✅ Ativo' : '⚠️ Emulador'}</div>
+                <div><strong>Total Mensagens:</strong> \${wa.totalReceivedCount || 0}</div>
+                <div><strong>Último Hit Recebido:</strong> \${wa.lastReceivedAt || 'Nenhum recente'}</div>
                 <div style="margin-top:8px; font-size:12px; color:#64748b; background:#f1f5f9; padding:8px 10px; border-radius:6px;">
                   ℹ️ \${wa.message || 'Webhook operacional.'}
                 </div>
               </div>
               <div style="margin-top:14px;">
                 <button class="action-btn btn-blue" onclick="testWebhookFromAdmin()" style="width:100%; justify-content:center; padding:8px;">
-                  ${tHtml("interface.label.672e4b802949")}
+                  🧪 Testar Ping & Rota do Webhook
                 </button>
               </div>
             </div>
@@ -1392,31 +1387,31 @@ function renderAdminHtml() {
             <!-- CLOUD FIRESTORE -->
             <div style="background:#f8fafc; border:1px solid var(--border); border-radius:10px; padding:18px;">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <h3 style="font-size:15px; display:flex; align-items:center; gap:6px;">${tHtml("interface.label.72c4a129e835")}</h3>
+                <h3 style="font-size:15px; display:flex; align-items:center; gap:6px;">🔥 Cloud Firestore</h3>
                 <span style="background:\${fs.color || '#10b981'}; color:white; font-size:11px; font-weight:800; padding:2px 8px; border-radius:10px;">
                   \${fs.badge || fs.status || 'ONLINE'}
                 </span>
               </div>
               <div style="font-size:13px; color:#475569; line-height:1.7;">
-                <div><strong>${tHtml("interface.label.26a405183ca4")}</strong> <code>\${fs.projectId || 'confloraai'}</code></div>
-                <div><strong>${tHtml("interface.message.b26880294f1e")}</strong> \${fs.latencyMs ?? 0} ms</div>
-                <div><strong>${tHtml("interface.message.7ed57c6c529c")}</strong> \${fs.message || 'Conectado ao Firestore.'}</div>
-                <div><strong>${tHtml("interface.message.32ffee6e236d")}</strong> ${tHtml("interface.label.99bfd55d7f18")}</div>
+                <div><strong>Projeto GCP:</strong> <code>\${fs.projectId || 'confloraai'}</code></div>
+                <div><strong>Latência de Resposta:</strong> \${fs.latencyMs ?? 0} ms</div>
+                <div><strong>Status de Conexão:</strong> \${fs.message || 'Conectado ao Firestore.'}</div>
+                <div><strong>Persistência:</strong> Firestore + Cache Local</div>
               </div>
             </div>
 
             <!-- PLANILHA OFICIAL DE CONTINGÊNCIA -->
             <div style="background:#f8fafc; border:1px solid var(--border); border-radius:10px; padding:18px;">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <h3 style="font-size:15px; display:flex; align-items:center; gap:6px;">${tHtml("interface.label.98b400e7d5c9")}</h3>
+                <h3 style="font-size:15px; display:flex; align-items:center; gap:6px;">🌱 Planilha Oficial Conflora</h3>
                 <span style="background:\${cat.color || '#10b981'}; color:white; font-size:11px; font-weight:800; padding:2px 8px; border-radius:10px;">
                   \${cat.badge || 'Carregada'}
                 </span>
               </div>
               <div style="font-size:13px; color:#475569; line-height:1.7;">
-                <div><strong>${tHtml("interface.label.fcd863bc4c50")}</strong> <strong style="color:#15803d;">\${cat.totalItems || 111} itens</strong></div>
-                <div><strong>${tHtml("interface.label.36b4da28022f")}</strong> \${cat.categoriesCount || 6}</div>
-                <div><strong>${tHtml("interface.label.731c04537d84")}</strong> \${cat.autoFallback || '100% garantida'}</div>
+                <div><strong>Itens Comerciais Oficiais:</strong> <strong style="color:#15803d;">\${cat.totalItems || 111} itens</strong></div>
+                <div><strong>Categorias Mapeadas:</strong> \${cat.categoriesCount || 6}</div>
+                <div><strong>Disponibilidade:</strong> \${cat.autoFallback || '100% garantida'}</div>
               </div>
             </div>
           </div>
@@ -1424,7 +1419,7 @@ function renderAdminHtml() {
           <div id="adminTestResultBox" style="display:none; margin-top:16px; padding:12px; border-radius:8px; font-size:13px;"></div>
         \`;
       } catch (err) {
-        container.innerHTML = '<div style="color:#ef4444; padding:20px; text-align:center;">${tHtml("interface.message.56b568b3f90e")}</div>';
+        container.innerHTML = '<div style="color:#ef4444; padding:20px; text-align:center;">Erro ao carregar diagnóstico: ' + err.message + '</div>';
       }
     }
 
@@ -1434,7 +1429,7 @@ function renderAdminHtml() {
         box.style.display = 'block';
         box.style.background = '#f1f5f9';
         box.style.color = '#334155';
-        box.innerHTML = t("interface.message.febcd03e2f76");
+        box.innerHTML = '⏳ Testando conexão com Google Sheets API...';
       }
       try {
         const res = await fetch('/api/admin/test-sheets', { method: 'POST' });
@@ -1442,13 +1437,13 @@ function renderAdminHtml() {
         if (box) {
           box.style.background = '#dcfce7';
           box.style.color = '#166534';
-          box.innerHTML = '✅ <strong>${tHtml("interface.message.3bc505040360")}</strong> ' + (d.message || t("interface.message.21c8799a6ca7")) + t("interface.text.81356a98d71b") + (d.latencyMs || 0) + 'ms)';
+          box.innerHTML = '✅ <strong>Google Sheets Conexão OK:</strong> ' + (d.message || 'Sincronizado com sucesso.') + ' (Latência: ' + (d.latencyMs || 0) + 'ms)';
         }
       } catch (err) {
         if (box) {
           box.style.background = '#fee2e2';
           box.style.color = '#991b1b';
-          box.innerHTML = '❌ <strong>${tHtml("interface.message.bd534082af8f")}</strong> ' + err.message;
+          box.innerHTML = '❌ <strong>Erro no teste do Sheets:</strong> ' + err.message;
         }
       }
     }
@@ -1459,7 +1454,7 @@ function renderAdminHtml() {
         box.style.display = 'block';
         box.style.background = '#f1f5f9';
         box.style.color = '#334155';
-        box.innerHTML = t("interface.message.2c10e389bf9d");
+        box.innerHTML = '⏳ Enviando ping para rota /webhook do WhatsApp...';
       }
       try {
         const res = await fetch('/api/admin/test-webhook', { method: 'POST' });
@@ -1467,13 +1462,13 @@ function renderAdminHtml() {
         if (box) {
           box.style.background = '#dcfce7';
           box.style.color = '#166534';
-          box.innerHTML = '✅ <strong>${tHtml("interface.label.02c64587d8f8")}</strong> ${tHtml("interface.label.7c81b807e573")} <code>${tHtml("interface.label.3bed6d2e3c21")}</code> respondeu com sucesso em ' + (d.pingLatencyMs || 0) + 'ms. ' + (d.message || '');
+          box.innerHTML = '✅ <strong>Webhook WhatsApp OK:</strong> Rota <code>/webhook</code> respondeu com sucesso em ' + (d.pingLatencyMs || 0) + 'ms. ' + (d.message || '');
         }
       } catch (err) {
         if (box) {
           box.style.background = '#fee2e2';
           box.style.color = '#991b1b';
-          box.innerHTML = '❌ <strong>${tHtml("interface.message.45538e9b167b")}</strong> ' + err.message;
+          box.innerHTML = '❌ <strong>Erro no teste do Webhook:</strong> ' + err.message;
         }
       }
     }
@@ -1485,20 +1480,20 @@ function renderAdminHtml() {
         if (res.ok) {
           const data = await res.json();
           const list = safeExtractProductsAdmin(data);
-          allProducts = (Array.isArray(list) && list.length > 0) ? list : DEFAULT_OFFICIAL_CATALOG;
+          allProducts = Array.isArray(list) ? list : [];
         } else {
-          allProducts = DEFAULT_OFFICIAL_CATALOG;
+          allProducts = [];
         }
       } catch (e) {
-        console.warn(t("interface.message.ff02748902da"), e);
-        allProducts = DEFAULT_OFFICIAL_CATALOG;
+        console.warn('Falha ao carregar estoque:', e);
+        allProducts = [];
       }
-      if (!Array.isArray(allProducts)) allProducts = DEFAULT_OFFICIAL_CATALOG;
+      if (!Array.isArray(allProducts)) allProducts = [];
       filterStockCards();
     }
 
     function filterStockCards() {
-      if (!Array.isArray(allProducts)) allProducts = DEFAULT_OFFICIAL_CATALOG;
+      if (!Array.isArray(allProducts)) allProducts = [];
       const q = document.getElementById('stockSearchInput').value.toLowerCase();
       const grid = document.getElementById('stockCardsGrid');
       grid.innerHTML = '';
@@ -1515,7 +1510,7 @@ function renderAdminHtml() {
               <div style="font-size:11px; color:#64748b;">\${p.subcategoria || p.categoria || ''}</div>
             </div>
           </div>
-          <div style="font-size:12px; color:#64748b;">${tHtml("interface.message.0c741a470cee")} <strong id="stk-\${p.id}" style="color:#15803d; font-size:16px;">\${p.stockQuantity ?? p.estoque ?? 0}</strong> ${tHtml("interface.label.68bca10eea2b")}</div>
+          <div style="font-size:12px; color:#64748b;">Estoque Atual: <strong id="stk-\${p.id}" style="color:#15803d; font-size:16px;">\${p.stockQuantity ?? p.estoque ?? 0}</strong> un</div>
           <div class="stock-btns-row">
             <button class="plus-btn" onclick="addStock('\${p.id}', 1)">+1</button>
             <button class="plus-btn" onclick="addStock('\${p.id}', 5)">+5</button>
@@ -1528,7 +1523,6 @@ function renderAdminHtml() {
     }
 
     async function addStock(prodId, qty) {
-      window.location.href = '/lancamentos'; return;
       const res = await fetch('/api/admin/stock/quick-entry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1548,30 +1542,30 @@ function renderAdminHtml() {
         if (res.ok) {
           const data = await res.json();
           const list = safeExtractProductsAdmin(data);
-          allProducts = (Array.isArray(list) && list.length > 0) ? list : DEFAULT_OFFICIAL_CATALOG;
+          allProducts = Array.isArray(list) ? list : [];
         } else {
-          allProducts = DEFAULT_OFFICIAL_CATALOG;
+          allProducts = [];
         }
       } catch (e) {
-        console.warn(t("interface.message.d1a99e76d06b"), e);
-        allProducts = DEFAULT_OFFICIAL_CATALOG;
+        console.warn('Falha ao carregar produtos:', e);
+        allProducts = [];
       }
-      if (!Array.isArray(allProducts)) allProducts = DEFAULT_OFFICIAL_CATALOG;
+      if (!Array.isArray(allProducts)) allProducts = [];
       const tbody = document.getElementById('adminProductsTableBody');
       tbody.innerHTML = '';
 
       allProducts.forEach(p => {
         const tr = document.createElement('tr');
-        const img = (p.images && p.images[0]) || p.imageUrl || p.imageurl || t("interface.text.671028bdaaed");
+        const img = (p.images && p.images[0]) || p.imageUrl || p.imageurl || 'https://images.unsplash.com/photo-1512428813834-c702c7702b78?w=600';
         tr.innerHTML = \`
           <td><img src="\${img}" class="prod-thumb" /></td>
           <td><strong>\${p.descricao || p.name}</strong></td>
           <td>\${p.categoria || p.category || ''}</td>
           <td>R$ \${Number(p.valor_num || p.price || 0).toFixed(2).replace('.', ',')}</td>
-          <td><strong style="color:#15803d;">\${p.stockQuantity ?? p.estoque ?? 0}</strong> ${tHtml("interface.label.68bca10eea2b")}</td>
+          <td><strong style="color:#15803d;">\${p.stockQuantity ?? p.estoque ?? 0}</strong> un</td>
           <td>
-            <button class="action-btn btn-blue" style="padding:4px 8px;" onclick="editProduct('\${p.id}')">${tHtml("interface.label.e3bd2ee1d054")}</button>
-            <button class="action-btn btn-red" style="padding:4px 8px;" onclick="deleteProduct('\${p.id}')">${tHtml("interface.label.5c8f0523b199")}</button>
+            <button class="action-btn btn-blue" style="padding:4px 8px;" onclick="editProduct('\${p.id}')">✏️ Editar</button>
+            <button class="action-btn btn-red" style="padding:4px 8px;" onclick="deleteProduct('\${p.id}')">🗑️ Excluir</button>
           </td>
         \`;
         tbody.appendChild(tr);
@@ -1589,18 +1583,18 @@ function renderAdminHtml() {
       document.getElementById('formProdStock').value = p.stockQuantity ?? p.estoque ?? 0;
       document.getElementById('formProdImages').value = (p.images || [p.imageUrl || p.imageurl]).filter(Boolean).join(', ');
       document.getElementById('formProdDesc').value = p.descriptionAi || p.descricao_ia || '';
-      document.getElementById('productFormTitle').textContent = t("interface.text.6c8ac6fb440e") + p.id;
+      document.getElementById('productFormTitle').textContent = 'Editar Produto #' + p.id;
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     function resetProdForm() {
       document.getElementById('prodForm').reset();
       document.getElementById('formProdId').value = '';
-      document.getElementById('productFormTitle').textContent = t("interface.message.707f57de93b4");
+      document.getElementById('productFormTitle').textContent = 'Novo Produto no Catálogo';
     }
 
     async function deleteProduct(id) {
-      if (!confirm(t("interface.message.8777a09a3727"))) return;
+      if (!confirm('Deseja excluir este produto do Firestore?')) return;
       await fetch('/api/admin/products/' + id, { method: 'DELETE' });
       loadAdminProducts();
     }
@@ -1633,7 +1627,7 @@ function renderAdminHtml() {
         })
       });
 
-      alert(t("interface.message.e9fb202b58ab"));
+      alert('Produto salvo com sucesso no Firestore!');
       resetProdForm();
       loadAdminProducts();
     }
@@ -1646,7 +1640,7 @@ function renderAdminHtml() {
         const orders = await res.json();
         container.innerHTML = '';
         if (orders.length === 0) {
-          container.innerHTML = '<div style="color:#64748b; padding:20px;">${tHtml("interface.message.2b184dcafc6b")}</div>';
+          container.innerHTML = '<div style="color:#64748b; padding:20px;">Nenhum pedido registrado.</div>';
           return;
         }
 
@@ -1656,9 +1650,9 @@ function renderAdminHtml() {
           const itemsTxt = (o.items || []).map(i => i.name + ' (' + (i.quantity || 1) + 'x)').join(', ');
           div.innerHTML = \`
             <div>
-              <strong>#\${(o.id || '').slice(-6)} — \${o.customerName || t("interface.message.f851d9a83ab0")}</strong> (\${o.customerPhone || 'Presencial'})<br>
+              <strong>#\${(o.id || '').slice(-6)} — \${o.customerName || 'Cliente'}</strong> (\${o.customerPhone || 'Presencial'})<br>
               <span style="font-size:12px; color:#64748b;">Itens: \${itemsTxt}</span><br>
-              <span style="font-size:12px; color:#64748b;">\${o.deliveryAddress || t("interface.message.ff09483495a3")} • \${o.paymentMethod || 'PIX'} • \${new Date(o.createdAt).toLocaleString()}</span>
+              <span style="font-size:12px; color:#64748b;">\${o.deliveryAddress || 'Retirada'} • \${o.paymentMethod || 'PIX'} • \${new Date(o.createdAt).toLocaleString()}</span>
             </div>
             <div style="text-align:right;">
               <span class="badge \${o.status === 'CONFIRMED' ? 'badge-confirmed' : (o.status === 'DELIVERED' ? 'badge-delivered' : 'badge-pending')}">\${o.status}</span>
@@ -1668,13 +1662,12 @@ function renderAdminHtml() {
           container.appendChild(div);
         });
       } catch (err) {
-        container.innerHTML = t("interface.text.ba05b383ac82") + err.message;
+        container.innerHTML = 'Erro ao carregar histórico: ' + err.message;
       }
     }
 
     // 12. VENDA MANUAL NO BALCÃO
     function openManualOrderModal() {
-      window.location.href = '/lancamentos'; return;
       const select = document.getElementById('mProdSelect');
       select.innerHTML = '';
       allProducts.forEach(p => {
@@ -1691,7 +1684,6 @@ function renderAdminHtml() {
     }
 
     async function submitManualOrder(e) {
-      e.preventDefault(); window.location.href='/lancamentos'; return;
       e.preventDefault();
       const name = document.getElementById('mCustName').value;
       const phone = document.getElementById('mCustPhone').value;
@@ -1710,7 +1702,7 @@ function renderAdminHtml() {
         body: JSON.stringify({ customerName: name, customerPhone: phone, items, paymentMethod: pay })
       });
 
-      alert(t("interface.message.6f6c4b4e0048"));
+      alert('Venda registrada com sucesso no caixa e estoque baixado!');
       closeManualOrderModal();
       loadCashierDaily();
     }
@@ -1718,9 +1710,9 @@ function renderAdminHtml() {
     // 13. PLANILHA MODELO E IMPORTADOR COM AUDITORIA LINHA A LINHA
     function downloadCsvTemplate() {
       const csvContent = 'id,name,category,subcategory,unit,price,stockQuantity,images,descriptionAi,tagsAi\\n' +
-        t("interface.text.2205963ea24d") +
-        t("interface.text.68b31696aff7") +
-        t("interface.text.d614d0d5e5cc");
+        '1,Palmeira Imperial,Palmeiras,Imperial,UN,180.00,10,https://images.unsplash.com/photo-1596726596162-421712a433a0?w=800,Muda vistosa de porte nobre para sol pleno,palmeira imperial muda\\n' +
+        '2,Adubo Orgânico Compostado,Gramas & Insumos,Adubação,KG,4.50,150,,Adubo rico em matéria orgânica mineralizada,adubo organico por kg terra\\n' +
+        '3,Jabuticaba Sabará,Frutíferas,Nativas,UN,95.00,20,,Muda enxertada produzindo precocemente,fruta jabuticaba sabara\\n';
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -1731,132 +1723,76 @@ function renderAdminHtml() {
       document.body.removeChild(link);
     }
 
-    let auditedRecords = [];
-
-    function parseCsvOrJson(val) {
-      val = val.trim();
-      if (!val) return [];
-      if (val.startsWith('[')) {
-        return JSON.parse(val);
-      }
-      const lines = val.split('\\n').map(l => l.trim()).filter(Boolean);
-      if (lines.length < 2) throw new Error(t("interface.message.ae1c62640cf4"));
-      const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-      const records = [];
-      for (let i = 1; i < lines.length; i++) {
-        const parts = lines[i].split(',').map(p => p.trim());
-        const row = { _line: i + 1 };
-        headers.forEach((h, colIdx) => {
-          row[h] = parts[colIdx] || '';
-        });
-        records.push(row);
-      }
-      return records;
+    let importPreview = null;
+    let importBusy = false;
+    function updateImportButton() {
+      document.getElementById('btnSubmitImport').disabled = importBusy || !importPreview || !document.getElementById('confirmReplace').checked;
     }
-
-    function validateImportPayload() {
-      const val = document.getElementById('importRawTextarea').value.trim();
-      const fb = document.getElementById('importFeedback');
-      const submitBtn = document.getElementById('btnSubmitImport');
-      auditedRecords = [];
-
+    function resetImportPreview() {
+      importPreview = null;
+      document.getElementById('confirmReplace').checked = false;
+      document.getElementById('importFeedback').textContent = '';
+      updateImportButton();
+    }
+    function setImportBusy(busy) {
+      importBusy = busy;
+      ['importFile', 'importMode', 'btnValidateImport', 'confirmReplace'].forEach(id => document.getElementById(id).disabled = busy);
+      updateImportButton();
+    }
+    async function uploadWorkbook(commit) {
+      const file = document.getElementById('importFile').files[0];
+      if (!file || !file.name.toLowerCase().endsWith('.xlsx')) throw new Error('Selecione a LISTA DE PRODUTOS em formato .xlsx.');
+      if (file.size > 10 * 1024 * 1024) throw new Error('O arquivo deve ter até 10 MB.');
+      const mode = document.getElementById('importMode').value;
+      const response = await fetch('/api/admin/import-xlsx?commit=' + commit + '&mode=' + mode, {
+        method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'X-Confirm-Replace': commit ? 'SUBSTITUIR' : '' }, body: file
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.message || (data.errors || []).join('\\n') || data.error || 'Não foi possível importar.');
+      return data;
+    }
+    async function validateImportPayload() {
+      resetImportPreview();
+      setImportBusy(true);
+      const feedback = document.getElementById('importFeedback');
+      feedback.textContent = 'Conferindo a planilha...';
       try {
-        const list = parseCsvOrJson(val);
-        if (!Array.isArray(list) || list.length === 0) {
-          throw new Error(t("interface.message.49d96baea99f"));
-        }
-
-        const errors = [];
-        const warnings = [];
-
-        list.forEach((item, idx) => {
-          const lineNum = item._line || (idx + 1);
-          const name = item.name || item.descricao || '';
-          const cat = item.category || item.categoria || '';
-          const price = parseFloat(item.price || item.valor_num || item.valor || 0);
-
-          if (!name) {
-            errors.push('Linha ' + lineNum + t("interface.text.55cd93a9b899"));
-          }
-          if (!cat) {
-            errors.push('Linha ' + lineNum + t("interface.text.95b1310e27b8"));
-          }
-          if (isNaN(price) || price <= 0) {
-            errors.push('Linha ' + lineNum + t("interface.text.95b40cfb55a8"));
-          }
-          const hasImg = item.images || item.imageUrl || item.imageurl;
-          if (!hasImg) {
-            warnings.push('Linha ' + lineNum + ' (' + (name || t("interface.message.a25a5e3451d3")) + t("interface.text.71cc66bb4263"));
-          }
-        });
-
-        if (errors.length > 0) {
-          if (submitBtn) {
-            submitBtn.disabled = true;
-            submitBtn.style.opacity = '0.5';
-            submitBtn.style.cursor = 'not-allowed';
-            submitBtn.innerText = t("interface.text.5625bd729947") + errors.length + t("interface.text.1ff002753705");
-          }
-          fb.innerHTML = \`
-            <div style="background:#fee2e2; border:1px solid #ef4444; color:#991b1b; padding:12px; border-radius:8px;">
-              <strong>⚠️ Encontradas \${errors.length} inconsistências que impedem a importação:</strong>
-              <ul style="margin:8px 0 0 20px; font-size:12px;">
-                \${errors.slice(0, 15).map(e => '<li>${tHtml("interface.label.8fbaa8bdafea")}</li>').join('')}
-                \${errors.length > 15 ? '<li>${tHtml("interface.message.b365a9e3d443")}</li>' : ''}
-              </ul>
-              <div style="margin-top:8px; font-size:11px;">${tHtml("interface.message.9e162fcbde4a")}</div>
-            </div>
-          \`;
-        } else {
-          auditedRecords = list;
-          if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.style.opacity = '1';
-            submitBtn.style.cursor = 'pointer';
-            submitBtn.innerText = '🚀 Gravar ' + list.length + ' Produtos Validados no Firestore';
-          }
-          fb.innerHTML = \`
-            <div style="background:#dcfce7; border:1px solid #86efac; color:#166534; padding:12px; border-radius:8px;">
-              <strong>✅ Planilha 100% Válida! (\${list.length} produtos auditados com sucesso)</strong>
-              <div style="font-size:12px; margin-top:4px;">${tHtml("interface.message.3985bf10592b")}</div>
-              \${warnings.length > 0 ? \`<div style="margin-top:6px; font-size:11px; color:#15803d;">ℹ️ Aviso: \${warnings.length} produto(s) usarão foto botânica real em alta definição de contingência.</div>\` : ''}
-            </div>
-          \`;
-        }
-      } catch (err) {
-        if (submitBtn) {
-          submitBtn.disabled = true;
-          submitBtn.style.opacity = '0.5';
-          submitBtn.style.cursor = 'not-allowed';
-        }
-        fb.innerHTML = \`<div style="color:#991b1b; background:#fee2e2; padding:10px; border-radius:6px; border:1px solid #fca5a5;">❌ Erro de Formatação: \${err.message}</div>\`;
-      }
+        const data = await uploadWorkbook(false);
+        importPreview = data;
+        feedback.textContent = data.count + ' produtos válidos (' + data.inactive + ' inativos). Base atual: ' + data.currentCount + ' produtos.' +
+          '\\nAba utilizada: ' + data.sheet + '. Abas ignoradas: ' + (data.ignoredSheets.join(', ') || 'nenhuma') +
+          (document.getElementById('importMode').value === 'replace' ? '\\nA base ficará com exatamente ' + data.count + ' produtos. ' + data.removed + ' IDs antigos serão removidos.' : '\\nOs demais produtos, fotos e estoques existentes serão mantidos quando não informados.') +
+          '\\n\\nPrévia:\\n' + data.preview.map(p => p.id + ' — ' + p.name + ' — ' + Number(p.price).toLocaleString('pt-BR', {style:'currency', currency:'BRL'}) + ' — ' + p.status).join('\\n');
+      } catch (error) { feedback.textContent = error.message; }
+      finally { setImportBusy(false); }
     }
-
     async function submitImportPayload() {
-      if (!auditedRecords || auditedRecords.length === 0) {
-        alert('Por favor, clique primeiro em "1. Analisar & Auditar Linhas da Planilha".');
-        return;
-      }
-      const type = document.getElementById('importTypeSelect').value;
+      if (importBusy || !importPreview || !document.getElementById('confirmReplace').checked) return;
+      const replace = document.getElementById('importMode').value === 'replace';
+      if (!confirm(replace ? 'Substituir o catálogo pelos ' + importPreview.count + ' produtos da planilha? Fotos e estoques não informados serão removidos ou zerados.' : 'Adicionar ou atualizar os produtos da planilha?')) return;
+      setImportBusy(true);
+      const feedback = document.getElementById('importFeedback');
+      feedback.textContent = 'Importando. Aguarde a conclusão...';
       try {
-        const res = await fetch('/api/admin/import-data', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ type, records: auditedRecords })
-        });
-        const d = await res.json();
-        if (d.success) {
-          alert('🎉 ' + d.count + t("interface.text.0d57ccf4adc1"));
-          document.getElementById('importRawTextarea').value = '';
-          document.getElementById('importFeedback').innerHTML = '';
-          loadAdminProducts();
-        } else {
-          alert(t("interface.text.679a4702fd70") + (d.message || t("interface.message.a09a707694c1")));
-        }
-      } catch (err) {
-        alert(t("interface.text.679a4702fd70") + err.message);
-      }
+        const data = await uploadWorkbook(true);
+        importPreview = null;
+        document.getElementById('confirmReplace').checked = false;
+        feedback.textContent = data.count + ' produtos importados com sucesso. ' + (data.removed || 0) + ' IDs antigos removidos.';
+        await loadAdminProducts();
+      } catch (error) {
+        importPreview = null;
+        feedback.textContent = error.message + '\\nConfira novamente a planilha antes de tentar de novo.';
+      } finally { setImportBusy(false); }
+    }
+    async function downloadCatalogBackup() {
+      try {
+        const response = await fetch('/api/inventory');
+        if (!response.ok) throw new Error('Não foi possível obter a cópia.');
+        const data = await response.json();
+        const url = URL.createObjectURL(new Blob([JSON.stringify(data.products, null, 2)], {type: 'application/json'}));
+        const link = document.createElement('a'); link.href = url; link.download = 'produtos-antes-importacao.json'; link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (error) { document.getElementById('importFeedback').textContent = error.message; }
     }
 
     // 14. CONTROLE / MODO CONTAGEM DE ESTOQUE
@@ -1864,9 +1800,9 @@ function renderAdminHtml() {
       localStorage.setItem('conflora_stock_control_active', active ? 'true' : 'false');
       updateStockControlBadge(active);
       if (active) {
-        alert(t("interface.message.d327b00faf43"));
+        alert('✅ Controle de Estoque ATIVADO: Vendas no cardápio e no balcão darão baixa automática no estoque.');
       } else {
-        alert(t("interface.message.be901534b135"));
+        alert('📋 MODO CONTAGEM ATIVADO: Durante essa semana de inventário, as vendas registradas NÃO descontarão do estoque, permitindo a contagem física com a loja rodando sem divergências.');
       }
     }
 
@@ -1874,22 +1810,22 @@ function renderAdminHtml() {
       const label = document.getElementById('stockModeLabel');
       if (!label) return;
       if (active) {
-        label.textContent = t("interface.message.f39e9a3bfa1e");
+        label.textContent = '✅ Baixa Automática Ativa';
         label.style.background = '#dcfce7';
         label.style.color = '#15803d';
       } else {
-        label.textContent = t("interface.message.f3ef0834aafa");
+        label.textContent = '📋 Modo Inventário (Sem Baixa)';
         label.style.background = '#fef3c7';
         label.style.color = '#92400e';
       }
     }
 
     async function seedDefaultConflora() {
-      if (!confirm(t("interface.message.8b0b0868daf0"))) return;
+      if (!confirm('Deseja restaurar o catálogo oficial da Conflora Horta e Viveiro no Firestore?')) return;
       const res = await fetch('/api/admin/seed-catalog', { method: 'POST' });
       const d = await res.json();
       if (d.success) {
-        alert(t("interface.message.3431746c6683"));
+        alert('Catálogo completo sincronizado no Firestore com sucesso!');
         loadAdminProducts();
         loadCashierDaily();
       }

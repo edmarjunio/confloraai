@@ -1,4 +1,3 @@
-const { t } = require('../i18n');
 const config = require('../config/env');
 const Logger = require('../shared/logger');
 const { DEFAULT_CATALOG_ITEMS } = require('../catalog/default-catalog');
@@ -36,12 +35,12 @@ class SystemStatusService {
     // 4. Default Catalog (Planilha Oficial LISTA DE PRODUTOS)
     const defaultCatalogStatus = {
       status: 'ONLINE',
-      badge: 'Planilha Oficial Carregada',
+      badge: 'Referência estática',
       color: '#10b981',
-      title: t("interface.message.ec570d76ace5"),
+      title: 'Catálogo inicial de referência (não substitui produtos importados)',
       totalItems: DEFAULT_CATALOG_ITEMS.length,
       categoriesCount: new Set(DEFAULT_CATALOG_ITEMS.map((i) => i.category || i.categoria)).size,
-      autoFallback: t("interface.message.402e4e065e16"),
+      autoFallback: 'DESATIVADO: o catálogo atual vem do Firestore',
       lastVerified: new Date().toISOString(),
     };
 
@@ -57,70 +56,29 @@ class SystemStatusService {
   }
 
   async checkGoogleSheetsStatus() {
-    const sheetId = config.sheets && config.sheets.spreadsheetId;
-    const hasSheetId = Boolean(sheetId);
     const start = Date.now();
-
-    if (!hasSheetId) {
-      return {
-        status: 'FALLBACK_OFFICIAL',
-        badge: t("interface.message.1510672d2ee2"),
-        color: '#10b981',
-        spreadsheetId: t("interface.message.f57c8e75a070"),
-        sheetName: 'PRODUTOS',
-        itemsActive: this.catalogRepo ? this.catalogRepo.items.length : DEFAULT_CATALOG_ITEMS.length,
-        source: 'Planilha Oficial Conflora (111 itens comerciais)',
-        latencyMs: 1,
-        message: t("interface.message.08b1a603fed8"),
-        lastSync: new Date().toISOString(),
-      };
-    }
-
+    const firestoreSource = Boolean(this.catalogRepo?.firestoreRepo);
+    const source = firestoreSource ? 'Catálogo Firestore' : 'Catálogo configurado';
     try {
-      if (this.catalogRepo && typeof this.catalogRepo.refreshCatalog === 'function') {
-        await this.catalogRepo.refreshCatalog();
-        const latency = Date.now() - start;
-        return {
-          status: 'ONLINE',
-          badge: 'Conectado em Tempo Real',
-          color: '#10b981',
-          spreadsheetId: sheetId,
-          sheetName: this.catalogRepo.sheetName || 'PRODUTOS',
-          itemsActive: this.catalogRepo.items.length,
-          source: 'Google Sheets API v4',
-          latencyMs: latency,
-          message: `${t("interface.message.2e1570b26355")}${this.catalogRepo.items.length}${t("interface.message.d3feb1f70ece")}`,
-          lastSync: new Date().toISOString(),
-        };
-      }
-    } catch (err) {
+      if (!this.catalogRepo?.refreshCatalog) {throw new Error('Catálogo não configurado.');}
+      await this.catalogRepo.refreshCatalog();
       return {
-        status: 'FALLBACK_ERROR',
-        badge: t("interface.message.aa80e258c4fd"),
-        color: '#f59e0b',
-        spreadsheetId: sheetId,
-        sheetName: 'PRODUTOS',
-        itemsActive: this.catalogRepo ? this.catalogRepo.items.length : DEFAULT_CATALOG_ITEMS.length,
-        source: t("interface.message.956773fbc951"),
+        status: 'ONLINE', badge: 'Catálogo disponível', color: '#10b981',
+        spreadsheetId: config.sheets?.spreadsheetId || 'Não configurado',
+        sheetName: this.catalogRepo.sheetName || 'PRODUTOS',
+        itemsActive: this.catalogRepo.items.length, source,
         latencyMs: Date.now() - start,
-        error: err.message,
-        message: `${t("interface.message.6c8497ea7074")}${err.message}${t("interface.message.8ce793a96b4c")}`,
+        message: firestoreSource ? 'Catálogo consultado no Firestore. Esta verificação não testa a conexão Google Sheets.' : 'Catálogo carregado pela fonte configurada.',
         lastSync: new Date().toISOString(),
       };
+    } catch (error) {
+      return {
+        status: 'ERROR', badge: 'Catálogo indisponível', color: '#ef4444', source,
+        spreadsheetId: config.sheets?.spreadsheetId || 'Não configurado', sheetName: 'PRODUTOS',
+        itemsActive: 0, latencyMs: Date.now() - start, error: error.message,
+        message: 'Não foi possível consultar o catálogo. Nenhum catálogo antigo foi restaurado automaticamente.',
+      };
     }
-
-    return {
-      status: 'FALLBACK_OFFICIAL',
-      badge: t("interface.message.1510672d2ee2"),
-      color: '#10b981',
-      spreadsheetId: sheetId || 'N/A',
-      sheetName: 'PRODUTOS',
-      itemsActive: DEFAULT_CATALOG_ITEMS.length,
-      source: 'Planilha Oficial Conflora',
-      latencyMs: 1,
-      message: 'Planilha oficial Conflora carregada.',
-      lastSync: new Date().toISOString(),
-    };
   }
 
   checkWhatsAppStatus() {
@@ -147,8 +105,8 @@ class SystemStatusService {
       lastReceivedAt: this.webhookStats.lastReceivedAt || 'Nenhuma mensagem recente',
       totalReceivedCount: this.webhookStats.totalReceived,
       message: isFullyConfigured
-        ? t("interface.message.a8f40d503cbd")
-        : t("interface.message.e8ddc70c2dcb"),
+        ? 'Webhook Meta operando na rota /webhook e token de verificação validado com sucesso.'
+        : 'Webhook ouvindo requisições na rota /webhook. Simulador do WhatsApp 100% ativo.',
     };
   }
 
@@ -162,19 +120,19 @@ class SystemStatusService {
         await this.firestoreRepo.firestore.collection('products').limit(2).get();
         isConnected = true;
       } catch (err) {
-        Logger.warn(t("interface.message.238ff61935d2"), { error: err.message });
+        Logger.warn('Diagnóstico Firestore falhou', { error: err.message });
       }
     }
 
     return {
       status: isConnected ? 'ONLINE' : 'FALLBACK_MEMORY',
-      badge: isConnected ? 'Firestore Conectado' : t("interface.message.fc1e827eaa86"),
+      badge: isConnected ? 'Firestore Conectado' : 'Modo Memória Ativo',
       color: isConnected ? '#10b981' : '#3b82f6',
       projectId,
       latencyMs: Date.now() - start,
       message: isConnected
-        ? `${t("interface.message.ca335cc846d0")}${projectId}].`
-        : t("interface.message.f4b6db3df364"),
+        ? `Banco de dados Firestore conectado com sucesso ao projeto [${projectId}].`
+        : 'Operando com repositório em memória e persistência em cache.',
     };
   }
 }

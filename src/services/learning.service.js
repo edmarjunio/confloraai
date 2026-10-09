@@ -1,11 +1,10 @@
-const { t } = require('../i18n');
 const { normalizeText } = require('../shared/string.util');
 const Logger = require('../shared/logger');
 
 const STOPWORDS = new Set([
-  'qual', 'quanto', t("interface.message.6adcc016448d"), 'preco', t("interface.message.90639633ec13"), 'voces', 'tem', 'possuem', 'quero', 'comprar',
+  'qual', 'quanto', 'valor', 'preco', 'preço', 'voces', 'tem', 'possuem', 'quero', 'comprar',
   'levar', 'favor', 'ola', 'bom', 'dia', 'tarde', 'noite', 'muda', 'planta', 'plantas',
-  t("interface.message.a1453f380fa9"), t("interface.message.71b4f3a3748c"), 'sem', t("interface.message.ad6276b240df"), 'menos', 'aqui', 'mineiros', 'conflora', 'gostaria', 'saber',
+  'para', 'com', 'sem', 'mais', 'menos', 'aqui', 'mineiros', 'conflora', 'gostaria', 'saber',
 ]);
 
 class LearningService {
@@ -17,7 +16,7 @@ class LearningService {
   async learnFromCompletedSale({ purchasedItems = [], conversationHistory = [] }) {
     const uniqueProductNames = [...new Set(purchasedItems.map((i) => i.name))];
     if (uniqueProductNames.length !== 1) {
-      Logger.debug(t("interface.message.72b3500ea76a"));
+      Logger.debug('Aprendizado ignorado: compra com multiplos produtos para evitar contaminacao cruzada.');
       return;
     }
 
@@ -67,7 +66,7 @@ class LearningService {
               learnedAt: new Date().toISOString(),
             }, { merge: true });
         } catch (err) {
-          Logger.warn(t("interface.message.0ed3c2f79956"), { error: err.message });
+          Logger.warn('Erro ao persistir tag aprendida no Firestore', { error: err.message });
         }
       }
     }

@@ -13,13 +13,12 @@
     "test:all": "npm install && npm run check && npm test && npm run dev",
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "check": "node --check src/server.js && node --check src/http/app.js && node --check src/services/message.service.js && node --check src/ai/agent.service.js && node --check src/catalog/catalog.repository.js && node --check src/orders/order.service.js && node --check src/integrations/whatsapp.client.js && node --check src/integrations/task-queue.client.js && node --check src/router/message.router.js && node --check src/services/direct-price.service.js && node --check src/operations/ledger.js && node --check src/operations/importer.js && node --check src/operations/routes.js && node --check src/operations/view.js && node --check src/operations/cash-report.js && node --check src/import/product-catalog.js && node --check src/testing/local-database.js && npm run i18n:check",
+    "check": "node --check src/server.js && node --check src/http/app.js && node --check src/services/message.service.js && node --check src/ai/agent.service.js && node --check src/catalog/catalog.repository.js && node --check src/orders/order.service.js && node --check src/integrations/whatsapp.client.js && node --check src/integrations/task-queue.client.js && node --check src/router/message.router.js && node --check src/services/direct-price.service.js",
     "test": "node --test test/*.test.js",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test:local": "node scripts/test-local.js",
-    "i18n:check": "node scripts/check-i18n.js"
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@google-cloud/firestore": "9.3.1",
@@ -32,6 +31,7 @@
     "googleapis": "183.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.0",
     "eslint": "10.12.0",
     "prettier": "3.9.9"
   }
