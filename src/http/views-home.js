@@ -1321,6 +1321,7 @@ function renderHomeHtml() {
         <img id="userHeaderPic" style="width:24px; height:24px; border-radius:50%; object-fit:cover;" src="" />
         <span id="userHeaderName" style="font-weight:700; font-size:12px; cursor:pointer;" onclick="openCustomerPortalModal()"></span>
         <span id="userHeaderBadge" style="font-size:10px; padding:2px 6px; border-radius:10px; color:white; font-weight:800;"></span>
+        <button type="button" class="google-auth-btn" onclick="logoutCurrentUser()">Sair</button>
       </div>
       <button type="button" class="admin-link-btn" onclick="handleAdminPanelClick()" data-i18n="header.adminPortal">
         ⚙️ Painel da Equipe
@@ -1378,6 +1379,7 @@ function renderHomeHtml() {
             <option value="nome_desc">Ordem: Z a A</option>
             <option value="preco_asc">Menor Preço</option>
             <option value="preco_desc">Maior Preço</option>
+            <option value="mais_vendidos" data-i18n="sort.bestSelling">MAIS VENDIDOS</option>
           </select>
         </div>
 
@@ -1663,24 +1665,79 @@ function renderHomeHtml() {
       </div>
 
       <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:8px; padding:10px 12px; margin-bottom:14px; font-size:12px; color:#166534; line-height:1.4;">
-        ✨ <strong>O login é 100% opcional!</strong> Você pode comprar à vontade sem conta.
+        ✨ <strong>O login é 100% opcional!</strong> Você pode comprar à vontade sem conta. Ao entrar, você salva seu endereço, acompanha seus pedidos e vê os produtos que mais compra!
       </div>
 
-      <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:14px; margin-bottom:14px;">
-        <p data-google-status role="status" style="font-size:13px; margin-bottom:10px;">Acesso rápido com sua conta Google:</p>
-        <button type="button" class="checkout-submit-btn" id="googleLoginButton" data-google-login disabled onclick="submitGoogleLogin()" style="display:flex; align-items:center; justify-content:center; gap:8px;">
-          <svg style="width:16px; height:16px;" viewBox="0 0 24 24"><path fill="#ffffff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#ffffff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#ffffff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#ffffff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
-          Entrar com Google
-        </button>
+      <!-- ABAS DO LOGIN -->
+      <div class="portal-tabs" style="margin-bottom:16px;">
+        <button class="portal-tab-btn active" id="authTabGoogleBtn" onclick="switchAuthTab('google')">🚀 Google (1-clique)</button>
+        <button class="portal-tab-btn" id="authTabLoginBtn" onclick="switchAuthTab('login')">🔑 Entrar</button>
+        <button class="portal-tab-btn" id="authTabRegisterBtn" onclick="switchAuthTab('register')">📝 Criar Conta</button>
+      </div>
+
+      <!-- ABA 1: GOOGLE SIGN-IN -->
+      <div id="authContentGoogle">
+        <p style="font-size:13px; color:#64748b; margin-bottom:12px;">
+          Faça login rápido com sua conta Google (Gmail ou Workspace):
+        </p>
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:14px; margin-bottom:14px;">
+          <p data-google-status role="status">Selecione sua conta na janela segura do Google.</p>
+          <button type="button" class="checkout-submit-btn" id="googleLoginButton" data-google-login disabled onclick="submitGoogleLogin()" style="display:flex; align-items:center; justify-content:center; gap:8px;">
+            <svg style="width:16px; height:16px;" viewBox="0 0 24 24"><path fill="#ffffff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#ffffff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#ffffff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#ffffff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+            Entrar com Google
+          </button>
+        </div>
+      </div>
+
+      <!-- ABA 2: EMAIL E SENHA -->
+      <div id="authContentLogin" style="display:none;">
+        <form onsubmit="submitPasswordLogin(event)">
+          <div style="margin-bottom:10px;">
+            <label style="font-size:12px; font-weight:bold; color:#475569;">E-mail cadastrado:</label>
+            <input type="email" id="loginEmailInput" required placeholder="seuemail@exemplo.com" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; margin-top:4px;" />
+          </div>
+          <div style="margin-bottom:14px;">
+            <label style="font-size:12px; font-weight:bold; color:#475569;">Sua Senha:</label>
+            <input type="password" id="loginPassInput" required placeholder="••••••••" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; margin-top:4px;" />
+          </div>
+          <button type="submit" class="checkout-submit-btn" style="width:100%;">Acessar Minha Conta</button>
+        </form>
+      </div>
+
+      <!-- ABA 3: CRIAR CONTA DE CLIENTE -->
+      <div id="authContentRegister" style="display:none;">
+        <form onsubmit="submitRegisterAccount(event)">
+          <div style="margin-bottom:8px;">
+            <label style="font-size:12px; font-weight:bold; color:#475569;">Nome Completo:</label>
+            <input type="text" id="regNameInput" required placeholder="Ex: Mariana Silva" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;" />
+          </div>
+          <div style="margin-bottom:8px;">
+            <label style="font-size:12px; font-weight:bold; color:#475569;">E-mail:</label>
+            <input type="email" id="regEmailInput" required placeholder="mariana@exemplo.com" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;" />
+          </div>
+          <div style="margin-bottom:8px;">
+            <label style="font-size:12px; font-weight:bold; color:#475569;">Senha (mínimo 4 caracteres):</label>
+            <input type="password" id="regPassInput" required minlength="4" placeholder="Crie uma senha segura" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;" />
+          </div>
+          <div style="margin-bottom:8px;">
+            <label style="font-size:12px; font-weight:bold; color:#475569;">WhatsApp / Telefone com DDD:</label>
+            <input type="text" id="regPhoneInput" placeholder="64999990000" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;" />
+          </div>
+          <div style="margin-bottom:12px;">
+            <label style="font-size:12px; font-weight:bold; color:#475569;">Endereço de Entrega (Mineiros - GO):</label>
+            <input type="text" id="regAddressInput" placeholder="Rua, Número e Bairro" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;" />
+          </div>
+          <button type="submit" class="checkout-submit-btn" style="width:100%;">Criar Minha Conta Conflora</button>
+        </form>
       </div>
 
       <div style="text-align:center; margin-top:14px;">
-        <button type="button" onclick="closeAuthModal()" style="background:#f1f5f9; border:none; padding:8px 16px; border-radius:6px; cursor:pointer; color:#64748b; font-weight:600;">Fechar</button>
+        <button type="button" class="action-btn" onclick="closeAuthModal()" style="background:#f1f5f9; border:none; padding:8px 16px; border-radius:6px; cursor:pointer; color:#64748b; font-weight:600;">Fechar</button>
       </div>
     </div>
   </div>
 
-  <!-- MODAL: PAINEL DO CLIENTE -->
+  <!-- MODAL: PAINEL DO CLIENTE (HISTÓRICO, MAIS COMPRADOS E STATUS) -->
   <div class="modal-overlay" id="customerPortalModal">
     <div class="modal-box" style="max-width:750px; padding:22px;">
       <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:12px; margin-bottom:14px;">
@@ -1772,6 +1829,7 @@ function renderHomeHtml() {
         'sort.nameDesc': 'Ordem: Z a A',
         'sort.priceAsc': 'Menor Preço',
         'sort.priceDesc': 'Maior Preço',
+        'sort.bestSelling': 'MAIS VENDIDOS',
         'cart.title': 'Sua Sacola',
         'cart.itemsCount': 'item(ns)',
         'cart.emptyMessage': 'Sua sacola está vazia.<br>Clique em <strong>+</strong> nos produtos para adicionar em 1 clique!',
@@ -1834,6 +1892,7 @@ function renderHomeHtml() {
         'sort.nameDesc': 'Order: Z to A',
         'sort.priceAsc': 'Lowest Price',
         'sort.priceDesc': 'Highest Price',
+        'sort.bestSelling': 'BEST SELLERS',
         'cart.title': 'Your Cart',
         'cart.itemsCount': 'item(s)',
         'cart.emptyMessage': 'Your cart is empty.<br>Click <strong>+</strong> on items to add with 1 click!',
@@ -1896,6 +1955,7 @@ function renderHomeHtml() {
         'sort.nameDesc': 'Orden: Z a A',
         'sort.priceAsc': 'Menor Precio',
         'sort.priceDesc': 'Mayor Precio',
+        'sort.bestSelling': 'MÁS VENDIDOS',
         'cart.title': 'Tu Cesta',
         'cart.itemsCount': 'artículo(s)',
         'cart.emptyMessage': 'Tu cesta está vacía.<br>¡Haz clic en <strong>+</strong> en los produtos para añadir en 1 clic!',
@@ -2401,7 +2461,10 @@ function renderHomeHtml() {
       }
 
       // ORDENAÇÃO (PADRÃO A-Z via localeCompare("pt-BR"))
-      if (sort === 'nome_desc') {
+      if (sort === 'mais_vendidos') {
+        list.sort((a, b) => (Number(b.salesCount) || 0) - (Number(a.salesCount) || 0)
+          || (a.descricao || a.name || '').localeCompare(b.descricao || b.name || '', 'pt-BR'));
+      } else if (sort === 'nome_desc') {
         list.sort((a, b) => (b.descricao || b.name || '').localeCompare(a.descricao || a.name || '', 'pt-BR'));
       } else if (sort === 'preco_asc') {
         list.sort((a, b) => (Number(a.valor_num || a.price || 0)) - (Number(b.valor_num || b.price || 0)));
@@ -3001,7 +3064,7 @@ function renderHomeHtml() {
             </div>
             <div class="cart-qty-ctrl-row">
               <button class="qty-btn" onclick="changeQty('\${item.id}', -1)" title="Diminuir">-</button>
-              <span style="font-weight:bold; min-width:38px; text-align:center; font-size:12px; cursor:\${item.isKg ? 'pointer' : 'default'};" \${item.isKg ? ('onclick="openKgModal(\'' + item.id + '\')"') : ''}>
+              <span style="font-weight:bold; min-width:38px; text-align:center; font-size:12px; cursor:\${item.isKg ? 'pointer' : 'default'};" \${item.isKg ? ('onclick="openKgModal(\\\'' + item.id + '\\\')"') : ''}>
                 \${qtyDisplay}
               </span>
               <button class="qty-btn" onclick="changeQty('\${item.id}', 1)" title="Aumentar">+</button>
@@ -3322,36 +3385,36 @@ function renderHomeHtml() {
     function buildOwnerWhatsAppMessage(rec) {
       const itemsListText = rec.items
         .map(it => '• ' + it.quantity + (it.unit === 'KG' ? ' kg' : 'x') + ' ' + it.name + ' (R$ ' + Number(it.price || 0).toFixed(2).replace('.', ',') + ') = R$ ' + Number(it.subtotal || (it.price * it.quantity)).toFixed(2).replace('.', ','))
-        .join('\n');
+        .join('\\n');
 
       const couponText = rec.discount > 0
-        ? '🎟️ *Cupom:* ' + rec.coupon + ' (-R$ ' + Number(rec.discount).toFixed(2).replace('.', ',') + ')\n'
+        ? '🎟️ *Cupom:* ' + rec.coupon + ' (-R$ ' + Number(rec.discount).toFixed(2).replace('.', ',') + ')\\n'
         : '';
 
       let cashDetails = '';
       if (rec.paymentMethod === 'DINHEIRO') {
         if (rec.changeDue > 0) {
-          cashDetails = '💵 *Dinheiro em mãos:* R$ ' + Number(rec.cashTendered).toFixed(2).replace('.', ',') + '\n' +
-                        '💰 *Levar de troco:* R$ ' + Number(rec.changeDue).toFixed(2).replace('.', ',') + '\n';
+          cashDetails = '💵 *Dinheiro em mãos:* R$ ' + Number(rec.cashTendered).toFixed(2).replace('.', ',') + '\\n' +
+                        '💰 *Levar de troco:* R$ ' + Number(rec.changeDue).toFixed(2).replace('.', ',') + '\\n';
         } else {
-          cashDetails = '💵 *Dinheiro em mãos:* R$ ' + Number(rec.cashTendered || rec.total).toFixed(2).replace('.', ',') + '\n' +
-                        '✅ *Valor exato, não precisa de troco*\n';
+          cashDetails = '💵 *Dinheiro em mãos:* R$ ' + Number(rec.cashTendered || rec.total).toFixed(2).replace('.', ',') + '\\n' +
+                        '✅ *Valor exato, não precisa de troco*\\n';
         }
       }
 
       return (
-        '🔔 *NOVO PEDIDO FECHADO - CONFLORA HORTA E VIVEIRO* 🔔\n\n' +
-        '📦 *Pedido:* #' + rec.order.id + '\n' +
-        '📅 *Data:* ' + rec.date + '\n\n' +
-        '👤 *Cliente:* ' + rec.customerName + '\n' +
-        '📱 *Telefone/WhatsApp:* ' + rec.customerPhone + '\n' +
-        '📍 *Entrega:* ' + rec.deliveryAddress + ' (' + (rec.orderType === 'DELIVERY' ? '🛵 Entrega' : '🏬 Retirada') + ')\n\n' +
-        '🛒 *Relação de Itens:*\n' +
-        itemsListText + '\n\n' +
-        '💵 *Subtotal:* R$ ' + Number(rec.subtotal).toFixed(2).replace('.', ',') + '\n' +
+        '🔔 *NOVO PEDIDO FECHADO - CONFLORA HORTA E VIVEIRO* 🔔\\n\\n' +
+        '📦 *Pedido:* #' + rec.order.id + '\\n' +
+        '📅 *Data:* ' + rec.date + '\\n\\n' +
+        '👤 *Cliente:* ' + rec.customerName + '\\n' +
+        '📱 *Telefone/WhatsApp:* ' + rec.customerPhone + '\\n' +
+        '📍 *Entrega:* ' + rec.deliveryAddress + ' (' + (rec.orderType === 'DELIVERY' ? '🛵 Entrega' : '🏬 Retirada') + ')\\n\\n' +
+        '🛒 *Relação de Itens:*\\n' +
+        itemsListText + '\\n\\n' +
+        '💵 *Subtotal:* R$ ' + Number(rec.subtotal).toFixed(2).replace('.', ',') + '\\n' +
         couponText +
-        '💰 *Total Final da Compra:* R$ ' + Number(rec.total).toFixed(2).replace('.', ',') + '\n' +
-        '💳 *Forma de Pagamento:* ' + rec.paymentMethod + '\n' +
+        '💰 *Total Final da Compra:* R$ ' + Number(rec.total).toFixed(2).replace('.', ',') + '\\n' +
+        '💳 *Forma de Pagamento:* ' + rec.paymentMethod + '\\n' +
         cashDetails
       );
     }
@@ -3523,6 +3586,79 @@ function renderHomeHtml() {
     }
     const openGoogleLoginModal = openAuthModal;
     const closeGoogleLoginModal = closeAuthModal;
+
+    function switchAuthTab(tab) {
+      const gTab = document.getElementById('authTabGoogleBtn');
+      const lTab = document.getElementById('authTabLoginBtn');
+      const rTab = document.getElementById('authTabRegisterBtn');
+      const gC = document.getElementById('authContentGoogle');
+      const lC = document.getElementById('authContentLogin');
+      const rC = document.getElementById('authContentRegister');
+
+      if (gTab) gTab.classList.toggle('active', tab === 'google');
+      if (lTab) lTab.classList.toggle('active', tab === 'login');
+      if (rTab) rTab.classList.toggle('active', tab === 'register');
+
+      if (gC) gC.style.display = tab === 'google' ? 'block' : 'none';
+      if (lC) lC.style.display = tab === 'login' ? 'block' : 'none';
+      if (rC) rC.style.display = tab === 'register' ? 'block' : 'none';
+    }
+
+    async function submitPasswordLogin(e) {
+      if (e) e.preventDefault();
+      const email = document.getElementById('loginEmailInput').value.trim();
+      const password = document.getElementById('loginPassInput').value.trim();
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        const data = await res.json();
+        if (data.success && data.user) {
+          currentUser = data.user;
+          if (data.user.role === 'ADMIN') {
+            localStorage.setItem('conflora_op', JSON.stringify(data.user));
+          }
+          applyUserUI(currentUser);
+          closeAuthModal();
+          alert('🌿 Bem-vindo(a), ' + (currentUser.name || 'Cliente') + '! Login efetuado com sucesso.');
+        } else {
+          alert('Erro no login: ' + (data.error || 'Verifique seus dados'));
+        }
+      } catch (err) {
+        alert('Erro de conexão ao entrar: ' + err.message);
+      }
+    }
+
+    async function submitRegisterAccount(e) {
+      if (e) e.preventDefault();
+      const name = document.getElementById('regNameInput').value.trim();
+      const email = document.getElementById('regEmailInput').value.trim();
+      const password = document.getElementById('regPassInput').value.trim();
+      const phone = document.getElementById('regPhoneInput').value.trim();
+      const address = document.getElementById('regAddressInput').value.trim();
+
+      try {
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, email, password, phone, address }),
+        });
+        const data = await res.json();
+        if (data.success && data.user) {
+          currentUser = data.user;
+          applyUserUI(currentUser);
+          closeAuthModal();
+          alert('🌿 Conta criada com sucesso! Perfil: CLIENTE. Você pode acompanhar suas compras e acumular pontos.');
+        } else {
+          alert('Erro no cadastro: ' + (data.error || 'Tente novamente'));
+        }
+      } catch (err) {
+        alert('Erro de conexão ao cadastrar: ' + err.message);
+      }
+    }
 
     async function submitGoogleLogin() {
       const button = document.getElementById('googleLoginButton');

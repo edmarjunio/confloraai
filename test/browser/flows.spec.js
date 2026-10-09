@@ -27,6 +27,25 @@ async function pinLogin(page, name, pin) {
     .click();
   await expect(page.locator("#loginModal")).not.toHaveClass(/open/);
 }
+
+test('Catálogo: mais vendidos respeita quantidades, desempate e busca', async ({ page }) => {
+  await page.route('**/api/inventory', route => route.fulfill({ json: {
+    products: [
+      { id: 'a', name: 'Abacaxi', price: 10, salesCount: 0, status: 'ATIVO' },
+      { id: 'b', name: 'Zamioculca', price: 20, salesCount: 12, status: 'ATIVO' },
+      { id: 'c', name: 'Begônia', price: 15, salesCount: 12, status: 'ATIVO' },
+    ], movements: [],
+  } }));
+  await page.goto('/');
+  await expect(page.locator('#productsGrid')).toContainText('Zamioculca');
+  await page.locator('#sortSelect').selectOption('mais_vendidos');
+  const names = await page.locator('#productsGrid').innerText();
+  expect(names.indexOf('Begônia')).toBeLessThan(names.indexOf('Zamioculca'));
+  expect(names.indexOf('Zamioculca')).toBeLessThan(names.indexOf('Abacaxi'));
+  await page.locator('#searchInput').fill('abacaxi');
+  await expect(page.locator('#productsGrid')).not.toContainText('Zamioculca');
+  await expect(page.locator('#productsGrid')).toContainText('Abacaxi');
+});
 test("Admin: login, todas as 11 telas, upload real e confirmação de substituição", async ({
   page,
 }) => {
@@ -103,7 +122,7 @@ test("Caixa: login, cinco telas permitidas, bloqueios e venda no balcão", async
   const orders = await (await page.request.get("/api/admin/orders")).json();
   expect(orders.some((o) => o.customerName === "Teste Caixa")).toBe(true);
 });
-test("Cliente: cadastro, senha, busca, sacola, pedido, três abas e logout", async ({
+test("Cliente: cadastro, senha, busca, sacola, recibo, histórico e logout", async ({
   page,
 }) => {
   await page.goto("/");
@@ -117,6 +136,7 @@ test("Cliente: cadastro, senha, busca, sacola, pedido, três abas e logout", asy
   await expect(page.locator("#userHeaderName")).toHaveText("Cliente");
   await page.locator("#searchInput").fill("ABACAXI");
   await expect(page.locator("#productsGrid")).toContainText("ABACAXI");
+  await expect(page.locator("#productsGrid")).not.toContainText("ABACATE");
   await page
     .locator("#productsGrid button")
     .filter({ hasText: /Adicionar|Comprar|\+/ })
@@ -126,11 +146,10 @@ test("Cliente: cadastro, senha, busca, sacola, pedido, três abas e logout", asy
   await page.locator("#custPhone").fill("64999999999");
   await page.locator("#custAddress").fill("Rua Teste, 123");
   await page.locator("#submitOrderBtn").click();
+  await expect(page.locator('#orderReceiptModal')).toHaveClass(/open/);
+  await page.locator('[onclick="closeReceiptModal()"]').click();
   await page.locator('[onclick="openCustomerPortalModal()"]').first().click();
-  for (const tab of ["Orders", "Favs", "Loyalty"]) {
-    await page.locator("#cTab" + tab + "Btn").click();
-    await expect(page.locator("#cTab" + tab + "Content")).toBeVisible();
-  }
+  await expect(page.locator('#customerOrdersList')).toContainText('Pedido #');
   await page.locator('[onclick="closeCustomerPortalModal()"]').first().click();
   await page.locator('[onclick="logoutCurrentUser()"]').click();
   await expect(page.locator("#authOpenBtn")).toBeVisible();

@@ -1,5 +1,6 @@
 const { createWebSessions, safeUser } = require('../security/web-session');
 const { readProductWorkbook } = require('../catalog/spreadsheet-import');
+const { rankProductSales } = require('../catalog/product-sales');
 let expressModule = null;
 function getExpress() {
   if (!expressModule) {
@@ -1063,7 +1064,15 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
     try {
-      const products = await messageService.firestoreRepo.getAllProducts();
+      let products = await messageService.firestoreRepo.getAllProducts();
+      if (typeof messageService.firestoreRepo.getSalesOrders === 'function') {
+        try {
+          const orders = await messageService.firestoreRepo.getSalesOrders();
+          products = rankProductSales(products, orders);
+        } catch (error) {
+          Logger.warn('Ranking de vendas temporariamente indisponível', { error: error.message });
+        }
+      }
       let movements = [];
       try {
         movements = await messageService.firestoreRepo.getStockMovements(15);

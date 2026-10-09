@@ -1704,6 +1704,19 @@ class FirestoreRepository {
     return orderObj;
   }
 
+  async getSalesOrders() {
+    if (!this.firestore) {
+      return Array.from(this.inMemoryOrders.values());
+    }
+    if (this.salesOrdersCache && Date.now() < this.salesOrdersCache.expiresAt) {
+      return this.salesOrdersCache.orders;
+    }
+    const snapshot = await this.firestore.collection('orders').select('status', 'items').get();
+    const orders = snapshot.docs.map(doc => doc.data());
+    this.salesOrdersCache = { orders, expiresAt: Date.now() + 60000 };
+    return orders;
+  }
+
   async getAllOrders(limit = 50) {
     if (this.firestore) {
       try {
