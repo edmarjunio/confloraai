@@ -1080,6 +1080,41 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
   app.get('/api/products', handleInventoryRequest);
   app.get('/api/catalog', handleInventoryRequest);
 
+  // Servir Foto de Produto Armazenada no Cloud Firestore
+  app.get('/api/images/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const photo = await messageService.firestoreRepo.getProductPhoto(id);
+      if (photo && photo.data) {
+        const mimeType = photo.contentType || 'image/jpeg';
+        res.setHeader('Content-Type', mimeType);
+        res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+        if (photo.fileName) {
+          res.setHeader('Content-Disposition', `inline; filename="${photo.fileName}"`);
+        }
+        const imgBuffer = Buffer.from(photo.data, 'base64');
+        return res.status(200).send(imgBuffer);
+      }
+
+      // Se não encontrou foto diretamente, tenta buscar o produto correspondente
+      const cleanProdId = id.replace(/^img_/, '');
+      const prod = await messageService.firestoreRepo.getProductById(cleanProdId);
+      if (prod && prod.imageUrl && prod.imageUrl.startsWith('http') && !prod.imageUrl.includes('/api/images/')) {
+        return res.redirect(prod.imageUrl);
+      }
+
+      // Fallback em SVG da Conflora
+      const { createConfloraSvgFallback } = require('../catalog/product-photo.service');
+      const fallbackBase64 = createConfloraSvgFallback(prod?.name || 'Conflora', prod?.category || 'Viveiro');
+      res.setHeader('Content-Type', 'image/svg+xml');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      return res.status(200).send(Buffer.from(fallbackBase64, 'base64'));
+    } catch (err) {
+      Logger.error('Erro ao servir imagem do Firestore', err);
+      res.status(500).send('Erro ao carregar imagem');
+    }
+  });
+
   // Client Web Orders API
   app.post('/api/orders', async (req, res) => {
     try {
@@ -1177,14 +1212,118 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
     }
   });
 
-  // Admin: Salvar / Atualizar Produto
+  // Admin: Salvar / Atualizar Produto (com suporte a foto direta no Firestore e padrão de nomes/tags)
   app.post('/api/admin/products', async (req, res) => {
     try {
       const product = req.body;
       await messageService.firestoreRepo.saveProduct(product);
+      if (messageService.catalogRepo) {
+        messageService.catalogRepo.lastCacheTime = 0;
+      }
       res.status(200).json({ success: true, product });
     } catch (err) {
       Logger.error('Erro ao salvar produto no admin', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin: Enviar Foto de Produto Direto para o Firestore (com compressão, padrão de nomes e tags)
+  app.post('/api/admin/products/:id/photo', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const prod = (await messageService.firestoreRepo.getProductById(id)) || { id, name: req.body.name || 'Produto' };
+      const { photoBase64, contentType, maxWidth, maxHeight, quality, format } = req.body || {};
+
+      if (!photoBase64 || typeof photoBase64 !== 'string') {
+        return res.status(400).json({ error: 'Envie os dados da foto em base64.' });
+      }
+
+      const { buildOptimizedFirestorePhotoDocument } = require('../catalog/product-photo.service');
+      const cleanBase64 = photoBase64.replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, '');
+      const photoDoc = await buildOptimizedFirestorePhotoDocument(prod, {
+        base64Data: cleanBase64,
+        contentType: contentType || 'image/jpeg',
+        source: 'WEBSITE_DIRECT',
+        maxWidth: maxWidth ? parseInt(maxWidth, 10) : undefined,
+        maxHeight: maxHeight ? parseInt(maxHeight, 10) : undefined,
+        quality: quality ? parseInt(quality, 10) : undefined,
+        format,
+      });
+
+      await messageService.firestoreRepo.saveProductPhoto(photoDoc);
+
+      const updatedProduct = {
+        ...prod,
+        imageUrl: `/api/images/${photoDoc.id}`,
+        images: [`/api/images/${photoDoc.id}`],
+        imageFileId: photoDoc.id,
+        imagePathCache: `/api/images/${photoDoc.id}`,
+        tagsAi: photoDoc.tagsAi,
+        tags_ia: photoDoc.tagsAi,
+        descriptionAi: photoDoc.descriptionAi,
+        descricao_ia: photoDoc.descriptionAi,
+        updatedAt: new Date().toISOString(),
+      };
+
+      await messageService.firestoreRepo.saveProduct(updatedProduct);
+
+      if (messageService.catalogRepo) {
+        messageService.catalogRepo.lastCacheTime = 0;
+      }
+
+      res.status(200).json({
+        success: true,
+        photo: {
+          id: photoDoc.id,
+          fileName: photoDoc.fileName,
+          tags: photoDoc.tagsAi,
+          url: updatedProduct.imageUrl,
+          compression: photoDoc.compression || null,
+        },
+        product: updatedProduct,
+      });
+    } catch (err) {
+      Logger.error('Erro no upload de foto para o Firestore', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin: Utilitário de Compressão e Redimensionamento de Imagem no Servidor
+  app.post('/api/admin/images/compress', async (req, res) => {
+    try {
+      const { imageBase64, maxWidth, maxHeight, quality, format } = req.body || {};
+      if (!imageBase64 || typeof imageBase64 !== 'string') {
+        return res.status(400).json({ error: 'Envie imageBase64 para compressão.' });
+      }
+
+      const { compressImageBase64 } = require('../catalog/image-compressor');
+      const result = await compressImageBase64(imageBase64, {
+        maxWidth: maxWidth ? parseInt(maxWidth, 10) : undefined,
+        maxHeight: maxHeight ? parseInt(maxHeight, 10) : undefined,
+        quality: quality ? parseInt(quality, 10) : undefined,
+        format,
+      });
+
+      res.status(200).json({
+        success: true,
+        ...result,
+      });
+    } catch (err) {
+      Logger.error('Erro na compressão de imagem no servidor', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin: Transferir Fotos do Google Drive da Planilha para o Firestore com Padrão de Nomes e Tags
+  app.post('/api/admin/transfer-drive-photos', async (_req, res) => {
+    try {
+      const result = await messageService.firestoreRepo.transferAllDrivePhotosToFirestore();
+      if (messageService.catalogRepo) {
+        messageService.catalogRepo.lastCacheTime = 0;
+      }
+      res.status(200).json(result);
+    } catch (err) {
+      Logger.error('Erro ao transferir fotos do Google Drive para o Firestore', err);
       res.status(500).json({ error: err.message });
     }
   });

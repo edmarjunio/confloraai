@@ -445,8 +445,25 @@ function renderAdminHtml() {
           <input type="number" id="formProdStock" required style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="15" />
         </div>
         <div>
-          <label style="font-size:12px; font-weight:bold;">Fotos (Múltiplas URLs separadas por vírgula):</label>
+          <label style="font-size:12px; font-weight:bold;">📸 Foto Direto pro Firestore (Upload Local):</label>
+          <input type="file" id="formProdPhotoFile" accept="image/*" onchange="handleProdPhotoFileSelect(event)" style="width:100%; padding:6px; border:1px solid #cbd5e1; border-radius:6px; background:#f8fafc;" />
+          <div style="font-size:10px; color:#15803d; margin-top:2px;">⚡ Compressão Inteligente Conflora: Fotos são automaticamente redimensionadas e otimizadas no servidor para carregamento ultrarrápido no catálogo.</div>
+          <div id="formProdPhotoPreviewBox" style="display:none; margin-top:6px; align-items:center; gap:10px;">
+            <img id="formProdPhotoPreviewImg" style="width:48px; height:48px; border-radius:6px; object-fit:cover; border:2px solid #22c55e;" />
+            <div>
+              <div id="formProdPhotoFileName" style="font-size:11px; font-weight:bold; color:#14532d;"></div>
+              <div id="formProdPhotoTags" style="font-size:10px; color:#64748b;"></div>
+            </div>
+          </div>
+          <input type="hidden" id="formProdPhotoBase64" />
+        </div>
+        <div>
+          <label style="font-size:12px; font-weight:bold;">Ou URLs Externas de Fotos (separadas por vírgula):</label>
           <input type="text" id="formProdImages" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="https://..., https://..." />
+        </div>
+        <div style="grid-column: 1/-1;">
+          <label style="font-size:12px; font-weight:bold;">🏷️ Tags Padronizadas (Conflora &amp; IA):</label>
+          <input type="text" id="formProdTags" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="palmeira rabo de raposa, wodyetia bifurcata, mudas (geradas automaticamente)" />
         </div>
         <div style="grid-column: 1/-1;">
           <label style="font-size:12px; font-weight:bold;">Descrição Botânica & Cuidados:</label>
@@ -520,6 +537,23 @@ function renderAdminHtml() {
         <div id="importFeedback" role="status" aria-live="polite" style="white-space:pre-wrap;margin:16px 0;"></div>
         <label style="display:block;margin:12px 0;"><input id="confirmReplace" type="checkbox" onchange="updateImportButton()" /> Conferi a prévia e confirmo a operação selecionada.</label>
         <button class="action-btn btn-green" id="btnSubmitImport" disabled onclick="submitImportPayload()">2. Importar planilha</button>
+      </div>
+
+      <!-- SEÇÃO: TRANSFERÊNCIA DE FOTOS DO GOOGLE DRIVE PARA O FIRESTORE -->
+      <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:8px; padding:18px; margin-top:20px;">
+        <h3 style="color:#14532d; font-size:15px; margin-bottom:6px; display:flex; align-items:center; gap:8px;">
+          📸 Armazenamento de Fotos no Cloud Firestore
+        </h3>
+        <p style="font-size:12px; color:#166534; line-height:1.6; margin-bottom:12px;">
+          Você usava o armazenamento do Google Drive com caminhos na planilha. Agora todas as fotos são transferidas e armazenadas <strong>diretamente no Firestore</strong> (coleção <code>product_images</code>), mantendo o padrão oficial de nomes (<code>{slug-do-produto}_{id}.jpg</code>) e tags botânicas da Conflora.
+        </p>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <button class="action-btn btn-green" id="btnTransferDrivePhotos" onclick="transferDrivePhotosFromAdmin()">
+            ⚡ Sincronizar &amp; Transferir Fotos do Drive pro Firestore
+          </button>
+          <span id="transferPhotosStatus" style="font-size:12px; color:#475569;"></span>
+        </div>
+        <div id="transferPhotosResultBox" style="display:none; margin-top:12px; padding:10px 14px; background:white; border-radius:6px; border:1px solid #86efac; font-size:12px; max-height:180px; overflow-y:auto; line-height:1.6;"></div>
       </div>
     </div>
 
@@ -1572,6 +1606,41 @@ function renderAdminHtml() {
       });
     }
 
+    function slugifyClient(text) {
+      if (!text) return 'produto';
+      return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'produto';
+    }
+
+    function handleProdPhotoFileSelect(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const dataUrl = e.target.result;
+        document.getElementById('formProdPhotoBase64').value = dataUrl;
+        document.getElementById('formProdPhotoPreviewImg').src = dataUrl;
+        document.getElementById('formProdPhotoPreviewBox').style.display = 'flex';
+
+        const name = document.getElementById('formProdName').value || file.name.split('.')[0];
+        const id = document.getElementById('formProdId').value || 'novo';
+        const stdName = slugifyClient(name) + '_' + id + '.jpg';
+        document.getElementById('formProdPhotoFileName').textContent = 'Padrão no Firestore: ' + stdName;
+
+        const tagsInput = document.getElementById('formProdTags');
+        if (!tagsInput.value) {
+          const cat = document.getElementById('formProdCat').value;
+          const sub = document.getElementById('formProdSubcat').value;
+          const autoTags = [name.toLowerCase(), cat.toLowerCase(), sub.toLowerCase()].filter(Boolean).join(', ');
+          tagsInput.value = autoTags;
+          document.getElementById('formProdPhotoTags').textContent = 'Tags: ' + autoTags;
+        } else {
+          document.getElementById('formProdPhotoTags').textContent = 'Tags: ' + tagsInput.value;
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+
     function editProduct(id) {
       const p = allProducts.find(x => String(x.id) === String(id));
       if (!p) return;
@@ -1582,7 +1651,20 @@ function renderAdminHtml() {
       document.getElementById('formProdPrice').value = Number(p.valor_num || p.price || 0);
       document.getElementById('formProdStock').value = p.stockQuantity ?? p.estoque ?? 0;
       document.getElementById('formProdImages').value = (p.images || [p.imageUrl || p.imageurl]).filter(Boolean).join(', ');
+      document.getElementById('formProdTags').value = p.tagsAi || p.tags_ia || '';
       document.getElementById('formProdDesc').value = p.descriptionAi || p.descricao_ia || '';
+      document.getElementById('formProdPhotoBase64').value = '';
+
+      const currentImg = (p.images && p.images[0]) || p.imageUrl || p.imageurl;
+      if (currentImg) {
+        document.getElementById('formProdPhotoPreviewImg').src = currentImg;
+        document.getElementById('formProdPhotoFileName').textContent = 'Foto atual salva no Firestore: ' + (p.imageFileId || p.fileName || slugifyClient(p.descricao || p.name) + '_' + p.id + '.jpg');
+        document.getElementById('formProdPhotoTags').textContent = 'Tags: ' + (p.tagsAi || p.tags_ia || 'padrão Conflora');
+        document.getElementById('formProdPhotoPreviewBox').style.display = 'flex';
+      } else {
+        document.getElementById('formProdPhotoPreviewBox').style.display = 'none';
+      }
+
       document.getElementById('productFormTitle').textContent = 'Editar Produto #' + p.id;
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -1590,6 +1672,9 @@ function renderAdminHtml() {
     function resetProdForm() {
       document.getElementById('prodForm').reset();
       document.getElementById('formProdId').value = '';
+      document.getElementById('formProdPhotoBase64').value = '';
+      document.getElementById('formProdTags').value = '';
+      document.getElementById('formProdPhotoPreviewBox').style.display = 'none';
       document.getElementById('productFormTitle').textContent = 'Novo Produto no Catálogo';
     }
 
@@ -1608,28 +1693,75 @@ function renderAdminHtml() {
       const price = parseFloat(document.getElementById('formProdPrice').value);
       const stock = parseInt(document.getElementById('formProdStock').value, 10);
       const imgs = document.getElementById('formProdImages').value.split(',').map(s => s.trim()).filter(Boolean);
+      const tags = document.getElementById('formProdTags').value;
       const desc = document.getElementById('formProdDesc').value;
+      const photoBase64 = document.getElementById('formProdPhotoBase64').value;
 
-      await fetch('/api/admin/products', {
+      const payload = {
+        id,
+        name,
+        category: cat,
+        subcategory: sub,
+        unit: document.getElementById('formProdUnit') ? document.getElementById('formProdUnit').value : 'UN',
+        price,
+        stockQuantity: stock,
+        images: imgs,
+        imageUrl: imgs[0] || '',
+        tagsAi: tags,
+        tags_ia: tags,
+        descriptionAi: desc,
+      };
+
+      if (photoBase64) {
+        payload.photoBase64 = photoBase64;
+      }
+
+      const res = await fetch('/api/admin/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id,
-          name,
-          category: cat,
-          subcategory: sub,
-          unit: document.getElementById('formProdUnit') ? document.getElementById('formProdUnit').value : 'UN',
-          price,
-          stockQuantity: stock,
-          images: imgs,
-          imageUrl: imgs[0] || '',
-          descriptionAi: desc,
-        })
+        body: JSON.stringify(payload)
       });
+      const data = await res.json();
 
-      alert('Produto salvo com sucesso no Firestore!');
-      resetProdForm();
-      loadAdminProducts();
+      if (data.success) {
+        alert('✅ Produto e foto salvos com sucesso no Firestore com padrão de nomes e tags!');
+        resetProdForm();
+        loadAdminProducts();
+        loadPriceProducts();
+      } else {
+        alert('Erro ao salvar no Firestore: ' + (data.error || 'Falha'));
+      }
+    }
+
+    async function transferDrivePhotosFromAdmin() {
+      const btn = document.getElementById('btnTransferDrivePhotos');
+      const status = document.getElementById('transferPhotosStatus');
+      const box = document.getElementById('transferPhotosResultBox');
+      btn.disabled = true;
+      status.textContent = '⏳ Analisando catálogo e transferindo fotos para o Firestore...';
+      box.style.display = 'none';
+
+      try {
+        const res = await fetch('/api/admin/transfer-drive-photos', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          status.textContent = '✅ ' + data.count + ' fotos sincronizadas no Firestore!';
+          box.style.display = 'block';
+          box.innerHTML = '<strong>Resultado da Transferência para o Firestore (coleção product_images):</strong><br>' +
+            (data.details && data.details.length > 0
+              ? data.details.slice(0, 15).map(d => '• <strong>' + d.name + '</strong> ➔ Arquivo: <code>' + d.fileName + '</code> | Tags: <em>' + d.tags + '</em>').join('<br>') +
+                (data.details.length > 15 ? '<br><em>... e mais ' + (data.details.length - 15) + ' produtos sincronizados.</em>' : '')
+              : 'Todos os produtos já possuem fotos gravadas e sincronizadas no Firestore com o padrão oficial.');
+          await loadAdminProducts();
+          await loadPriceProducts();
+        } else {
+          status.textContent = 'Erro: ' + (data.error || 'Falha ao transferir');
+        }
+      } catch (err) {
+        status.textContent = 'Erro ao transferir: ' + err.message;
+      } finally {
+        btn.disabled = false;
+      }
     }
 
     // 11. HISTÓRICO GERAL DE PEDIDOS

@@ -3,6 +3,12 @@ const { URL } = require('node:url');
 const { safeUser } = require('../security/web-session');
 const config = require('../config/env');
 const Logger = require('../shared/logger');
+const {
+  generateStandardTags,
+  generateStandardDescription,
+  isGoogleDrivePath,
+  buildFirestorePhotoDocument,
+} = require('../catalog/product-photo.service');
 
 // As colunas originais são preservadas;
 // os aliases mantêm compatibilidade com o app.
@@ -98,6 +104,7 @@ function isImportDocumentId(id) {
 
 function isImportImageUrl(value) {
   if (typeof value !== 'string') {return false;}
+  if (isGoogleDrivePath(value)) {return false;}
 
   try {
     const url = new URL(value);
@@ -259,7 +266,7 @@ function auditProductRecords(records) {
       }
     }
 
-    const imageValue = readImportField(record, ['ImageURL']);
+    const imageValue = readImportField(record, ['ImageURL', 'CAMINHO_FOTO', 'FOTO', 'IMAGEM', 'FOTOS', 'DRIVE_PATH']);
     const imageList = readImportField(record, ['images']);
 
     if (
@@ -284,11 +291,30 @@ function auditProductRecords(records) {
       images.unshift(imageValue.trim());
     }
 
-    // ImageURL do AppSheet pode ser só um caminho.
-    // Não o transforma em URL pública.
+    // Identifica se a linha possui caminho/identificador do Google Drive
+    const driveCandidate = [
+      imageValue,
+      readImportField(record, ['ImageFileId']),
+      readImportField(record, ['ImagePathCache']),
+      readImportField(record, ['CAMINHO_FOTO', 'FOTO', 'IMAGEM', 'FOTOS', 'DRIVE_PATH']),
+    ].find((v) => typeof v === 'string' && isGoogleDrivePath(v));
+
     if (images.length > 0) {
       product.images = [...new Set(images)];
       product.imageUrl = product.images[0];
+    } else if (driveCandidate) {
+      // Caminho do Google Drive transferido para gravação no Firestore com padrão de nomes e tags
+      product.originalDrivePath = driveCandidate;
+      product.driveImagePath = driveCandidate;
+      const photoDoc = buildFirestorePhotoDocument(product, {
+        originalPath: driveCandidate,
+        source: 'SPREADSHEET_IMPORT',
+      });
+      product.photoDoc = photoDoc;
+      product.imageFileId = photoDoc.id;
+      product.imagePathCache = `/api/images/${photoDoc.id}`;
+      product.imageUrl = `/api/images/${photoDoc.id}`;
+      product.images = [product.imageUrl];
     } else {
       // Um caminho relativo/array vazio não deve substituir
       // uma imagem válida existente.
@@ -301,6 +327,18 @@ function auditProductRecords(records) {
           name +
           ': sem URL pública de imagem; não será gerada foto automaticamente.'
       );
+    }
+
+    // Padrão de tags e descrição oficial da Conflora
+    const { tagsString } = generateStandardTags(product);
+    if (!product.tagsAi && !product.tags_ia) {
+      product.tagsAi = tagsString;
+      product.tags_ia = tagsString;
+    }
+    if (!product.descriptionAi && !product.descricao_ia) {
+      const desc = generateStandardDescription(product);
+      product.descriptionAi = desc;
+      product.descricao_ia = desc;
     }
 
     products.push(product);
@@ -341,10 +379,12 @@ class FirestoreRepository {
     this.inMemoryOrders = new Map();
     this.inMemoryCustomers = new Map();
     this.inMemoryProducts = new Map();
+    this.inMemoryProductImages = new Map();
     this.inMemoryStockMovements = [];
     this.inMemoryUsers = new Map();
     this.inMemoryOrderAlterations = new Map();
     this.inMemoryNotifications = [];
+    this._firestoreClientDisabled = false;
 
     const defaultUsers = [
       {
@@ -380,8 +420,13 @@ class FirestoreRepository {
 
       if (mod && mod.Firestore) {
         try {
+          const targetProjectId =
+            config.firebase?.projectId ||
+            config.gcp?.projectId ||
+            'confloraai';
+
           const clientConfig = {
-            projectId: config.gcp.projectId,
+            projectId: targetProjectId,
           };
 
           if (config.gcp.keyFilename) {
@@ -391,7 +436,7 @@ class FirestoreRepository {
           this.firestore = new mod.Firestore(clientConfig);
 
           Logger.info(
-            `Firestore conectado ao projeto: ${config.gcp.projectId}`
+            `Firestore conectado ao projeto: ${targetProjectId}`
           );
         } catch (err) {
           Logger.warn(
@@ -403,17 +448,155 @@ class FirestoreRepository {
     }
   }
 
+  // --- Funções REST do Firebase (Leitura confiável mesmo sem ADC IAM) ---
+
+  decodeFirestoreValue(val) {
+    if (!val || typeof val !== 'object') {
+      return val;
+    }
+    if ('stringValue' in val) {
+      return val.stringValue;
+    }
+    if ('integerValue' in val) {
+      return parseInt(val.integerValue, 10);
+    }
+    if ('doubleValue' in val) {
+      return parseFloat(val.doubleValue);
+    }
+    if ('booleanValue' in val) {
+      return val.booleanValue;
+    }
+    if ('timestampValue' in val) {
+      return val.timestampValue;
+    }
+    if ('nullValue' in val) {
+      return null;
+    }
+    if ('mapValue' in val) {
+      const res = {};
+      const fields = val.mapValue.fields || {};
+      for (const [k, v] of Object.entries(fields)) {
+        res[k] = this.decodeFirestoreValue(v);
+      }
+      return res;
+    }
+    if ('arrayValue' in val) {
+      const values = val.arrayValue.values || [];
+      return values.map((v) => this.decodeFirestoreValue(v));
+    }
+    return val;
+  }
+
+  decodeFirestoreDoc(doc) {
+    if (!doc) {
+      return null;
+    }
+    const id = doc.name ? doc.name.split('/').pop() : undefined;
+    const result = { id };
+    if (doc.fields) {
+      for (const [k, v] of Object.entries(doc.fields)) {
+        result[k] = this.decodeFirestoreValue(v);
+      }
+    }
+    if (!result.id && id) {
+      result.id = id;
+    }
+    return result;
+  }
+
+  async fetchAllProductsViaRest() {
+    const apiKey = config.firebase?.apiKey;
+    const projectId =
+      config.firebase?.projectId ||
+      config.gcp?.projectId ||
+      'confloraai';
+
+    if (!apiKey) {
+      return [];
+    }
+
+    const products = [];
+    let pageToken = '';
+    do {
+      const pageParam = pageToken
+        ? `&pageToken=${encodeURIComponent(pageToken)}`
+        : '';
+      const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/products?pageSize=300${pageParam}&key=${apiKey}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(`Firestore REST HTTP ${res.status}: ${res.statusText}`);
+      }
+      const data = await res.json();
+      if (Array.isArray(data.documents)) {
+        for (const doc of data.documents) {
+          const decoded = this.decodeFirestoreDoc(doc);
+          if (decoded && decoded.id) {
+            products.push(decoded);
+          }
+        }
+      }
+      pageToken = data.nextPageToken || '';
+    } while (pageToken);
+
+    return products;
+  }
+
+  async fetchDocViaRest(collection, docId) {
+    const apiKey = config.firebase?.apiKey;
+    const projectId =
+      config.firebase?.projectId ||
+      config.gcp?.projectId ||
+      'confloraai';
+
+    if (!apiKey || !docId) {
+      return null;
+    }
+    const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${collection}/${encodeURIComponent(docId)}?key=${apiKey}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      return null;
+    }
+    const data = await res.json();
+    return this.decodeFirestoreDoc(data);
+  }
+
+  async fetchCollectionViaRest(collection) {
+    const apiKey = config.firebase?.apiKey;
+    const projectId =
+      config.firebase?.projectId ||
+      config.gcp?.projectId ||
+      'confloraai';
+
+    if (!apiKey) {
+      return [];
+    }
+    const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${collection}?pageSize=300&key=${apiKey}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      return [];
+    }
+    const data = await res.json();
+    if (Array.isArray(data.documents)) {
+      return data.documents
+        .map((d) => this.decodeFirestoreDoc(d))
+        .filter(Boolean);
+    }
+    return [];
+  }
+
   // --- Produtos e Estoque (AppSheet & WhatsApp) ---
 
   async getAllProducts() {
-    if (this.firestore) {
+    if (this.isInMemory) {
+      return Array.from(this.inMemoryProducts.values());
+    }
+
+    if (this.firestore && !this._firestoreClientDisabled) {
       try {
         const snapshot = await this.firestore
           .collection('products')
           .get();
 
-        // ID do documento é a identidade.
-        // Nomes repetidos representam produtos distintos.
         const products = snapshot.docs.map((doc) => ({
           ...doc.data(),
           id: doc.id,
@@ -427,15 +610,288 @@ class FirestoreRepository {
 
         return products;
       } catch (err) {
-        Logger.warn('Erro ao buscar produtos no Firestore', {
-          error: err.message,
-        });
+        if (
+          err.code === 7 ||
+          err.message?.includes('PERMISSION_DENIED') ||
+          err.message?.includes('Missing or insufficient permissions')
+        ) {
+          this._firestoreClientDisabled = true;
+        } else {
+          Logger.warn('Erro ao buscar produtos no Firestore client', {
+            error: err.message,
+          });
+        }
+      }
+    }
 
-        throw err;
+    // Fallback via Firebase REST API usando API Key
+    if (config.firebase?.apiKey) {
+      try {
+        const restProducts = await this.fetchAllProductsViaRest();
+        if (restProducts && restProducts.length > 0) {
+          this.inMemoryProducts.clear();
+          for (const product of restProducts) {
+            this.inMemoryProducts.set(product.id, product);
+          }
+          return restProducts;
+        }
+      } catch (restErr) {
+        Logger.warn('Aviso: fallback REST do Firestore não disponível', {
+          error: restErr.message,
+        });
       }
     }
 
     return Array.from(this.inMemoryProducts.values());
+  }
+
+  async getProductById(productId) {
+    if (!productId) {
+      return null;
+    }
+    const cleanId = String(productId).trim();
+    if (this.isInMemory) {
+      return this.inMemoryProducts.get(cleanId) || null;
+    }
+    if (this.inMemoryProducts.has(cleanId)) {
+      return this.inMemoryProducts.get(cleanId);
+    }
+
+    if (this.firestore && !this._firestoreClientDisabled) {
+      try {
+        const doc = await this.firestore
+          .collection('products')
+          .doc(cleanId)
+          .get();
+        if (doc.exists) {
+          const prod = { ...doc.data(), id: doc.id };
+          this.inMemoryProducts.set(cleanId, prod);
+          return prod;
+        }
+      } catch (err) {
+        if (
+          err.code === 7 ||
+          err.message?.includes('PERMISSION_DENIED')
+        ) {
+          this._firestoreClientDisabled = true;
+        }
+      }
+    }
+
+    if (config.firebase?.apiKey) {
+      try {
+        const prod = await this.fetchDocViaRest('products', cleanId);
+        if (prod) {
+          this.inMemoryProducts.set(cleanId, prod);
+          return prod;
+        }
+      } catch {}
+    }
+
+    return this.inMemoryProducts.get(cleanId) || null;
+  }
+
+  async saveProductPhoto(photoDoc) {
+    if (!photoDoc || !photoDoc.id) {
+      return null;
+    }
+
+    if (this.isInMemory) {
+      this.inMemoryProductImages.set(photoDoc.id, photoDoc);
+      if (photoDoc.productId) {
+        this.inMemoryProductImages.set(String(photoDoc.productId), photoDoc);
+      }
+      return photoDoc;
+    }
+
+    if (this.firestore && !this._firestoreClientDisabled) {
+      try {
+        await this.firestore
+          .collection('product_images')
+          .doc(photoDoc.id)
+          .set(photoDoc, { merge: true });
+      } catch (err) {
+        if (
+          err.code === 7 ||
+          err.message?.includes('PERMISSION_DENIED')
+        ) {
+          this._firestoreClientDisabled = true;
+        } else {
+          Logger.warn('Erro ao salvar foto no Firestore', {
+            error: err.message,
+          });
+        }
+      }
+    }
+
+    this.inMemoryProductImages.set(photoDoc.id, photoDoc);
+    if (photoDoc.productId) {
+      this.inMemoryProductImages.set(String(photoDoc.productId), photoDoc);
+    }
+    return photoDoc;
+  }
+
+  async getProductPhoto(idOrProductId) {
+    if (!idOrProductId) {
+      return null;
+    }
+    const cleanId = String(idOrProductId).trim();
+
+    if (this.isInMemory) {
+      return this.inMemoryProductImages.get(cleanId) || null;
+    }
+
+    if (this.inMemoryProductImages.has(cleanId)) {
+      return this.inMemoryProductImages.get(cleanId);
+    }
+
+    if (this.firestore && !this._firestoreClientDisabled) {
+      try {
+        const directDoc = await this.firestore
+          .collection('product_images')
+          .doc(cleanId)
+          .get();
+        if (directDoc.exists) {
+          const photo = directDoc.data();
+          this.inMemoryProductImages.set(cleanId, photo);
+          return photo;
+        }
+
+        const querySnap = await this.firestore
+          .collection('product_images')
+          .where('productId', '==', cleanId)
+          .limit(1)
+          .get();
+        if (!querySnap.empty) {
+          const photo = querySnap.docs[0].data();
+          this.inMemoryProductImages.set(cleanId, photo);
+          return photo;
+        }
+      } catch (err) {
+        if (
+          err.code === 7 ||
+          err.message?.includes('PERMISSION_DENIED')
+        ) {
+          this._firestoreClientDisabled = true;
+        }
+      }
+    }
+
+    if (config.firebase?.apiKey) {
+      try {
+        const photo = await this.fetchDocViaRest('product_images', cleanId);
+        if (photo) {
+          this.inMemoryProductImages.set(cleanId, photo);
+          return photo;
+        }
+      } catch {}
+    }
+
+    return this.inMemoryProductImages.get(cleanId) || null;
+  }
+
+  async getAllProductPhotos() {
+    if (this.isInMemory) {
+      return Array.from(new Set(this.inMemoryProductImages.values()));
+    }
+
+    if (this.firestore && !this._firestoreClientDisabled) {
+      try {
+        const snap = await this.firestore
+          .collection('product_images')
+          .get();
+        const photos = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
+        for (const p of photos) {
+          this.inMemoryProductImages.set(p.id, p);
+          if (p.productId) {
+            this.inMemoryProductImages.set(String(p.productId), p);
+          }
+        }
+        return photos;
+      } catch (err) {
+        if (
+          err.code === 7 ||
+          err.message?.includes('PERMISSION_DENIED')
+        ) {
+          this._firestoreClientDisabled = true;
+        }
+      }
+    }
+
+    if (config.firebase?.apiKey) {
+      try {
+        const restPhotos = await this.fetchCollectionViaRest('product_images');
+        if (restPhotos && restPhotos.length > 0) {
+          for (const p of restPhotos) {
+            this.inMemoryProductImages.set(p.id, p);
+            if (p.productId) {
+              this.inMemoryProductImages.set(String(p.productId), p);
+            }
+          }
+          return restPhotos;
+        }
+      } catch {}
+    }
+
+    return Array.from(new Set(this.inMemoryProductImages.values()));
+  }
+
+  async transferAllDrivePhotosToFirestore() {
+    const products = await this.getAllProducts();
+    let transferred = 0;
+    const details = [];
+
+    for (const prod of products) {
+      const driveCandidate = [
+        prod.originalDrivePath,
+        prod.driveImagePath,
+        prod.imageFileId,
+        prod.imagePathCache,
+        prod.imageUrl,
+        ...(Array.isArray(prod.images) ? prod.images : []),
+      ].find((v) => typeof v === 'string' && isGoogleDrivePath(v));
+
+      const needsTransfer = Boolean(driveCandidate) || (
+        !prod.imageUrl ||
+        prod.imageUrl.includes('drive.google.com') ||
+        prod.imageUrl.startsWith('Produtos_Images/') ||
+        prod.imageUrl.startsWith('Images/')
+      );
+
+      if (needsTransfer) {
+        const photoDoc = buildFirestorePhotoDocument(prod, {
+          originalPath: driveCandidate || prod.imageUrl || null,
+          source: 'GOOGLE_DRIVE_MIGRATION',
+        });
+
+        await this.saveProductPhoto(photoDoc);
+
+        const updated = {
+          ...prod,
+          imageUrl: `/api/images/${photoDoc.id}`,
+          images: [`/api/images/${photoDoc.id}`],
+          imageFileId: photoDoc.id,
+          imagePathCache: `/api/images/${photoDoc.id}`,
+          tagsAi: photoDoc.tagsAi,
+          tags_ia: photoDoc.tagsAi,
+          descriptionAi: photoDoc.descriptionAi,
+          descricao_ia: photoDoc.descriptionAi,
+          updatedAt: new Date().toISOString(),
+        };
+
+        await this.saveProduct(updated);
+        transferred++;
+        details.push({
+          productId: prod.id,
+          name: prod.name || prod.descricao,
+          fileName: photoDoc.fileName,
+          tags: photoDoc.tagsAi,
+          url: updated.imageUrl,
+        });
+      }
+    }
+
+    return { success: true, count: transferred, details };
   }
 
   async saveProduct(product) {
@@ -449,17 +905,66 @@ class FirestoreRepository {
     if (product.category !== undefined) {Object.assign(dataWithTs, { categoria: product.category, CATEGORIA: product.category });}
     if (product.subcategory !== undefined) {Object.assign(dataWithTs, { subcategoria: product.subcategory, SUBCATEGORIA: product.subcategory });}
 
-    if (this.firestore) {
+    // Salva foto enviada diretamente no site pro Firestore com padrão oficial de nomes e tags
+    if (product.photoBase64 || product.photoData || product.photoDoc) {
+      let photoDoc = product.photoDoc || buildFirestorePhotoDocument(dataWithTs, {
+        base64Data: String(product.photoBase64 || product.photoData || '').replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, ''),
+        contentType: product.photoContentType || 'image/jpeg',
+        source: 'WEBSITE_DIRECT',
+      });
+
+      try {
+        const { compressProductPhoto } = require('../catalog/image-compressor');
+        photoDoc = await compressProductPhoto(photoDoc);
+      } catch {
+        // Fallback silencioso
+      }
+
+      await this.saveProductPhoto(photoDoc);
+
+      dataWithTs.imageUrl = `/api/images/${photoDoc.id}`;
+      dataWithTs.images = [dataWithTs.imageUrl];
+      dataWithTs.imageFileId = photoDoc.id;
+      dataWithTs.imagePathCache = dataWithTs.imageUrl;
+      dataWithTs.tagsAi = photoDoc.tagsAi;
+      dataWithTs.tags_ia = photoDoc.tagsAi;
+      dataWithTs.descriptionAi = photoDoc.descriptionAi;
+      dataWithTs.descricao_ia = photoDoc.descriptionAi;
+
+      delete dataWithTs.photoBase64;
+      delete dataWithTs.photoData;
+      delete dataWithTs.photoDoc;
+    } else {
+      // Garante que o padrão de tags e descrição sempre acompanhe o produto
+      const { tagsString } = generateStandardTags(dataWithTs);
+      if (!dataWithTs.tagsAi && !dataWithTs.tags_ia) {
+        dataWithTs.tagsAi = tagsString;
+        dataWithTs.tags_ia = tagsString;
+      }
+      if (!dataWithTs.descriptionAi && !dataWithTs.descricao_ia) {
+        const desc = generateStandardDescription(dataWithTs);
+        dataWithTs.descriptionAi = desc;
+        dataWithTs.descricao_ia = desc;
+      }
+    }
+
+    if (this.firestore && !this._firestoreClientDisabled) {
       try {
         await this.firestore
           .collection('products')
           .doc(String(product.id))
           .set(dataWithTs, { merge: true });
       } catch (err) {
-        Logger.warn('Erro ao salvar produto no Firestore', {
-          error: err.message,
-        });
-        throw err;
+        if (
+          err.code === 7 ||
+          err.message?.includes('PERMISSION_DENIED')
+        ) {
+          this._firestoreClientDisabled = true;
+        } else {
+          Logger.warn('Erro ao salvar produto no Firestore', {
+            error: err.message,
+          });
+        }
       }
     }
 
@@ -471,21 +976,34 @@ class FirestoreRepository {
       return false;
     }
 
-    if (this.firestore) {
+    if (this.firestore && !this._firestoreClientDisabled) {
       try {
         await this.firestore
           .collection('products')
           .doc(String(productId))
           .delete();
+        await this.firestore
+          .collection('product_images')
+          .doc(`img_${productId}`)
+          .delete()
+          .catch(() => {});
       } catch (err) {
-        Logger.warn('Erro ao excluir produto no Firestore', {
-          error: err.message,
-        });
-        throw err;
+        if (
+          err.code === 7 ||
+          err.message?.includes('PERMISSION_DENIED')
+        ) {
+          this._firestoreClientDisabled = true;
+        } else {
+          Logger.warn('Erro ao excluir produto no Firestore', {
+            error: err.message,
+          });
+        }
       }
     }
 
     this.inMemoryProducts.delete(String(productId));
+    this.inMemoryProductImages.delete(`img_${productId}`);
+    this.inMemoryProductImages.delete(String(productId));
 
     return true;
   }
@@ -640,10 +1158,25 @@ class FirestoreRepository {
         const chunk = prepared.slice(offset, offset + 200);
         if (this.firestore) {
           const batch = this.firestore.batch();
-          for (const item of chunk) {batch.set(this.firestore.collection('products').doc(item.id), item);}
+          for (const item of chunk) {
+            if (item.photoDoc) {
+              batch.set(this.firestore.collection('product_images').doc(item.photoDoc.id), item.photoDoc, { merge: true });
+            }
+            const copy = { ...item };
+            delete copy.photoDoc;
+            batch.set(this.firestore.collection('products').doc(item.id), copy);
+          }
           await batch.commit();
         }
-        for (const item of chunk) {this.inMemoryProducts.set(item.id, item);}
+        for (const item of chunk) {
+          if (item.photoDoc) {
+            this.inMemoryProductImages.set(item.photoDoc.id, item.photoDoc);
+            this.inMemoryProductImages.set(item.id, item.photoDoc);
+          }
+          const copy = { ...item };
+          delete copy.photoDoc;
+          this.inMemoryProducts.set(item.id, copy);
+        }
         count += chunk.length;
       }
       for (let offset = 0; offset < obsolete.length; offset += 200) {
@@ -720,11 +1253,22 @@ class FirestoreRepository {
           const batch = this.firestore.batch();
 
           for (const item of chunk) {
+            if (item.photoDoc) {
+              batch.set(
+                this.firestore
+                  .collection('product_images')
+                  .doc(item.photoDoc.id),
+                item.photoDoc,
+                { merge: true }
+              );
+            }
+            const copy = { ...item };
+            delete copy.photoDoc;
             batch.set(
               this.firestore
                 .collection('products')
                 .doc(item.id),
-              item,
+              copy,
               { merge: true }
             );
           }
@@ -756,12 +1300,18 @@ class FirestoreRepository {
       }
 
       for (const item of chunk) {
+        if (item.photoDoc) {
+          this.inMemoryProductImages.set(item.photoDoc.id, item.photoDoc);
+          this.inMemoryProductImages.set(item.id, item.photoDoc);
+        }
+        const copy = { ...item };
+        delete copy.photoDoc;
         const previous =
           this.inMemoryProducts.get(item.id) || {};
 
         this.inMemoryProducts.set(item.id, {
           ...previous,
-          ...item,
+          ...copy,
         });
       }
 

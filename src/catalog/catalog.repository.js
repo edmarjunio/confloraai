@@ -23,11 +23,14 @@ const IGNORED_CATEGORIES = new Set([
 ]);
 
 function buildDriveDirectImageUrl(fileId, rawUrl) {
+  if (rawUrl && typeof rawUrl === 'string' && (rawUrl.startsWith('http') || rawUrl.startsWith('/api/images/'))) {
+    return rawUrl.trim();
+  }
+  if (fileId && typeof fileId === 'string' && (fileId.startsWith('img_') || fileId.startsWith('photo_'))) {
+    return `/api/images/${fileId.trim()}`;
+  }
   if (fileId && typeof fileId === 'string' && fileId.trim().length > 10) {
     return `https://drive.google.com/uc?export=view&id=${fileId.trim()}`;
-  }
-  if (rawUrl && typeof rawUrl === 'string' && rawUrl.startsWith('http')) {
-    return rawUrl.trim();
   }
   return null;
 }
@@ -83,10 +86,12 @@ class CatalogRepository {
     if (this.firestoreRepo && typeof this.firestoreRepo.getAllProducts === 'function') {
       try {
         const firestoreProducts = await this.firestoreRepo.getAllProducts();
-        this.loadItems(firestoreProducts || []);
-        return;
+        if (firestoreProducts && firestoreProducts.length > 0) {
+          this.loadItems(firestoreProducts);
+          return;
+        }
       } catch (err) {
-        throw err;
+        Logger.warn('Aviso: erro ao carregar produtos do Firestore no catálogo; continuando com fallback', { error: err.message });
       }
     }
 
@@ -237,10 +242,17 @@ class CatalogRepository {
         productGroup.descriptionAi = item.descriptionAi;
       }
 
-      // Imagens do Drive ou URL
+      // Imagens do Drive, URL ou Firestore
       const directUrl = buildDriveDirectImageUrl(item.imageFileId, item.imageUrl);
       if (directUrl && !productGroup.images.includes(directUrl)) {
         productGroup.images.push(directUrl);
+      }
+      if (Array.isArray(item.images)) {
+        for (const img of item.images) {
+          if (img && typeof img === 'string' && !productGroup.images.includes(img.trim())) {
+            productGroup.images.push(img.trim());
+          }
+        }
       }
 
       // Indexação de TAGS_IA da planilha
