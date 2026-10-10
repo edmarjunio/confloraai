@@ -1,4 +1,16 @@
 export const $ = (selector) => document.querySelector(selector);
+export async function readJsonResponse(response) {
+  const message =
+    "O serviço está temporariamente indisponível. Tente novamente em instantes.";
+  if (!response.headers.get("content-type")?.includes("application/json")) {
+    throw new Error(message);
+  }
+  try {
+    return await response.json();
+  } catch {
+    throw new Error(message);
+  }
+}
 export function element(tag, properties = {}, children = []) {
   const node = document.createElement(tag);
   for (const [key, value] of Object.entries(properties)) {
@@ -82,7 +94,7 @@ export function createApi(slug) {
           ...(body ? { body: JSON.stringify(body) } : {}),
         },
       );
-      const data = await response.json();
+      const data = await readJsonResponse(response);
       if (!response.ok) {
         throw new Error(data.error || "Não foi possível concluir.");
       }

@@ -1,5 +1,33 @@
 const { test, expect } = require("@playwright/test");
 
+test("chat presents a friendly error when an upstream proxy returns HTML", async ({
+  page,
+}) => {
+  await page.route("**/api/storefront/assistant", (route) =>
+    route.fulfill({
+      status: 502,
+      contentType: "text/html",
+      body: "<!DOCTYPE html><h1>Proxy error</h1>",
+    }),
+  );
+  await page.goto("/");
+  await expect(page.locator("#products .product-card").first()).toBeVisible();
+  await page.locator("#coachSkip").click();
+  await page.locator("#aiFab").click();
+  await page.locator("#chatInput").fill("Planta para sombra");
+  await page.getByRole("button", { name: "Enviar mensagem" }).click();
+  await expect(page.locator("#chatMessages")).toContainText(
+    "O serviço está temporariamente indisponível",
+  );
+  await expect(page.locator("#chatMessages")).not.toContainText(
+    "Unexpected token",
+  );
+  await expect(page.locator("#chatInput")).toHaveValue("Planta para sombra");
+  await expect(
+    page.getByRole("button", { name: "Enviar mensagem" }),
+  ).toBeEnabled();
+});
+
 test.beforeAll(async ({ request }) => {
   const users = await (await request.get("/api/admin/auth/users")).json();
   const admin = users.find((user) => user.role === "ADMIN");
@@ -87,10 +115,10 @@ test("main URL shows the new layout and uses existing customer accounts, catalog
     path: "test-results/new-main-desktop-detail.png",
     fullPage: true,
   });
-  await page.getByRole('button', { name: '← Voltar ao catálogo' }).click();
-  await page.locator('#search').fill('');
-  await page.locator('#cartButton').click();
-  await page.screenshot({ path: 'test-results/new-main-desktop-catalog.png' });
+  await page.getByRole("button", { name: "← Voltar ao catálogo" }).click();
+  await page.locator("#search").fill("");
+  await page.locator("#cartButton").click();
+  await page.screenshot({ path: "test-results/new-main-desktop-catalog.png" });
   await page.locator("#submitOrder").click();
   await expect(page.locator("#receipt")).toContainText("Pedido recebido!");
   await page.getByRole("button", { name: "Continuar comprando" }).click();
@@ -135,11 +163,9 @@ test("main mobile product, bottom sheet and conversational cards follow the appr
   await page.getByRole("button", { name: "Não, quero outra opção" }).click();
   await expect(page.locator("#chatMessages")).toContainText("Me conte mais");
   await page.screenshot({ path: "test-results/new-main-mobile-chat.png" });
-  const width = await page
-    .locator("html")
-    .evaluate((node) => ({
-      scroll: node.scrollWidth,
-      viewport: node.clientWidth,
-    }));
+  const width = await page.locator("html").evaluate((node) => ({
+    scroll: node.scrollWidth,
+    viewport: node.clientWidth,
+  }));
   expect(width.scroll).toBeLessThanOrEqual(width.viewport);
 });

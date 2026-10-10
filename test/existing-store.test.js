@@ -3,7 +3,38 @@ const assert = require("node:assert/strict");
 const {
   toProduct,
   normalizeExistingCheckout,
+  installExistingStore,
 } = require("../src/storefront/existing-store");
+
+test("main storefront API returns safe JSON when a service fails", async (t) => {
+  const express = require("express");
+  const app = express();
+  app.use(express.json());
+  installExistingStore(app, {
+    repository: { getAllProducts: async () => [] },
+    assistant: {
+      recommend: async () => {
+        throw new Error("private provider details");
+      },
+    },
+  });
+  const server = app.listen(0, "127.0.0.1");
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  await new Promise((resolve) => server.once("listening", resolve));
+  const response = await fetch(
+    `http://127.0.0.1:${server.address().port}/api/storefront/assistant`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "Planta" }),
+    },
+  );
+  assert.equal(response.status, 503);
+  assert.match(response.headers.get("content-type"), /application\/json/);
+  const body = await response.json();
+  assert.match(body.error, /temporariamente indisponível/);
+  assert.ok(!body.error.includes("private provider"));
+});
 
 test("existing catalogue maps photos, specifications and categories without exposing private fields", () => {
   const product = toProduct({

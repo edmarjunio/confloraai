@@ -1,5 +1,6 @@
 // The main store keeps its current accounts, catalogue and order processing.
 // Tenant storefronts continue to use /api/stores/:slug without this adapter.
+import { readJsonResponse } from "./ui.js";
 export function createExistingApi() {
   let catalogPromise;
   async function request(path, options = {}) {
@@ -12,7 +13,7 @@ export function createExistingApi() {
     if (path === "/api/auth/me" && response.status === 401) {
       return { user: null };
     }
-    const data = await response.json();
+    const data = await readJsonResponse(response);
     if (!response.ok || data.success === false) {
       throw new Error(
         data.error || data.message || "Não foi possível concluir.",

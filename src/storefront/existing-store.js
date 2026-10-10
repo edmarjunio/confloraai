@@ -1,6 +1,6 @@
 const profile = require("../../config/stores/conflora.example.json");
 const { rankProductSales } = require("../catalog/product-sales");
-const { ensure, digest } = require("./validation");
+const { ensure, digest, StoreError } = require("./validation");
 
 // Compatibility boundary for the existing store. SaaS tenants never use these collections.
 function toProduct(item) {
@@ -132,6 +132,14 @@ function installExistingStore(app, { repository, assistant }) {
     } catch (error) {
       next(error);
     }
+  });
+  app.use("/api/storefront", (error, _req, res, _next) => {
+    const known = error instanceof StoreError;
+    res.status(known ? error.status : 503).json({
+      error: known
+        ? error.message
+        : "O serviço está temporariamente indisponível. Tente novamente em instantes.",
+    });
   });
 }
 async function normalizeExistingCheckout(req, repository) {

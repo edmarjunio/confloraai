@@ -51,7 +51,7 @@ function installStorefront(app, { express, firestore, repository, assistant }) {
       next(error);
     }
   });
-  app.use("/store-assets/v2", express.static(assets, { maxAge: "1h" }));
+  app.use(["/store-assets/v2", "/store-assets/v3"], express.static(assets, { maxAge: "1h" }));
   app.use("/store-assets", express.static(assets, { maxAge: "1h" }));
   app.get(
     ["/shop/:slug", "/shop/:slug/products/:productId", "/shop/:slug/admin"],

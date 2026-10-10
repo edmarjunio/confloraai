@@ -133,6 +133,78 @@ test("product and theme validation reject unsafe URLs and unknown categories", a
   );
 });
 
+test("assistant falls back on depleted credits, throttles retries and excludes unavailable products", async () => {
+  const repo = await repository();
+  let calls = 0;
+  const ai = new StoreAssistant({
+    client: {
+      models: {
+        generateContent: async () => {
+          calls++;
+          throw Object.assign(new Error("private billing details"), {
+            status: 402,
+          });
+        },
+      },
+    },
+  });
+  const config = await repo.config("garden");
+  const products = await repo.list("garden", "products");
+  const result = await ai.recommend(config, {}, products, {
+    message: "Manjericão",
+  });
+  assert.equal(result.mode, "CATALOG_SEARCH");
+  assert.deepEqual(
+    result.products.map((p) => p.name),
+    ["Manjericão"],
+  );
+  assert.ok(!JSON.stringify(result).includes("private billing"));
+  const unavailable = products.map((p) => ({
+    ...p,
+    stock: { tracked: true, quantity: 0 },
+  }));
+  const second = await ai.recommend(config, {}, unavailable, {
+    message: "Manjericão",
+  });
+  assert.deepEqual(second.products, []);
+  assert.equal(calls, 1);
+  ai.retryAfter = 0;
+  await ai.recommend(config, {}, products, { message: "Manjericão" });
+  assert.equal(calls, 2);
+});
+
+test("assistant falls back if the second model request fails or returns malformed JSON", async () => {
+  const repo = await repository();
+  for (const invalidJson of [false, true]) {
+    let calls = 0;
+    const ai = new StoreAssistant({
+      client: {
+        models: {
+          generateContent: async () => {
+            calls++;
+            if (calls === 1) {
+              return { text: "Pesquisa" };
+            }
+            if (invalidJson) {
+              return { text: "<html>Invalid</html>" };
+            }
+            throw new Error("timeout");
+          },
+        },
+      },
+    });
+    const result = await ai.recommend(
+      await repo.config("pets"),
+      {},
+      await repo.list("pets", "products"),
+      { message: "ração" },
+    );
+    assert.equal(result.mode, "CATALOG_SEARCH");
+    assert.equal(result.products[0].name, "Ração para gatos");
+    assert.deepEqual(result.sources, []);
+  }
+});
+
 test("assistant validates model product IDs against the current tenant catalogue", async () => {
   const repo = await repository();
   const calls = [];
