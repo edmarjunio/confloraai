@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#2E9348" />
+    <title>Loja</title>
+    <link rel="stylesheet" href="/store-assets/store.css" />
+    <link id="storeIcon" rel="icon" href="data:," />
+  </head>
+  <body>
+    <a class="skip" href="#main">Ir para os produtos</a>
+    <header class="header">
+      <a id="brand" class="brand" href="#"
+        ><img id="logo" alt="" hidden /><span
+          ><strong id="storeName">Carregando loja…</strong
+          ><small id="subtitle"></small></span></a
+      ><label class="search"
+        ><span aria-hidden="true">⌕</span
+        ><input
+          id="search"
+          type="search"
+          placeholder="O que você procura?"
+          aria-label="Buscar produtos"
+      /></label>
+      <div class="header-actions">
+        <span id="region"></span
+        ><button id="accountButton" class="quiet">Entrar</button
+        ><button id="cartButton" aria-haspopup="dialog">
+          Sacola <span id="cartCount">0</span>
+        </button>
+      </div>
+    </header>
+    <main id="main" class="main">
+      <section id="catalogView">
+        <div class="catalog-tools">
+          <nav id="categories" aria-label="Categorias"></nav>
+          <label
+            >Ordenar
+            <select id="sort">
+              <option value="name">A a Z</option>
+              <option value="sales">Mais vendidos</option>
+              <option value="price">Menor preço</option>
+              <option value="priceDesc">Maior preço</option>
+            </select></label
+          >
+        </div>
+        <div class="section-title">
+          <h1 id="catalogTitle">Explore o catálogo</h1>
+          <span id="resultCount"></span>
+        </div>
+        <div id="products" class="products"></div>
+        <button id="loadMore" class="quiet" hidden>
+          Mostrar mais produtos
+        </button>
+      </section>
+      <section id="productView" hidden></section>
+      <section id="adminView" hidden></section>
+    </main>
+    <button id="mobileCart" class="mobile-cart" aria-haspopup="dialog">
+      <span>Ver sacola · <span id="mobileCount">0</span> itens</span
+      ><strong id="mobileTotal">R$ 0,00</strong>
+    </button>
+    <button id="aiFab" class="ai-fab" aria-haspopup="dialog" hidden>
+      ✧ <span id="aiName">Assistente</span>
+    </button>
+    <dialog
+      id="cartDialog"
+      class="drawer cart-drawer"
+      aria-labelledby="cartTitle"
+    >
+      <div class="dialog-header">
+        <h2 id="cartTitle">Sua sacola</h2>
+        <button data-close aria-label="Fechar sacola">×</button>
+      </div>
+      <div id="cartItems"></div>
+      <div class="total">
+        <span>Total dos produtos</span><strong id="cartTotal"></strong>
+      </div>
+      <form id="checkoutForm">
+        <h3>Seus dados</h3>
+        <label
+          >Nome<input
+            name="name"
+            autocomplete="name"
+            required
+            maxlength="100" /></label
+        ><label
+          >WhatsApp / Telefone<input
+            name="phone"
+            type="tel"
+            autocomplete="tel"
+            required
+            placeholder="(64) 99999-9999"
+            maxlength="25"
+        /></label>
+        <fieldset>
+          <legend>Entrega ou retirada</legend>
+          <div id="fulfillmentOptions" class="choices"></div>
+        </fieldset>
+        <div id="deliveryFields" hidden>
+          <label id="serviceAreaLabel"
+            >Região<select name="serviceArea"></select></label
+          ><label
+            >Endereço completo<textarea
+              name="address"
+              autocomplete="street-address"
+              maxlength="500"
+            ></textarea>
+          </label>
+        </div>
+        <p id="pickupAddress" class="muted"></p>
+        <fieldset>
+          <legend>Pagamento</legend>
+          <div id="paymentOptions" class="choices"></div>
+        </fieldset>
+        <div id="pixBox" class="pix" hidden>
+          <strong>Chave PIX da loja</strong><span id="pixRecipient"></span
+          ><code id="pixKey"></code
+          ><button type="button" id="copyPix">Copiar chave PIX</button
+          ><small>Copiar a chave não confirma o pagamento.</small>
+        </div>
+        <label id="cashLabel" hidden
+          >Dinheiro em mãos (R$)<input
+            name="cash"
+            type="number"
+            min="0"
+            step="0.01"
+        /></label>
+        <div class="total">
+          <span>Total com entrega</span><strong id="checkoutTotal"></strong>
+        </div>
+        <p id="checkoutError" class="error" role="alert"></p>
+        <button class="primary" type="submit" id="submitOrder">
+          Finalizar pedido
+        </button>
+      </form>
+      <section id="receipt" hidden></section>
+    </dialog>
+    <dialog
+      id="chatDialog"
+      class="drawer chat-drawer"
+      aria-labelledby="chatTitle"
+    >
+      <div class="dialog-header">
+        <div>
+          <small>CONSULTORIA DA LOJA</small>
+          <h2 id="chatTitle">Assistente</h2>
+        </div>
+        <button data-close aria-label="Fechar conversa">×</button>
+      </div>
+      <div
+        id="chatMessages"
+        class="messages"
+        role="log"
+        aria-live="polite"
+      ></div>
+      <div id="chatSuggestions" class="suggestions"></div>
+      <form id="chatForm" class="composer">
+        <label class="sr-only" for="chatInput">Sua mensagem</label
+        ><input
+          id="chatInput"
+          maxlength="500"
+          required
+          placeholder="Conte o que você procura…"
+        /><button class="primary" aria-label="Enviar mensagem">↑</button>
+      </form>
+      <small class="chat-note"
+        >Confira as especificações antes de comprar. A IA pode errar.</small
+      >
+    </dialog>
+    <dialog
+      id="accountDialog"
+      class="account-dialog"
+      aria-labelledby="accountTitle"
+    >
+      <div class="dialog-header">
+        <h2 id="accountTitle">Sua conta</h2>
+        <button data-close aria-label="Fechar conta">×</button>
+      </div>
+      <div id="accountContent"></div>
+    </dialog>
+    <aside id="coach" class="coach" hidden>
+      <p id="coachText"></p>
+      <button id="coachNext">Entendi</button
+      ><button id="coachSkip" class="quiet">Pular dicas</button>
+    </aside>
+    <div id="toast" class="toast" role="status" hidden></div>
+    <script type="module" src="/store-assets/app.js"></script>
+  </body>
+</html>

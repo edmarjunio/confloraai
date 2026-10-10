@@ -853,7 +853,7 @@ function renderTermsOfServiceHtml() {
 </html>`;
 }
 
-function createApp({ messageService, taskQueueClient, verifyGoogleToken = verifyFirebaseToken }) {
+function createApp({ messageService, taskQueueClient, verifyGoogleToken = verifyFirebaseToken, storeRepository, storeAssistant }) {
   const express = getExpress();
   if (!express) { throw new Error('Express module not available'); }
   const app = express();
@@ -873,6 +873,15 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       },
     })
   );
+
+  const { installStorefront } = require('../storefront/routes');
+  const { StoreAssistant } = require('../storefront/assistant');
+  installStorefront(app, {
+    express,
+    firestore: messageService.firestoreRepo.firestore,
+    repository: storeRepository,
+    assistant: storeAssistant || new StoreAssistant({ client: messageService.agentService?.getAiClient?.(), model: config.gemini.model }),
+  });
 
   const sessions = createWebSessions(messageService.firestoreRepo);
   app.use('/api', sessions.resolve);
@@ -920,6 +929,9 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
 
   // Home / Cardápio Digital Conflora
   app.get('/', (_req, res) => {
+    if (process.env.STOREFRONT_STORE_SLUG) {
+      return res.redirect('/shop/' + encodeURIComponent(process.env.STOREFRONT_STORE_SLUG));
+    }
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');

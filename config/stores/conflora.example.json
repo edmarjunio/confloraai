@@ -1,0 +1,55 @@
+{
+  "tenantId": "conflora",
+  "slug": "conflora",
+  "version": 1,
+  "identity": {
+    "name": "Conflora Horta e Viveiro",
+    "subtitle": "Horta e Viveiro",
+    "niche": "Plantas, hortaliças e insumos",
+    "city": "Mineiros",
+    "region": "GO",
+    "locale": "pt-BR",
+    "currency": "BRL"
+  },
+  "branding": {
+    "logoUrl": "/store-assets/brands/conflora-logo.png",
+    "iconUrl": "/store-assets/brands/conflora-icon.png",
+    "colors": {
+      "primary": "#2E9348",
+      "accent": "#F5C518",
+      "text": "#1A1A1A",
+      "background": "#F8F9FA"
+    }
+  },
+  "categories": [],
+  "checkout": {
+    "enabledPayments": ["CARD", "CASH"],
+    "pix": {
+      "key": "",
+      "recipientName": ""
+    },
+    "contactPhone": "",
+    "completionMode": "IN_APP",
+    "delivery": {
+      "enabled": false,
+      "label": "Entrega",
+      "serviceAreas": [],
+      "feeMinor": 0
+    },
+    "pickup": {
+      "enabled": true,
+      "label": "Retirada no local",
+      "address": ""
+    }
+  },
+  "assistant": {
+    "enabled": true,
+    "displayName": "Conflora AI",
+    "welcomeMessage": "Conte o que você procura. Vamos encontrar uma opção?",
+    "suggestedQuestions": [
+      "Planta para sombra",
+      "Frutíferas para vasos",
+      "Preciso de ajuda para escolher"
+    ]
+  }
+}

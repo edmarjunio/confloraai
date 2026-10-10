@@ -3,7 +3,11 @@ process.env.NODE_ENV = "test";
 const { createApp } = require("../src/http/app");
 const { FirestoreRepository } = require("../src/database/firestore.repository");
 const repo = new FirestoreRepository({ isInMemory: true });
+const { StoreRepository } = require('../src/storefront/repository');
+const { seedStores } = require('./storefront-fixture');
 (async () => {
+  const storeRepository = new StoreRepository();
+  await seedStores(storeRepository);
   const { readProductWorkbook } = require("../src/catalog/spreadsheet-import");
   const fs = require("node:fs");
   await repo.replaceProducts(
@@ -22,6 +26,7 @@ const repo = new FirestoreRepository({ isInMemory: true });
     status: "ATIVO",
   });
   const app = createApp({
+    storeRepository,
     messageService: {
       firestoreRepo: repo,
       catalogRepo: { items: [], refreshCatalog: async () => {} },

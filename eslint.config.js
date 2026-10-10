@@ -20,6 +20,9 @@ module.exports = [
         __dirname: "readonly",
         module: "readonly",
         require: "readonly",
+        structuredClone: "readonly",
+        URL: "readonly",
+        AbortSignal: "readonly",
       },
     },
     rules: {
@@ -29,6 +32,13 @@ module.exports = [
       "prefer-const": "error",
       eqeqeq: ["error", "always"],
       curly: ["error", "all"],
+    },
+  },
+  {
+    files: ["public/storefront/**/*.js"],
+    languageOptions: {
+      sourceType: "module",
+      globals: { document: "readonly", window: "readonly", navigator: "readonly", location: "readonly", history: "readonly", localStorage: "readonly", crypto: "readonly", TextEncoder: "readonly", AbortController: "readonly" },
     },
   },
 ];
