@@ -1404,9 +1404,22 @@ class FirestoreRepository {
    * para o Looker Studio / AppSheet.
    */
   async getInventorySettings() {
-    const stored = this.firestore
-      ? (await this.firestore.collection('store_settings').doc('inventory').get()).data()
-      : this.inMemoryInventorySettings;
+    let stored = null;
+    if (this.firestore && !this._firestoreClientDisabled) {
+      try {
+        const snap = await this.firestore.collection('store_settings').doc('inventory').get();
+        stored = snap.data();
+      } catch (err) {
+        if (/PERMISSION_DENIED/i.test(err.message) || err.code === 7) {
+          Logger.warn('Aviso: Permissão negada para store_settings no Firestore, usando fallback local.');
+        } else {
+          Logger.warn('Erro ao buscar store_settings no Firestore', err);
+        }
+        stored = this.inMemoryInventorySettings;
+      }
+    } else {
+      stored = this.inMemoryInventorySettings;
+    }
     return {
       stockControlEnabled: stored?.stockControlEnabled ?? process.env.STORE_STOCK_CONTROL_ENABLED !== 'false',
     };
@@ -1417,8 +1430,13 @@ class FirestoreRepository {
       throw new Error('Informe se o controle de estoque está habilitado.');
     }
     const value = { stockControlEnabled: settings.stockControlEnabled };
-    if (this.firestore) {
-      await this.firestore.collection('store_settings').doc('inventory').set(value, { merge: true });
+    if (this.firestore && !this._firestoreClientDisabled) {
+      try {
+        await this.firestore.collection('store_settings').doc('inventory').set(value, { merge: true });
+      } catch (err) {
+        Logger.warn('Erro ao salvar store_settings no Firestore, salvando em memória', err);
+        this.inMemoryInventorySettings = value;
+      }
     } else {
       this.inMemoryInventorySettings = value;
     }
@@ -1584,7 +1602,7 @@ class FirestoreRepository {
   }
 
   async getStockMovements(limit = 20) {
-    if (this.firestore) {
+    if (this.firestore && !this._firestoreClientDisabled) {
       try {
         const snap = await this.firestore
           .collection('stock_movements')
@@ -1597,10 +1615,19 @@ class FirestoreRepository {
           ...doc.data(),
         }));
       } catch (err) {
-        Logger.warn(
-          'Erro ao buscar stock_movements no Firestore',
-          { error: err.message }
-        );
+        if (
+          err.code === 7 ||
+          err.code === 'permission-denied' ||
+          err.message?.includes('PERMISSION_DENIED') ||
+          err.message?.includes('Missing or insufficient')
+        ) {
+          this._firestoreClientDisabled = true;
+        } else {
+          Logger.warn(
+            'Erro ao buscar stock_movements no Firestore',
+            { error: err.message }
+          );
+        }
       }
     }
 
@@ -1730,16 +1757,32 @@ class FirestoreRepository {
   }
 
   async getSalesOrders() {
-    if (!this.firestore) {
+    if (!this.firestore || this._firestoreClientDisabled) {
       return Array.from(this.inMemoryOrders.values());
     }
     if (this.salesOrdersCache && Date.now() < this.salesOrdersCache.expiresAt) {
       return this.salesOrdersCache.orders;
     }
-    const snapshot = await this.firestore.collection('orders').select('status', 'items').get();
-    const orders = snapshot.docs.map(doc => doc.data());
-    this.salesOrdersCache = { orders, expiresAt: Date.now() + 60000 };
-    return orders;
+    try {
+      const snapshot = await this.firestore.collection('orders').select('status', 'items').get();
+      const orders = snapshot.docs.map((doc) => doc.data());
+      this.salesOrdersCache = { orders, expiresAt: Date.now() + 60000 };
+      return orders;
+    } catch (err) {
+      if (
+        err.code === 7 ||
+        err.code === 'permission-denied' ||
+        err.message?.includes('PERMISSION_DENIED') ||
+        err.message?.includes('Missing or insufficient')
+      ) {
+        this._firestoreClientDisabled = true;
+      } else {
+        Logger.warn('Erro ao buscar pedidos para ranking no Firestore', {
+          error: err.message,
+        });
+      }
+      return Array.from(this.inMemoryOrders.values());
+    }
   }
 
   async getAllOrders(limit = 50) {
