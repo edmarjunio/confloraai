@@ -1,4 +1,6 @@
 const profile = require("../../config/stores/conflora.example.json");
+const navigation = require("../../config/stores/conflora-navigation.json");
+const { navigationPath } = require("./catalog-navigation");
 const { rankProductSales } = require("../catalog/product-sales");
 const { ensure, digest, StoreError } = require("./validation");
 
@@ -28,6 +30,13 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
       .filter((image) => image.url),
     categories: [digest(category).slice(0, 16)],
     categoryName: category,
+    subcategoryName: String(item.subcategory || item.subcategoria || ""),
+    navigationPath: navigationPath(item, navigation),
+    searchAliases: [item.tagsAi, item.tags_ia]
+      .filter((value) => typeof value === "string")
+      .flatMap((value) => value.split(/[,;\n]/))
+      .map((value) => value.trim())
+      .filter(Boolean),
     tags: (Array.isArray(item.tags) ? item.tags : []).filter(
       (tag) => typeof tag === "string",
     ),
@@ -64,7 +73,14 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
 }
 function existingConfig(products) {
   const config = structuredClone(profile);
+  config.assistant.mode =
+    process.env.STOREFRONT_CHAT_MODE === "AI" ? "AI" : "GUIDED";
+  config.assistant.synonyms = navigation.synonyms;
+  if (config.assistant.mode === "GUIDED") {
+    config.assistant.displayName = "Guia de compras";
+  }
   config.branding.colors.background = "#FFFFFF";
+  config.navigation = navigation;
   config.categories = [
     ...new Map(
       products.map((p) => [
@@ -102,11 +118,27 @@ function installExistingStore(app, { repository, assistant }) {
       .send(script);
   });
   async function products() {
-    let records = await repository.getAllProducts();
-    if (repository.getSalesOrders) {
-      records = rankProductSales(records, await repository.getSalesOrders());
+    let records = [];
+    try {
+      records = await repository.getAllProducts();
+    } catch {
+      records = [];
     }
-    const settings = await repository.getInventorySettings();
+    if (repository.getSalesOrders) {
+      try {
+        records = rankProductSales(records, await repository.getSalesOrders());
+      } catch {
+        // preserve unranked records
+      }
+    }
+    let settings = { stockControlEnabled: true };
+    if (repository.getInventorySettings) {
+      try {
+        settings = await repository.getInventorySettings();
+      } catch {
+        settings = { stockControlEnabled: true };
+      }
+    }
     return records.map((item) => toProduct(item, settings)).filter((p) => p.isAvailable);
   }
   app.get("/api/storefront/catalog", async (_req, res, next) => {

@@ -1404,9 +1404,22 @@ class FirestoreRepository {
    * para o Looker Studio / AppSheet.
    */
   async getInventorySettings() {
-    const stored = this.firestore
-      ? (await this.firestore.collection('store_settings').doc('inventory').get()).data()
-      : this.inMemoryInventorySettings;
+    let stored = null;
+    if (this.firestore && !this._firestoreClientDisabled) {
+      try {
+        const snap = await this.firestore.collection('store_settings').doc('inventory').get();
+        stored = snap.data();
+      } catch (err) {
+        if (/PERMISSION_DENIED/i.test(err.message) || err.code === 7) {
+          Logger.warn('Aviso: Permissão negada para store_settings no Firestore, usando fallback local.');
+        } else {
+          Logger.warn('Erro ao buscar store_settings no Firestore', err);
+        }
+        stored = this.inMemoryInventorySettings;
+      }
+    } else {
+      stored = this.inMemoryInventorySettings;
+    }
     return {
       stockControlEnabled: stored?.stockControlEnabled ?? process.env.STORE_STOCK_CONTROL_ENABLED !== 'false',
     };
@@ -1417,8 +1430,13 @@ class FirestoreRepository {
       throw new Error('Informe se o controle de estoque está habilitado.');
     }
     const value = { stockControlEnabled: settings.stockControlEnabled };
-    if (this.firestore) {
-      await this.firestore.collection('store_settings').doc('inventory').set(value, { merge: true });
+    if (this.firestore && !this._firestoreClientDisabled) {
+      try {
+        await this.firestore.collection('store_settings').doc('inventory').set(value, { merge: true });
+      } catch (err) {
+        Logger.warn('Erro ao salvar store_settings no Firestore, salvando em memória', err);
+        this.inMemoryInventorySettings = value;
+      }
     } else {
       this.inMemoryInventorySettings = value;
     }

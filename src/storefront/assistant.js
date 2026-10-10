@@ -53,6 +53,10 @@ class StoreAssistant {
                   product.tags,
                   product.specifications,
                   product.description,
+                  product.navigationPath,
+                  product.searchAliases,
+                  product.categoryName,
+                  product.subcategoryName,
                 ]),
               ).includes(token),
             ),
@@ -63,6 +67,17 @@ class StoreAssistant {
     const candidates = ranked
       .filter((item) => item.score > 0)
       .map((item) => item.product);
+    if (config?.assistant?.mode === "GUIDED") {
+      return {
+        message: candidates.length
+          ? "Encontrei estas opções no catálogo para você:"
+          : "Não encontrei um produto disponível para essa busca no momento.",
+        products: candidates.slice(0, 5),
+        sources: [],
+        mode: "GUIDED",
+        needsConfirmation: false,
+      };
+    }
     if (!this.client || Date.now() < this.retryAfter) {
       return catalogFallback(candidates);
     }

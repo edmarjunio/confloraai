@@ -2,12 +2,12 @@ import {
   $,
   element,
   money,
-  normalize,
   quantityControl,
   storageGet,
   storageSet,
 } from "./ui.js";
 import { icon } from "./icons.js";
+import { searchProducts } from "./guided-search.js";
 
 export function createCatalog(state, add, navigate) {
   let category = "";
@@ -103,23 +103,37 @@ export function createCatalog(state, add, navigate) {
     );
   }
   function render() {
-    const query = normalize($("#search").value);
-    const list = state.products.filter(
-      (p) =>
-        (!category || p.categories.includes(category)) &&
-        normalize([p.name, p.description, ...p.tags].join(" ")).includes(query),
-    );
-    const sort = $("#sort").value;
-    list.sort(
-      (a, b) =>
-        (sort === "sales"
-          ? (b.salesCount || 0) - (a.salesCount || 0)
-          : sort === "price"
-            ? a.price.amountMinor - b.price.amountMinor
-            : sort === "priceDesc"
-              ? b.price.amountMinor - a.price.amountMinor
-              : 0) || a.name.localeCompare(b.name, "pt-BR"),
-    );
+    const rawQuery = $("#search").value.trim();
+    const baseList = category
+      ? state.products.filter((p) => p.categories.includes(category))
+      : state.products;
+
+    let list;
+    if (rawQuery) {
+      list = searchProducts(baseList, rawQuery, {
+        synonyms: state.config?.assistant?.synonyms,
+        limit: 1000,
+      });
+      if (!list.length && category) {
+        list = searchProducts(state.products, rawQuery, {
+          synonyms: state.config?.assistant?.synonyms,
+          limit: 1000,
+        });
+      }
+    } else {
+      list = [...baseList];
+      const sort = $("#sort").value;
+      list.sort(
+        (a, b) =>
+          (sort === "sales"
+            ? (b.salesCount || 0) - (a.salesCount || 0)
+            : sort === "price"
+              ? a.price.amountMinor - b.price.amountMinor
+              : sort === "priceDesc"
+                ? b.price.amountMinor - a.price.amountMinor
+                : 0) || a.name.localeCompare(b.name, "pt-BR"),
+      );
+    }
     $("#products").replaceChildren(
       ...list.slice(0, pageSize).map((p) => card(p)),
     );
