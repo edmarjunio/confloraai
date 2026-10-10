@@ -1584,7 +1584,7 @@ class FirestoreRepository {
   }
 
   async getStockMovements(limit = 20) {
-    if (this.firestore) {
+    if (this.firestore && !this._firestoreClientDisabled) {
       try {
         const snap = await this.firestore
           .collection('stock_movements')
@@ -1597,10 +1597,19 @@ class FirestoreRepository {
           ...doc.data(),
         }));
       } catch (err) {
-        Logger.warn(
-          'Erro ao buscar stock_movements no Firestore',
-          { error: err.message }
-        );
+        if (
+          err.code === 7 ||
+          err.code === 'permission-denied' ||
+          err.message?.includes('PERMISSION_DENIED') ||
+          err.message?.includes('Missing or insufficient')
+        ) {
+          this._firestoreClientDisabled = true;
+        } else {
+          Logger.warn(
+            'Erro ao buscar stock_movements no Firestore',
+            { error: err.message }
+          );
+        }
       }
     }
 
@@ -1730,16 +1739,32 @@ class FirestoreRepository {
   }
 
   async getSalesOrders() {
-    if (!this.firestore) {
+    if (!this.firestore || this._firestoreClientDisabled) {
       return Array.from(this.inMemoryOrders.values());
     }
     if (this.salesOrdersCache && Date.now() < this.salesOrdersCache.expiresAt) {
       return this.salesOrdersCache.orders;
     }
-    const snapshot = await this.firestore.collection('orders').select('status', 'items').get();
-    const orders = snapshot.docs.map(doc => doc.data());
-    this.salesOrdersCache = { orders, expiresAt: Date.now() + 60000 };
-    return orders;
+    try {
+      const snapshot = await this.firestore.collection('orders').select('status', 'items').get();
+      const orders = snapshot.docs.map((doc) => doc.data());
+      this.salesOrdersCache = { orders, expiresAt: Date.now() + 60000 };
+      return orders;
+    } catch (err) {
+      if (
+        err.code === 7 ||
+        err.code === 'permission-denied' ||
+        err.message?.includes('PERMISSION_DENIED') ||
+        err.message?.includes('Missing or insufficient')
+      ) {
+        this._firestoreClientDisabled = true;
+      } else {
+        Logger.warn('Erro ao buscar pedidos para ranking no Firestore', {
+          error: err.message,
+        });
+      }
+      return Array.from(this.inMemoryOrders.values());
+    }
   }
 
   async getAllOrders(limit = 50) {
