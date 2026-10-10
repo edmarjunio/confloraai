@@ -32,15 +32,7 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
     categoryName: category,
     subcategoryName: String(item.subcategory || item.subcategoria || ""),
     navigationPath: navigationPath(item, navigation),
-<<<<<<< HEAD
     searchAliases: [item.tagsAi, item.tags_ia].filter(value => typeof value === "string").flatMap(value => value.split(/[,;\n]/)).map(value => value.trim()).filter(Boolean),
-=======
-    searchAliases: [item.tagsAi, item.tags_ia]
-      .filter((value) => typeof value === "string")
-      .flatMap((value) => value.split(/[,;\n]/))
-      .map((value) => value.trim())
-      .filter(Boolean),
->>>>>>> 817c5b27f153d388a4f8d6ac776cfd9b5ca97325
     tags: (Array.isArray(item.tags) ? item.tags : []).filter(
       (tag) => typeof tag === "string",
     ),
