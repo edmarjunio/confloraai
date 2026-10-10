@@ -1,4 +1,5 @@
 const { randomBytes, createHash } = require("node:crypto");
+const { readSessionToken, sessionCookie } = require("./session-cookie");
 
 function safeUser(user) {
   const safe = {
@@ -14,14 +15,9 @@ function safeUser(user) {
 function createWebSessions(repo) {
   const memory = new Map();
   const hash = (token) => createHash("sha256").update(token).digest("hex");
-  const cookieToken = (req) =>
-    (req.headers.cookie || "")
-      .split(";")
-      .map((s) => s.trim())
-      .find((s) => s.startsWith("conflora_session="))
-      ?.slice(17);
+  const cookieToken = (req) => readSessionToken(req, "web", "conflora_session");
   const cookie = (req, token, age) =>
-    `conflora_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${age}${req.secure || process.env.NODE_ENV === "production" ? "; Secure" : ""}`;
+    sessionCookie(req, { scope: "web", token, path: "/", maxAge: age });
   async function remove(req) {
     const token = cookieToken(req);
     if (!token) {

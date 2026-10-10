@@ -18,3 +18,4 @@ firebase-service-account.json
 
 test-results/
 playwright-report/
+.firebase/

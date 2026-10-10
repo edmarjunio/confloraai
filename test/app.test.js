@@ -447,11 +447,12 @@ test('16. Cardápio Digital & Painel Admin: Renderização e elementos essenciai
   assert.match(homeHtml, /setOrderType/);
 
   const adminHtml = renderAdminHtml();
-  assert.match(adminHtml, /Painel Operacional Conflora/);
-  assert.match(adminHtml, /Caixa & Pedidos/);
+  assert.match(adminHtml, /Administração/);
+  assert.match(adminHtml, /admin-shell-v1\.css/);
+  assert.match(adminHtml, /Caixa e vendas/);
   assert.match(adminHtml, /Entrada Rápida de Estoque/);
-  assert.match(adminHtml, /Cadastro de Produtos/);
-  assert.match(adminHtml, /Importar Planilhas/);
+  assert.match(adminHtml, /Cadastro & Alteração de Produtos/);
+  assert.match(adminHtml, /id="tabBtn-import"/);
 });
 
 test('17. Firestore Repository: Entrada ágil de estoque, venda balcão e importador de planilha', async () => {

@@ -857,6 +857,10 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
   const express = getExpress();
   if (!express) { throw new Error('Express module not available'); }
   const app = express();
+  app.use('/api', (_req, res, next) => {
+    res.setHeader('Cache-Control', 'private, no-store');
+    next();
+  });
   const signatureValidator = new SignatureValidator(config.whatsapp.metaAppSecret);
   const systemStatusService = new SystemStatusService({
     catalogRepo: messageService ? messageService.catalogRepo : null,

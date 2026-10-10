@@ -1,0 +1,16 @@
+{
+  "hosting": {
+    "site": "confloraai",
+    "public": "firebase-hosting",
+    "ignore": ["**/.*"],
+    "rewrites": [
+      {
+        "source": "**",
+        "run": {
+          "serviceId": "confloraai",
+          "region": "southamerica-east1"
+        }
+      }
+    ]
+  }
+}

@@ -1,4 +1,5 @@
 module.exports = [
+  { ignores: ["src/dataconnect-admin-generated/**", "functions/lib/**"] },
   {
     files: ["**/*.js"],
     ignores: ["node_modules/**"],

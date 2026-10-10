@@ -1,5 +1,9 @@
 const { randomBytes, scrypt, timingSafeEqual } = require("node:crypto");
 const { promisify } = require("node:util");
+const {
+  readSessionToken,
+  sessionCookie,
+} = require("../security/session-cookie");
 const { ensure, text, digest } = require("./validation");
 const derive = promisify(scrypt);
 async function hashPassword(password) {
@@ -29,13 +33,14 @@ function publicUser(user) {
 }
 function createStoreAuth(repo) {
   const tokenFrom = (req) =>
-    (req.headers.cookie || "")
-      .split(";")
-      .map((x) => x.trim())
-      .find((x) => x.startsWith("store_session="))
-      ?.slice(14);
+    readSessionToken(req, `store.${req.tenantId}`, "store_session");
   const cookie = (req, token, age) =>
-    `store_session=${token}; Path=/api/stores/${req.tenantId}; HttpOnly; SameSite=Strict; Max-Age=${age}${req.secure || process.env.NODE_ENV === "production" ? "; Secure" : ""}`;
+    sessionCookie(req, {
+      scope: `store.${req.tenantId}`,
+      token,
+      path: `/api/stores/${req.tenantId}`,
+      maxAge: age,
+    });
   return {
     async resolve(req, _res, next) {
       try {

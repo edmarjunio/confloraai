@@ -87,34 +87,39 @@ export function createChat(state, catalog) {
           response.searchSuggestions;
         messages.append(frame);
       }
-      messages.append(
-        element("p", {
-          class: "bubble assistant",
-          text: "É isso que você procura?",
-        }),
-        element("div", { class: "suggestions" }, [
-          element("button", {
-            text: "Sim, é isso",
-            onclick: (event) => {
-              event.target.disabled = true;
-              bubble(
-                "Ótimo! Você pode adicionar o produto à sacola aqui mesmo.",
-                "assistant",
-              );
-            },
+      if (
+        response.needsConfirmation !== false &&
+        response.products.length > 0
+      ) {
+        messages.append(
+          element("p", {
+            class: "bubble assistant",
+            text: "É isso que você procura?",
           }),
-          element("button", {
-            text: "Não, quero outra opção",
-            onclick: () => {
-              bubble(
-                "Me conte mais sobre o uso, o ambiente ou as características que você precisa.",
-                "assistant",
-              );
-              $("#chatInput").focus();
-            },
-          }),
-        ]),
-      );
+          element("div", { class: "suggestions" }, [
+            element("button", {
+              text: "Sim, é isso",
+              onclick: (event) => {
+                event.target.disabled = true;
+                bubble(
+                  "Ótimo! Você pode adicionar o produto à sacola aqui mesmo.",
+                  "assistant",
+                );
+              },
+            }),
+            element("button", {
+              text: "Não, quero outra opção",
+              onclick: () => {
+                bubble(
+                  "Me conte mais sobre o uso, o ambiente ou as características que você precisa.",
+                  "assistant",
+                );
+                $("#chatInput").focus();
+              },
+            }),
+          ]),
+        );
+      }
       history.push(
         { role: "user", text: message },
         { role: "assistant", text: response.message.slice(0, 1000) },

@@ -9,7 +9,7 @@ function catalogFallback(candidates) {
     products: candidates.slice(0, 3),
     sources: [],
     mode: "CATALOG_SEARCH",
-    needsConfirmation: true,
+    needsConfirmation: candidates.length > 0,
   };
 }
 const redactContactInfo = (value) =>
