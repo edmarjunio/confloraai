@@ -64,7 +64,9 @@ class BotanicalConsultantService {
    * @returns {string|null}
    */
   static detectBotanicalIntent(userQuery) {
-    if (!userQuery || typeof userQuery !== 'string') return null;
+    if (!userQuery || typeof userQuery !== 'string') {
+      return null;
+    }
     const normalized = userQuery
       .toLowerCase()
       .normalize('NFD')
@@ -90,7 +92,7 @@ class BotanicalConsultantService {
    * @param {Object} [params.agentService]
    * @returns {Promise<{ reply: string, recommendations: Array }>}
    */
-  static async consult({ query, history = [], catalogProducts = [], agentService = null }) {
+  static async consult({ query, history: _history = [], catalogProducts = [], agentService = null }) {
     if (!query || typeof query !== 'string') {
       return {
         reply: 'Olá! Como posso ajudar você a cuidar do seu jardim ou escolher as melhores mudas hoje?',

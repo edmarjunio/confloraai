@@ -35,6 +35,10 @@ module.exports = [
     },
   },
   {
+    files: ["src/components/index.js"],
+    languageOptions: { sourceType: "module" },
+  },
+  {
     files: ["public/storefront/**/*.js"],
     languageOptions: {
       sourceType: "module",
