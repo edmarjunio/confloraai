@@ -1403,7 +1403,32 @@ class FirestoreRepository {
    * Garante consistência e registra movimentação
    * para o Looker Studio / AppSheet.
    */
+  async getInventorySettings() {
+    const stored = this.firestore
+      ? (await this.firestore.collection('store_settings').doc('inventory').get()).data()
+      : this.inMemoryInventorySettings;
+    return {
+      stockControlEnabled: stored?.stockControlEnabled ?? process.env.STORE_STOCK_CONTROL_ENABLED !== 'false',
+    };
+  }
+
+  async saveInventorySettings(settings) {
+    if (typeof settings?.stockControlEnabled !== 'boolean') {
+      throw new Error('Informe se o controle de estoque está habilitado.');
+    }
+    const value = { stockControlEnabled: settings.stockControlEnabled };
+    if (this.firestore) {
+      await this.firestore.collection('store_settings').doc('inventory').set(value, { merge: true });
+    } else {
+      this.inMemoryInventorySettings = value;
+    }
+    return value;
+  }
+
   async deductStock(orderItems, customerPhone = '') {
+    if (!(await this.getInventorySettings()).stockControlEnabled) {
+      return { success: true, deducted: [], trackingDisabled: true };
+    }
     if (
       !Array.isArray(orderItems) ||
       orderItems.length === 0
@@ -1524,8 +1549,8 @@ class FirestoreRepository {
         const [id, prod] of this.inMemoryProducts.entries()
       ) {
         if (
-          prod.name === item.name ||
-          prod.canonicalName === item.name
+          item.productId ? String(id) === String(item.productId) :
+            (prod.name === item.name || prod.canonicalName === item.name)
         ) {
           const cur =
             prod.stockQuantity ?? prod.estoque ?? 0;

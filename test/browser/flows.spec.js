@@ -231,6 +231,36 @@ test("Admin: editar produto importado, criar/excluir produto e colaborador, entr
   await expect(page.locator("#loginModal")).toHaveClass(/open/);
 });
 
+test("Admin mobile: filtros de status, aviso de inativo e controle opcional de estoque", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await pinLogin(page, "Edmar Júnio (Izibola)", "1234");
+  await page.request.post('/api/admin/products', { data: { id: 'inactive-filter-test', name: 'Produto oculto teste', category: 'Teste', price: 10, status: 'INATIVO', stockQuantity: 0 } });
+  await page.locator('#tabBtn-products').click();
+  const product = page.locator('#adminProductsTableBody tr').filter({ hasText: 'Produto oculto teste' });
+  await expect(product).toHaveCount(0);
+  await page.getByRole('button', { name: 'INATIVOS', exact: true }).click();
+  await expect(product).toContainText('INATIVO — oculto no catálogo');
+  await product.getByRole('button', { name: /Editar/ }).click();
+  await expect(page.locator('#formProdStatus')).toHaveValue('INATIVO');
+  await page.getByRole('button', { name: 'TODOS', exact: true }).click();
+  await expect(product).toHaveCount(1);
+  const catalog = await (await page.request.get('/api/storefront/catalog')).json();
+  expect(catalog.products.some(p => p.id === 'inactive-filter-test')).toBe(false);
+  await page.locator('#tabBtn-stock').click();
+  const toggle = page.locator('#stockControlEnabled');
+  await expect(toggle).toBeEnabled();
+  await toggle.uncheck();
+  await expect(page.locator('#inventorySettingsStatus')).toContainText('Desativado');
+  await page.reload();
+  await page.locator('#tabBtn-stock').click();
+  await expect(toggle).not.toBeChecked();
+  await expect(toggle).toBeEnabled();
+  await toggle.check();
+  await expect(page.locator('#inventorySettingsStatus')).toContainText('Ativado');
+  expect(await page.locator('html').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await page.request.delete('/api/admin/products/inactive-filter-test');
+});
+
 test("Login inválido mantém painel bloqueado e Google sem configuração informa indisponibilidade", async ({
   page,
 }) => {

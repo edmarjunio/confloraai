@@ -188,6 +188,14 @@ function renderAdminHtml() {
 
     <!-- ABA 5: ENTRADA ÁGIL DE ESTOQUE (ADMIN E CAIXA) -->
     <div id="tab-stock" class="tab-content">
+      <div id="inventorySettingsPanel" hidden style="padding:16px; margin-bottom:20px; border:1px solid #E5E7EB; border-radius:12px; background:#F8F9FA;">
+        <h2>Controle de estoque</h2>
+        <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+          <input id="stockControlEnabled" type="checkbox" style="width:20px; height:20px;" disabled onchange="saveInventorySettings()" />
+          Usar estoque para limitar as vendas
+        </label>
+        <p id="inventorySettingsStatus" role="status" style="margin-top:10px; font-size:13px;">Carregando configuração…</p>
+      </div>
       <h2>Entrada Rápida de Estoque (1 Toque para Somar)</h2>
       <p style="font-size:12px; color:#64748b; margin-bottom:12px;">Para funcionários do viveiro: busque a planta e aperte no botão para somar unidades no Firestore.</p>
       <input type="text" id="stockSearchInput" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px;" placeholder="Digitar nome da planta para achar rápido..." oninput="filterStockCards()" />
@@ -236,7 +244,11 @@ function renderAdminHtml() {
         </div>
         <div>
           <label style="font-size:12px; font-weight:bold;">Estoque Inicial:</label>
-          <input type="number" id="formProdStock" required style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="15" />
+          <input type="number" id="formProdStock" required min="0" value="0" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="15" />
+        </div>
+        <div>
+          <label for="formProdStatus" style="font-size:12px; font-weight:bold;">Status no catálogo:</label>
+          <select id="formProdStatus"><option value="ATIVO">ATIVO</option><option value="INATIVO">INATIVO — oculto no catálogo</option></select>
         </div>
         <div style="grid-column: 1/-1;">
           <label style="font-size:12px; font-weight:bold;">📸 Fotos do Produto Direto pro Firestore (Upload Múltiplo Local):</label>
@@ -275,6 +287,12 @@ function renderAdminHtml() {
 
       <div style="display:flex; justify-content:space-between; align-items:center; margin-top:28px; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
         <h3 style="margin:0;">Produtos no Banco de Dados</h3>
+        <div id="productStatusFilters" role="group" aria-label="Filtrar produtos por status" style="display:flex; flex-wrap:wrap; gap:8px;">
+          <button type="button" class="action-btn btn-gray" data-status="TODOS" aria-pressed="false" onclick="setProductStatusFilter('TODOS')">TODOS</button>
+          <button type="button" class="action-btn btn-green" data-status="ATIVO" aria-pressed="true" onclick="setProductStatusFilter('ATIVO')">ATIVOS</button>
+          <button type="button" class="action-btn btn-gray" data-status="INATIVO" aria-pressed="false" onclick="setProductStatusFilter('INATIVO')">INATIVOS</button>
+        </div>
+        <p id="productStatusCount" role="status" style="font-size:13px;"></p>
         <button type="button" class="action-btn btn-green" onclick="showTab('import')">Importar LISTA DE PRODUTOS</button>
       </div>
       <div class="table-scroll" tabindex="0" role="region" aria-label="Tabela de dados"><table>
@@ -1307,6 +1325,7 @@ function renderAdminHtml() {
 
     // 9. ESTOQUE ÁGIL (+1, +5, +10)
     async function loadStockProducts() {
+      if (currentUser?.role === 'ADMIN') await loadInventorySettings();
       try {
         const res = await fetch('/api/inventory');
         if (res.ok) {
@@ -1322,6 +1341,42 @@ function renderAdminHtml() {
       }
       if (!Array.isArray(allProducts)) allProducts = [];
       filterStockCards();
+    }
+
+    function showInventorySettings(settings) {
+      document.getElementById('stockControlEnabled').checked = settings.stockControlEnabled;
+      document.getElementById('inventorySettingsStatus').textContent = settings.stockControlEnabled
+        ? 'Ativado: o catálogo limita compras ao saldo disponível e as vendas dão baixa no estoque.'
+        : 'Desativado: produtos ativos podem ser vendidos mesmo com saldo zero. As vendas não alteram o saldo; você pode cadastrar as entradas normalmente.';
+    }
+    async function loadInventorySettings() {
+      const panel = document.getElementById('inventorySettingsPanel');
+      const checkbox = document.getElementById('stockControlEnabled');
+      panel.hidden = false;
+      checkbox.disabled = true;
+      try {
+        const response = await fetch('/api/admin/inventory-settings');
+        if (!response.ok) throw new Error('Não foi possível carregar a configuração.');
+        showInventorySettings(await response.json());
+        checkbox.disabled = false;
+      } catch (error) {
+        document.getElementById('inventorySettingsStatus').textContent = error.message;
+      }
+    }
+    async function saveInventorySettings() {
+      const checkbox = document.getElementById('stockControlEnabled');
+      checkbox.disabled = true;
+      try {
+        const response = await fetch('/api/admin/inventory-settings', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stockControlEnabled: checkbox.checked }),
+        });
+        if (!response.ok) throw new Error('Não foi possível salvar a configuração.');
+        showInventorySettings(await response.json());
+      } catch (error) {
+        checkbox.checked = !checkbox.checked;
+        document.getElementById('inventorySettingsStatus').textContent = error.message;
+      } finally { checkbox.disabled = false; }
     }
 
     function filterStockCards() {
@@ -1368,6 +1423,19 @@ function renderAdminHtml() {
     }
 
     // 10. CADASTRO DE PRODUTOS
+    let productStatusFilter = 'ATIVO';
+    function productIsInactive(product) {
+      return String(product.status || 'ATIVO').trim().toUpperCase() === 'INATIVO';
+    }
+    function setProductStatusFilter(status) {
+      productStatusFilter = status;
+      document.querySelectorAll('#productStatusFilters button').forEach(button => {
+        const selected = button.dataset.status === status;
+        button.setAttribute('aria-pressed', String(selected));
+        button.className = 'action-btn ' + (selected ? 'btn-green' : 'btn-gray');
+      });
+      renderAdminProducts();
+    }
     async function loadAdminProducts() {
       try {
         const res = await fetch('/api/inventory');
@@ -1383,15 +1451,20 @@ function renderAdminHtml() {
         allProducts = [];
       }
       if (!Array.isArray(allProducts)) allProducts = [];
+      renderAdminProducts();
+    }
+    function renderAdminProducts() {
       const tbody = document.getElementById('adminProductsTableBody');
       tbody.innerHTML = '';
 
-      allProducts.forEach(p => {
+      const visible = allProducts.filter(p => productStatusFilter === 'TODOS' || productIsInactive(p) === (productStatusFilter === 'INATIVO'));
+      document.getElementById('productStatusCount').textContent = visible.length + ' produto(s) · ' + (productStatusFilter === 'TODOS' ? 'Todos os status' : productStatusFilter === 'INATIVO' ? 'Inativos' : 'Ativos');
+      visible.forEach(p => {
         const tr = document.createElement('tr');
         const img = (p.images && p.images[0]) || p.imageUrl || p.imageurl || 'https://images.unsplash.com/photo-1512428813834-c702c7702b78?w=600';
         tr.innerHTML = \`
           <td><img src="\${img}" class="prod-thumb" /></td>
-          <td><strong>\${p.descricao || p.name}</strong></td>
+          <td><strong>\${p.descricao || p.name}</strong>\${productIsInactive(p) ? '<p style="color:#92400e; background:#fef3c7; padding:6px 8px; border-radius:6px; font-size:12px; margin-top:6px;">INATIVO — oculto no catálogo, indisponível para compra.</p>' : ''}</td>
           <td>\${p.categoria || p.category || ''}</td>
           <td>R$ \${Number(p.valor_num || p.price || 0).toFixed(2).replace('.', ',')}</td>
           <td><strong style="color:#15803d;">\${p.stockQuantity ?? p.estoque ?? 0}</strong> un</td>
@@ -1522,6 +1595,7 @@ function renderAdminHtml() {
       document.getElementById('formProdSubcat').value = p.subcategoria || p.subcategory || '';
       document.getElementById('formProdPrice').value = Number(p.valor_num || p.price || 0);
       document.getElementById('formProdStock').value = p.stockQuantity ?? p.estoque ?? 0;
+      document.getElementById('formProdStatus').value = productIsInactive(p) ? 'INATIVO' : 'ATIVO';
       document.getElementById('formProdImages').value = (p.images || [p.imageUrl || p.imageurl]).filter(Boolean).join(', ');
       document.getElementById('formProdTags').value = p.tagsAi || p.tags_ia || '';
       document.getElementById('formProdDesc').value = p.descriptionAi || p.descricao_ia || '';
@@ -1586,6 +1660,7 @@ function renderAdminHtml() {
         unit: document.getElementById('formProdUnit') ? document.getElementById('formProdUnit').value : 'UN',
         price,
         stockQuantity: stock,
+        status: document.getElementById('formProdStatus').value,
         images: combinedImgs,
         imageUrl: combinedImgs[0] || '',
         tagsAi: tags,
@@ -1716,7 +1791,7 @@ function renderAdminHtml() {
         body: JSON.stringify({ customerName: name, customerPhone: phone, items, paymentMethod: pay })
       });
 
-      alert('Venda registrada com sucesso no caixa e estoque baixado!');
+      alert('Venda registrada com sucesso no caixa!');
       closeManualOrderModal();
       loadCashierDaily();
     }

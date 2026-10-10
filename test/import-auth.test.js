@@ -119,6 +119,25 @@ async function appContext(t) {
   return { repo, base, request, login };
 }
 
+test("inventory settings are admin-only and control stock deduction", async (t) => {
+  const { repo, request, login } = await appContext(t);
+  const admin = await login("usr-edmar", "1234");
+  const cashier = await login("usr-caixa1", "0000");
+  assert.equal((await request("/api/admin/inventory-settings")).status, 401);
+  assert.equal((await request("/api/admin/inventory-settings", { stockControlEnabled: false }, cashier, "PUT")).status, 403);
+  assert.equal((await request("/api/admin/inventory-settings", { stockControlEnabled: "false" }, admin, "PUT")).status, 400);
+  await repo.saveProduct({ id: "stock-switch", name: "Stock switch", price: 10, stockQuantity: 5 });
+  const update = await request("/api/admin/inventory-settings", { stockControlEnabled: false }, admin, "PUT");
+  assert.equal(update.status, 200);
+  assert.equal((await (await request("/api/admin/inventory-settings", undefined, admin)).json()).stockControlEnabled, false);
+  const deduction = await repo.deductStock([{ productId: "stock-switch", quantity: 2 }]);
+  assert.equal(deduction.trackingDisabled, true);
+  assert.equal((await repo.getAllProducts()).find(p => p.id === "stock-switch").stockQuantity, 5);
+  await repo.saveInventorySettings({ stockControlEnabled: true });
+  await repo.deductStock([{ productId: "stock-switch", quantity: 2 }]);
+  assert.equal((await repo.getAllProducts()).find(p => p.id === "stock-switch").stockQuantity, 3);
+});
+
 test("Login PIN: inválido, conta sem PIN, inativa, cliente e encerramento de sessão", async (t) => {
   const { repo, request, login } = await appContext(t);
   assert.equal(

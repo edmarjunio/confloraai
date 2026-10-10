@@ -56,8 +56,30 @@ test("existing catalogue maps photos, specifications and categories without expo
   assert.equal(product.supplierCost, undefined);
 });
 
+test("untracked stock allows zero-stock sales but never inactive products", async () => {
+  let enabled = false;
+  let status = "ATIVO";
+  const repository = {
+    getInventorySettings: async () => ({ stockControlEnabled: enabled }),
+    getAllProducts: async () => [{ id: "plant", name: "Planta", price: 6, stockQuantity: 0, status }],
+  };
+  const request = () => ({ path: "/api/storefront/orders", body: {
+    customer: { name: "Cliente", phone: "64999999999" }, fulfillment: "pickup", paymentMethod: "PIX",
+    items: [{ productId: "plant", quantity: 2 }],
+  } });
+  const req = request();
+  await normalizeExistingCheckout(req, repository);
+  assert.equal(req.body.subtotal, 12);
+  status = " inativo ";
+  await assert.rejects(normalizeExistingCheckout(request(), repository), /indisponível/);
+  status = "ATIVO";
+  enabled = true;
+  await assert.rejects(normalizeExistingCheckout(request(), repository), /indisponível/);
+});
+
 test("new main checkout uses authoritative legacy prices and rejects excessive combined quantities", async () => {
   const repository = {
+    getInventorySettings: async () => ({ stockControlEnabled: true }),
     getAllProducts: async () => [
       { id: "plant", name: "Manjericão", price: 6, stockQuantity: 3 },
     ],

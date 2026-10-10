@@ -1333,6 +1333,20 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
     }
   });
 
+  app.get('/api/admin/inventory-settings', async (_req, res, next) => {
+    try {
+      res.json(await messageService.firestoreRepo.getInventorySettings());
+    } catch (error) { next(error); }
+  });
+  app.put('/api/admin/inventory-settings', async (req, res, next) => {
+    if (typeof req.body?.stockControlEnabled !== 'boolean') {
+      return res.status(400).json({ error: 'Informe uma opção válida de controle de estoque.' });
+    }
+    try {
+      res.json(await messageService.firestoreRepo.saveInventorySettings(req.body));
+    } catch (error) { next(error); }
+  });
+
   // Admin: Entrada Rápida de Estoque
   app.post('/api/admin/stock/quick-entry', async (req, res) => {
     try {

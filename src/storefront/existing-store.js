@@ -3,7 +3,7 @@ const { rankProductSales } = require("../catalog/product-sales");
 const { ensure, digest, StoreError } = require("./validation");
 
 // Compatibility boundary for the existing store. SaaS tenants never use these collections.
-function toProduct(item) {
+function toProduct(item, { stockControlEnabled = true } = {}) {
   const category = String(item.category || item.categoria || "Geral");
   const unit = item.unit || item.unidade || "UN";
   const photo = (value) =>
@@ -48,9 +48,9 @@ function toProduct(item) {
         typeof section.title === "string" &&
         typeof section.body === "string",
     ),
-    isAvailable: item.status !== "INATIVO",
+    isAvailable: String(item.status || "ATIVO").trim().toUpperCase() !== "INATIVO",
     stock: {
-      tracked: true,
+      tracked: stockControlEnabled,
       quantity: Math.max(0, Number(item.stockQuantity ?? item.estoque ?? 0)),
     },
     saleUnit: {
@@ -106,7 +106,8 @@ function installExistingStore(app, { repository, assistant }) {
     if (repository.getSalesOrders) {
       records = rankProductSales(records, await repository.getSalesOrders());
     }
-    return records.map(toProduct).filter((p) => p.isAvailable);
+    const settings = await repository.getInventorySettings();
+    return records.map((item) => toProduct(item, settings)).filter((p) => p.isAvailable);
   }
   app.get("/api/storefront/catalog", async (_req, res, next) => {
     try {
@@ -179,10 +180,11 @@ async function normalizeExistingCheckout(req, repository) {
         String(input.address || "").trim().length >= 5),
     "Informe o endereço de entrega em Mineiros - GO.",
   );
+  const settings = await repository.getInventorySettings();
   const catalog = new Map(
     (await repository.getAllProducts()).map((item) => [
       String(item.id),
-      toProduct(item),
+      toProduct(item, settings),
     ]),
   );
   const quantities = new Map();
@@ -201,7 +203,7 @@ async function normalizeExistingCheckout(req, repository) {
   const items = [...quantities].map(([id, quantity]) => {
     const product = catalog.get(id);
     ensure(
-      product?.isAvailable && product.stock.quantity >= quantity,
+      product?.isAvailable && (!product.stock.tracked || product.stock.quantity >= quantity),
       "Produto ou quantidade indisponível.",
     );
     const steps = quantity / product.saleUnit.increment;
