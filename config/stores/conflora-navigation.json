@@ -1,0 +1,10 @@
+{
+  "categoryLabels": { "Plantas / Mudas": "Plantas", "Frutífera": "Plantas", "Horta": "Hortifrutti", "Hortifrutti": "Hortifrutti", "Pets": "Pets" },
+  "subcategoryLabels": { "Hortaliças": "Mudas", "Mudas de horta": "Mudas" },
+  "excludedCategories": ["TROCO DO DIA", "RECEBIMENTO"],
+  "rules": [
+    { "category": "Pets", "subcategory": "Pequenos mamíferos", "nameTerms": ["hamster", "chinchila", "porquinho"], "path": ["Pets", "Roedores"] },
+    { "category": "Horta", "subcategory": "Mudas de horta", "path": ["Plantas", "Mudas"] }
+  ],
+  "synonyms": [["mandioca", "aipim", "macaxeira"], ["hamster", "hamister"], ["palmeira carpentária", "carpentaria"]]
+}

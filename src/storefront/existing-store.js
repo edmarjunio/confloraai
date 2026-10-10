@@ -1,4 +1,6 @@
 const profile = require("../../config/stores/conflora.example.json");
+const navigation = require("../../config/stores/conflora-navigation.json");
+const { navigationPath } = require("./catalog-navigation");
 const { rankProductSales } = require("../catalog/product-sales");
 const { ensure, digest, StoreError } = require("./validation");
 
@@ -28,6 +30,9 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
       .filter((image) => image.url),
     categories: [digest(category).slice(0, 16)],
     categoryName: category,
+    subcategoryName: String(item.subcategory || item.subcategoria || ""),
+    navigationPath: navigationPath(item, navigation),
+    searchAliases: [item.tagsAi, item.tags_ia].filter(value => typeof value === "string").flatMap(value => value.split(/[,;\n]/)).map(value => value.trim()).filter(Boolean),
     tags: (Array.isArray(item.tags) ? item.tags : []).filter(
       (tag) => typeof tag === "string",
     ),
@@ -64,6 +69,11 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
 }
 function existingConfig(products) {
   const config = structuredClone(profile);
+  config.assistant.mode = process.env.STOREFRONT_CHAT_MODE === "AI" ? "AI" : "GUIDED";
+  config.assistant.synonyms = navigation.synonyms;
+  if (config.assistant.mode === "GUIDED") {
+    config.assistant.displayName = "Guia de compras";
+  }
   config.branding.colors.background = "#FFFFFF";
   config.categories = [
     ...new Map(

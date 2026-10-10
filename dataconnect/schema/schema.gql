@@ -1,0 +1,35 @@
+type User @table {
+  username: String!
+  email: String!
+  bio: String!
+  profilePictureUrl: String
+  location: String
+}
+
+type Skill @table {
+  name: String!
+  category: String!
+  description: String
+}
+
+type UserSkill @table {
+  user: User!
+  skill: Skill!
+  proficiencyLevel: String!
+}
+
+type Session @table {
+  mentor: User!
+  mentee: User!
+  skill: Skill!
+  status: String!
+  scheduledAt: Timestamp
+  notes: String
+}
+
+type Review @table {
+  session: Session!
+  reviewer: User!
+  rating: Int!
+  comment: String
+}

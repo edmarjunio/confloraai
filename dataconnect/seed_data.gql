@@ -1,0 +1,24 @@
+mutation CreateSeedData @transaction {
+  user_insertMany(data: [
+    { id: "00000000-0000-0000-0000-000000000001", username: "mentor_alice", email: "alice@example.com", bio: "Senior Engineer", location: "New York" },
+    { id: "00000000-0000-0000-0000-000000000002", username: "mentee_bob", email: "bob@example.com", bio: "Junior Developer", location: "San Francisco" },
+    { id: "00000000-0000-0000-0000-000000000003", username: "mentee_charlie", email: "charlie@example.com", bio: "Student", location: "London" }
+  ])
+  skill_insertMany(data: [
+    { id: "00000000-0000-0000-0000-000000000001", name: "GraphQL", category: "API", description: "Query language for APIs" },
+    { id: "00000000-0000-0000-0000-000000000002", name: "Firebase", category: "Backend", description: "App platform" },
+    { id: "00000000-0000-0000-0000-000000000003", name: "PostgreSQL", category: "Database", description: "SQL database" }
+  ])
+  userSkill_insertMany(data: [
+    { userId: "00000000-0000-0000-0000-000000000001", skillId: "00000000-0000-0000-0000-000000000001", proficiencyLevel: "Expert" },
+    { userId: "00000000-0000-0000-0000-000000000002", skillId: "00000000-0000-0000-0000-000000000002", proficiencyLevel: "Beginner" },
+    { userId: "00000000-0000-0000-0000-000000000003", skillId: "00000000-0000-0000-0000-000000000003", proficiencyLevel: "Intermediate" }
+  ])
+  session_insertMany(data: [
+    { id: "00000000-0000-0000-0000-000000000001", mentorId: "00000000-0000-0000-0000-000000000001", menteeId: "00000000-0000-0000-0000-000000000002", skillId: "00000000-0000-0000-0000-000000000001", status: "completed", notes: "Great session!" },
+    { id: "00000000-0000-0000-0000-000000000002", mentorId: "00000000-0000-0000-0000-000000000001", menteeId: "00000000-0000-0000-0000-000000000003", skillId: "00000000-0000-0000-0000-000000000002", status: "scheduled", notes: "Intro to Firebase" }
+  ])
+  review_insertMany(data: [
+    { sessionId: "00000000-0000-0000-0000-000000000001", reviewerId: "00000000-0000-0000-0000-000000000002", rating: 5, comment: "Alice is a wonderful mentor!" }
+  ])
+}
