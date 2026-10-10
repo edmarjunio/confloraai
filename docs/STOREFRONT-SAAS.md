@@ -15,9 +15,22 @@ Não existe fallback de uma loja desconhecida para a Conflora.
 - `order-delivery.js`: entrega de webhooks assinados com repetição controlada.
 - `public/storefront`: módulos nativos do navegador, sem dependência de framework.
 
-As rotas antigas continuam disponíveis. Elas **não são a API multi-tenant** e não
-devem ser usadas por novas lojas. `STOREFRONT_STORE_SLUG=conflora` muda somente a
-entrada `/` para a nova loja, após provisionamento e conferência.
+A página principal `/` agora usa o novo layout por padrão, e os detalhes ficam em
+`/products/:id`. O adaptador `existing-store.js` usa os produtos, imagens, sessões,
+pedidos e o processamento de estoque já existentes; não cria outra cópia do estoque.
+O administrador atual continua em `/admin`. A página antiga está disponível em
+`/catalogo-classico` para compatibilidade.
+
+Esse adaptador pertence exclusivamente à loja existente. Ele **não é a API
+multi-tenant** e não deve ser usado por novas lojas. As garantias transacionais
+do checkout SaaS descritas abaixo se aplicam a `/api/stores/:slug`; a entrada
+principal mantém o processamento legado, validando preços e quantidades no servidor.
+`STOREFRONT_STORE_SLUG=conflora` redireciona a entrada para uma loja SaaS já
+provisionada. Não defina essa variável antes de concluir a migração.
+
+O layout principal reutiliza a chave PIX publicada no catálogo anterior; a
+variável `STORE_PIX_KEY` permite substituí-la. Fotos, descrições, especificações
+e seções de cuidados vêm do cadastro; conteúdo ausente não é inventado.
 
 ## Provisionamento
 

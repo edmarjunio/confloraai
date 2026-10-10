@@ -8,7 +8,7 @@
     />
     <meta name="theme-color" content="#2E9348" />
     <title>Loja</title>
-    <link rel="stylesheet" href="/store-assets/store.css" />
+    <link rel="stylesheet" href="/store-assets/v2/store.css" />
     <link id="storeIcon" rel="icon" href="data:," />
   </head>
   <body>
@@ -19,7 +19,7 @@
           ><strong id="storeName">Carregando loja…</strong
           ><small id="subtitle"></small></span></a
       ><label class="search"
-        ><span aria-hidden="true">⌕</span
+        ><span data-icon="search" aria-hidden="true"></span
         ><input
           id="search"
           type="search"
@@ -28,9 +28,11 @@
       /></label>
       <div class="header-actions">
         <span id="region"></span
+        ><span data-icon="user" class="account-symbol" aria-hidden="true"></span
         ><button id="accountButton" class="quiet">Entrar</button
         ><button id="cartButton" aria-haspopup="dialog">
-          Sacola <span id="cartCount">0</span>
+          <span data-icon="cart" aria-hidden="true"></span
+          ><span class="cart-label">Sacola</span> <span id="cartCount">0</span>
         </button>
       </div>
     </header>
@@ -65,7 +67,9 @@
       ><strong id="mobileTotal">R$ 0,00</strong>
     </button>
     <button id="aiFab" class="ai-fab" aria-haspopup="dialog" hidden>
-      ✧ <span id="aiName">Assistente</span>
+      <span data-icon="sparkle" aria-hidden="true"></span
+      ><span id="aiName" class="sr-only">Assistente</span
+      ><span class="fab-caption">Converse com a IA</span>
     </button>
     <dialog
       id="cartDialog"
@@ -81,12 +85,13 @@
         <span>Total dos produtos</span><strong id="cartTotal"></strong>
       </div>
       <form id="checkoutForm">
-        <h3>Seus dados</h3>
+        <h3><span data-icon="user" aria-hidden="true"></span>Seus dados</h3>
         <label
           >Nome<input
             name="name"
             autocomplete="name"
             required
+            placeholder="Ex.: Ana Silva"
             maxlength="100" /></label
         ><label
           >WhatsApp / Telefone<input
@@ -94,11 +99,14 @@
             type="tel"
             autocomplete="tel"
             required
-            placeholder="(64) 99999-9999"
+            placeholder="(00) 9 0000-0000"
             maxlength="25"
         /></label>
         <fieldset>
-          <legend>Entrega ou retirada</legend>
+          <legend>
+            <span data-icon="truck" aria-hidden="true"></span>Entrega ou
+            retirada
+          </legend>
           <div id="fulfillmentOptions" class="choices"></div>
         </fieldset>
         <div id="deliveryFields" hidden>
@@ -114,14 +122,25 @@
         </div>
         <p id="pickupAddress" class="muted"></p>
         <fieldset>
-          <legend>Pagamento</legend>
+          <legend>
+            <span data-icon="card" aria-hidden="true"></span>Forma de pagamento
+          </legend>
           <div id="paymentOptions" class="choices"></div>
         </fieldset>
         <div id="pixBox" class="pix" hidden>
-          <strong>Chave PIX da loja</strong><span id="pixRecipient"></span
-          ><code id="pixKey"></code
-          ><button type="button" id="copyPix">Copiar chave PIX</button
-          ><small>Copiar a chave não confirma o pagamento.</small>
+          <strong>Chave da loja (PIX)</strong><span id="pixRecipient"></span>
+          <div class="pix-copy">
+            <code id="pixKey"></code
+            ><button
+              type="button"
+              id="copyPix"
+              aria-label="Copiar chave PIX"
+              title="Copiar chave PIX"
+            >
+              <span data-icon="copy"></span>
+            </button>
+          </div>
+          <small>Copiar a chave não confirma o pagamento.</small>
         </div>
         <label id="cashLabel" hidden
           >Dinheiro em mãos (R$)<input
@@ -135,7 +154,7 @@
         </div>
         <p id="checkoutError" class="error" role="alert"></p>
         <button class="primary" type="submit" id="submitOrder">
-          Finalizar pedido
+          <span data-icon="arrow" aria-hidden="true"></span>Finalizar pedido
         </button>
       </form>
       <section id="receipt" hidden></section>
@@ -146,9 +165,14 @@
       aria-labelledby="chatTitle"
     >
       <div class="dialog-header">
-        <div>
-          <small>CONSULTORIA DA LOJA</small>
+        <span
+          class="assistant-avatar"
+          data-icon="leaf"
+          aria-hidden="true"
+        ></span>
+        <div class="assistant-heading">
           <h2 id="chatTitle">Assistente</h2>
+          <small>Vamos encontrar a melhor opção</small>
         </div>
         <button data-close aria-label="Fechar conversa">×</button>
       </div>
@@ -166,7 +190,9 @@
           maxlength="500"
           required
           placeholder="Conte o que você procura…"
-        /><button class="primary" aria-label="Enviar mensagem">↑</button>
+        /><button class="primary" aria-label="Enviar mensagem">
+          <span data-icon="send"></span>
+        </button>
       </form>
       <small class="chat-note"
         >Confira as especificações antes de comprar. A IA pode errar.</small
@@ -182,6 +208,18 @@
         <button data-close aria-label="Fechar conta">×</button>
       </div>
       <div id="accountContent"></div>
+      <div id="googleAccount" hidden>
+        <p class="muted" data-google-status>Ou entre com sua conta Google.</p>
+        <button
+          type="button"
+          id="googleAccountButton"
+          data-google-login
+          disabled
+        >
+          Entrar com Google
+        </button>
+        <a href="/admin" class="staff-link">Acesso da equipe</a>
+      </div>
     </dialog>
     <aside id="coach" class="coach" hidden>
       <p id="coachText"></p>
@@ -189,6 +227,6 @@
       ><button id="coachSkip" class="quiet">Pular dicas</button>
     </aside>
     <div id="toast" class="toast" role="status" hidden></div>
-    <script type="module" src="/store-assets/app.js"></script>
+    <script type="module" src="/store-assets/v2/app.js"></script>
   </body>
 </html>

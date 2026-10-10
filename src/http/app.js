@@ -885,6 +885,11 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
 
   const sessions = createWebSessions(messageService.firestoreRepo);
   app.use('/api', sessions.resolve);
+  const { installExistingStore, normalizeExistingCheckout } = require('../storefront/existing-store');
+  installExistingStore(app, {
+    repository: messageService.firestoreRepo,
+    assistant: storeAssistant || new StoreAssistant({ client: messageService.agentService?.getAiClient?.(), model: config.gemini.model }),
+  });
   app.get('/api/auth/me', (req, res) => {
     res.status(req.user ? 200 : 401).json({ user: req.user || null });
   });
@@ -928,10 +933,15 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
   });
 
   // Home / Cardápio Digital Conflora
-  app.get('/', (_req, res) => {
+  app.get(['/', '/products/:productId'], (req, res) => {
     if (process.env.STOREFRONT_STORE_SLUG) {
-      return res.redirect('/shop/' + encodeURIComponent(process.env.STOREFRONT_STORE_SLUG));
+      const detail = req.params.productId ? '/products/' + encodeURIComponent(req.params.productId) : '';
+      return res.redirect('/shop/' + encodeURIComponent(process.env.STOREFRONT_STORE_SLUG) + detail);
     }
+    res.setHeader('Cache-Control', 'no-store');
+    return res.sendFile(require('node:path').resolve(__dirname, '../../public/storefront/index.html'));
+  });
+  app.get('/catalogo-classico', (_req, res) => {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
@@ -1156,8 +1166,9 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
   });
 
   // Client Web Orders API
-  app.post('/api/orders', async (req, res) => {
+  app.post(['/api/orders', '/api/storefront/orders'], async (req, res) => {
     try {
+      await normalizeExistingCheckout(req, messageService.firestoreRepo);
       const {
         customerName,
         customerPhone,
@@ -1254,7 +1265,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       res.status(200).json({ success: true, order });
     } catch (err) {
       Logger.error('Erro ao registrar pedido web', err);
-      res.status(500).json({ error: err.message });
+      res.status(err.status || 500).json({ error: err.message });
     }
   });
 

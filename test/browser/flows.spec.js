@@ -36,7 +36,7 @@ test('Catálogo: mais vendidos respeita quantidades, desempate e busca', async (
       { id: 'c', name: 'Begônia', price: 15, salesCount: 12, status: 'ATIVO' },
     ], movements: [],
   } }));
-  await page.goto('/');
+  await page.goto('/catalogo-classico');
   await expect(page.locator('#productsGrid')).toContainText('Zamioculca');
   await page.locator('#sortSelect').selectOption('mais_vendidos');
   const names = await page.locator('#productsGrid').innerText();
@@ -125,7 +125,7 @@ test("Caixa: login, cinco telas permitidas, bloqueios e venda no balcão", async
 test("Cliente: cadastro, senha, busca, sacola, recibo, histórico e logout", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/catalogo-classico");
   await page.locator("#authOpenBtn").click();
   await page.locator("button[onclick=\"switchAuthTab('register')\"]").click();
   await page.locator("#regNameInput").fill("Cliente Teste");

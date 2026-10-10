@@ -7,7 +7,9 @@ import {
   storageSet,
   openDialog,
   copyText,
+  quantityControl,
 } from "./ui.js";
+import { icon } from "./icons.js";
 
 export function createCart(state) {
   const key = `store:${state.slug}:cart:v1`;
@@ -63,12 +65,19 @@ export function createCart(state) {
     persist();
     render();
     notify(`${product.name} adicionado à sacola.`);
+    if (
+      window.matchMedia("(min-width:1100px)").matches &&
+      !document.querySelector("dialog:modal")
+    ) {
+      open();
+    }
   }
   function render() {
     const count = items.reduce((sum, item) => sum + item.quantity, 0);
     $("#cartCount").textContent = $("#mobileCount").textContent = Number(
       count.toFixed(3),
     ).toLocaleString("pt-BR");
+    $("#cartTitle").textContent = `Sua sacola (${items.length})`;
     $("#cartTotal").textContent = $("#mobileTotal").textContent =
       money(subtotal());
     $("#cartItems").replaceChildren(
@@ -91,7 +100,12 @@ export function createCart(state) {
           if (
             !product ||
             value < product.saleUnit.minimum ||
-            !Number.isFinite(value)
+            !Number.isFinite(value) ||
+            (product.stock.tracked && value > product.stock.quantity) ||
+            Math.abs(
+              value / product.saleUnit.increment -
+                Math.round(value / product.saleUnit.increment),
+            ) > 0.00001
           ) {
             render();
             return;
@@ -112,13 +126,17 @@ export function createCart(state) {
             element("span", {
               text: money((product?.price.amountMinor || 0) * item.quantity),
             }),
-            quantity,
+            quantityControl(quantity),
           ]),
-          element("button", {
-            class: "quiet",
-            text: "Remover",
-            onclick: remove,
-          }),
+          element(
+            "button",
+            {
+              class: "quiet",
+              "aria-label": `Remover ${product?.name || "produto"}`,
+              onclick: remove,
+            },
+            [icon("trash")],
+          ),
         ]);
       }),
     );
@@ -144,7 +162,16 @@ export function createCart(state) {
         input.checked = index === 0;
         return element("label", {}, [
           input,
-          document.createTextNode(option.label),
+          icon(
+            {
+              delivery: "truck",
+              pickup: "store",
+              PIX: "pix",
+              CARD: "card",
+              CASH: "cash",
+            }[option.value],
+          ),
+          element("span", { text: option.label }),
         ]);
       }),
     );
@@ -305,6 +332,14 @@ export function createCart(state) {
     form.hidden = false;
     $("#receipt").hidden = true;
     render();
+    if (state.user) {
+      if (!form.elements.name.value) {
+        form.elements.name.value = state.user.name || "";
+      }
+      if (!form.elements.phone.value) {
+        form.elements.phone.value = state.user.phone || "";
+      }
+    }
     const dialog = $("#cartDialog");
     if (!dialog.open) {
       if (window.matchMedia("(min-width:1100px)").matches) {

@@ -12,11 +12,18 @@ import { createCatalog } from "./catalog.js";
 import { createCart } from "./cart.js";
 import { createChat } from "./chat.js";
 import { createAdmin } from "./admin.js";
+import { createExistingApi } from "./existing-api.js";
+import { icon } from "./icons.js";
 
-const slug = decodeURIComponent(location.pathname.split("/")[2]);
+const existingStore = !location.pathname.startsWith("/shop/");
+const slug = existingStore
+  ? "conflora"
+  : decodeURIComponent(location.pathname.split("/")[2]);
+const basePath = existingStore ? "" : `/shop/${slug}`;
 const state = {
   slug,
-  api: createApi(slug),
+  basePath,
+  api: existingStore ? createExistingApi() : createApi(slug),
   config: null,
   products: [],
   user: null,
@@ -37,7 +44,9 @@ async function route() {
   if (!state.config) {
     return;
   }
-  const path = location.pathname.split("/");
+  const path = (
+    existingStore ? "/shop/conflora" + location.pathname : location.pathname
+  ).split("/");
   const isAdmin = path[3] === "admin";
   const isProduct = path[3] === "products";
   $("#catalogView").hidden = isAdmin || isProduct;
@@ -89,7 +98,8 @@ function applyConfig() {
   $("#logo").src = config.branding.logoUrl || "/store-assets/placeholder.svg";
   $("#logo").alt = config.identity.name;
   $("#storeIcon").href = config.branding.iconUrl || "data:,";
-  $("#brand").href = `/shop/${slug}`;
+  $("#brand").href = basePath || "/";
+  $("#brand").classList.toggle("has-logo", !!config.branding.logoUrl);
   document.querySelector("meta[name=theme-color]").content =
     config.branding.colors.primary;
   catalog?.categories();
@@ -107,14 +117,21 @@ state.reloadProducts = async () => {
 async function account() {
   const content = $("#accountContent");
   content.replaceChildren();
+  $("#googleAccount").hidden = !existingStore || !!state.user;
   if (state.user) {
     content.append(element("p", { text: `Olá, ${state.user.name}` }));
-    if (state.user.role === "ADMIN") {
+    if (
+      state.user.role === "ADMIN" ||
+      (existingStore && state.user.role === "CAIXA")
+    ) {
       content.append(
         element("button", {
           class: "primary",
           text: "Gerenciar catálogo, pedidos e configurações",
-          onclick: () => navigate(`/shop/${slug}/admin`),
+          onclick: () =>
+            existingStore
+              ? location.assign("/admin")
+              : navigate(`${basePath}/admin`),
         }),
       );
     }
@@ -124,10 +141,13 @@ async function account() {
         onclick: async () => {
           try {
             await state.api("/auth/logout", { method: "POST" });
+            if (existingStore && window.signOutGoogle) {
+              await window.signOutGoogle().catch(() => {});
+            }
             state.user = null;
             $("#accountButton").textContent = "Entrar";
             $("#accountDialog").close();
-            navigate(`/shop/${slug}`);
+            navigate(basePath || "/");
           } catch (error) {
             notify(error.message);
           }
@@ -195,7 +215,7 @@ async function account() {
       type: "password",
       name: "password",
       autocomplete: "current-password",
-      minlength: "10",
+      minlength: existingStore ? "4" : "10",
       maxlength: "128",
       required: "",
     });
@@ -215,7 +235,11 @@ async function account() {
       mode,
       nameLabel,
       element("label", { text: "E-mail" }, [email]),
-      element("label", { text: "Senha (mínimo 10 caracteres)" }, [password]),
+      element(
+        "label",
+        { text: existingStore ? "Senha" : "Senha (mínimo 10 caracteres)" },
+        [password],
+      ),
       errorLabel,
       button,
     );
@@ -316,6 +340,9 @@ function onboarding() {
 for (const button of document.querySelectorAll("[data-close]")) {
   button.addEventListener("click", () => button.closest("dialog").close());
 }
+for (const node of document.querySelectorAll("[data-icon]")) {
+  node.replaceChildren(icon(node.dataset.icon));
+}
 for (const dialog of document.querySelectorAll("dialog")) {
   dialog.addEventListener("click", (event) => {
     if (event.target === dialog) {
@@ -333,11 +360,26 @@ for (const dialog of document.querySelectorAll("dialog")) {
 }
 $("#brand").addEventListener("click", (event) => {
   event.preventDefault();
-  navigate(`/shop/${slug}`);
+  navigate(basePath || "/");
 });
 $("#accountButton").addEventListener("click", () =>
   account().catch((error) => notify(error.message)),
 );
+$("#googleAccountButton").addEventListener("click", async () => {
+  const button = $("#googleAccountButton");
+  button.disabled = true;
+  try {
+    const response = await window.authenticateGoogle();
+    state.user = response.user;
+    $("#accountButton").textContent = state.user.name;
+    $("#accountDialog").close();
+    route();
+  } catch (error) {
+    notify(error.message);
+  } finally {
+    button.disabled = false;
+  }
+});
 window.addEventListener("popstate", route);
 try {
   [state.config, state.products] = await Promise.all([
@@ -361,6 +403,9 @@ try {
   cart.render();
   await route();
   onboarding();
+  if (existingStore) {
+    import("/storefront-auth.js").catch(() => {});
+  }
 } catch (error) {
   $("#storeName").textContent = "Loja indisponível";
   $("#products").replaceChildren(

@@ -1,8 +1,46 @@
-import { $, element, money, normalize } from "./ui.js";
+import {
+  $,
+  element,
+  money,
+  normalize,
+  quantityControl,
+  storageGet,
+  storageSet,
+} from "./ui.js";
+import { icon } from "./icons.js";
 
 export function createCatalog(state, add, navigate) {
   let category = "";
   let pageSize = 24;
+  const favoriteKey = `store:${state.slug}:favorites`;
+  const saved = storageGet(favoriteKey, []);
+  const favorites = new Set(Array.isArray(saved) ? saved : []);
+  function favorite(product) {
+    const button = element(
+      "button",
+      {
+        class: "favorite",
+        "aria-label": `Favoritar ${product.name}`,
+        "aria-pressed": String(favorites.has(product.id)),
+      },
+      [icon("heart")],
+    );
+    button.addEventListener("click", () => {
+      if (favorites.has(product.id)) {
+        favorites.delete(product.id);
+      } else {
+        favorites.add(product.id);
+      }
+      storageSet(favoriteKey, [...favorites]);
+      button.setAttribute("aria-pressed", String(favorites.has(product.id)));
+    });
+    return button;
+  }
+  const categoryLabel = (product) =>
+    product.categories
+      .map((id) => state.config.categories.find((c) => c.id === id)?.name)
+      .filter(Boolean)
+      .join(" · ");
   function card(product, compact = false) {
     const photo = element("img", {
       src: product.imageUrl || "/store-assets/placeholder.svg",
@@ -19,7 +57,7 @@ export function createCatalog(state, add, navigate) {
     );
     const open = () =>
       navigate(
-        `/shop/${state.slug}/products/${encodeURIComponent(product.id)}`,
+        `${state.basePath ?? `/shop/${state.slug}`}/products/${encodeURIComponent(product.id)}`,
       );
     const unavailable =
       product.stock.tracked &&
@@ -30,10 +68,12 @@ export function createCatalog(state, add, navigate) {
       onclick: () => add(product, product.saleUnit.minimum),
     });
     button.disabled = unavailable;
+    button.prepend(icon("cart"));
     return element(
       "article",
       { class: compact ? "recommendation" : "product-card" },
       [
+        ...(!compact ? [favorite(product)] : []),
         element(
           "button",
           {
@@ -51,10 +91,11 @@ export function createCatalog(state, add, navigate) {
           }),
           element("small", {
             class: "muted",
-            text: product.tags.slice(0, 2).join(" · "),
+            text:
+              categoryLabel(product) || product.tags.slice(0, 2).join(" · "),
           }),
           element("strong", {
-            text: `${money(product.price.amountMinor)} / ${product.saleUnit.label}`,
+            text: `${money(product.price.amountMinor)}${product.saleUnit.code === "UN" ? "" : " / " + product.saleUnit.label}`,
           }),
           button,
         ]),
@@ -123,7 +164,7 @@ export function createCatalog(state, add, navigate) {
       element("button", {
         class: "quiet",
         text: "← Voltar ao catálogo",
-        onclick: () => navigate(`/shop/${state.slug}`),
+        onclick: () => navigate(state.basePath || "/"),
       }),
     );
     if (!product) {
@@ -162,6 +203,9 @@ export function createCatalog(state, add, navigate) {
       step: product.saleUnit.increment,
       "aria-label": "Quantidade",
     });
+    if (product.stock.tracked) {
+      quantity.max = product.stock.quantity;
+    }
     const specs = element("dl", { class: "specifications" });
     for (const attribute of Object.values(product.specifications)) {
       specs.append(
@@ -171,11 +215,14 @@ export function createCatalog(state, add, navigate) {
     }
     view.append(
       element("div", { class: "detail-grid" }, [
-        element("div", {}, [
-          mainPhoto,
+        element("div", { class: "detail-gallery" }, [
+          element("div", { class: "detail-hero" }, [
+            mainPhoto,
+            favorite(product),
+          ]),
           element(
             "div",
-            { class: "thumbnails" },
+            { class: "thumbnails", ...(images.length < 2 ? { hidden: '' } : {}) },
             images.map((image, index) =>
               element(
                 "button",
@@ -192,6 +239,10 @@ export function createCatalog(state, add, navigate) {
           ),
         ]),
         element("div", { class: "detail-copy" }, [
+          element("small", {
+            class: "detail-category",
+            text: categoryLabel(product),
+          }),
           element("h1", { text: product.name }),
           element("strong", {
             class: "detail-price",
@@ -199,27 +250,139 @@ export function createCatalog(state, add, navigate) {
           }),
           element("p", { text: product.description }),
           element("div", { class: "purchase-row" }, [
-            quantity,
-            element("button", {
-              class: "primary",
-              text: "Adicionar à sacola",
-              onclick: () => add(product, Number(quantity.value)),
-            }),
+            quantityControl(quantity),
+            element(
+              "button",
+              {
+                class: "primary",
+                text:
+                  product.stock.tracked &&
+                  product.stock.quantity < product.saleUnit.minimum
+                    ? "Indisponível"
+                    : "Adicionar à sacola",
+                onclick: () => add(product, Number(quantity.value)),
+                ...(product.stock.tracked &&
+                product.stock.quantity < product.saleUnit.minimum
+                  ? { disabled: "" }
+                  : {}),
+              },
+              [icon("cart")],
+            ),
           ]),
-          specs,
-          ...product.contentSections.map((section) =>
-            element("section", { class: "content-section" }, [
-              element("h2", { text: section.title }),
-              element("p", { text: section.body }),
-            ]),
+          element(
+            "div",
+            { class: "quick-specs" },
+            Object.values(product.specifications)
+              .slice(0, 3)
+              .map((attribute) =>
+                element("div", {}, [
+                  icon(
+                    /luz|\bsol\b|ambiente/i.test(attribute.label)
+                      ? "sun"
+                      : /rega|agua|água/i.test(attribute.label)
+                        ? "drop"
+                        : "leaf",
+                  ),
+                  element("span", {}, [
+                    element("strong", { text: attribute.label }),
+                    element("small", {
+                      text: `${attribute.value} ${attribute.unit || ""}`,
+                    }),
+                  ]),
+                ]),
+              ),
           ),
         ]),
       ]),
     );
+    const panels = [
+      {
+        id: "about",
+        label: "Sobre o produto",
+        nodes: [
+          element("h2", { text: product.name }),
+          element("p", {
+            text:
+              product.description ||
+              "Consulte nossa equipe para saber mais sobre este produto.",
+          }),
+        ],
+      },
+      ...product.contentSections.map((section) => ({
+        id: section.id,
+        label: section.title,
+        nodes: [
+          element("h2", { text: section.title }),
+          element("p", { text: section.body }),
+        ],
+      })),
+      {
+        id: "specifications",
+        label: "Especificações",
+        nodes: Object.keys(product.specifications).length
+          ? [specs]
+          : [
+              element("p", {
+                text: "Consulte nossa equipe para confirmar os detalhes deste produto.",
+              }),
+            ],
+      },
+    ];
+    const tabs = element("div", {
+      class: "detail-tabs",
+      role: "tablist",
+      "aria-label": "Informações do produto",
+    });
+    const content = element("section", {
+      class: "detail-information",
+      role: "tabpanel",
+      id: "detailPanel",
+      tabindex: "0",
+    });
+    const select = (index) => {
+      for (const [position, button] of [...tabs.children].entries()) {
+        button.setAttribute("aria-selected", String(position === index));
+        button.tabIndex = position === index ? 0 : -1;
+      }
+      content.setAttribute("aria-labelledby", `detailTab${index}`);
+      content.replaceChildren(...panels[index].nodes);
+    };
+    panels.forEach((panel, index) =>
+      tabs.append(
+        element("button", {
+          role: "tab",
+          id: `detailTab${index}`,
+          "aria-controls": "detailPanel",
+          text: panel.label,
+          onclick: () => select(index),
+          onkeydown: (event) => {
+            if (
+              !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)
+            ) {
+              return;
+            }
+            event.preventDefault();
+            const next =
+              event.key === "Home"
+                ? 0
+                : event.key === "End"
+                  ? panels.length - 1
+                  : (index +
+                      (event.key === "ArrowRight" ? 1 : -1) +
+                      panels.length) %
+                    panels.length;
+            select(next);
+            tabs.children[next].focus();
+          },
+        }),
+      ),
+    );
+    select(0);
+    view.append(tabs, content);
   }
   $("#search").addEventListener("input", () => {
     if ($("#catalogView").hidden) {
-      navigate(`/shop/${state.slug}`);
+      navigate(state.basePath || "/");
     }
     pageSize = 24;
     render();

@@ -88,6 +88,10 @@ export function createChat(state, catalog) {
         messages.append(frame);
       }
       messages.append(
+        element("p", {
+          class: "bubble assistant",
+          text: "É isso que você procura?",
+        }),
         element("div", { class: "suggestions" }, [
           element("button", {
             text: "Sim, é isso",

@@ -102,3 +102,31 @@ export function inputField(label, name, value = "", type = "text") {
     element("input", { name, value, type }),
   ]);
 }
+export function quantityControl(input) {
+  const change = (direction) => {
+    const value = Number(input.value) + direction * Number(input.step || 1);
+    if (
+      value < Number(input.min || 1) ||
+      (input.max && value > Number(input.max))
+    ) {
+      return;
+    }
+    input.value = Number(value.toFixed(6));
+    input.dispatchEvent(new window.Event("change", { bubbles: true }));
+  };
+  return element("div", { class: "quantity-control" }, [
+    element("button", {
+      type: "button",
+      text: "−",
+      "aria-label": "Diminuir quantidade",
+      onclick: () => change(-1),
+    }),
+    input,
+    element("button", {
+      type: "button",
+      text: "+",
+      "aria-label": "Aumentar quantidade",
+      onclick: () => change(1),
+    }),
+  ]);
+}
