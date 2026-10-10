@@ -164,6 +164,23 @@ test("Cliente: cadastro, senha, busca, sacola, recibo, histórico e logout", asy
   await expect(page.locator("#tabBtn-cashier")).toBeHidden();
 });
 
+test('Admin: visual do catálogo e navegação responsiva sem overflow da página', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 960 });
+  await pinLogin(page, 'Edmar Júnio (Izibola)', '1234');
+  await expect(page.locator('.admin-brand img')).toBeVisible();
+  await expect(page.locator('header')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await page.screenshot({ path: 'test-results/admin-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const tab of ['analytics', 'products', 'cashier', 'orders', 'stock', 'price', 'team', 'import', 'notifs', 'status', 'diff']) {
+    await page.locator('#tabBtn-' + tab).click();
+    await expect(page.locator('#tab-' + tab)).toBeVisible();
+    const width = await page.locator('html').evaluate(node => ({ scroll: node.scrollWidth, viewport: node.clientWidth }));
+    expect(width.scroll, tab).toBeLessThanOrEqual(width.viewport);
+  }
+  await page.locator('#tabBtn-analytics').click();
+  await page.screenshot({ path: 'test-results/admin-mobile.png', fullPage: true });
+});
+
 test("Admin: editar produto importado, criar/excluir produto e colaborador, entrada de estoque", async ({
   page,
 }) => {

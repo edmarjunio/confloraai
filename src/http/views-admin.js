@@ -23,223 +23,16 @@ function renderAdminHtml() {
   ${GOOGLE_ANALYTICS_TAG}
   ${FETCH_SHIM_SCRIPT}
 
-  <!-- Fontes Canva: Títulos com Intro Rust & Secundárias com Now -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,800;0,900;1,800&family=Plus+Jakarta+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/store-assets/admin-shell-v1.css">
 
-  <style>
-    .action-btn:disabled { opacity: .45; cursor: not-allowed; }
-    @font-face {
-      font-family: 'Intro Rust';
-      src: local('Intro Rust'), local('IntroRust-Base'), local('Montserrat-Black');
-      font-weight: 800 900;
-    }
-    @font-face {
-      font-family: 'Now';
-      src: local('Now'), local('Plus Jakarta Sans'), local('Inter');
-      font-weight: 400 500;
-    }
-
-    :root {
-      /* Paleta Oficial Conflora Horta & Viveiro */
-      --primary: #15803d;
-      --primary-dark: #14532d;
-      --accent: #22c55e;
-      --earth: #78350f;
-      --gold: #d97706;
-      --border: #e2e8f0;
-      --bg: #f8fafc;
-      --diff-del-bg: #fee2e2;
-      --diff-del-text: #991b1b;
-      --diff-add-bg: #dcfce7;
-      --diff-add-text: #166534;
-      --diff-info-bg: #f1f5f9;
-      --diff-info-text: #475569;
-
-      /* Tipografia do Canva */
-      --font-title: 'Intro Rust', 'Montserrat', -apple-system, sans-serif;
-      --font-body: 'Now', 'Plus Jakarta Sans', -apple-system, sans-serif;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: var(--font-body); background: #f1f5f9; color: #0f172a; padding: 16px; font-weight: 400; }
-    h1, h2, h3, header h1, .nav-btn, .stat-val { font-family: var(--font-title); letter-spacing: 0.5px; }
-    .container { max-width: 1380px; margin: 0 auto; background: white; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); overflow: hidden; }
-    
-    /* CABEÇALHO COM OPERADOR */
-    header {
-      background: #14532d;
-      color: white;
-      padding: 14px 20px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 12px;
-    }
-    .user-pill {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      background: rgba(255,255,255,0.15);
-      padding: 6px 14px;
-      border-radius: 20px;
-      font-size: 13px;
-    }
-    .role-badge {
-      background: #22c55e;
-      color: #052e16;
-      font-weight: 800;
-      padding: 2px 8px;
-      border-radius: 10px;
-      font-size: 11px;
-    }
-    .role-badge.caixa { background: #facc15; color: #713f12; }
-    .header-actions { display: flex; align-items: center; gap: 8px; }
-    .header-btn {
-      background: rgba(255,255,255,0.2);
-      border: none;
-      color: white;
-      padding: 7px 12px;
-      border-radius: 6px;
-      font-size: 12px;
-      font-weight: bold;
-      cursor: pointer;
-      text-decoration: none;
-      transition: background 0.2s;
-    }
-    .header-btn:hover { background: rgba(255,255,255,0.3); }
-
-    /* NAVEGAÇÃO */
-    .nav-tabs { display: flex; background: #0f172a; overflow-x: auto; scrollbar-width: none; }
-    .nav-tabs::-webkit-scrollbar { display: none; }
-    .nav-btn {
-      padding: 13px 18px;
-      color: #94a3b8;
-      background: none;
-      border: none;
-      font-size: 13px;
-      font-weight: 700;
-      cursor: pointer;
-      border-bottom: 3px solid transparent;
-      white-space: nowrap;
-      transition: all 0.2s;
-    }
-    .nav-btn.active { color: #ffffff; border-bottom-color: #22c55e; background: rgba(255,255,255,0.05); }
-    .tab-content { padding: 22px; display: none; }
-    .tab-content.active { display: block; }
-
-    /* CARDS & ESTATÍSTICAS */
-    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 20px; }
-    .stat-card {
-      background: #f8fafc;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 16px;
-      position: relative;
-    }
-    .stat-val { font-size: 24px; font-weight: 800; color: var(--primary-dark); margin-top: 4px; }
-    .stat-label { font-size: 12px; color: #64748b; font-weight: 600; text-transform: uppercase; }
-
-    /* TABELAS */
-    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-    th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; }
-    th { background: #f8fafc; font-weight: 700; color: #334155; }
-    .prod-thumb { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; }
-
-    /* BOTÕES GERAIS */
-    .action-btn {
-      padding: 8px 14px;
-      border-radius: 6px;
-      border: none;
-      font-weight: 700;
-      cursor: pointer;
-      font-size: 12px;
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      transition: filter 0.15s;
-    }
-    .action-btn:hover { filter: brightness(0.92); }
-    .btn-green { background: var(--primary); color: white; }
-    .btn-blue { background: #0284c7; color: white; }
-    .btn-red { background: #ef4444; color: white; }
-    .btn-amber { background: #f59e0b; color: white; }
-    .btn-gray { background: #e2e8f0; color: #334155; }
-
-    /* GIT DIFF CARD */
-    .diff-card {
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      margin-bottom: 16px;
-      overflow: hidden;
-      background: white;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.04);
-    }
-    .diff-header {
-      background: #f8fafc;
-      padding: 12px 16px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 1px solid var(--border);
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-    .diff-reason-box {
-      background: #fffbeb;
-      border-left: 4px solid #f59e0b;
-      padding: 10px 14px;
-      font-size: 13px;
-      color: #92400e;
-      margin: 12px 16px 6px 16px;
-      border-radius: 4px;
-    }
-    .diff-body {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      font-size: 12.5px;
-      padding: 10px 16px;
-      line-height: 1.6;
-    }
-    .diff-line { padding: 3px 8px; border-radius: 4px; margin-bottom: 2px; }
-    .diff-del { background: var(--diff-del-bg); color: var(--diff-del-text); }
-    .diff-add { background: var(--diff-add-bg); color: var(--diff-add-text); }
-    .diff-info { background: var(--diff-info-bg); color: var(--diff-info-text); font-weight: bold; }
-    .diff-actions { padding: 12px 16px; background: #f8fafc; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
-
-    /* ESTOQUE ÁGIL */
-    .quick-stock-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 12px; margin-top: 14px; }
-    .stock-card { border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; background: white; }
-    .stock-btns-row { display: flex; gap: 4px; }
-    .plus-btn { flex: 1; padding: 8px 2px; background: #f0fdf4; border: 1px solid #86efac; color: #166534; font-weight: 800; border-radius: 6px; cursor: pointer; font-size: 12px; }
-    .plus-btn:hover { background: #dcfce7; }
-
-    /* NOTIFICAÇÃO CARD */
-    .notif-card { border-left: 4px solid #0284c7; background: #f0f9ff; padding: 12px 16px; border-radius: 6px; margin-bottom: 10px; font-size: 13px; }
-    .notif-card.rejected { border-left-color: #ef4444; background: #fef2f2; }
-    .notif-card.approved { border-left-color: #15803d; background: #f0fdf4; }
-    .notif-card.sale { border-left-color: #16a34a; background: #f0fdf4; box-shadow: 0 1px 3px rgba(22,163,74,0.1); }
-
-    /* MODAIS */
-    .modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 100; padding: 16px; }
-    .modal.open { display: flex; }
-    .modal-card { background: white; border-radius: 12px; padding: 22px; max-width: 520px; width: 100%; max-height: 90vh; overflow-y: auto; }
-    .badge { padding: 3px 8px; border-radius: 10px; font-size: 11px; font-weight: bold; }
-    .badge-pending { background: #fef3c7; color: #92400e; }
-    .badge-confirmed { background: #dcfce7; color: #166534; }
-    .badge-delivered { background: #e0f2fe; color: #0369a1; }
-    .badge-cancelled { background: #fee2e2; color: #991b1b; }
-  </style>
 </head>
 <body>
   <div class="container">
     <header>
-      <div>
-        <h1 style="font-size: 18px; display:flex; align-items:center; gap:8px;">
-          ⚙️ Painel Operacional Conflora
-          <span style="font-size:12px; font-weight:normal; background:rgba(255,255,255,0.2); padding:2px 8px; border-radius:10px;">Horta & Viveiro</span>
-        </h1>
-        <p style="font-size: 11px; color: #bbf7d0; margin-top:2px;">Controle de Caixa, Estoque, Auditoria de Vendas e Google Analytics</p>
+      <div class="admin-brand">
+        <a href="/" aria-label="Voltar ao catálogo"><img src="/store-assets/brands/conflora-logo.png" alt="Conflora Horta e Viveiro" /></a>
+        <div class="admin-heading"><h1>Administração</h1>
+        <p>Catálogo, pedidos e operação da loja</p></div>
       </div>
 
       <div class="header-actions">
@@ -249,34 +42,34 @@ function renderAdminHtml() {
           <strong id="loggedUserName">Carregando...</strong>
           <span class="role-badge" id="loggedUserRole">ADMIN</span>
         </div>
-        <button class="header-btn" onclick="openLoginModal()">🔑 Trocar Operador</button>
-        <button class="header-btn" onclick="logoutAdmin()" style="background:rgba(239,68,68,0.25); border:1px solid rgba(239,68,68,0.4);" title="Sair da conta de operador/admin">🚪 Sair</button>
-        <button class="header-btn" onclick="showTab('notifs')">🔔 <span id="notifBadge">0</span></button>
-        <a href="/" class="header-btn">🌱 Ver Cardápio</a>
+        <button class="header-btn" onclick="openLoginModal()">Trocar operador</button>
+        <button class="header-btn" onclick="logoutAdmin()" title="Sair da conta de operador/admin">Sair</button>
+        <button class="header-btn notification-button" onclick="showTab('notifs')" aria-label="Notificações">Avisos <span id="notifBadge">0</span></button>
+        <a href="/" class="header-btn catalog-link">Ver catálogo ↗</a>
       </div>
     </header>
 
     <!-- NAVEGAÇÃO POR ABAS (FILTRADAS AUTOMATICAMENTE POR CARGO) -->
     <div class="nav-tabs" id="navTabsContainer">
       <!-- Abas ADMIN -->
-      <button class="nav-btn active" id="tabBtn-analytics" onclick="showTab('analytics')">📊 Analytics GA4</button>
-      <button class="nav-btn" id="tabBtn-cashier" onclick="showTab('cashier')">💰 Caixa & Pedidos / Vendas</button>
-      <button class="nav-btn" id="tabBtn-diff" onclick="showTab('diff')">🔀 Alterações (Git Diff) <span id="diffCountBadge" style="background:#ef4444; color:white; padding:1px 6px; border-radius:10px; font-size:10px; margin-left:4px; display:none;">0</span></button>
-      <button class="nav-btn" id="tabBtn-orders" onclick="showTab('orders')">📜 Histórico de Pedidos</button>
-      <button class="nav-btn" id="tabBtn-stock" onclick="showTab('stock')">📦 Entrada Rápida de Estoque</button>
-      <button class="nav-btn" id="tabBtn-price" onclick="showTab('price')">🔍 Consulta Rápida de Preço</button>
-      <button class="nav-btn" id="tabBtn-products" onclick="showTab('products')">🌱 Cadastro de Produtos</button>
-      <button class="nav-btn" id="tabBtn-team" onclick="showTab('team')">👥 Equipe & Permissões</button>
-      <button class="nav-btn" id="tabBtn-import" onclick="showTab('import')">📥 Importar Planilhas</button>
-      <button class="nav-btn" id="tabBtn-notifs" onclick="showTab('notifs')">🔔 Notificações</button>
-      <button class="nav-btn" id="tabBtn-status" onclick="showTab('status')">📡 Status das Conexões (Sheets & Webhook)</button>
+      <button class="nav-btn active" id="tabBtn-analytics" onclick="showTab('analytics')">Visão geral</button>
+      <button class="nav-btn" id="tabBtn-cashier" onclick="showTab('cashier')">Caixa e vendas</button>
+      <button class="nav-btn" id="tabBtn-diff" onclick="showTab('diff')">Alterações<span id="diffCountBadge" style="background:#ef4444; color:white; padding:1px 6px; border-radius:10px; font-size:10px; margin-left:4px; display:none;">0</span></button>
+      <button class="nav-btn" id="tabBtn-orders" onclick="showTab('orders')">Pedidos</button>
+      <button class="nav-btn" id="tabBtn-stock" onclick="showTab('stock')">Estoque</button>
+      <button class="nav-btn" id="tabBtn-price" onclick="showTab('price')">Preços</button>
+      <button class="nav-btn" id="tabBtn-products" onclick="showTab('products')">Produtos</button>
+      <button class="nav-btn" id="tabBtn-team" onclick="showTab('team')">Equipe</button>
+      <button class="nav-btn" id="tabBtn-import" onclick="showTab('import')">Importação</button>
+      <button class="nav-btn" id="tabBtn-notifs" onclick="showTab('notifs')">Notificações</button>
+      <button class="nav-btn" id="tabBtn-status" onclick="showTab('status')">Conexões</button>
     </div>
 
     <!-- ABA 1: ANALYTICS & MÉTRICAS (EXCLUSIVA ADMIN) -->
     <div id="tab-analytics" class="tab-content active">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
         <div>
-          <h2>📊 Desempenho e Tráfego do Catálogo Digital</h2>
+          <h2>Desempenho e Tráfego do Catálogo Digital</h2>
           <p style="font-size:12px; color:#64748b;">Monitoramento em tempo real via <strong>Google tag (gtag.js): G-TX7SZBP9J8</strong></p>
         </div>
         <div style="display:flex; gap:8px; align-items:center;">
@@ -308,13 +101,13 @@ function renderAdminHtml() {
         </div>
       </div>
 
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px;">
+      <div class="admin-columns">
         <div style="border:1px solid var(--border); border-radius:8px; padding:16px;">
-          <h3 style="font-size:14px; margin-bottom:12px;">🏆 Mudas & Produtos Mais Acessados (GA4 view_item)</h3>
+          <h3 style="font-size:14px; margin-bottom:12px;">Mudas & Produtos Mais Acessados (GA4 view_item)</h3>
           <div id="analyticsTopProducts" style="font-size:13px; color:#334155;">Carregando métricas...</div>
         </div>
         <div style="border:1px solid var(--border); border-radius:8px; padding:16px;">
-          <h3 style="font-size:14px; margin-bottom:12px;">💳 Divisão de Vendas por Canal & Pagamento</h3>
+          <h3 style="font-size:14px; margin-bottom:12px;">Divisão de Vendas por Canal & Pagamento</h3>
           <div id="analyticsPaymentSplit" style="font-size:13px; color:#334155;">Carregando divisões...</div>
         </div>
       </div>
@@ -324,7 +117,7 @@ function renderAdminHtml() {
     <div id="tab-cashier" class="tab-content">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
         <div>
-          <h2>💰 Frente de Caixa & Vendas de Hoje</h2>
+          <h2>Frente de Caixa & Vendas de Hoje</h2>
           <p style="font-size:12px; color:#64748b;">Conferência de lançamentos do dia e registro de vendas no balcão.</p>
         </div>
         <div style="display:flex; gap:8px;">
@@ -333,7 +126,7 @@ function renderAdminHtml() {
         </div>
       </div>
 
-      <div class="stat-grid" style="grid-template-columns: repeat(4, 1fr);">
+      <div class="stat-grid" >
         <div class="stat-card">
           <div class="stat-label">Vendas Totais Hoje</div>
           <div class="stat-val" id="cashierTotalToday">R$ 0,00</div>
@@ -353,7 +146,7 @@ function renderAdminHtml() {
       </div>
 
       <h3 style="margin-top:16px; font-size:14px;">Lista de Vendas Realizadas Hoje</h3>
-      <table id="todayOrdersTable">
+      <div class="table-scroll" tabindex="0" role="region" aria-label="Tabela de dados"><table id="todayOrdersTable">
         <thead>
           <tr>
             <th>Pedido</th>
@@ -366,14 +159,14 @@ function renderAdminHtml() {
           </tr>
         </thead>
         <tbody id="todayOrdersBody"></tbody>
-      </table>
+      </table></div>
     </div>
 
     <!-- ABA 3: SOLICITAÇÕES DE ALTERAÇÃO - GIT DIFF (ADMIN E CAIXA) -->
     <div id="tab-diff" class="tab-content">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
         <div>
-          <h2>🔀 Central de Auditoria & Alterações de Venda (Estilo Git Diff)</h2>
+          <h2>Central de Auditoria & Alterações de Venda (Estilo Git Diff)</h2>
           <p style="font-size:12px; color:#64748b;">
             Quando o caixa erra um lançamento, ele solicita a alteração. O Administrador confere o Diff (linhas vermelhas e verdes) e aprova ou recusa com justificativa.
           </p>
@@ -387,7 +180,7 @@ function renderAdminHtml() {
     <!-- ABA 4: HISTÓRICO COMPLETO DE PEDIDOS (ADMIN) -->
     <div id="tab-orders" class="tab-content">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
-        <h2>📜 Histórico Geral de Pedidos (Web, WhatsApp e Balcão)</h2>
+        <h2>Histórico Geral de Pedidos (Web, WhatsApp e Balcão)</h2>
         <button class="action-btn btn-gray" onclick="loadAllOrders()">🔄 Atualizar</button>
       </div>
       <div id="allOrdersListContainer">Carregando histórico...</div>
@@ -395,7 +188,7 @@ function renderAdminHtml() {
 
     <!-- ABA 5: ENTRADA ÁGIL DE ESTOQUE (ADMIN E CAIXA) -->
     <div id="tab-stock" class="tab-content">
-      <h2>📦 Entrada Rápida de Estoque (1 Toque para Somar)</h2>
+      <h2>Entrada Rápida de Estoque (1 Toque para Somar)</h2>
       <p style="font-size:12px; color:#64748b; margin-bottom:12px;">Para funcionários do viveiro: busque a planta e aperte no botão para somar unidades no Firestore.</p>
       <input type="text" id="stockSearchInput" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px;" placeholder="Digitar nome da planta para achar rápido..." oninput="filterStockCards()" />
       <div class="quick-stock-grid" id="stockCardsGrid"></div>
@@ -403,10 +196,10 @@ function renderAdminHtml() {
 
     <!-- ABA 6: CONSULTA RÁPIDA DE PREÇO (ADMIN E CAIXA) -->
     <div id="tab-price" class="tab-content">
-      <h2>🔍 Consulta Rápida de Preço e Disponibilidade</h2>
+      <h2>Consulta Rápida de Preço e Disponibilidade</h2>
       <p style="font-size:12px; color:#64748b; margin-bottom:12px;">Busca instantânea para informar clientes no balcão sem demora.</p>
       <input type="text" id="priceSearchInput" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px; font-size:15px;" placeholder="Buscar qualquer produto ou muda (ex: rabo de raposa, jabuticaba, eucalipto, alface...)" oninput="filterPriceTable()" />
-      <table style="margin-top:14px;">
+      <div class="table-scroll" tabindex="0" role="region" aria-label="Tabela de dados"><table style="margin-top:14px;">
         <thead>
           <tr>
             <th>Foto</th>
@@ -417,13 +210,13 @@ function renderAdminHtml() {
           </tr>
         </thead>
         <tbody id="priceTableBody"></tbody>
-      </table>
+      </table></div>
     </div>
 
     <!-- ABA 7: CADASTRO DE PRODUTOS COM MÚLTIPLAS IMAGENS (ADMIN) -->
     <div id="tab-products" class="tab-content">
-      <h2 id="productFormTitle">🌱 Cadastro & Alteração de Produtos</h2>
-      <form id="prodForm" onsubmit="handleProductSubmit(event)" style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px;">
+      <h2 id="productFormTitle">Cadastro & Alteração de Produtos</h2>
+      <form id="prodForm" onsubmit="handleProductSubmit(event)" class="product-form">
         <input type="hidden" id="formProdId" />
         <div>
           <label style="font-size:12px; font-weight:bold;">Nome do Produto:</label>
@@ -484,7 +277,7 @@ function renderAdminHtml() {
         <h3 style="margin:0;">Produtos no Banco de Dados</h3>
         <button type="button" class="action-btn btn-green" onclick="showTab('import')">Importar LISTA DE PRODUTOS</button>
       </div>
-      <table>
+      <div class="table-scroll" tabindex="0" role="region" aria-label="Tabela de dados"><table>
         <thead>
           <tr>
             <th>Foto</th>
@@ -496,20 +289,20 @@ function renderAdminHtml() {
           </tr>
         </thead>
         <tbody id="adminProductsTableBody"></tbody>
-      </table>
+      </table></div>
     </div>
 
     <!-- ABA 8: EQUIPE & PERMISSÕES (ADMIN) -->
     <div id="tab-team" class="tab-content">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
         <div>
-          <h2>👥 Gestão de Funcionários & Controle de Permissões</h2>
+          <h2>Gestão de Funcionários & Controle de Permissões</h2>
           <p style="font-size:12px; color:#64748b;">Cadastre atendentes de caixa e administradores com PIN de acesso.</p>
         </div>
         <button class="action-btn btn-green" onclick="openNewUserModal()">➕ Novo Funcionário</button>
       </div>
 
-      <table>
+      <div class="table-scroll" tabindex="0" role="region" aria-label="Tabela de dados"><table>
         <thead>
           <tr>
             <th>Nome</th>
@@ -521,7 +314,7 @@ function renderAdminHtml() {
           </tr>
         </thead>
         <tbody id="teamTableBody"></tbody>
-      </table>
+      </table></div>
     </div>
 
     <!-- ABA 9: IMPORTAR PLANILHAS (ADMIN) -->
@@ -546,8 +339,7 @@ function renderAdminHtml() {
 
       <!-- SEÇÃO: TRANSFERÊNCIA DE FOTOS DO GOOGLE DRIVE PARA O FIRESTORE -->
       <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:8px; padding:18px; margin-top:20px;">
-        <h3 style="color:#14532d; font-size:15px; margin-bottom:6px; display:flex; align-items:center; gap:8px;">
-          📸 Armazenamento de Fotos no Cloud Firestore
+        <h3 style="color:#14532d; font-size:15px; margin-bottom:6px; display:flex; align-items:center; gap:8px;">Armazenamento de Fotos no Cloud Firestore
         </h3>
         <p style="font-size:12px; color:#166534; line-height:1.6; margin-bottom:12px;">
           Você usava o armazenamento do Google Drive com caminhos na planilha. Agora todas as fotos são transferidas e armazenadas <strong>diretamente no Firestore</strong> (coleção <code>product_images</code>), mantendo o padrão oficial de nomes (<code>{slug-do-produto}_{id}.jpg</code>) e tags botânicas da Conflora.
@@ -564,7 +356,7 @@ function renderAdminHtml() {
 
     <!-- ABA 10: NOTIFICAÇÕES (CAIXA E ADMIN) -->
     <div id="tab-notifs" class="tab-content">
-      <h2>🔔 Central de Notificações & Avisos do Sistema</h2>
+      <h2>Central de Notificações & Avisos do Sistema</h2>
       <p style="font-size:12px; color:#64748b; margin-bottom:14px;">Avisos sobre solicitações de alteração de vendas aceitas ou canceladas com o motivo.</p>
       <div id="notificationsContainer">Carregando avisos...</div>
     </div>
@@ -573,7 +365,7 @@ function renderAdminHtml() {
     <div id="tab-status" class="tab-content">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
         <div>
-          <h2>📡 Status das Conexões & Diagnóstico do Sistema</h2>
+          <h2>Status das Conexões & Diagnóstico do Sistema</h2>
           <p style="font-size:12px; color:#64748b;">Monitoramento de comunicação em tempo real com Google Sheets API, Meta WhatsApp Webhook e Cloud Firestore.</p>
         </div>
         <button class="action-btn btn-green" onclick="loadAdminStatusData()" style="padding:10px 16px; font-size:13px;">
@@ -590,8 +382,7 @@ function renderAdminHtml() {
   <!-- MODAL: LOGIN / TROCA DE OPERADOR / GOOGLE LOGIN -->
   <div class="modal" id="loginModal">
     <div class="modal-card" style="max-width:480px;">
-      <h3 style="margin-bottom:6px; display:flex; align-items:center; gap:8px;">
-        🔐 Identificação & Acesso Administrativo
+      <h3 style="margin-bottom:6px; display:flex; align-items:center; gap:8px;">Identificação & Acesso Administrativo
       </h3>
       <p style="font-size:12px; color:#64748b; margin-bottom:16px;">
         Acesso restrito ao viveiro. Faça login com sua conta Google de administrador ou utilize seu PIN de operador de caixa.
@@ -630,7 +421,7 @@ function renderAdminHtml() {
   <!-- MODAL: SOLICITAÇÃO DE ALTERAÇÃO PELO CAIXA -->
   <div class="modal" id="alterationRequestModal">
     <div class="modal-card">
-      <h3 style="margin-bottom:8px;">✏️ Solicitar Correção de Venda</h3>
+      <h3 style="margin-bottom:8px;">Solicitar Correção de Venda</h3>
       <p style="font-size:12px; color:#64748b; margin-bottom:12px;">
         Caso tenha errado no lançamento, informe o que mudou e o motivo. Edmar receberá uma notificação estilo Git Diff para aprovar.
       </p>
@@ -666,7 +457,7 @@ function renderAdminHtml() {
   <!-- MODAL: RECUSAR ALTERAÇÃO (EDMAR DIGITA O MOTIVO) -->
   <div class="modal" id="rejectReasonModal">
     <div class="modal-card">
-      <h3 style="margin-bottom:8px; color:#991b1b;">❌ Recusar Solicitação de Alteração</h3>
+      <h3 style="margin-bottom:8px; color:#991b1b;">Recusar Solicitação de Alteração</h3>
       <p style="font-size:12px; color:#64748b; margin-bottom:12px;">
         Digite o motivo da recusa. O atendente do caixa receberá uma notificação na tela explicando o cancelamento.
       </p>
@@ -685,7 +476,7 @@ function renderAdminHtml() {
   <!-- MODAL: LANÇAR VENDA MANUAL NO BALCÃO -->
   <div class="modal" id="manualOrderModal">
     <div class="modal-card">
-      <h3 style="margin-bottom:12px;">➕ Nova Venda no Balcão</h3>
+      <h3 style="margin-bottom:12px;">Nova Venda no Balcão</h3>
       <form onsubmit="submitManualOrder(event)">
         <div style="margin-bottom:10px;">
           <label style="font-size:12px; font-weight:bold;">Nome do Cliente:</label>
@@ -723,7 +514,7 @@ function renderAdminHtml() {
   <!-- MODAL: NOVO FUNCIONÁRIO -->
   <div class="modal" id="userModal">
     <div class="modal-card">
-      <h3 style="margin-bottom:12px;">👥 Cadastrar / Editar Funcionário</h3>
+      <h3 style="margin-bottom:12px;">Cadastrar / Editar Funcionário</h3>
       <form onsubmit="handleUserSubmit(event)">
         <input type="hidden" id="uId" />
         <div style="margin-bottom:10px;">
@@ -1377,7 +1168,7 @@ function renderAdminHtml() {
             <!-- GOOGLE SHEETS API STATUS -->
             <div style="background:#f8fafc; border:1px solid var(--border); border-radius:10px; padding:18px;">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <h3 style="font-size:15px; display:flex; align-items:center; gap:6px;">📊 Google Sheets API</h3>
+                <h3 style="font-size:15px; display:flex; align-items:center; gap:6px;">Google Sheets API</h3>
                 <span style="background:\${sheets.color || '#10b981'}; color:white; font-size:11px; font-weight:800; padding:2px 8px; border-radius:10px;">
                   \${sheets.badge || sheets.status || 'ONLINE'}
                 </span>
@@ -1402,7 +1193,7 @@ function renderAdminHtml() {
             <!-- WHATSAPP WEBHOOK STATUS -->
             <div style="background:#f8fafc; border:1px solid var(--border); border-radius:10px; padding:18px;">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <h3 style="font-size:15px; display:flex; align-items:center; gap:6px;">💬 WhatsApp Webhook & API</h3>
+                <h3 style="font-size:15px; display:flex; align-items:center; gap:6px;">WhatsApp Webhook & API</h3>
                 <span style="background:\${wa.color || '#10b981'}; color:white; font-size:11px; font-weight:800; padding:2px 8px; border-radius:10px;">
                   \${wa.badge || wa.status || 'ONLINE'}
                 </span>
@@ -1428,7 +1219,7 @@ function renderAdminHtml() {
             <!-- CLOUD FIRESTORE -->
             <div style="background:#f8fafc; border:1px solid var(--border); border-radius:10px; padding:18px;">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <h3 style="font-size:15px; display:flex; align-items:center; gap:6px;">🔥 Cloud Firestore</h3>
+                <h3 style="font-size:15px; display:flex; align-items:center; gap:6px;">Cloud Firestore</h3>
                 <span style="background:\${fs.color || '#10b981'}; color:white; font-size:11px; font-weight:800; padding:2px 8px; border-radius:10px;">
                   \${fs.badge || fs.status || 'ONLINE'}
                 </span>
@@ -1444,7 +1235,7 @@ function renderAdminHtml() {
             <!-- PLANILHA OFICIAL DE CONTINGÊNCIA -->
             <div style="background:#f8fafc; border:1px solid var(--border); border-radius:10px; padding:18px;">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <h3 style="font-size:15px; display:flex; align-items:center; gap:6px;">🌱 Planilha Oficial Conflora</h3>
+                <h3 style="font-size:15px; display:flex; align-items:center; gap:6px;">Planilha Oficial Conflora</h3>
                 <span style="background:\${cat.color || '#10b981'}; color:white; font-size:11px; font-weight:800; padding:2px 8px; border-radius:10px;">
                   \${cat.badge || 'Carregada'}
                 </span>
