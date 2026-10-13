@@ -27,17 +27,27 @@
           aria-label="Buscar produtos"
       /></label>
       <div class="header-actions">
-        <span id="region"></span
-        ><span data-icon="user" class="account-symbol" aria-hidden="true"></span
-        ><button id="accountButton" class="quiet">Entrar</button
-        ><button id="cartButton" aria-haspopup="dialog">
-          <span data-icon="cart" aria-hidden="true"></span
-          ><span class="cart-label">Sacola</span> <span id="cartCount">0</span>
+        <span id="region"></span>
+        <button id="teamDrawerBtn" class="team-hamburger-btn" type="button" title="Menu da Equipe" aria-label="Menu da Equipe" aria-haspopup="dialog">
+          <span class="team-hamburger-icon">☰</span>
+          <span class="team-hamburger-label">Equipe</span>
+        </button>
+        <button id="accountButton" class="quiet" hidden>Entrar</button>
+        <button id="cartButton" aria-haspopup="dialog">
+          <span data-icon="cart" aria-hidden="true"></span>
+          <span class="cart-label">Sacola</span> <span id="cartCount">0</span>
         </button>
       </div>
     </header>
     <main id="main" class="main">
       <section id="catalogView">
+        <div class="catalog-header-bar">
+          <div class="status-filters-bar" id="statusFilters" role="group" aria-label="Filtrar produtos por status"></div>
+          <div class="store-ops-bar">
+            <button id="stockToggleBtn" class="stock-toggle-btn" type="button" title="Alternar controle de estoque"></button>
+            <button id="catalogEntryBtn" class="catalog-entry-btn" type="button" title="Dar entrada em produtos ou estoque">+ Entrada rápida</button>
+          </div>
+        </div>
         <div class="catalog-tools">
           <nav id="categories" aria-label="Categorias"></nav>
           <label
@@ -221,12 +231,120 @@
         <a href="/admin" class="staff-link">Acesso da equipe</a>
       </div>
     </dialog>
+    <dialog
+      id="productEntryDialog"
+      class="drawer product-entry-drawer"
+      aria-labelledby="productEntryTitle"
+    >
+      <div class="dialog-header">
+        <h2 id="productEntryTitle">Entrada e Gestão de Produtos</h2>
+        <button data-close aria-label="Fechar formulário">×</button>
+      </div>
+      <div id="productEntryContent" class="product-entry-content"></div>
+    </dialog>
     <aside id="coach" class="coach" hidden>
       <p id="coachText"></p>
       <button id="coachNext">Entendi</button
       ><button id="coachSkip" class="quiet">Pular dicas</button>
     </aside>
     <div id="toast" class="toast" role="status" hidden></div>
+
+    <!-- BOTTOMSHEET (MOBILE) / ABA NA DIREITA (PC) - ÁREA DA EQUIPE -->
+    <div id="teamDrawerOverlay" class="team-drawer-overlay hidden">
+      <div id="teamDrawerSheet" class="team-drawer-sheet" role="dialog" aria-labelledby="teamDrawerTitle">
+        <div class="team-drawer-handle" aria-hidden="true"></div>
+        <div class="team-drawer-header">
+          <div class="team-drawer-brand">
+            <span class="team-badge-icon">🌿</span>
+            <div>
+              <h3 id="teamDrawerTitle">Área da Equipe Conflora</h3>
+              <span id="teamOperatorSubtitle" class="team-drawer-sub">Identifique seu cargo</span>
+            </div>
+          </div>
+          <button id="closeTeamDrawerBtn" class="team-drawer-close" aria-label="Fechar menu">✕</button>
+        </div>
+
+        <div class="team-drawer-body">
+          <!-- CARD DO OPERADOR ATIVO -->
+          <div class="team-operator-card">
+            <div class="team-op-left">
+              <span class="team-op-avatar">👤</span>
+              <div>
+                <strong id="teamOpName">Atendente Caixa</strong>
+                <span id="teamOpRoleBadge" class="team-role-badge caixa">CARGO: CAIXA</span>
+              </div>
+            </div>
+            <button id="teamSwitchOpBtn" class="team-switch-btn" type="button">Trocar</button>
+          </div>
+
+          <!-- SELETOR RÁPIDO DE OPERADOR -->
+          <div id="teamOpSelectorBox" class="team-op-selector-box hidden">
+            <label for="teamSelectUser" class="team-field-label">Selecione seu perfil:</label>
+            <select id="teamSelectUser" class="team-select-input"></select>
+            <div class="team-selector-actions">
+              <button id="teamConfirmOpBtn" class="team-btn-confirm" type="button">Confirmar Operador</button>
+              <button id="teamCancelOpBtn" class="team-btn-cancel" type="button">Cancelar</button>
+            </div>
+          </div>
+
+          <!-- AÇÕES DO MENU ESPECÍFICAS POR CARGO -->
+          <div class="team-menu-actions">
+
+            <!-- LINK PARA CAIXA: ACESSO ESTRITO ÀS VENDAS DE HOJE DO CAIXA DELE -->
+            <a id="teamLinkCaixa" href="/caixa" class="team-nav-card featured-caixa">
+              <div class="team-nav-icon">⚡</div>
+              <div class="team-nav-text">
+                <strong>Caixa / PDV (Hoje)</strong>
+                <small id="teamCaixaScopeDesc">Acesso estrito às suas vendas e números de hoje</small>
+              </div>
+              <span class="team-nav-arrow">➔</span>
+            </a>
+
+            <!-- FUNCIONALIDADES EXCLUSIVAS DO ADMIN (ESCONDIDAS PARA CARGO CAIXA) -->
+            <div id="teamAdminSection" class="team-admin-section">
+              <div class="team-section-divider">
+                <span>Ferramentas de Gerência (Admin)</span>
+              </div>
+
+              <a href="/admin-gerencial" class="team-nav-card">
+                <div class="team-nav-icon">📊</div>
+                <div class="team-nav-text">
+                  <strong>Painel Gerencial (Looker Studio)</strong>
+                  <small>Faturamento diário, ticket médio e gráficos</small>
+                </div>
+                <span class="team-nav-arrow">➔</span>
+              </a>
+
+              <button id="teamOpenEntryBtn" type="button" class="team-nav-card">
+                <div class="team-nav-icon">📦</div>
+                <div class="team-nav-text">
+                  <strong>Entrada de Produtos & Estoque</strong>
+                  <small>Cadastrar novos itens ou repor estoque</small>
+                </div>
+                <span class="team-nav-arrow">➔</span>
+              </button>
+
+              <a href="/admin" class="team-nav-card">
+                <div class="team-nav-icon">⚙️</div>
+                <div class="team-nav-text">
+                  <strong>Painel Admin Completo</strong>
+                  <small>Equipe, importação de planilhas e configurações</small>
+                </div>
+                <span class="team-nav-arrow">➔</span>
+              </a>
+            </div>
+
+            <!-- AVISO DE ACESSO DO CLIENTE -->
+            <div class="team-customer-notice">
+              <span>🛒 Você é um cliente da loja?</span>
+              <button id="teamBackToShopBtn" type="button" class="team-btn-back-shop">Continuar Comprando</button>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script type="module" src="/store-assets/v4/app.js"></script>
   </body>
 </html>

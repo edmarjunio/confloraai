@@ -18,19 +18,9 @@ const { verifyFirebaseToken } = require('../security/firebase-auth');
 const Logger = require('../shared/logger');
 const { SignatureValidator } = require('../security/signature.validator');
 const { SystemStatusService } = require('../services/system-status.service');
-const { renderHomeHtml, renderAdminHtml } = require('./views');
+const { renderHomeHtml, renderAdminHtml, renderCaixaHtml, renderAdminGerencialHtml } = require('./views');
 
-const FETCH_SHIM_SCRIPT = `<script>
-  try {
-    var _origFetch = window.fetch;
-    Object.defineProperty(window, 'fetch', {
-      get: function() { return _origFetch; },
-      set: function(v) { _origFetch = v; },
-      configurable: true,
-      enumerable: true
-    });
-  } catch (_) {}
-</script>`;
+const FETCH_SHIM_SCRIPT = '';
 
 function renderPrivacyPolicyHtml() {
   return `<!DOCTYPE html>
@@ -965,6 +955,29 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
     } catch (error) { next(error); }
   });
 
+  // Painel Admin Gerencial (Substituição de Alta Performance do Looker Studio)
+  app.get('/admin-gerencial', async (_req, res, next) => {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    try {
+      res.status(200).send(renderAdminGerencialHtml());
+    } catch (error) { next(error); }
+  });
+
+  // Servir relatórios em PDF gerados
+  app.use('/reports', express.static(require('node:path').resolve(__dirname, '../../public/reports')));
+
+  // Tela Dedicada do Caixa & Frente de Loja (Mobile & Desktop)
+  app.get(['/caixa', '/pdv'], (_req, res) => {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.status(200).send(renderCaixaHtml());
+  });
+
   // Simulador WhatsApp Oficial
   app.get(['/simulador', '/chat-simulador'], (_req, res) => {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -1035,10 +1048,12 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
         for (const msg of value.messages) {
           const phone = msg.from;
           const messageId = msg.id;
-          const text = msg.text?.body || '';
+          const isMedia = Boolean(msg.image || msg.document);
+          const mediaCaption = msg.image?.caption || msg.document?.caption || '';
+          const text = msg.text?.body || mediaCaption || (isMedia ? '[COMPROVANTE_ENVIADO]' : '');
           const customerName = value.contacts?.[0]?.profile?.name || '';
 
-          if (!text) {
+          if (!text && !isMedia) {
             continue;
           }
 
@@ -1332,6 +1347,196 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       res.status(200).json({ success: true, order });
     } catch (err) {
       Logger.error('Erro ao lançar pedido manual no caixa', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // --- API DO CAIXA & PDV RÁPIDO (CELULAR & BALCÃO) ---
+  app.get('/api/caixa/products', async (_req, res) => {
+    try {
+      const products = await messageService.firestoreRepo.getAllProducts();
+      const active = products
+        .filter((p) => p.status !== 'INATIVO' && p.isAvailable !== false)
+        .map((p) => ({
+          id: p.id,
+          name: p.name || p.descricao || 'Produto',
+          price: Number(p.price || p.valor_num || 0),
+          stock: Number(p.stockQuantity ?? p.estoque ?? 0),
+          unit: p.unit || p.unidade || 'UN',
+          category: p.category || p.categoria || 'Geral',
+          imageUrl: p.imageUrl || p.imageurl || '',
+        }));
+      res.status(200).json(active);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/caixa/orders', async (req, res) => {
+    try {
+      const {
+        customerName,
+        customerPhone,
+        items,
+        paymentMethod,
+        notes,
+        operatorName,
+      } = req.body;
+
+      if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ error: 'Nenhum item adicionado à venda.' });
+      }
+
+      const payMethod = (paymentMethod || 'DINHEIRO').toUpperCase();
+      const isPix = payMethod === 'PIX';
+      const status = isPix ? 'AWAITING_PIX' : 'AWAITING_CASHIER';
+
+      const total = items.reduce(
+        (sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1),
+        0
+      );
+
+      const ticketNumber = String(Math.floor(100 + Math.random() * 900));
+
+      const { generatePixCode } = require('../orders/pix.util');
+      let pixCode = '';
+      if (isPix) {
+        pixCode = generatePixCode({
+          key: process.env.STORE_PIX_KEY || config.pix.key || '64999351616',
+          name: config.pix.holder || 'Conflora Horta e Viveiro',
+          city: 'Mineiros',
+          amount: total,
+          txid: `CONF${ticketNumber}`,
+        });
+      }
+
+      const order = await messageService.firestoreRepo.createManualOrder({
+        customerName: customerName || (customerPhone ? `Cliente ${customerPhone.slice(-4)}` : `Balcão #${ticketNumber}`),
+        customerPhone: customerPhone || '',
+        items,
+        paymentMethod: payMethod,
+        notes,
+        operatorName: operatorName || req.user?.name || 'Colaborador',
+        operatorId: req.user?.id || '',
+        ticketNumber,
+        pixCode,
+        status,
+      });
+
+      // Se PIX e tiver telefone do cliente, envia chave PIX automaticamente no WhatsApp
+      if (isPix && customerPhone && messageService.whatsappClient) {
+        const cleanPhone = String(customerPhone).replace(/\D/g, '');
+        const pixMsg = (
+          `🌱 *Conflora Horta e Viveiro*\n\n` +
+          `Olá ${customerName ? customerName + '! ' : '!'}Aqui estão os dados para pagamento PIX do seu pedido *#${ticketNumber}*:\n\n` +
+          `💰 *Valor Total:* R$ ${total.toFixed(2).replace('.', ',')}\n` +
+          `🔑 *Chave PIX:* \`${process.env.STORE_PIX_KEY || config.pix.key || '64999351616'}\`\n` +
+          `👤 *Titular:* ${config.pix.holder || 'Conflora Horta e Viveiro'}\n\n` +
+          `📋 *Código Copia e Cola:*\n\`${pixCode}\`\n\n` +
+          `📸 *Assim que efetuar o pagamento, basta enviar o comprovante aqui nesta conversa que seu pedido será liberado automaticamente sem fila no caixa!*`
+        );
+        messageService.whatsappClient.sendTextMessage(cleanPhone, pixMsg).catch((err) => {
+          Logger.warn('Aviso: falha ao enviar PIX no WhatsApp', { error: err.message });
+        });
+      }
+
+      res.status(200).json({ success: true, order });
+    } catch (err) {
+      Logger.error('Erro ao lançar pedido no PDV', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/caixa/orders', async (req, res) => {
+    try {
+      const user = req.user;
+      let role = user?.role || '';
+      let operatorName = req.query.operatorName || user?.name || '';
+      let userId = user?.id || '';
+
+      if (!role && operatorName) {
+        const users = await messageService.firestoreRepo.getAllUsers();
+        const found = users.find(u => u.name?.toLowerCase().trim() === String(operatorName).toLowerCase().trim() || u.id === req.query.userId);
+        if (found) {
+          role = found.role;
+          userId = found.id;
+        }
+      }
+
+      const data = await messageService.firestoreRepo.getCashierOrders({
+        operatorName,
+        role,
+        userId,
+      });
+      res.status(200).json(data);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/caixa/orders/:id', async (req, res) => {
+    try {
+      const order = await messageService.firestoreRepo.getOrderById(req.params.id);
+      if (!order) {
+        return res.status(404).json({ error: 'Pedido não encontrado.' });
+      }
+      res.status(200).json(order);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/caixa/orders/:id/confirm', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { verifiedVia, receivedAmount, changeGiven } = req.body || {};
+      const order = await messageService.firestoreRepo.confirmOrderPayment(id, {
+        verifiedVia: verifiedVia || 'CAIXA_CONFIRMACAO',
+        receivedAmount: typeof receivedAmount === 'number' ? receivedAmount : null,
+        changeGiven: Number(changeGiven || 0),
+      });
+      res.status(200).json({ success: true, order });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/caixa/orders/:id/cancel', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body || {};
+      const result = await messageService.firestoreRepo.cancelOrder(id, reason);
+      res.status(200).json(result);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/caixa/orders/:id/send-whatsapp', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { phone } = req.body || {};
+      const order = await messageService.firestoreRepo.getOrderById(id);
+      if (!order) {
+        return res.status(404).json({ error: 'Pedido não encontrado.' });
+      }
+      const targetPhone = String(phone || order.customerPhone || '').replace(/\D/g, '');
+      if (!targetPhone) {
+        return res.status(400).json({ error: 'Telefone inválido.' });
+      }
+      if (messageService.whatsappClient) {
+        const msg = (
+          `🌱 *Conflora Horta e Viveiro*\n\n` +
+          `Olá ${order.customerName}! Aqui estão os dados para pagamento do pedido *#${order.ticketNumber || order.id.slice(-4)}*:\n\n` +
+          `💰 *Valor Total:* R$ ${Number(order.total || 0).toFixed(2).replace('.', ',')}\n` +
+          `🔑 *Chave PIX:* \`${process.env.STORE_PIX_KEY || config.pix.key || '64999351616'}\`\n\n` +
+          (order.pixCode ? `📋 *Copia e Cola:*\n\`${order.pixCode}\`\n\n` : '') +
+          `📸 *Basta responder com o comprovante aqui nesta conversa que seu pedido será liberado automaticamente sem fila no caixa!*`
+        );
+        await messageService.whatsappClient.sendTextMessage(targetPhone, msg);
+      }
+      res.status(200).json({ success: true });
+    } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
@@ -1821,6 +2026,36 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       res.status(200).json(metrics);
     } catch (err) {
       Logger.error('Erro ao buscar métricas diárias', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Métricas Executivas Diárias (Substituição de Alta Performance do Looker Studio)
+  app.get('/api/admin/executive-metrics', async (req, res) => {
+    try {
+      const date = req.query.date || new Date().toISOString().slice(0, 10);
+      const metrics = await messageService.firestoreRepo.getDailyExecutiveMetrics({ date });
+      res.status(200).json(metrics);
+    } catch (err) {
+      Logger.error('Erro ao buscar métricas executivas diárias', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Fechamento de Caixa Diário com PDF e Notificação no WhatsApp do Patrão
+  app.post('/api/admin/cashier/close-day', async (req, res) => {
+    try {
+      const { date, closedBy, notes } = req.body || {};
+      const result = await messageService.firestoreRepo.closeCashierDay({
+        date: date || new Date().toISOString().slice(0, 10),
+        closedBy: closedBy || req.user?.name || 'Administrador',
+        notes: notes || '',
+        notifyOwnerWhatsapp: true,
+        whatsappClient: messageService.whatsappClient,
+      });
+      res.status(200).json(result);
+    } catch (err) {
+      Logger.error('Erro no fechamento do caixa diário', err);
       res.status(500).json({ error: err.message });
     }
   });

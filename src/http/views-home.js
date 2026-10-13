@@ -1,17 +1,7 @@
 const { renderFirebaseAuthScript } = require('./firebase-client');
 const { GOOGLE_ANALYTICS_TAG } = require('./analytics');
 
-const FETCH_SHIM_SCRIPT = `<script>
-  try {
-    var _origFetch = window.fetch;
-    Object.defineProperty(window, 'fetch', {
-      get: function() { return _origFetch; },
-      set: function(v) { _origFetch = v; },
-      configurable: true,
-      enumerable: true
-    });
-  } catch (_) {}
-</script>`;
+const FETCH_SHIM_SCRIPT = '';
 
 function renderInitialProductCards(items) {
   if (!Array.isArray(items)) {

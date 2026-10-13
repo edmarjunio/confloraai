@@ -220,6 +220,10 @@ class CatalogRepository {
           category: item.category,
           subcategory: item.subcategory,
           descriptionAi: item.descriptionAi || '',
+          cuidados_basicos: item.cuidados_basicos || item.cuidadosBasicos || '',
+          ambiente_ideal: item.ambiente_ideal || item.ambienteIdeal || '',
+          dicas_armazenamento: item.dicas_armazenamento || item.dicasArmazenamento || '',
+          durabilidade: item.durabilidade || '',
           tags: new Set(),
           prices: [],
           images: [],
@@ -229,6 +233,10 @@ class CatalogRepository {
       }
 
       const productGroup = this.productByNameMap.get(normalizedName);
+      if (item.cuidados_basicos && !productGroup.cuidados_basicos) productGroup.cuidados_basicos = item.cuidados_basicos;
+      if (item.ambiente_ideal && !productGroup.ambiente_ideal) productGroup.ambiente_ideal = item.ambiente_ideal;
+      if (item.dicas_armazenamento && !productGroup.dicas_armazenamento) productGroup.dicas_armazenamento = item.dicas_armazenamento;
+      if (item.durabilidade && !productGroup.durabilidade) productGroup.durabilidade = item.durabilidade;
       productGroup.items.push(item);
 
       // Preços sem duplicidade ordenados

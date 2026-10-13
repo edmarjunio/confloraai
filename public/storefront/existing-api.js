@@ -55,6 +55,33 @@ export function createExistingApi() {
     if (route === "/assistant") {
       return request("/api/storefront/assistant", options);
     }
+    if (route === "/inventory-settings") {
+      if (options.method === "PUT") {
+        catalogPromise = null;
+        return request("/api/storefront/inventory-settings", options);
+      }
+      return request("/api/storefront/inventory-settings", options);
+    }
+    if (route === "/products" && options.method === "POST") {
+      catalogPromise = null;
+      const res = await request("/api/storefront/products", options);
+      return res.product;
+    }
+    if (route === "/stock/quick-entry" && options.method === "POST") {
+      catalogPromise = null;
+      const res = await request("/api/storefront/stock/quick-entry", options);
+      return res.product;
+    }
+    if (route.startsWith("/products/") && route.endsWith("/status") && options.method === "PUT") {
+      catalogPromise = null;
+      const res = await request("/api/storefront" + route, options);
+      return res.product;
+    }
+    if (route === "/admin/products" || route === "/admin/products/") {
+      catalogPromise ||= request("/api/storefront/catalog");
+      const result = await catalogPromise;
+      return result.products;
+    }
     if (route === "/orders" && options.method === "POST") {
       const result = await request("/api/storefront/orders", options);
       catalogPromise = null;

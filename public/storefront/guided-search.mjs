@@ -50,34 +50,40 @@ function wordScore(query, candidate) {
   }
   return distance(query, candidate) <= limit ? 1 : 0;
 }
-export function productPaths(product, categories) {
-  const active = categories.filter(
+export function productPaths(product, categories = []) {
+  if (product.status === "INATIVO" || product.isAvailable === false) {
+    return [];
+  }
+  const active = (categories || []).filter(
     (category) =>
       product.categories?.includes(category.id) && category.isActive !== false,
   );
-  if (!active.length) {
-    return [];
+  if (active.length) {
+    if (Array.isArray(product.navigationPath) && product.navigationPath.length) {
+      return [[active[0].name, ...product.navigationPath.slice(1)]];
+    }
+    return (product.categories || [])
+      .map((id) => {
+        const category = categories.find(
+          (item) => item.id === id && item.isActive !== false,
+        );
+        return category
+          ? [category.name, product.subcategoryName].filter(Boolean)
+          : [];
+      })
+      .filter((path) => path.length);
   }
-  if (Array.isArray(product.navigationPath)) {
-    return product.navigationPath.length
-      ? [[active[0].name, ...product.navigationPath.slice(1)]]
-      : [];
+  const cat = product.categoryName || product.category;
+  if (cat) {
+    return [[cat, product.subcategoryName || product.subcategory].filter(Boolean)];
   }
-  return (product.categories || [])
-    .map((id) => {
-      const category = categories.find(
-        (item) => item.id === id && item.isActive !== false,
-      );
-      return category
-        ? [category.name, product.subcategoryName].filter(Boolean)
-        : [];
-    })
-    .filter((path) => path.length);
+  return [];
 }
 export function scopedProducts(products, categories, path) {
   return products.filter(
     (product) =>
       product.isAvailable &&
+      product.status !== "INATIVO" &&
       productPaths(product, categories).some((parts) =>
         path.every((part, index) => part === parts[index]),
       ),
@@ -106,7 +112,7 @@ export function searchProducts(products, query, synonyms = []) {
     return [];
   }
   return products
-    .filter((product) => product.isAvailable)
+    .filter((product) => product.isAvailable && product.status !== "INATIVO")
     .map((product) => {
       const identity = [
         product.name,
