@@ -13,6 +13,8 @@ import { createCart } from "./cart.js";
 import { createChat } from "./chat.js";
 import { createAdmin } from "./admin.js";
 import { createExistingApi } from "./existing-api.js";
+import { createProductEntry } from "./product-entry.js";
+import { initTeamDrawer } from "./team-drawer.js";
 import { icon } from "./icons.js";
 
 const existingStore = !location.pathname.startsWith("/shop/");
@@ -391,6 +393,18 @@ try {
   if (state.user) {
     $("#accountButton").textContent = state.user.name;
   }
+  state.applyConfig = applyConfig;
+  state.reloadProducts = async () => {
+    [state.config, state.products] = await Promise.all([
+      state.api("/config"),
+      state.api("/products"),
+    ]);
+    applyConfig();
+    if (catalog) {
+      catalog.categories();
+      catalog.render();
+    }
+  };
   catalog = createCatalog(
     state,
     (product, quantity) => cart.add(product, quantity),
@@ -399,11 +413,15 @@ try {
   cart = createCart(state);
   chat = createChat(state, catalog);
   admin = createAdmin(state);
+  state.productEntry = createProductEntry(state, async () => {
+    await state.reloadProducts();
+  });
   applyConfig();
   catalog.render();
   cart.render();
   await route();
   onboarding();
+  initTeamDrawer();
   if (existingStore) {
     import("/storefront-auth.js").catch(() => {});
   }

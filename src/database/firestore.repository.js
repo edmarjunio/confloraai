@@ -1082,6 +1082,11 @@ class FirestoreRepository {
     items,
     paymentMethod,
     notes = '',
+    status = 'CONFIRMED',
+    operatorName = '',
+    operatorId = '',
+    ticketNumber = '',
+    pixCode = '',
   }) {
     const total = (items || []).reduce(
       (sum, item) =>
@@ -1091,27 +1096,470 @@ class FirestoreRepository {
       0
     );
 
+    const shortTicket = ticketNumber || String(Math.floor(100 + Math.random() * 900));
+
     const orderData = {
       customerName: customerName || 'Venda Balcão / Caixa',
       customerPhone: customerPhone || 'Presencial',
       orderType: 'PICKUP',
       deliveryAddress: 'Venda Presencial no Balcão Conflora',
-      paymentMethod: paymentMethod || 'DINHEIRO',
+      paymentMethod: (paymentMethod || 'DINHEIRO').toUpperCase(),
       items: items || [],
       total,
       notes,
+      operatorName: operatorName || 'Colaborador',
+      operatorId: operatorId || '',
+      ticketNumber: shortTicket,
+      pixCode: pixCode || '',
       source: 'CAIXA_MANUAL',
-      status: 'CONFIRMED',
+      status: status || 'CONFIRMED',
     };
 
     const order = await this.createDirectOrder(orderData);
 
-    await this.deductStock(
-      items,
-      customerPhone || 'Balcão'
-    );
+    if (order.status === 'CONFIRMED' || order.status === 'PAID_CONFIRMED') {
+      await this.deductStock(
+        items,
+        customerPhone || 'Balcão'
+      ).catch(() => {});
+      order.stockDeducted = true;
+    }
 
     return order;
+  }
+
+  async getOrderById(orderId) {
+    const idStr = String(orderId);
+    if (this.firestore && !this._firestoreClientDisabled) {
+      try {
+        const snap = await this.firestore.collection('orders').doc(idStr).get();
+        if (snap.exists) {
+          const docData = { id: snap.id, ...snap.data() };
+          this.inMemoryOrders.set(idStr, docData);
+          return docData;
+        }
+      } catch (err) {
+        if (
+          err.code === 7 ||
+          err.code === 'permission-denied' ||
+          err.message?.includes('PERMISSION_DENIED') ||
+          err.message?.includes('Missing or insufficient')
+        ) {
+          this._firestoreClientDisabled = true;
+        } else {
+          Logger.warn('Erro ao buscar pedido por ID no Firestore', { error: err.message });
+        }
+      }
+    }
+    if (config.firebase?.apiKey) {
+      try {
+        const restDoc = await this.fetchDocViaRest('orders', idStr);
+        if (restDoc) {
+          this.inMemoryOrders.set(idStr, restDoc);
+          return restDoc;
+        }
+      } catch (_) {}
+    }
+    return this.inMemoryOrders.get(idStr) || null;
+  }
+
+  async findPendingPixOrderByPhone(phone) {
+    const cleanTarget = String(phone || '').replace(/\D/g, '');
+    if (!cleanTarget) return null;
+
+    const allOrders = await this.getAllOrders(100);
+    const pendingPix = allOrders.filter(
+      (o) => o.status === 'AWAITING_PIX' || o.status === 'AGUARDANDO_PIX'
+    );
+
+    const match = pendingPix.find((o) => {
+      const oPhone = String(o.customerPhone || o.phone || '').replace(/\D/g, '');
+      if (!oPhone) return false;
+      if (oPhone === cleanTarget) return true;
+      const oNo55 = oPhone.startsWith('55') && oPhone.length >= 12 ? oPhone.slice(2) : oPhone;
+      const tNo55 = cleanTarget.startsWith('55') && cleanTarget.length >= 12 ? cleanTarget.slice(2) : cleanTarget;
+      if (oNo55 === tNo55) return true;
+      if (oNo55.length === 11 && tNo55.length === 10) {
+        return oNo55.slice(0, 2) === tNo55.slice(0, 2) && oNo55.slice(3) === tNo55.slice(2);
+      }
+      if (tNo55.length === 11 && oNo55.length === 10) {
+        return tNo55.slice(0, 2) === oNo55.slice(0, 2) && tNo55.slice(3) === oNo55.slice(2);
+      }
+      return false;
+    });
+
+    return match || null;
+  }
+
+  async confirmOrderPayment(orderId, { verifiedVia = 'CAIXA_MANUAL', receivedAmount = null, changeGiven = 0 } = {}) {
+    const order = await this.getOrderById(orderId);
+    if (!order) {
+      throw new Error('Pedido não encontrado.');
+    }
+
+    const now = new Date().toISOString();
+    const updateData = {
+      status: 'CONFIRMED',
+      paidAt: now,
+      verifiedVia,
+      updatedAt: now,
+    };
+    if (verifiedVia.includes('PIX') || order.paymentMethod === 'PIX') {
+      updateData.pixVerified = true;
+    }
+    if (typeof receivedAmount === 'number') {
+      updateData.cashReceived = receivedAmount;
+      updateData.changeGiven = changeGiven;
+    }
+
+    if (this.firestore && !this._firestoreClientDisabled) {
+      try {
+        await this.firestore.collection('orders').doc(String(orderId)).update(updateData);
+      } catch (err) {
+        if (
+          err.code === 7 ||
+          err.code === 'permission-denied' ||
+          err.message?.includes('PERMISSION_DENIED') ||
+          err.message?.includes('Missing or insufficient')
+        ) {
+          this._firestoreClientDisabled = true;
+        } else {
+          Logger.warn('Erro ao atualizar status de pagamento no Firestore', { error: err.message });
+        }
+      }
+    }
+
+    const local = this.inMemoryOrders.get(String(orderId));
+    if (local) {
+      Object.assign(local, updateData);
+    }
+    Object.assign(order, updateData);
+
+    if (!order.stockDeducted && Array.isArray(order.items)) {
+      await this.deductStock(order.items, order.customerPhone || 'Caixa').catch(() => {});
+      order.stockDeducted = true;
+    }
+
+    return order;
+  }
+
+  async cancelOrder(orderId, reason = '') {
+    const now = new Date().toISOString();
+    const updateData = {
+      status: 'CANCELLED',
+      cancelReason: reason || 'Cancelado no caixa',
+      updatedAt: now,
+    };
+
+    if (this.firestore && !this._firestoreClientDisabled) {
+      try {
+        await this.firestore.collection('orders').doc(String(orderId)).update(updateData);
+      } catch (err) {
+        if (
+          err.code === 7 ||
+          err.code === 'permission-denied' ||
+          err.message?.includes('PERMISSION_DENIED') ||
+          err.message?.includes('Missing or insufficient')
+        ) {
+          this._firestoreClientDisabled = true;
+        } else {
+          Logger.warn('Erro ao cancelar pedido no Firestore', { error: err.message });
+        }
+      }
+    }
+
+    const local = this.inMemoryOrders.get(String(orderId));
+    if (local) {
+      Object.assign(local, updateData);
+    }
+
+    return { success: true, orderId, status: 'CANCELLED' };
+  }
+
+  async getCashierOrders({ operatorName = '', role = '', userId = '' } = {}) {
+    const allOrders = await this.getAllOrders(200);
+    const todayStr = new Date().toISOString().slice(0, 10);
+
+    const cleanOp = String(operatorName || '').trim();
+    const isCashierRole = String(role || '').toUpperCase() === 'CAIXA';
+
+    const pendingCashier = [];
+    const pendingPix = [];
+    const completedToday = [];
+
+    let totalRevenue = 0;
+    const byPayment = { PIX: 0, CARTAO: 0, DINHEIRO: 0 };
+
+    for (const ord of allOrders) {
+      const ordDate = (ord.createdAt || '').slice(0, 10);
+      const isToday = ordDate === todayStr;
+
+      const ordOpName = String(ord.operatorName || '').trim().toLowerCase();
+      const ordOpId = String(ord.operatorId || '').trim();
+      const matchesName = cleanOp && ordOpName === cleanOp.toLowerCase();
+      const matchesId = userId && ordOpId === String(userId);
+      const isMyOrder = Boolean(matchesName || matchesId);
+
+      // Se o usuário logado tiver cargo de CAIXA, isola estritamente as vendas dele
+      if (isCashierRole && !isMyOrder) {
+        continue;
+      }
+
+      if (ord.status === 'AWAITING_CASHIER') {
+        pendingCashier.push(ord);
+      } else if (ord.status === 'AWAITING_PIX') {
+        pendingPix.push(ord);
+      } else if ((ord.status === 'CONFIRMED' || ord.status === 'PAID_CONFIRMED' || ord.status === 'DELIVERED') && isToday) {
+        completedToday.push(ord);
+        const val = Number(ord.total || 0);
+        totalRevenue += val;
+        const pay = (ord.paymentMethod || 'DINHEIRO').toUpperCase();
+        if (byPayment[pay] !== undefined) {
+          byPayment[pay] += val;
+        } else {
+          byPayment[pay] = (byPayment[pay] || 0) + val;
+        }
+      }
+    }
+
+    return {
+      pendingCashier,
+      pendingPix,
+      completedToday,
+      metrics: {
+        totalRevenue,
+        orderCount: completedToday.length,
+        byPayment,
+      },
+      operatorScope: isCashierRole ? cleanOp : 'ALL',
+      isCashierOnly: isCashierRole,
+    };
+  }
+
+  /**
+   * DAO Modularizado: Métricas executivas diárias consolidando fluxo de caixa, formas de pagamento,
+   * vendas por colaborador e ranking de produtos mais vendidos com alto desempenho.
+   */
+  async getDailyExecutiveMetrics({ date = new Date().toISOString().slice(0, 10), storeId = '' } = {}) {
+    try {
+      const targetDate = String(date || '').slice(0, 10);
+      const allOrders = await this.getAllOrders(500);
+
+      let totalRevenue = 0;
+      let orderCount = 0;
+      const byPayment = {
+        PIX: { count: 0, total: 0 },
+        CARTAO: { count: 0, total: 0 },
+        DINHEIRO: { count: 0, total: 0 },
+      };
+
+      const collaboratorMap = new Map();
+      const productSalesMap = new Map();
+      const hourlyDistribution = Array.from({ length: 24 }, (_, h) => ({
+        hour: `${String(h).padStart(2, '0')}:00`,
+        count: 0,
+        total: 0,
+      }));
+
+      const targetOrders = [];
+
+      for (const ord of allOrders) {
+        if (!ord || !ord.createdAt) continue;
+        const ordDate = ord.createdAt.slice(0, 10);
+        if (ordDate !== targetDate) continue;
+
+        const isCompleted = ['CONFIRMED', 'PAID_CONFIRMED', 'DELIVERED', 'COMPLETED'].includes(String(ord.status || '').toUpperCase());
+        if (!isCompleted) continue;
+
+        targetOrders.push(ord);
+
+        const val = Number(ord.total || 0);
+        totalRevenue += val;
+        orderCount++;
+
+        // Pagamento
+        let pay = String(ord.paymentMethod || 'DINHEIRO').toUpperCase();
+        if (pay.includes('PIX')) pay = 'PIX';
+        else if (pay.includes('CARD') || pay.includes('CARTAO') || pay.includes('DEBITO') || pay.includes('CREDITO')) pay = 'CARTAO';
+        else pay = 'DINHEIRO';
+
+        if (!byPayment[pay]) byPayment[pay] = { count: 0, total: 0 };
+        byPayment[pay].count++;
+        byPayment[pay].total += val;
+
+        // Colaborador
+        const opName = String(ord.operatorName || ord.sellerName || 'Atendimento Loja').trim();
+        const existingCollab = collaboratorMap.get(opName) || { name: opName, count: 0, total: 0 };
+        existingCollab.count++;
+        existingCollab.total += val;
+        collaboratorMap.set(opName, existingCollab);
+
+        // Itens / Produtos mais vendidos
+        const items = Array.isArray(ord.items) ? ord.items : [];
+        for (const item of items) {
+          const itemKey = item.productId || item.id || item.name;
+          if (!itemKey) continue;
+          const itemName = item.name || 'Produto';
+          const qty = Number(item.quantity || 1);
+          const itemRev = Number(item.price || 0) * qty;
+
+          const existingProd = productSalesMap.get(itemKey) || {
+            id: itemKey,
+            name: itemName,
+            category: item.category || 'Geral',
+            quantity: 0,
+            revenue: 0,
+          };
+          existingProd.quantity += qty;
+          existingProd.revenue += itemRev;
+          productSalesMap.set(itemKey, existingProd);
+        }
+
+        // Distribuição horária
+        try {
+          const hour = new Date(ord.createdAt).getHours();
+          if (hour >= 0 && hour < 24) {
+            hourlyDistribution[hour].count++;
+            hourlyDistribution[hour].total += val;
+          }
+        } catch (_) {}
+      }
+
+      // Ranking de colaboradores
+      const byCollaborator = Array.from(collaboratorMap.values())
+        .sort((a, b) => b.total - a.total)
+        .map((c) => ({
+          ...c,
+          percentage: totalRevenue > 0 ? Math.round((c.total / totalRevenue) * 100) : 0,
+        }));
+
+      // Ranking de produtos
+      const topProducts = Array.from(productSalesMap.values())
+        .sort((a, b) => b.quantity - a.quantity || b.revenue - a.revenue)
+        .slice(0, 15);
+
+      const ticketMedio = orderCount > 0 ? totalRevenue / orderCount : 0;
+
+      return {
+        date: targetDate,
+        totalRevenue: Math.round(totalRevenue * 100) / 100,
+        orderCount,
+        ticketMedio: Math.round(ticketMedio * 100) / 100,
+        byPayment,
+        byCollaborator,
+        topProducts,
+        hourlyDistribution: hourlyDistribution.filter((h) => {
+          const hourNum = parseInt(h.hour, 10);
+          return hourNum >= 7 && hourNum <= 20;
+        }),
+        recentOrders: targetOrders.slice(0, 10),
+      };
+    } catch (err) {
+      Logger.error('Erro ao calcular métricas gerenciais diárias', err);
+      return {
+        date: String(date || '').slice(0, 10),
+        totalRevenue: 0,
+        orderCount: 0,
+        ticketMedio: 0,
+        byPayment: {
+          PIX: { count: 0, total: 0 },
+          CARTAO: { count: 0, total: 0 },
+          DINHEIRO: { count: 0, total: 0 },
+        },
+        byCollaborator: [],
+        topProducts: [],
+        hourlyDistribution: [],
+        recentOrders: [],
+      };
+    }
+  }
+
+  /**
+   * Finaliza o caixa do dia, gera o PDF executivo e envia resumo + PDF pro WhatsApp do patrão.
+   */
+  async closeCashierDay({ date = new Date().toISOString().slice(0, 10), closedBy = 'Administrador', notes = '', notifyOwnerWhatsapp = true, whatsappClient = null } = {}) {
+    const metrics = await this.getDailyExecutiveMetrics({ date });
+    const now = new Date().toISOString();
+    const closingId = `closing_${date}_${Date.now()}`;
+
+    const closingRecord = {
+      id: closingId,
+      date,
+      closedAt: now,
+      closedBy,
+      notes,
+      metrics,
+      status: 'CLOSED',
+    };
+
+    if (this.firestore && !this._firestoreClientDisabled) {
+      try {
+        await this.firestore.collection('cashier_closings').doc(closingId).set(closingRecord);
+      } catch (err) {
+        Logger.warn('Aviso: falha ao salvar fechamento no Firestore', { error: err.message });
+      }
+    }
+    this.inMemoryCashierClosings = this.inMemoryCashierClosings || new Map();
+    this.inMemoryCashierClosings.set(closingId, closingRecord);
+
+    // Gera PDF oficial
+    const { generateDailyReportPdf } = require('../reports/daily-report-pdf');
+    let pdfResult = null;
+    try {
+      pdfResult = await generateDailyReportPdf(metrics, {
+        date,
+        closedBy,
+        closedAt: new Date().toLocaleTimeString('pt-BR'),
+      });
+    } catch (pdfErr) {
+      Logger.error('Erro ao gerar PDF de fechamento de caixa', pdfErr);
+    }
+
+    let whatsappSent = false;
+    let whatsappError = null;
+
+    if (notifyOwnerWhatsapp && whatsappClient) {
+      const ownerPhone = process.env.OWNER_WHATSAPP_NUMBER || config.whatsapp?.ownerNumber;
+      if (ownerPhone) {
+        const cleanPhone = String(ownerPhone).replace(/\D/g, '');
+        const topProdTxt = (metrics.topProducts || []).slice(0, 3)
+          .map((p, i) => `${i + 1}º ${p.name} (${p.quantity} un - R$ ${p.revenue.toFixed(2).replace('.', ',')})`)
+          .join('\n');
+
+        const summaryText = (
+          `🏁 *FECHAMENTO DE CAIXA CONFLORA · ${date.split('-').reverse().join('/')}*\n\n` +
+          `Olá, Patrão! O caixa do dia foi encerrado com sucesso por *${closedBy}*.\n\n` +
+          `📊 *VALORES DO DIA:*\n` +
+          `💰 *Faturamento Total:* R$ ${metrics.totalRevenue.toFixed(2).replace('.', ',')}\n` +
+          `🛒 *Total de Vendas:* ${metrics.orderCount} pedidos\n` +
+          `🎯 *Ticket Médio:* R$ ${metrics.ticketMedio.toFixed(2).replace('.', ',')}\n\n` +
+          `💳 *SEGMENTAÇÃO DE PAGAMENTOS:*\n` +
+          `• PIX: R$ ${(metrics.byPayment?.PIX?.total || 0).toFixed(2).replace('.', ',')} (${metrics.byPayment?.PIX?.count || 0}x)\n` +
+          `• Cartão: R$ ${(metrics.byPayment?.CARTAO?.total || 0).toFixed(2).replace('.', ',')} (${metrics.byPayment?.CARTAO?.count || 0}x)\n` +
+          `• Dinheiro: R$ ${(metrics.byPayment?.DINHEIRO?.total || 0).toFixed(2).replace('.', ',')} (${metrics.byPayment?.DINHEIRO?.count || 0}x)\n\n` +
+          `🏆 *PRODUTOS MAIS VENDIDOS:*\n${topProdTxt || 'Consulte o relatório'}\n\n` +
+          (pdfResult?.publicUrl ? `📄 *Relatório Executivo PDF Completo:* \`${process.env.SERVICE_URL || ''}${pdfResult.publicUrl}\`` : '')
+        );
+
+        try {
+          await whatsappClient.sendTextMessage(cleanPhone, summaryText);
+          whatsappSent = true;
+        } catch (waErr) {
+          whatsappError = waErr.message;
+          Logger.warn('Aviso: falha ao enviar resumo de fechamento no WhatsApp do patrão', { error: waErr.message });
+        }
+      }
+    }
+
+    return {
+      success: true,
+      closingId,
+      date,
+      metrics,
+      pdfUrl: pdfResult ? pdfResult.publicUrl : null,
+      whatsappSent,
+      whatsappError,
+    };
   }
 
   async importSpreadsheetData({
@@ -1726,21 +2174,32 @@ class FirestoreRepository {
       updatedAt: now,
     };
 
-    if (this.firestore) {
+    if (this.firestore && !this._firestoreClientDisabled) {
       try {
         const ref = await this.firestore
           .collection('orders')
           .add(dataWithTs);
 
-        return {
+        const saved = {
           id: ref.id,
           ...dataWithTs,
         };
+        this.inMemoryOrders.set(ref.id, saved);
+        return saved;
       } catch (err) {
-        Logger.warn(
-          'Erro ao salvar pedido direto no Firestore',
-          { error: err.message }
-        );
+        if (
+          err.code === 7 ||
+          err.code === 'permission-denied' ||
+          err.message?.includes('PERMISSION_DENIED') ||
+          err.message?.includes('Missing or insufficient')
+        ) {
+          this._firestoreClientDisabled = true;
+        } else {
+          Logger.warn(
+            'Erro ao salvar pedido direto no Firestore',
+            { error: err.message }
+          );
+        }
       }
     }
 
@@ -1786,7 +2245,7 @@ class FirestoreRepository {
   }
 
   async getAllOrders(limit = 50) {
-    if (this.firestore) {
+    if (this.firestore && !this._firestoreClientDisabled && !FirestoreRepository._globalClientDisabled) {
       try {
         const snap = await this.firestore
           .collection('orders')
@@ -1795,17 +2254,46 @@ class FirestoreRepository {
           .get();
 
         if (!snap.empty) {
-          return snap.docs.map((d) => ({
+          const orders = snap.docs.map((d) => ({
             id: d.id,
             ...d.data(),
           }));
+          for (const order of orders) {
+            this.inMemoryOrders.set(order.id, order);
+          }
+          return orders;
         }
       } catch (err) {
-        Logger.warn(
-          'Erro ao buscar pedidos no Firestore',
-          { error: err.message }
-        );
+        const errText = String(err?.message || err?.details || err || '');
+        if (
+          err?.code === 7 ||
+          err?.code === '7' ||
+          err?.code === 'permission-denied' ||
+          errText.includes('PERMISSION_DENIED') ||
+          errText.includes('Missing or insufficient') ||
+          errText.includes('7 PERMISSION_DENIED')
+        ) {
+          this._firestoreClientDisabled = true;
+          FirestoreRepository._globalClientDisabled = true;
+        } else {
+          Logger.warn(
+            'Erro ao buscar pedidos no Firestore',
+            { error: err?.message || errText }
+          );
+        }
       }
+    }
+
+    if (config.firebase?.apiKey) {
+      try {
+        const restOrders = await this.fetchCollectionViaRest('orders');
+        if (restOrders && restOrders.length > 0) {
+          for (const o of restOrders) {
+            this.inMemoryOrders.set(o.id, o);
+          }
+          return restOrders.slice(0, limit);
+        }
+      } catch (_) {}
     }
 
     return Array.from(
@@ -1818,7 +2306,7 @@ class FirestoreRepository {
   async updateOrderStatus(orderId, status) {
     const now = new Date().toISOString();
 
-    if (this.firestore) {
+    if (this.firestore && !this._firestoreClientDisabled) {
       try {
         await this.firestore
           .collection('orders')
@@ -1834,10 +2322,19 @@ class FirestoreRepository {
           status,
         };
       } catch (err) {
-        Logger.warn(
-          'Erro ao atualizar status do pedido no Firestore',
-          { error: err.message }
-        );
+        if (
+          err.code === 7 ||
+          err.code === 'permission-denied' ||
+          err.message?.includes('PERMISSION_DENIED') ||
+          err.message?.includes('Missing or insufficient')
+        ) {
+          this._firestoreClientDisabled = true;
+        } else {
+          Logger.warn(
+            'Erro ao atualizar status do pedido no Firestore',
+            { error: err.message }
+          );
+        }
       }
     }
 

@@ -5,6 +5,7 @@ import {
   quantityControl,
   storageGet,
   storageSet,
+  notify,
 } from "./ui.js";
 import { icon } from "./icons.js";
 import { searchProducts } from "./guided-search.mjs";
@@ -12,9 +13,11 @@ import { searchProducts } from "./guided-search.mjs";
 export function createCatalog(state, add, navigate) {
   let category = "";
   let pageSize = 24;
+  let statusFilter = "ATIVO"; // "ATIVO" | "TODOS" | "INATIVO"
   const favoriteKey = `store:${state.slug}:favorites`;
   const saved = storageGet(favoriteKey, []);
   const favorites = new Set(Array.isArray(saved) ? saved : []);
+
   function favorite(product) {
     const button = element(
       "button",
@@ -36,11 +39,14 @@ export function createCatalog(state, add, navigate) {
     });
     return button;
   }
-  const categoryLabel = (product) =>
-    product.categories
-      .map((id) => state.config.categories.find((c) => c.id === id)?.name)
-      .filter(Boolean)
-      .join(" · ");
+
+  const categoryLabel = (product) => {
+    const names = product.categories
+      ?.map((id) => state.config?.categories?.find((c) => c.id === id)?.name)
+      .filter(Boolean);
+    return names?.length ? names.join(" · ") : (product.categoryName || product.category || "");
+  };
+
   function card(product, compact = false) {
     const photo = element("img", {
       src: product.imageUrl || "/store-assets/placeholder.svg",
@@ -59,21 +65,54 @@ export function createCatalog(state, add, navigate) {
       navigate(
         `${state.basePath ?? `/shop/${state.slug}`}/products/${encodeURIComponent(product.id)}`,
       );
-    const unavailable =
-      product.stock.tracked &&
-      product.stock.quantity < product.saleUnit.minimum;
+
+    const isInactive =
+      product.status === "INATIVO" || product.isAvailable === false;
+    const outOfStock =
+      product.stock?.tracked &&
+      product.stock.quantity < (product.saleUnit?.minimum || 1);
+    const unavailable = isInactive || outOfStock;
+
     const button = element("button", {
       class: "primary",
-      text: unavailable ? "Indisponível" : "Adicionar",
-      onclick: () => add(product, product.saleUnit.minimum),
+      text: isInactive
+        ? "Item Inativo"
+        : unavailable
+          ? "Indisponível"
+          : "Adicionar",
+      onclick: () => add(product, product.saleUnit?.minimum || 1),
     });
     button.disabled = unavailable;
-    button.prepend(icon("cart"));
+    if (!isInactive) {
+      button.prepend(icon("cart"));
+    }
+
+    const editBtn = element("button", {
+      type: "button",
+      class: "card-quick-edit",
+      title: "Editar produto",
+      text: "✏️",
+      onclick: (e) => {
+        e.stopPropagation();
+        if (state.productEntry) {
+          state.productEntry.open(product);
+        }
+      },
+    });
+
     return element(
       "article",
-      { class: compact ? "recommendation" : "product-card" },
+      { class: compact ? "recommendation" : `product-card ${isInactive ? "is-inactive" : ""}` },
       [
-        ...(!compact ? [favorite(product)] : []),
+        ...(!compact ? [favorite(product), editBtn] : []),
+        ...(isInactive
+          ? [
+              element("div", {
+                class: "badge-inactive",
+                text: "⚠️ INATIVO - Indisponível",
+              }),
+            ]
+          : []),
         element(
           "button",
           {
@@ -92,27 +131,123 @@ export function createCatalog(state, add, navigate) {
           element("small", {
             class: "muted",
             text:
-              categoryLabel(product) || product.tags.slice(0, 2).join(" · "),
+              categoryLabel(product) || product.tags?.slice(0, 2).join(" · "),
           }),
           element("strong", {
-            text: `${money(product.price.amountMinor)}${product.saleUnit.code === "UN" ? "" : " / " + product.saleUnit.label}`,
+            text: `${money(product.price.amountMinor)}${(product.saleUnit?.code || "UN") === "UN" ? "" : " / " + (product.saleUnit?.label || product.saleUnit?.code)}`,
           }),
           button,
         ]),
       ],
     );
   }
+
+  function renderStatusFilters() {
+    const bar = $("#statusFilters");
+    if (!bar) return;
+    const filters = [
+      { id: "ATIVO", label: "🟢 Ativos" },
+      { id: "TODOS", label: "📋 Todos" },
+      { id: "INATIVO", label: "🔴 Inativos" },
+    ];
+    bar.replaceChildren(
+      ...filters.map((f) =>
+        element("button", {
+          type: "button",
+          class: `status-filter-btn ${statusFilter === f.id ? "active" : ""}`,
+          text: f.label,
+          onclick: () => {
+            statusFilter = f.id;
+            renderStatusFilters();
+            render();
+          },
+        }),
+      ),
+    );
+  }
+
+  function renderStockToggle() {
+    const btn = $("#stockToggleBtn");
+    if (!btn) return;
+    const isTracked =
+      state.config?.inventory?.stockControlEnabled ??
+      state.products.some((p) => p.stock?.tracked);
+
+    if (isTracked) {
+      btn.textContent = "📦 Estoque: ATIVO (Controlando)";
+      btn.className = "stock-toggle-btn stock-active";
+      btn.title = "Clique para permitir venda livre sem controle de estoque";
+    } else {
+      btn.textContent = "⚡ Vender Tudo (Sem controle de estoque)";
+      btn.className = "stock-toggle-btn stock-disabled";
+      btn.title = "Clique para ativar controle de estoque dos produtos";
+    }
+
+    btn.onclick = async () => {
+      btn.disabled = true;
+      try {
+        const nextState = !isTracked;
+        await state.api("/inventory-settings", {
+          method: "PUT",
+          body: { stockControlEnabled: nextState },
+        });
+        notify(
+          nextState
+            ? "Controle de estoque ATIVADO: produtos sem saldo serão bloqueados."
+            : "Controle de estoque DESATIVADO: agora todos os produtos podem ser vendidos livremente!",
+        );
+        if (state.reloadProducts) {
+          await state.reloadProducts();
+        }
+      } catch (err) {
+        notify("Erro ao alternar estoque: " + err.message);
+      } finally {
+        btn.disabled = false;
+      }
+    };
+  }
+
   function render() {
+    renderStatusFilters();
+    renderStockToggle();
+
     const rawQuery = $("#search").value.trim();
-    const baseList = category
-      ? state.products.filter((p) => p.categories.includes(category))
-      : state.products;
+
+    // 1. Filtrar pelo status selecionado (ATIVO por padrão)
+    let baseList = state.products;
+    if (statusFilter === "ATIVO") {
+      baseList = baseList.filter(
+        (p) => p.status !== "INATIVO" && p.isAvailable !== false,
+      );
+    } else if (statusFilter === "INATIVO") {
+      baseList = baseList.filter(
+        (p) => p.status === "INATIVO" || p.isAvailable === false,
+      );
+    }
+
+    // 2. Filtrar pela categoria selecionada
+    if (category) {
+      baseList = baseList.filter(
+        (p) =>
+          p.categories?.includes(category) ||
+          p.categoryName === category ||
+          p.category === category,
+      );
+    }
 
     let list;
     if (rawQuery) {
-      list = searchProducts(baseList, rawQuery, state.config?.assistant?.synonyms || []).map(result => result.product);
+      list = searchProducts(
+        baseList,
+        rawQuery,
+        state.config?.assistant?.synonyms || [],
+      ).map((result) => result.product);
       if (!list.length && category) {
-        list = searchProducts(state.products, rawQuery, state.config?.assistant?.synonyms || []).map(result => result.product);
+        list = searchProducts(
+          state.products,
+          rawQuery,
+          state.config?.assistant?.synonyms || [],
+        ).map((result) => result.product);
       }
     } else {
       list = [...baseList];
@@ -128,27 +263,59 @@ export function createCatalog(state, add, navigate) {
                 : 0) || a.name.localeCompare(b.name, "pt-BR"),
       );
     }
+
     $("#products").replaceChildren(
       ...list.slice(0, pageSize).map((p) => card(p)),
     );
     if (!list.length) {
+      const msg =
+        statusFilter === "INATIVO"
+          ? "Nenhum produto inativo no catálogo."
+          : "Nenhum produto encontrado. Tente outra busca ou categoria.";
       $("#products").append(
         element("p", {
           class: "empty",
-          text: "Nenhum produto encontrado. Tente outra busca ou categoria.",
+          text: msg,
         }),
       );
     }
     $("#resultCount").textContent = `${list.length} produtos`;
     $("#loadMore").hidden = list.length <= pageSize;
   }
+
   function categories() {
+    // Pegar categorias que possuem produtos ATIVOS
+    const activeProducts = state.products.filter(
+      (p) => p.status !== "INATIVO" && p.isAvailable !== false,
+    );
+    const activeCategoryIds = new Set(
+      activeProducts.flatMap((p) => p.categories || []),
+    );
+    const activeCategoryNames = new Set(
+      activeProducts.map((p) => p.categoryName || p.category).filter(Boolean),
+    );
+
+    let categoryList = (state.config?.categories || []).filter(
+      (c) =>
+        c.isActive &&
+        (activeCategoryIds.has(c.id) || activeCategoryNames.has(c.name)),
+    );
+
+    // Se o catálogo for genérico e não tiver categories pré-configuradas:
+    if (!categoryList.length && activeCategoryNames.size > 0) {
+      categoryList = [...activeCategoryNames].map((name, index) => ({
+        id: name,
+        name,
+        isActive: true,
+        order: index,
+      }));
+    }
+
     const items = [
       { id: "", name: "Todas" },
-      ...state.config.categories
-        .filter((c) => c.isActive)
-        .sort((a, b) => a.order - b.order),
+      ...categoryList.sort((a, b) => a.order - b.order),
     ];
+
     $("#categories").replaceChildren(
       ...items.map((c) =>
         element("button", {
@@ -165,6 +332,7 @@ export function createCatalog(state, add, navigate) {
       ),
     );
   }
+
   function details(id) {
     const product = state.products.find((p) => p.id === id);
     const view = $("#productView");
@@ -182,12 +350,29 @@ export function createCatalog(state, add, navigate) {
       return;
     }
     document.title = `${product.name} · ${state.config.identity.name}`;
+
+    const isInactive =
+      product.status === "INATIVO" || product.isAvailable === false;
+    const outOfStock =
+      product.stock?.tracked &&
+      product.stock.quantity < (product.saleUnit?.minimum || 1);
+    const unavailable = isInactive || outOfStock;
+
+    if (isInactive) {
+      view.append(
+        element("div", {
+          class: "inactive-banner",
+          text: "⚠️ AVISO: Este produto está INATIVO no sistema e não está disponível para compra.",
+        }),
+      );
+    }
+
     const images = [
       {
         url: product.imageUrl || "/store-assets/placeholder.svg",
         alt: product.name,
       },
-      ...product.images,
+      ...(product.images || []),
     ].filter(
       (image, index, all) =>
         all.findIndex((i) => i.url === image.url) === index,
@@ -206,21 +391,46 @@ export function createCatalog(state, add, navigate) {
     );
     const quantity = element("input", {
       type: "number",
-      value: product.saleUnit.minimum,
-      min: product.saleUnit.minimum,
-      step: product.saleUnit.increment,
+      value: product.saleUnit?.minimum || 1,
+      min: product.saleUnit?.minimum || 1,
+      step: product.saleUnit?.increment || 1,
       "aria-label": "Quantidade",
     });
-    if (product.stock.tracked) {
+    if (product.stock?.tracked) {
       quantity.max = product.stock.quantity;
     }
     const specs = element("dl", { class: "specifications" });
-    for (const attribute of Object.values(product.specifications)) {
+    for (const attribute of Object.values(product.specifications || {})) {
       specs.append(
         element("dt", { text: attribute.label }),
         element("dd", { text: `${attribute.value} ${attribute.unit || ""}` }),
       );
     }
+
+    const buyButton = element(
+      "button",
+      {
+        class: "primary",
+        text: isInactive
+          ? "Item Inativo"
+          : unavailable
+            ? "Indisponível"
+            : "Adicionar à sacola",
+        onclick: () => add(product, Number(quantity.value)),
+        ...(unavailable ? { disabled: "" } : {}),
+      },
+      [!isInactive ? icon("cart") : null].filter(Boolean),
+    );
+
+    const editDetailBtn = element("button", {
+      type: "button",
+      class: "quiet",
+      text: "✏️ Editar Cadastro do Produto",
+      onclick: () => {
+        if (state.productEntry) state.productEntry.open(product);
+      },
+    });
+
     view.append(
       element("div", { class: "detail-grid" }, [
         element("div", { class: "detail-gallery" }, [
@@ -230,7 +440,7 @@ export function createCatalog(state, add, navigate) {
           ]),
           element(
             "div",
-            { class: "thumbnails", ...(images.length < 2 ? { hidden: '' } : {}) },
+            { class: "thumbnails", ...(images.length < 2 ? { hidden: "" } : {}) },
             images.map((image, index) =>
               element(
                 "button",
@@ -259,28 +469,13 @@ export function createCatalog(state, add, navigate) {
           element("p", { text: product.description }),
           element("div", { class: "purchase-row" }, [
             quantityControl(quantity),
-            element(
-              "button",
-              {
-                class: "primary",
-                text:
-                  product.stock.tracked &&
-                  product.stock.quantity < product.saleUnit.minimum
-                    ? "Indisponível"
-                    : "Adicionar à sacola",
-                onclick: () => add(product, Number(quantity.value)),
-                ...(product.stock.tracked &&
-                product.stock.quantity < product.saleUnit.minimum
-                  ? { disabled: "" }
-                  : {}),
-              },
-              [icon("cart")],
-            ),
+            buyButton,
           ]),
+          element("div", { style: "margin-top:10px;" }, [editDetailBtn]),
           element(
             "div",
             { class: "quick-specs" },
-            Object.values(product.specifications)
+            Object.values(product.specifications || {})
               .slice(0, 3)
               .map((attribute) =>
                 element("div", {}, [
@@ -303,6 +498,7 @@ export function createCatalog(state, add, navigate) {
         ]),
       ]),
     );
+
     const panels = [
       {
         id: "about",
@@ -316,7 +512,7 @@ export function createCatalog(state, add, navigate) {
           }),
         ],
       },
-      ...product.contentSections.map((section) => ({
+      ...(product.contentSections || []).map((section) => ({
         id: section.id,
         label: section.title,
         nodes: [
@@ -327,7 +523,7 @@ export function createCatalog(state, add, navigate) {
       {
         id: "specifications",
         label: "Especificações",
-        nodes: Object.keys(product.specifications).length
+        nodes: Object.keys(product.specifications || {}).length
           ? [specs]
           : [
               element("p", {
@@ -388,6 +584,7 @@ export function createCatalog(state, add, navigate) {
     select(0);
     view.append(tabs, content);
   }
+
   $("#search").addEventListener("input", () => {
     if ($("#catalogView").hidden) {
       navigate(state.basePath || "/");
@@ -400,5 +597,6 @@ export function createCatalog(state, add, navigate) {
     pageSize += 24;
     render();
   });
+
   return { render, categories, details, card };
 }

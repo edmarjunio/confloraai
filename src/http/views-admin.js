@@ -1,17 +1,7 @@
 const { renderFirebaseAuthScript } = require('./firebase-client');
 const { GOOGLE_ANALYTICS_TAG } = require('./analytics');
 
-const FETCH_SHIM_SCRIPT = `<script>
-  try {
-    var _origFetch = window.fetch;
-    Object.defineProperty(window, 'fetch', {
-      get: function() { return _origFetch; },
-      set: function(v) { _origFetch = v; },
-      configurable: true,
-      enumerable: true
-    });
-  } catch (_) {}
-</script>`;
+const FETCH_SHIM_SCRIPT = '';
 
 function renderAdminHtml(storeConfig) {
   const escape = value => String(value || '').replace(/[&<>"']/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[character]);
@@ -50,6 +40,7 @@ function renderAdminHtml(storeConfig) {
         </div>
         <button class="header-btn" onclick="openLoginModal()">Trocar operador</button>
         <button class="header-btn" onclick="logoutAdmin()" title="Sair da conta de operador/admin">Sair</button>
+        <a href="/admin-gerencial" class="header-btn" style="background:#0f172a; color:#fff;" title="Painel Gerencial Executivo & Looker Studio">📊 Painel Gerencial</a>
         <button class="header-btn notification-button" onclick="showTab('notifs')" aria-label="Notificações">Avisos <span id="notifBadge">0</span></button>
         <a href="/configuracoes" class="header-btn">Personalizar loja</a>
         <a href="/" class="header-btn catalog-link">Ver catálogo ↗</a>

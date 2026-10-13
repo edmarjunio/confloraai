@@ -64,6 +64,10 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
         typeof section.title === "string" &&
         typeof section.body === "string",
     ),
+    status:
+      String(item.status || "ATIVO").trim().toUpperCase() === "INATIVO"
+        ? "INATIVO"
+        : "ATIVO",
     isAvailable:
       String(item.status || "ATIVO")
         .trim()
@@ -79,12 +83,19 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
       increment: unit === "KG" ? 0.1 : 1,
     },
     salesCount: Number(item.salesCount) || 0,
+    cuidados_basicos: item.cuidados_basicos || item.cuidadosBasicos || "",
+    ambiente_ideal: item.ambiente_ideal || item.ambienteIdeal || "",
+    dicas_armazenamento: item.dicas_armazenamento || item.dicasArmazenamento || "",
+    durabilidade: item.durabilidade || "",
   };
 }
-function existingConfig(products, saved) {
+function existingConfig(products, saved, settings = { stockControlEnabled: true }) {
+  const activeProducts = products.filter(
+    (p) => p.isAvailable && p.status !== "INATIVO",
+  );
   if (saved?.config) {
     const result = structuredClone(saved.config);
-    for (const product of products) {
+    for (const product of activeProducts) {
       if (
         !result.categories.some(
           (category) => category.id === product.categories[0],
@@ -98,6 +109,9 @@ function existingConfig(products, saved) {
         });
       }
     }
+    result.inventory = {
+      stockControlEnabled: settings?.stockControlEnabled !== false,
+    };
     return result;
   }
   const config = structuredClone(profile);
@@ -110,12 +124,15 @@ function existingConfig(products, saved) {
   config.branding.colors.background = "#FFFFFF";
   config.categories = [
     ...new Map(
-      products.map((p) => [
+      activeProducts.map((p) => [
         p.categories[0],
         { id: p.categories[0], name: p.categoryName, isActive: true },
       ]),
     ).values(),
   ].map((c, order) => ({ ...c, order }));
+  config.inventory = {
+    stockControlEnabled: settings?.stockControlEnabled !== false,
+  };
   // Preserve the checkout settings already published by the existing storefront.
   config.checkout.pix = {
     key: process.env.STORE_PIX_KEY || "64999351616",
@@ -229,7 +246,7 @@ function installExistingStore(app, { repository, assistant }) {
     return records
       .map((item) => {
         const product = toProduct(item, settings);
-        const category = saved?.config.categories.find(
+        const category = saved?.config?.categories?.find(
           (category) =>
             category.name.toLocaleLowerCase() ===
             product.categoryName.toLocaleLowerCase(),
@@ -241,8 +258,7 @@ function installExistingStore(app, { repository, assistant }) {
       })
       .filter(
         (p) =>
-          p.isAvailable &&
-          !saved?.config.categories.some(
+          !saved?.config?.categories?.some(
             (category) =>
               p.categories.includes(category.id) && !category.isActive,
           ),
@@ -250,11 +266,19 @@ function installExistingStore(app, { repository, assistant }) {
   }
   app.get("/api/storefront/catalog", async (_req, res, next) => {
     try {
+      let settings = { stockControlEnabled: true };
+      if (repository.getInventorySettings) {
+        try {
+          settings = await repository.getInventorySettings();
+        } catch {
+          settings = { stockControlEnabled: true };
+        }
+      }
       const items = await products();
       res
         .set("Cache-Control", "no-store")
         .json({
-          config: existingConfig(items, await readSettings()),
+          config: existingConfig(items, await readSettings(), settings),
           products: items,
         });
     } catch (error) {
@@ -263,10 +287,25 @@ function installExistingStore(app, { repository, assistant }) {
   });
   app.post("/api/storefront/assistant", async (req, res, next) => {
     try {
-      const items = await products();
+      const allItems = await products();
+      const items = allItems.filter(
+        (p) => p.isAvailable && p.status !== "INATIVO",
+      );
       const saved = await readSettings();
-      const config = existingConfig(items, saved);
-      ensure(config.assistant.enabled && config.assistant.mode === "AI", "Use o guia de categorias: a consultoria por IA está desativada nesta loja.", 409);
+      let settings = { stockControlEnabled: true };
+      if (repository.getInventorySettings) {
+        try {
+          settings = await repository.getInventorySettings();
+        } catch {
+          settings = { stockControlEnabled: true };
+        }
+      }
+      const config = existingConfig(items, saved, settings);
+      ensure(
+        config.assistant.enabled && config.assistant.mode === "AI",
+        "Use o guia de categorias: a consultoria por IA está desativada nesta loja.",
+        409,
+      );
       res.json(
         await assistant.recommend(
           config,
@@ -279,6 +318,115 @@ function installExistingStore(app, { repository, assistant }) {
           req.body,
         ),
       );
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.get("/api/storefront/inventory-settings", async (_req, res, next) => {
+    try {
+      let settings = { stockControlEnabled: true };
+      if (repository.getInventorySettings) {
+        try {
+          settings = await repository.getInventorySettings();
+        } catch {
+          settings = { stockControlEnabled: true };
+        }
+      }
+      res.json(settings);
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.put("/api/storefront/inventory-settings", async (req, res, next) => {
+    try {
+      if (typeof req.body?.stockControlEnabled !== "boolean") {
+        return res
+          .status(400)
+          .json({ error: "Informe uma opção válida de controle de estoque." });
+      }
+      let result = req.body;
+      if (repository.saveInventorySettings) {
+        result = await repository.saveInventorySettings(req.body);
+      }
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post("/api/storefront/products", async (req, res, next) => {
+    try {
+      const data = req.body;
+      ensure(data && typeof data === "object", "Dados do produto inválidos.");
+      ensure(
+        typeof data.name === "string" && data.name.trim().length >= 2,
+        "Nome do produto é obrigatório.",
+      );
+      const product = {
+        id: data.id
+          ? String(data.id)
+          : `prod_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        name: String(data.name).trim(),
+        price: Number(data.price || 0),
+        stockQuantity: Number(data.stockQuantity ?? data.stock ?? 0),
+        status:
+          String(data.status || "ATIVO").trim().toUpperCase() === "INATIVO"
+            ? "INATIVO"
+            : "ATIVO",
+        unit: String(data.unit || "UN").trim().toUpperCase(),
+        category: String(data.category || "Geral").trim(),
+        subcategory: String(data.subcategory || "").trim(),
+        imageUrl: String(data.imageUrl || "").trim(),
+        description: String(data.description || "").trim(),
+        tags: Array.isArray(data.tags)
+          ? data.tags
+          : typeof data.tags === "string"
+            ? data.tags
+                .split(",")
+                .map((t) => t.trim())
+                .filter(Boolean)
+            : [],
+        updatedAt: new Date().toISOString(),
+      };
+      if (repository.saveProduct) {
+        await repository.saveProduct(product);
+      }
+      res.status(200).json({ success: true, product });
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post("/api/storefront/stock/quick-entry", async (req, res, next) => {
+    try {
+      const { productId, quantityAdded } = req.body;
+      ensure(productId, "ID do produto é obrigatório.");
+      const qty = Number(quantityAdded || 0);
+      ensure(qty > 0, "Quantidade deve ser maior que zero.");
+      let result = { success: true };
+      if (repository.quickAddStock) {
+        result = await repository.quickAddStock(productId, qty);
+      }
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.put("/api/storefront/products/:id/status", async (req, res, next) => {
+    try {
+      const { status } = req.body;
+      const targetStatus =
+        String(status).trim().toUpperCase() === "INATIVO"
+          ? "INATIVO"
+          : "ATIVO";
+      let existing;
+      if (repository.getProductById) {
+        existing = await repository.getProductById(req.params.id);
+      }
+      ensure(existing, "Produto não encontrado.", 404);
+      existing.status = targetStatus;
+      if (repository.saveProduct) {
+        await repository.saveProduct(existing);
+      }
+      res.json({ success: true, product: existing });
     } catch (error) {
       next(error);
     }
@@ -401,14 +549,25 @@ async function normalizeExistingCheckout(req, repository) {
   };
 }
 async function readStoreSettings(repository) {
-  return repository.firestore
-    ? (
-        await repository.firestore
-          .collection("store_settings")
-          .doc("storefront")
-          .get()
-      ).data()
-    : repository.storefrontSettings;
+  if (repository.firestore && !repository._firestoreClientDisabled) {
+    try {
+      const snap = await repository.firestore
+        .collection("store_settings")
+        .doc("storefront")
+        .get();
+      return snap.data();
+    } catch (err) {
+      if (
+        err.code === 7 ||
+        err.code === "permission-denied" ||
+        err.message?.includes("PERMISSION_DENIED") ||
+        err.message?.includes("Missing or insufficient")
+      ) {
+        repository._firestoreClientDisabled = true;
+      }
+    }
+  }
+  return repository.storefrontSettings;
 }
 module.exports = {
   installExistingStore,

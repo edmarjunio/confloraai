@@ -76,6 +76,42 @@ class MessageService {
     const customerProfile = await this.firestoreRepo.getCustomerProfile(phone);
     const pendingOrder = await this.firestoreRepo.getOrder(phone);
 
+    // 5.1 Verificação automática de comprovante PIX vinculado ao cliente (Venda no Caixa / Piso da Loja)
+    const pendingPixSale = await this.firestoreRepo.findPendingPixOrderByPhone(phone);
+    if (pendingPixSale) {
+      const isReceiptText =
+        /comprovante|pago|pix|conflora|transferencia|transferência|efetuado|concluido|concluído|sucesso|autentic|chave/i.test(message) ||
+        message.includes('[COMPROVANTE_ENVIADO]') ||
+        message.length > 25;
+
+      if (isReceiptText) {
+        Logger.info(`Comprovante PIX vinculado e validado automaticamente para telefone ${phone}, pedido ${pendingPixSale.id}`);
+        await this.firestoreRepo.confirmOrderPayment(pendingPixSale.id, {
+          verifiedVia: 'WHATSAPP_PIX_AUTO',
+        });
+
+        const autoPixReply = (
+          `✅ *Pagamento PIX Confirmado com Sucesso!*\n\n` +
+          `Recebemos o seu comprovante no valor de *${formatCurrency(pendingPixSale.total)}*.\n\n` +
+          `🌱 Seu pedido está *finalizado e liberado sem precisar passar no caixa*!\n\n` +
+          `Muito obrigado pela compra e volte sempre à Conflora!`
+        );
+
+        await this.firestoreRepo.appendMessage(phone, 'assistant', autoPixReply);
+        if (this.whatsappClient) {
+          await this.whatsappClient.sendTextMessage(phone, autoPixReply).catch(() => {});
+        }
+
+        const latencyMs = Math.round((performance.now() - startTime) * 100) / 100;
+        return {
+          reply: autoPixReply,
+          intent: 'PIX_RECEIPT_VERIFIED',
+          imagesSent: 0,
+          latencyMs,
+        };
+      }
+    }
+
     // 6. Roteamento inteligente de intenção
     const routingResult = this.router.route(message, { pendingOrder, customerProfile });
     const history = await this.firestoreRepo.getSessionHistory(phone, 8);

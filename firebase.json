@@ -1,15 +1,51 @@
 {
   "hosting": {
     "site": "confloraai",
-    "public": "firebase-hosting",
-    "ignore": ["**/.*"],
+    "public": "public",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
     "rewrites": [
       {
-        "source": "**",
+        "source": "/api/**",
         "run": {
           "serviceId": "confloraai",
           "region": "southamerica-east1"
         }
+      },
+      {
+        "source": "/caixa",
+        "run": {
+          "serviceId": "confloraai",
+          "region": "southamerica-east1"
+        }
+      },
+      {
+        "source": "/pdv",
+        "run": {
+          "serviceId": "confloraai",
+          "region": "southamerica-east1"
+        }
+      },
+      {
+        "source": "/admin",
+        "run": {
+          "serviceId": "confloraai",
+          "region": "southamerica-east1"
+        }
+      },
+      {
+        "source": "/admin-gerencial",
+        "run": {
+          "serviceId": "confloraai",
+          "region": "southamerica-east1"
+        }
+      },
+      {
+        "source": "**",
+        "destination": "/storefront/index.html"
       }
     ]
   }
