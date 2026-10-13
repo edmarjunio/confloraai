@@ -4,14 +4,26 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="refresh" content="0; url=/storefront/index.html">
-  <title>Conflora Horta e Viveiro & Agromadeiras</title>
+  <title>Conflora Horta e Viveiro</title>
   <script>
-    window.location.replace('/storefront/index.html');
+    (function() {
+      try {
+        var _fetch = typeof window !== 'undefined' ? window.fetch : null;
+        var _current = _fetch ? _fetch.bind(window) : null;
+        var desc = {
+          get: function() { return _current; },
+          set: function(fn) { _current = fn; },
+          configurable: true,
+          enumerable: true
+        };
+        try { Object.defineProperty(window, 'fetch', desc); } catch (_) {}
+        try { if (typeof Window !== 'undefined' && Window.prototype) Object.defineProperty(Window.prototype, 'fetch', desc); } catch (_) {}
+        try { if (typeof window !== 'undefined' && window.__proto__) Object.defineProperty(window.__proto__, 'fetch', desc); } catch (_) {}
+      } catch (_) {}
+    })();
   </script>
 </head>
 <body>
-  <p style="font-family:sans-serif; text-align:center; padding:40px; color:#2e9348;">
-    Carregando Catálogo Conflora...
-  </p>
+  <script>location.replace('/storefront/index.html');</script>
 </body>
 </html>

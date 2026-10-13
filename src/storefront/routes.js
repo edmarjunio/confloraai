@@ -51,8 +51,16 @@ function installStorefront(app, { express, firestore, repository, assistant }) {
       next(error);
     }
   });
-  app.use(["/store-assets/v2", "/store-assets/v3", "/store-assets/v4"], express.static(assets, { maxAge: "1h" }));
-  app.use("/store-assets", express.static(assets, { maxAge: "1h" }));
+  const staticOptions = {
+    setHeaders: (res) => {
+      res.setHeader("Cache-Control", "no-cache, must-revalidate");
+    },
+  };
+  app.use(
+    ["/store-assets/v2", "/store-assets/v3", "/store-assets/v4", "/store-assets/v5"],
+    express.static(assets, staticOptions)
+  );
+  app.use("/store-assets", express.static(assets, staticOptions));
   app.get(
     ["/shop/:slug", "/shop/:slug/products/:productId", "/shop/:slug/admin"],
     async (req, res, next) => {
