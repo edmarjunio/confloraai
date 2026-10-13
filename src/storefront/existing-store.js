@@ -65,18 +65,11 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
         typeof section.title === "string" &&
         typeof section.body === "string",
     ),
-<<<<<<< HEAD
     isAvailable: productStatus(item) === "ATIVO",
-=======
     status:
       String(item.status || "ATIVO").trim().toUpperCase() === "INATIVO"
         ? "INATIVO"
         : "ATIVO",
-    isAvailable:
-      String(item.status || "ATIVO")
-        .trim()
-        .toUpperCase() !== "INATIVO",
->>>>>>> 8f8702fbba9b55a5edb07c01e81216435e44e298
     stock: {
       tracked: stockControlEnabled,
       quantity: Math.max(0, Number(item.stockQuantity ?? item.estoque ?? 0)),
@@ -288,11 +281,7 @@ function installExistingStore(app, { repository, assistant }) {
       res
         .set("Cache-Control", "no-store")
         .json({
-<<<<<<< HEAD
-          config,
-=======
           config: existingConfig(items, await readSettings(), settings),
->>>>>>> 8f8702fbba9b55a5edb07c01e81216435e44e298
           products: items,
         });
     } catch (error) {
