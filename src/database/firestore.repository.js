@@ -3,6 +3,7 @@ const { URL } = require('node:url');
 const { safeUser } = require('../security/web-session');
 const config = require('../config/env');
 const Logger = require('../shared/logger');
+const { productStatus } = require('../catalog/product-status');
 const {
   generateStandardTags,
   generateStandardDescription,
@@ -913,6 +914,13 @@ class FirestoreRepository {
     }
 
     const dataWithTs = { ...product, updatedAt: new Date().toISOString() };
+    if (product.status !== undefined || product.STATUS !== undefined) {
+      const status = productStatus(product);
+      if (!['ATIVO', 'INATIVO'].includes(status)) {
+        throw new Error('STATUS deve ser ATIVO ou INATIVO.');
+      }
+      Object.assign(dataWithTs, { status, STATUS: status });
+    }
     if (product.name !== undefined) {Object.assign(dataWithTs, { canonicalName: product.name, descricao: product.name, 'DESCRIÇÃO': product.name });}
     if (product.price !== undefined) {Object.assign(dataWithTs, { valor_num: product.price, VALOR: product.price });}
     if (product.category !== undefined) {Object.assign(dataWithTs, { categoria: product.category, CATEGORIA: product.category });}

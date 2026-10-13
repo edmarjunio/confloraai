@@ -1,5 +1,6 @@
 const profile = require("../../config/stores/conflora.example.json");
 const { rankProductSales } = require("../catalog/product-sales");
+const { productStatus } = require("../catalog/product-status");
 const {
   ensure,
   digest,
@@ -64,10 +65,7 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
         typeof section.title === "string" &&
         typeof section.body === "string",
     ),
-    isAvailable:
-      String(item.status || "ATIVO")
-        .trim()
-        .toUpperCase() !== "INATIVO",
+    isAvailable: productStatus(item) === "ATIVO",
     stock: {
       tracked: stockControlEnabled,
       quantity: Math.max(0, Number(item.stockQuantity ?? item.estoque ?? 0)),
@@ -251,10 +249,15 @@ function installExistingStore(app, { repository, assistant }) {
   app.get("/api/storefront/catalog", async (_req, res, next) => {
     try {
       const items = await products();
+      const config = existingConfig(items, await readSettings());
+      const visibleCategories = new Set(items.flatMap((item) => item.categories));
+      config.categories = config.categories.filter(
+        (category) => category.isActive && visibleCategories.has(category.id),
+      );
       res
         .set("Cache-Control", "no-store")
         .json({
-          config: existingConfig(items, await readSettings()),
+          config,
           products: items,
         });
     } catch (error) {

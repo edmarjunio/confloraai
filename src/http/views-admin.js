@@ -1432,7 +1432,7 @@ function renderAdminHtml(storeConfig) {
     // 10. CADASTRO DE PRODUTOS
     let productStatusFilter = 'ATIVO';
     function productIsInactive(product) {
-      return String(product.status || 'ATIVO').trim().toUpperCase() === 'INATIVO';
+      return String(product.status || product.STATUS || 'ATIVO').trim().toUpperCase() !== 'ATIVO';
     }
     function setProductStatusFilter(status) {
       productStatusFilter = status;

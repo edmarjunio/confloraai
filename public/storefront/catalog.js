@@ -15,6 +15,9 @@ export function createCatalog(state, add, navigate) {
   const favoriteKey = `store:${state.slug}:favorites`;
   const saved = storageGet(favoriteKey, []);
   const favorites = new Set(Array.isArray(saved) ? saved : []);
+  const visibleProducts = () => state.products.filter((product) =>
+    product.isAvailable && !state.config.categories.some((item) =>
+      product.categories.includes(item.id) && !item.isActive));
   function favorite(product) {
     const button = element(
       "button",
@@ -103,16 +106,18 @@ export function createCatalog(state, add, navigate) {
     );
   }
   function render() {
+    categories();
+    const products = visibleProducts();
     const rawQuery = $("#search").value.trim();
     const baseList = category
-      ? state.products.filter((p) => p.categories.includes(category))
-      : state.products;
+      ? products.filter((p) => p.categories.includes(category))
+      : products;
 
     let list;
     if (rawQuery) {
       list = searchProducts(baseList, rawQuery, state.config?.assistant?.synonyms || []).map(result => result.product);
       if (!list.length && category) {
-        list = searchProducts(state.products, rawQuery, state.config?.assistant?.synonyms || []).map(result => result.product);
+        list = searchProducts(products, rawQuery, state.config?.assistant?.synonyms || []).map(result => result.product);
       }
     } else {
       list = [...baseList];
@@ -143,10 +148,12 @@ export function createCatalog(state, add, navigate) {
     $("#loadMore").hidden = list.length <= pageSize;
   }
   function categories() {
+    const populated = new Set(visibleProducts().flatMap((product) => product.categories));
+    if (!populated.has(category)) category = "";
     const items = [
       { id: "", name: "Todas" },
       ...state.config.categories
-        .filter((c) => c.isActive)
+        .filter((c) => c.isActive && populated.has(c.id))
         .sort((a, b) => a.order - b.order),
     ];
     $("#categories").replaceChildren(
@@ -166,7 +173,7 @@ export function createCatalog(state, add, navigate) {
     );
   }
   function details(id) {
-    const product = state.products.find((p) => p.id === id);
+    const product = visibleProducts().find((p) => p.id === id);
     const view = $("#productView");
     view.replaceChildren(
       element("button", {
