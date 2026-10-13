@@ -17,13 +17,7 @@ export function createCatalog(state, add, navigate) {
   const favoriteKey = `store:${state.slug}:favorites`;
   const saved = storageGet(favoriteKey, []);
   const favorites = new Set(Array.isArray(saved) ? saved : []);
-<<<<<<< HEAD
-  const visibleProducts = () => state.products.filter((product) =>
-    product.isAvailable && !state.config.categories.some((item) =>
-      product.categories.includes(item.id) && !item.isActive));
-=======
 
->>>>>>> 8f8702fbba9b55a5edb07c01e81216435e44e298
   function favorite(product) {
     const button = element(
       "button",
@@ -214,14 +208,6 @@ export function createCatalog(state, add, navigate) {
   }
 
   function render() {
-<<<<<<< HEAD
-    categories();
-    const products = visibleProducts();
-    const rawQuery = $("#search").value.trim();
-    const baseList = category
-      ? products.filter((p) => p.categories.includes(category))
-      : products;
-=======
     renderStatusFilters();
     renderStockToggle();
 
@@ -248,7 +234,6 @@ export function createCatalog(state, add, navigate) {
           p.category === category,
       );
     }
->>>>>>> 8f8702fbba9b55a5edb07c01e81216435e44e298
 
     let list;
     if (rawQuery) {
@@ -258,15 +243,11 @@ export function createCatalog(state, add, navigate) {
         state.config?.assistant?.synonyms || [],
       ).map((result) => result.product);
       if (!list.length && category) {
-<<<<<<< HEAD
-        list = searchProducts(products, rawQuery, state.config?.assistant?.synonyms || []).map(result => result.product);
-=======
         list = searchProducts(
           state.products,
           rawQuery,
           state.config?.assistant?.synonyms || [],
         ).map((result) => result.product);
->>>>>>> 8f8702fbba9b55a5edb07c01e81216435e44e298
       }
     } else {
       list = [...baseList];
@@ -303,15 +284,6 @@ export function createCatalog(state, add, navigate) {
   }
 
   function categories() {
-<<<<<<< HEAD
-    const populated = new Set(visibleProducts().flatMap((product) => product.categories));
-    if (!populated.has(category)) category = "";
-    const items = [
-      { id: "", name: "Todas" },
-      ...state.config.categories
-        .filter((c) => c.isActive && populated.has(c.id))
-        .sort((a, b) => a.order - b.order),
-=======
     // Pegar categorias que possuem produtos ATIVOS
     const activeProducts = state.products.filter(
       (p) => p.status !== "INATIVO" && p.isAvailable !== false,
@@ -342,7 +314,6 @@ export function createCatalog(state, add, navigate) {
     const items = [
       { id: "", name: "Todas" },
       ...categoryList.sort((a, b) => a.order - b.order),
->>>>>>> 8f8702fbba9b55a5edb07c01e81216435e44e298
     ];
 
     $("#categories").replaceChildren(
@@ -363,7 +334,7 @@ export function createCatalog(state, add, navigate) {
   }
 
   function details(id) {
-    const product = visibleProducts().find((p) => p.id === id);
+    const product = state.products.find((p) => p.id === id);
     const view = $("#productView");
     view.replaceChildren(
       element("button", {
