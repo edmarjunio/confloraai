@@ -6,6 +6,21 @@ function renderCaixaHtml() {
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
+  <script>
+    (function() {
+      try {
+        if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
+          var _f = window.fetch.bind(window);
+          Object.defineProperty(window, 'fetch', {
+            value: _f,
+            writable: true,
+            configurable: true,
+            enumerable: true
+          });
+        }
+      } catch (_) {}
+    })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Conflora — Caixa & Frente de Loja</title>
   <style>

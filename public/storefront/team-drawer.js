@@ -141,22 +141,22 @@ export function initTeamDrawer() {
       if (res.ok) {
         const users = await res.json();
         if (Array.isArray(users) && users.length > 0) {
-          selectUser.innerHTML = users.map(u => \`
-            <option value="\${u.id}" data-name="\${u.name}" data-role="\${u.role}" \${u.name === currentOperator.name ? 'selected' : ''}>
-              \${u.role === 'ADMIN' ? '👑' : '👤'} \${u.name} (\${u.role})
+          selectUser.innerHTML = users.map(u => `
+            <option value="${u.id}" data-name="${u.name}" data-role="${u.role}" ${u.name === currentOperator.name ? 'selected' : ''}>
+              ${u.role === 'ADMIN' ? '👑' : '👤'} ${u.name} (${u.role})
             </option>
-          \`).join('');
+          `).join('');
           return;
         }
       }
     } catch (_) {}
 
     // Fallback padrão de operadores
-    selectUser.innerHTML = \`
+    selectUser.innerHTML = `
       <option value="op-caixa-1" data-name="Atendente Caixa" data-role="CAIXA">👤 Atendente Caixa (CAIXA)</option>
       <option value="op-caixa-2" data-name="Edmar Júnio" data-role="CAIXA">👤 Edmar Júnio (CAIXA)</option>
       <option value="op-admin" data-name="Administrador Conflora" data-role="ADMIN">👑 Administrador (ADMIN)</option>
-    \`;
+    `;
   }
 
   if (confirmOpBtn && selectUser) {
