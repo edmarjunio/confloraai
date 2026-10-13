@@ -23,15 +23,17 @@ const { renderHomeHtml, renderAdminHtml, renderCaixaHtml, renderAdminGerencialHt
 const FETCH_SHIM_SCRIPT = `<script>
   (function() {
     try {
-      if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
-        var _f = window.fetch.bind(window);
-        Object.defineProperty(window, 'fetch', {
-          value: _f,
-          writable: true,
-          configurable: true,
-          enumerable: true
-        });
-      }
+      var _fetch = typeof window !== 'undefined' ? window.fetch : null;
+      var _current = _fetch ? _fetch.bind(window) : null;
+      var desc = {
+        get: function() { return _current; },
+        set: function(fn) { _current = fn; },
+        configurable: true,
+        enumerable: true
+      };
+      try { Object.defineProperty(window, 'fetch', desc); } catch (_) {}
+      try { if (typeof Window !== 'undefined' && Window.prototype) Object.defineProperty(Window.prototype, 'fetch', desc); } catch (_) {}
+      try { if (typeof window !== 'undefined' && window.__proto__) Object.defineProperty(window.__proto__, 'fetch', desc); } catch (_) {}
     } catch (_) {}
   })();
 </script>`;
