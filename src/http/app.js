@@ -20,7 +20,21 @@ const { SignatureValidator } = require('../security/signature.validator');
 const { SystemStatusService } = require('../services/system-status.service');
 const { renderHomeHtml, renderAdminHtml, renderCaixaHtml, renderAdminGerencialHtml } = require('./views');
 
-const FETCH_SHIM_SCRIPT = '';
+const FETCH_SHIM_SCRIPT = `<script>
+  (function() {
+    try {
+      if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
+        var _f = window.fetch.bind(window);
+        Object.defineProperty(window, 'fetch', {
+          value: _f,
+          writable: true,
+          configurable: true,
+          enumerable: true
+        });
+      }
+    } catch (_) {}
+  })();
+</script>`;
 
 function renderPrivacyPolicyHtml() {
   return `<!DOCTYPE html>

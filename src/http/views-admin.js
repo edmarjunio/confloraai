@@ -1,7 +1,21 @@
 const { renderFirebaseAuthScript } = require('./firebase-client');
 const { GOOGLE_ANALYTICS_TAG } = require('./analytics');
 
-const FETCH_SHIM_SCRIPT = '';
+const FETCH_SHIM_SCRIPT = `<script>
+  (function() {
+    try {
+      if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
+        var _f = window.fetch.bind(window);
+        Object.defineProperty(window, 'fetch', {
+          value: _f,
+          writable: true,
+          configurable: true,
+          enumerable: true
+        });
+      }
+    } catch (_) {}
+  })();
+</script>`;
 
 function renderAdminHtml(storeConfig) {
   const escape = value => String(value || '').replace(/[&<>"']/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[character]);
