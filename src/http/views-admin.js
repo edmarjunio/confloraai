@@ -13,24 +13,30 @@ const FETCH_SHIM_SCRIPT = `<script>
   } catch (_) {}
 </script>`;
 
-function renderAdminHtml() {
+function renderAdminHtml(storeConfig) {
+  const escape = value => String(value || '').replace(/[&<>"']/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[character]);
+  const name = escape(storeConfig?.identity.name || 'Administração');
+  const logo = escape(storeConfig?.branding.logoUrl || '/store-assets/placeholder.svg');
+  const colors = storeConfig?.branding.colors || {};
+  const color = (key, fallback) => /^#[0-9a-f]{6}$/i.test(colors[key]) ? colors[key] : fallback;
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Conflora AI — Painel Operacional, Caixa, Analytics & Equipe</title>
+  <title>${name} — Administração</title>
   ${GOOGLE_ANALYTICS_TAG}
   ${FETCH_SHIM_SCRIPT}
 
   <link rel="stylesheet" href="/store-assets/admin-shell-v1.css">
+  <style>:root { --primary: ${color('primary','#2e9348')}; --primary-dark: ${color('primary','#2e9348')}; --accent: ${color('accent','#f5c518')}; --bg: ${color('background','#f8f9fa')}; } body { color: ${color('text','#1a1a1a')}; }</style>
 
 </head>
 <body>
   <div class="container">
     <header>
       <div class="admin-brand">
-        <a href="/" aria-label="Voltar ao catálogo"><img src="/store-assets/brands/conflora-logo.png" alt="Conflora Horta e Viveiro" /></a>
+        <a href="/" aria-label="Voltar ao catálogo"><img src="${logo}" alt="${name}" /></a>
         <div class="admin-heading"><h1>Administração</h1>
         <p>Catálogo, pedidos e operação da loja</p></div>
       </div>
@@ -45,6 +51,7 @@ function renderAdminHtml() {
         <button class="header-btn" onclick="openLoginModal()">Trocar operador</button>
         <button class="header-btn" onclick="logoutAdmin()" title="Sair da conta de operador/admin">Sair</button>
         <button class="header-btn notification-button" onclick="showTab('notifs')" aria-label="Notificações">Avisos <span id="notifBadge">0</span></button>
+        <a href="/configuracoes" class="header-btn">Personalizar loja</a>
         <a href="/" class="header-btn catalog-link">Ver catálogo ↗</a>
       </div>
     </header>

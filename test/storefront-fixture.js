@@ -9,6 +9,7 @@ async function seedStores(repo) {
     ["pets", "Casa Pet", "Pet shop", "Ração para gatos"],
   ]) {
     const config = defaultStoreConfig(slug, name);
+    config.assistant.mode = "AI";
     config.identity.niche = niche;
     config.identity.city = "Mineiros";
     config.identity.region = "GO";

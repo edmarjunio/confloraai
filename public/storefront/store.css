@@ -1578,3 +1578,7 @@ dialog .toast {
     padding: 16px;
   }
 }
+.guided-choices { flex-wrap: wrap; overflow: visible; padding: 8px 0; }
+.guided-results { display: grid; gap: 6px; min-width: 0; }
+.guided-detail, .guided-more { margin: 0 0 12px; padding: 10px; border: 1px solid var(--primary-color); border-radius: 10px; background: white; color: var(--text-color); }
+.messages .bubble { white-space: pre-line; overflow-wrap: anywhere; }

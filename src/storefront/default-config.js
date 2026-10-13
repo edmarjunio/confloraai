@@ -37,6 +37,8 @@ function defaultStoreConfig(slug, name = "Minha Loja") {
       pickup: { enabled: true, label: "Retirada no local", address: "" },
     },
     assistant: {
+      mode: "GUIDED",
+      synonyms: [],
       enabled: true,
       displayName: "Assistente da loja",
       welcomeMessage: "Conte o que você procura. Vamos encontrar uma opção?",

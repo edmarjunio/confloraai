@@ -51,6 +51,17 @@ function nonNegative(value, integer = false) {
   );
   return value;
 }
+function brandImage(value) {
+  if (typeof value === "string" && value.startsWith("data:")) {
+    ensure(
+      value.length <= 250000 &&
+        /^data:image\/(png|jpeg|webp);base64,[a-zA-Z0-9+/]+=*$/.test(value),
+      "Logo inválida. Use PNG, JPEG ou WebP até 180 KB após otimização.",
+    );
+    return value;
+  }
+  return imageUrl(value);
+}
 function validateConfig(input, tenantId) {
   ensure(input && typeof input === "object", "Configuração inválida.");
   const identity = input.identity || {};
@@ -116,8 +127,8 @@ function validateConfig(input, tenantId) {
       currency: "BRL",
     },
     branding: {
-      logoUrl: imageUrl(input.branding?.logoUrl),
-      iconUrl: imageUrl(input.branding?.iconUrl),
+      logoUrl: brandImage(input.branding?.logoUrl),
+      iconUrl: brandImage(input.branding?.iconUrl),
       colors: Object.fromEntries(
         ["primary", "accent", "text", "background"].map((k) => [k, colors[k]]),
       ),
@@ -146,6 +157,19 @@ function validateConfig(input, tenantId) {
       },
     },
     assistant: {
+      mode: input.assistant?.mode === "AI" ? "AI" : "GUIDED",
+      synonyms: (Array.isArray(input.assistant?.synonyms)
+        ? input.assistant.synonyms
+        : []
+      )
+        .slice(0, 100)
+        .map((group) => {
+          ensure(
+            Array.isArray(group) && group.length <= 20,
+            "Grupo de sinônimos inválido.",
+          );
+          return group.map((alias) => text(alias, 100, true));
+        }),
       enabled: !!input.assistant?.enabled,
       displayName: text(input.assistant?.displayName, 100) || "Assistente",
       welcomeMessage:
@@ -196,14 +220,13 @@ function validateProduct(input, tenantId, config) {
       .map((i) => ({ url: imageUrl(i.url, tenantId), alt: text(i.alt, 150) })),
     categories,
     tags: (input.tags || []).slice(0, 30).map((t) => text(t, 100)),
+    subcategoryName: text(input.subcategoryName, 100),
     specifications,
-    contentSections: (input.contentSections || [])
-      .slice(0, 15)
-      .map((s) => ({
-        id: identifier(s.id),
-        title: text(s.title, 100, true),
-        body: text(s.body, 5000),
-      })),
+    contentSections: (input.contentSections || []).slice(0, 15).map((s) => ({
+      id: identifier(s.id),
+      title: text(s.title, 100, true),
+      body: text(s.body, 5000),
+    })),
     isAvailable: input.isAvailable !== false,
     stock: {
       tracked: !!input.stock?.tracked,

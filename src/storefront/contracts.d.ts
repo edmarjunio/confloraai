@@ -36,6 +36,8 @@ export interface StoreConfig {
     completionMode: "IN_APP" | "WHATSAPP_HANDOFF";
   };
   assistant: {
+    mode?: "GUIDED" | "AI";
+    synonyms?: string[][];
     enabled: boolean;
     displayName: string;
     welcomeMessage: string;
@@ -53,6 +55,9 @@ export interface Product {
   images: { url: string; alt: string }[];
   categories: string[];
   tags: string[];
+  subcategoryName?: string;
+  searchAliases?: string[];
+  navigationPath?: string[];
   specifications: Record<
     string,
     { label: string; value: string | number | boolean; unit?: string }

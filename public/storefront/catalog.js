@@ -7,7 +7,7 @@ import {
   storageSet,
 } from "./ui.js";
 import { icon } from "./icons.js";
-import { searchProducts } from "./guided-search.js";
+import { searchProducts } from "./guided-search.mjs";
 
 export function createCatalog(state, add, navigate) {
   let category = "";
@@ -110,15 +110,9 @@ export function createCatalog(state, add, navigate) {
 
     let list;
     if (rawQuery) {
-      list = searchProducts(baseList, rawQuery, {
-        synonyms: state.config?.assistant?.synonyms,
-        limit: 1000,
-      });
+      list = searchProducts(baseList, rawQuery, state.config?.assistant?.synonyms || []).map(result => result.product);
       if (!list.length && category) {
-        list = searchProducts(state.products, rawQuery, {
-          synonyms: state.config?.assistant?.synonyms,
-          limit: 1000,
-        });
+        list = searchProducts(state.products, rawQuery, state.config?.assistant?.synonyms || []).map(result => result.product);
       }
     } else {
       list = [...baseList];

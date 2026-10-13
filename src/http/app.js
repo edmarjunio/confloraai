@@ -937,9 +937,9 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
   });
 
   // Home / Cardápio Digital Conflora
-  app.get(['/', '/products/:productId'], (req, res) => {
+  app.get(['/', '/products/:productId', '/configuracoes'], (req, res) => {
     if (process.env.STOREFRONT_STORE_SLUG) {
-      const detail = req.params.productId ? '/products/' + encodeURIComponent(req.params.productId) : '';
+      const detail = req.path === '/configuracoes' ? '/admin' : req.params.productId ? '/products/' + encodeURIComponent(req.params.productId) : '';
       return res.redirect('/shop/' + encodeURIComponent(process.env.STOREFRONT_STORE_SLUG) + detail);
     }
     res.setHeader('Cache-Control', 'no-store');
@@ -954,12 +954,15 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
   });
 
   // Painel de Administração, Frente de Caixa & Estoque
-  app.get('/admin', (_req, res) => {
+  app.get('/admin', async (_req, res, next) => {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
-    res.status(200).send(renderAdminHtml());
+    try {
+      const { readStoreSettings, existingConfig } = require('../storefront/existing-store');
+      res.status(200).send(renderAdminHtml(existingConfig([], await readStoreSettings(messageService.firestoreRepo))));
+    } catch (error) { next(error); }
   });
 
   // Simulador WhatsApp Oficial
@@ -1222,7 +1225,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       });
 
       // Notificação ao Proprietário via WhatsApp se o client estiver ativo
-      const ownerNumber = process.env.OWNER_WHATSAPP_NUMBER || '5564999351616';
+      const ownerNumber = req.storeConfig?.checkout.contactPhone || process.env.OWNER_WHATSAPP_NUMBER || '5564999351616';
       if (messageService.whatsappClient && ownerNumber) {
         try {
           const itemsListText = items
@@ -1245,7 +1248,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
           }
 
           const notificationText = (
-            `🔔 *NOVO PEDIDO FECHADO - CONFLORA* 🔔\n\n` +
+            `🔔 *NOVO PEDIDO - ${req.storeConfig?.identity.name || 'LOJA'}* 🔔\n\n` +
             `📦 *Pedido:* #${order.id}\n` +
             `📅 *Data:* ${new Date().toLocaleString('pt-BR')}\n\n` +
             `👤 *Cliente:* ${customerName}\n` +

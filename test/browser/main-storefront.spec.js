@@ -3,6 +3,11 @@ const { test, expect } = require("@playwright/test");
 test("chat presents a friendly error when an upstream proxy returns HTML", async ({
   page,
 }) => {
+  await page.route("**/api/storefront/catalog", async route => {
+    const response = await route.fetch(); const data = await response.json();
+    data.config.assistant.mode = "AI";
+    await route.fulfill({ json: data });
+  });
   await page.route("**/api/storefront/assistant", (route) =>
     route.fulfill({
       status: 502,

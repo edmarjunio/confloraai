@@ -36,6 +36,11 @@ export function createExistingApi() {
     };
   }
   return async (route, options = {}) => {
+    if (route === "/admin/config") {
+      const result = await request("/api/storefront/admin/config", options);
+      catalogPromise = null;
+      return result;
+    }
     if (route === "/config" || route === "/products") {
       catalogPromise ||= request("/api/storefront/catalog");
       const result = await catalogPromise;

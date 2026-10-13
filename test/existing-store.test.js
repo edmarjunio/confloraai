@@ -11,7 +11,7 @@ test("main storefront API returns safe JSON when a service fails", async (t) => 
   const app = express();
   app.use(express.json());
   installExistingStore(app, {
-    repository: { getAllProducts: async () => [] },
+    repository: { getAllProducts: async () => [], storefrontSettings: {config:{ ...require('../config/stores/conflora.example.json'), assistant: {enabled:true,mode:'AI'} }} },
     assistant: {
       recommend: async () => {
         throw new Error("private provider details");

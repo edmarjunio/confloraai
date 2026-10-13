@@ -119,6 +119,30 @@ async function appContext(t) {
   return { repo, base, request, login };
 }
 
+test("store branding settings require admin, validate data, persist and reject stale updates", async (t) => {
+  const { request, login } = await appContext(t);
+  assert.equal((await request('/api/storefront/admin/config')).status,401);
+  const admin = await login('usr-edmar','1234');
+  const cashier = await login('usr-caixa1','0000');
+  assert.equal((await request('/api/storefront/admin/config',undefined,cashier)).status,403);
+  const original = await (await request('/api/storefront/admin/config',undefined,admin)).json();
+  const config=structuredClone(original.config);
+  config.identity.name='Loja de Cosméticos';
+  config.identity.city='São Paulo';
+  config.branding.colors.primary='#2345ab';
+  config.assistant.mode='GUIDED';
+  config.assistant.synonyms=[['batom','lipstick']];
+  const invalid=structuredClone(config); invalid.branding.logoUrl='javascript:alert(1)';
+  assert.equal((await request('/api/storefront/admin/config',{config:invalid},admin,'PUT')).status,400);
+  assert.equal((await request('/api/storefront/admin/config',{config},admin,'PUT')).status,200);
+  assert.equal((await request('/api/storefront/admin/config',{config},admin,'PUT')).status,409);
+  const result=await (await request('/api/storefront/catalog')).json();
+  assert.equal(result.config.identity.name,'Loja de Cosméticos');
+  assert.equal(result.config.branding.colors.primary,'#2345ab');
+  assert.deepEqual(result.config.assistant.synonyms,[['batom','lipstick']]);
+  assert.equal((await request('/api/storefront/assistant',{message:'batom'})).status,409);
+});
+
 test("inventory settings are admin-only and control stock deduction", async (t) => {
   const { repo, request, login } = await appContext(t);
   const admin = await login("usr-edmar", "1234");

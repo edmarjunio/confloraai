@@ -4,7 +4,7 @@ const { spawnSync } = require("node:child_process");
 
 for (const directory of ["src/storefront", "public/storefront"]) {
   for (const entry of fs.readdirSync(directory)) {
-    if (!entry.endsWith(".js")) {
+    if (!/\.m?js$/.test(entry)) {
       continue;
     }
     const file = path.join(directory, entry);

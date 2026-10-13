@@ -26,11 +26,13 @@ export function createAdmin(state) {
     }
     const tabs = element("nav", { class: "admin-tabs" });
     const panel = element("section", { class: "admin-panel" });
-    for (const [label, action] of [
-      ["Configurações", () => settings(panel)],
-      ["Produtos", () => products(panel)],
-      ["Pedidos", () => orders(panel)],
-    ]) {
+    for (const [label, action] of state.existingStore
+      ? [["Personalizar loja", () => settings(panel)]]
+      : [
+          ["Configurações", () => settings(panel)],
+          ["Produtos", () => products(panel)],
+          ["Pedidos", () => orders(panel)],
+        ]) {
       tabs.append(
         element("button", {
           text: label,
@@ -39,6 +41,14 @@ export function createAdmin(state) {
       );
     }
     view.append(tabs, panel);
+    if (state.existingStore) {
+      view.append(
+        element("a", {
+          href: "/admin",
+          text: "Gerenciar produtos, pedidos e estoque",
+        }),
+      );
+    }
     await settings(panel);
   }
   async function settings(panel) {
@@ -47,6 +57,47 @@ export function createAdmin(state) {
     const config = configDraft;
     const assistant = response.assistant;
     const form = element("form", { class: "admin-form" });
+    const preview = element("img", {
+      src: config.branding.logoUrl || "/store-assets/placeholder.svg",
+      alt: "Prévia do logo",
+      style: "max-width:220px;max-height:100px;object-fit:contain",
+    });
+    const upload = element("input", {
+      type: "file",
+      accept: "image/png,image/jpeg,image/webp",
+      "aria-label": "Escolher logo do computador",
+    });
+    upload.addEventListener("change", async () => {
+      const file = upload.files[0];
+      if (!file) {
+        return;
+      }
+      try {
+        if (
+          !["image/png", "image/jpeg", "image/webp"].includes(file.type) ||
+          file.size > 10000000
+        ) {
+          throw new Error("Escolha PNG, JPEG ou WebP de até 10 MB.");
+        }
+        const bitmap = await window.createImageBitmap(file);
+        const canvas = document.createElement("canvas");
+        const scale = Math.min(1, 512 / Math.max(bitmap.width, bitmap.height));
+        canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+        canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+        canvas
+          .getContext("2d")
+          .drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        bitmap.close();
+        const url = canvas.toDataURL("image/webp", 0.85);
+        if (url.length > 250000) {
+          throw new Error("Logo muito detalhada. Escolha uma imagem menor.");
+        }
+        form.elements.logo.value = url;
+        preview.src = url;
+      } catch (error) {
+        notify(error.message);
+      }
+    });
     const categories = element("div", { class: "category-editor" });
     const categoryRows = config.categories.map((category) => ({ ...category }));
     const drawCategories = () => {
@@ -91,6 +142,35 @@ export function createAdmin(state) {
     ]) {
       form.append(inputField(label, key, config.branding.colors[key], "color"));
     }
+    form.append(
+      element("label", { text: "Escolher logo do computador" }, [upload]),
+      preview,
+    );
+    form.elements.logo.addEventListener("change", () => {
+      preview.src = form.elements.logo.value || "/store-assets/placeholder.svg";
+    });
+    const mode = element(
+      "select",
+      { name: "chatMode", "aria-label": "Modo do assistente" },
+      [
+        element("option", {
+          value: "GUIDED",
+          text: "Guia por categorias — sem IA",
+        }),
+        element("option", { value: "AI", text: "Consultoria por IA" }),
+      ],
+    );
+    mode.value = config.assistant.mode || "GUIDED";
+    form.append(
+      element("label", { text: "Modo do assistente" }, [mode]),
+      textarea(
+        "Sinônimos: um grupo por linha, separado por vírgulas",
+        "synonyms",
+        (config.assistant.synonyms || [])
+          .map((group) => group.join(", "))
+          .join("\n"),
+      ),
+    );
     form.append(
       element("h2", { text: "Categorias" }),
       element("p", {
@@ -266,6 +346,16 @@ export function createAdmin(state) {
         },
       };
       next.assistant = {
+        mode: f.chatMode.value,
+        synonyms: f.synonyms.value
+          .split("\n")
+          .map((line) =>
+            line
+              .split(",")
+              .map((value) => value.trim())
+              .filter(Boolean),
+          )
+          .filter((group) => group.length),
         enabled: f.aiEnabled.checked,
         displayName: f.aiName.value,
         welcomeMessage: f.welcome.value,
@@ -288,6 +378,10 @@ export function createAdmin(state) {
           },
         });
         state.applyConfig();
+        if (next.assistant.mode !== config.assistant.mode) {
+          window.location.reload();
+          return;
+        }
         await settings(panel);
         notify("Configurações salvas.");
       });
@@ -340,6 +434,7 @@ export function createAdmin(state) {
     form.append(
       element("h2", { text: product ? "Editar produto" : "Novo produto" }),
       field("Nome", "name", product?.name),
+      field("Subcategoria", "subcategoryName", product?.subcategoryName),
       textarea("Descrição", "description", product?.description),
       inputField(
         "Preço (R$)",
@@ -462,6 +557,7 @@ export function createAdmin(state) {
             .split(",")
             .map((t) => t.trim())
             .filter(Boolean),
+          subcategoryName: f.subcategoryName.value,
           categories: state.config.categories
             .filter((c) => f[`cat-${c.id}`].checked)
             .map((c) => c.id),

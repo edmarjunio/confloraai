@@ -21,6 +21,7 @@ const slug = existingStore
   : decodeURIComponent(location.pathname.split("/")[2]);
 const basePath = existingStore ? "" : `/shop/${slug}`;
 const state = {
+  existingStore,
   slug,
   basePath,
   api: existingStore ? createExistingApi() : createApi(slug),
@@ -47,7 +48,7 @@ async function route() {
   const path = (
     existingStore ? "/shop/conflora" + location.pathname : location.pathname
   ).split("/");
-  const isAdmin = path[3] === "admin";
+  const isAdmin = path[3] === "admin" || path[3] === "configuracoes";
   const isProduct = path[3] === "products";
   $("#catalogView").hidden = isAdmin || isProduct;
   $("#productView").hidden = !isProduct;

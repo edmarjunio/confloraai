@@ -1,8 +1,12 @@
 const profile = require("../../config/stores/conflora.example.json");
-const navigation = require("../../config/stores/conflora-navigation.json");
-const { navigationPath } = require("./catalog-navigation");
 const { rankProductSales } = require("../catalog/product-sales");
-const { ensure, digest, StoreError } = require("./validation");
+const {
+  ensure,
+  digest,
+  StoreError,
+  validateConfig,
+  text,
+} = require("./validation");
 
 // Compatibility boundary for the existing store. SaaS tenants never use these collections.
 function toProduct(item, { stockControlEnabled = true } = {}) {
@@ -31,8 +35,15 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
     categories: [digest(category).slice(0, 16)],
     categoryName: category,
     subcategoryName: String(item.subcategory || item.subcategoria || ""),
-    navigationPath: navigationPath(item, navigation),
-    searchAliases: [item.tagsAi, item.tags_ia].filter(value => typeof value === "string").flatMap(value => value.split(/[,;\n]/)).map(value => value.trim()).filter(Boolean),
+    navigationPath: [
+      category,
+      String(item.subcategory || item.subcategoria || ""),
+    ].filter(Boolean),
+    searchAliases: [item.tagsAi, item.tags_ia]
+      .filter((value) => typeof value === "string")
+      .flatMap((value) => value.split(/[,;\n]/))
+      .map((value) => value.trim())
+      .filter(Boolean),
     tags: (Array.isArray(item.tags) ? item.tags : []).filter(
       (tag) => typeof tag === "string",
     ),
@@ -53,7 +64,10 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
         typeof section.title === "string" &&
         typeof section.body === "string",
     ),
-    isAvailable: String(item.status || "ATIVO").trim().toUpperCase() !== "INATIVO",
+    isAvailable:
+      String(item.status || "ATIVO")
+        .trim()
+        .toUpperCase() !== "INATIVO",
     stock: {
       tracked: stockControlEnabled,
       quantity: Math.max(0, Number(item.stockQuantity ?? item.estoque ?? 0)),
@@ -67,20 +81,33 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
     salesCount: Number(item.salesCount) || 0,
   };
 }
-function existingConfig(products) {
+function existingConfig(products, saved) {
+  if (saved?.config) {
+    const result = structuredClone(saved.config);
+    for (const product of products) {
+      if (
+        !result.categories.some(
+          (category) => category.id === product.categories[0],
+        )
+      ) {
+        result.categories.push({
+          id: product.categories[0],
+          name: product.categoryName,
+          isActive: true,
+          order: result.categories.length,
+        });
+      }
+    }
+    return result;
+  }
   const config = structuredClone(profile);
-<<<<<<< HEAD
-  config.assistant.mode = process.env.STOREFRONT_CHAT_MODE === "AI" ? "AI" : "GUIDED";
-=======
   config.assistant.mode =
     process.env.STOREFRONT_CHAT_MODE === "AI" ? "AI" : "GUIDED";
->>>>>>> 817c5b27f153d388a4f8d6ac776cfd9b5ca97325
-  config.assistant.synonyms = navigation.synonyms;
+  config.assistant.synonyms = [];
   if (config.assistant.mode === "GUIDED") {
     config.assistant.displayName = "Guia de compras";
   }
   config.branding.colors.background = "#FFFFFF";
-  config.navigation = navigation;
   config.categories = [
     ...new Map(
       products.map((p) => [
@@ -107,6 +134,70 @@ function existingConfig(products) {
   return config;
 }
 function installExistingStore(app, { repository, assistant }) {
+  const readSettings = () => readStoreSettings(repository);
+  const admin = (req) =>
+    ensure(
+      req.user?.role === "ADMIN",
+      "Acesso administrativo necessário.",
+      req.user ? 403 : 401,
+    );
+  app.get("/api/storefront/admin/config", async (req, res, next) => {
+    try {
+      admin(req);
+      const saved = await readSettings();
+      res.json({
+        config: existingConfig(await products(), saved),
+        assistant: saved?.assistant || {},
+        integrations: {},
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.put("/api/storefront/admin/config", async (req, res, next) => {
+    try {
+      admin(req);
+      const config = validateConfig(
+        { ...req.body.config, slug: "conflora" },
+        "conflora",
+      );
+      ensure(
+        !req.body.integrations?.orderWebhookUrl,
+        "Webhooks são configurados no painel de lojas SaaS.",
+      );
+      const value = {
+        config,
+        assistant: {
+          persona: text(req.body.assistant?.persona, 2000),
+          instructions: text(req.body.assistant?.instructions, 4000),
+          webSearchEnabled: !!req.body.assistant?.webSearchEnabled,
+        },
+      };
+      const update = (current) => {
+        ensure(
+          req.body.config.version === (current?.config.version || 1),
+          "Configuração alterada. Recarregue a página.",
+          409,
+        );
+        value.config.version = (current?.config.version || 1) + 1;
+      };
+      if (repository.firestore) {
+        const ref = repository.firestore
+          .collection("store_settings")
+          .doc("storefront");
+        await repository.firestore.runTransaction(async (tx) => {
+          update((await tx.get(ref)).data());
+          tx.set(ref, value);
+        });
+      } else {
+        update(repository.storefrontSettings);
+        repository.storefrontSettings = value;
+      }
+      res.json(config);
+    } catch (error) {
+      next(error);
+    }
+  });
   app.get("/storefront-auth.js", (_req, res) => {
     const { renderFirebaseAuthScript } = require("../http/firebase-client");
     const script = renderFirebaseAuthScript()
@@ -118,12 +209,7 @@ function installExistingStore(app, { repository, assistant }) {
       .send(script);
   });
   async function products() {
-    let records = [];
-    try {
-      records = await repository.getAllProducts();
-    } catch {
-      records = [];
-    }
+    let records = await repository.getAllProducts();
     if (repository.getSalesOrders) {
       try {
         records = rankProductSales(records, await repository.getSalesOrders());
@@ -139,14 +225,38 @@ function installExistingStore(app, { repository, assistant }) {
         settings = { stockControlEnabled: true };
       }
     }
-    return records.map((item) => toProduct(item, settings)).filter((p) => p.isAvailable);
+    const saved = await readSettings();
+    return records
+      .map((item) => {
+        const product = toProduct(item, settings);
+        const category = saved?.config.categories.find(
+          (category) =>
+            category.name.toLocaleLowerCase() ===
+            product.categoryName.toLocaleLowerCase(),
+        );
+        if (category) {
+          product.categories = [category.id];
+        }
+        return product;
+      })
+      .filter(
+        (p) =>
+          p.isAvailable &&
+          !saved?.config.categories.some(
+            (category) =>
+              p.categories.includes(category.id) && !category.isActive,
+          ),
+      );
   }
   app.get("/api/storefront/catalog", async (_req, res, next) => {
     try {
       const items = await products();
       res
         .set("Cache-Control", "no-store")
-        .json({ config: existingConfig(items), products: items });
+        .json({
+          config: existingConfig(items, await readSettings()),
+          products: items,
+        });
     } catch (error) {
       next(error);
     }
@@ -154,10 +264,17 @@ function installExistingStore(app, { repository, assistant }) {
   app.post("/api/storefront/assistant", async (req, res, next) => {
     try {
       const items = await products();
+      const saved = await readSettings();
+      const config = existingConfig(items, saved);
+      ensure(config.assistant.enabled && config.assistant.mode === "AI", "Use o guia de categorias: a consultoria por IA está desativada nesta loja.", 409);
       res.json(
         await assistant.recommend(
-          existingConfig(items),
-          { persona: "", instructions: "", webSearchEnabled: true },
+          config,
+          saved?.assistant || {
+            persona: "",
+            instructions: "",
+            webSearchEnabled: false,
+          },
           items,
           req.body,
         ),
@@ -180,6 +297,8 @@ async function normalizeExistingCheckout(req, repository) {
     return;
   }
   const input = req.body;
+  const storeConfig = existingConfig([], await readStoreSettings(repository));
+  req.storeConfig = storeConfig;
   ensure(input && typeof input === "object", "Pedido inválido.");
   ensure(
     typeof input.customer?.name === "string" &&
@@ -203,14 +322,18 @@ async function normalizeExistingCheckout(req, repository) {
     "Escolha entrega ou retirada.",
   );
   ensure(
-    ["PIX", "CARD", "CASH"].includes(input.paymentMethod),
+    storeConfig.checkout.enabledPayments.includes(input.paymentMethod),
     "Pagamento inválido.",
   );
   ensure(
+    storeConfig.checkout[input.fulfillment]?.enabled,
+    "Opção de entrega ou retirada indisponível.",
+  );
+  ensure(
     input.fulfillment !== "delivery" ||
-      (input.serviceArea === "Mineiros - GO" &&
+      (storeConfig.checkout.delivery.serviceAreas.includes(input.serviceArea) &&
         String(input.address || "").trim().length >= 5),
-    "Informe o endereço de entrega em Mineiros - GO.",
+    "Informe um endereço na região atendida pela loja.",
   );
   const settings = await repository.getInventorySettings();
   const catalog = new Map(
@@ -235,7 +358,8 @@ async function normalizeExistingCheckout(req, repository) {
   const items = [...quantities].map(([id, quantity]) => {
     const product = catalog.get(id);
     ensure(
-      product?.isAvailable && (!product.stock.tracked || product.stock.quantity >= quantity),
+      product?.isAvailable &&
+        (!product.stock.tracked || product.stock.quantity >= quantity),
       "Produto ou quantidade indisponível.",
     );
     const steps = quantity / product.saleUnit.increment;
@@ -267,9 +391,29 @@ async function normalizeExistingCheckout(req, repository) {
     ],
     cashTendered: Number(input.cashTenderedMinor || 0) / 100,
     items,
-    subtotal: total,
+    subtotal:
+      total +
+      (input.fulfillment === "delivery"
+        ? storeConfig.checkout.delivery.feeMinor / 100
+        : 0),
     discount: 0,
     changeDue: Math.max(0, Number(input.cashTenderedMinor || 0) / 100 - total),
   };
 }
-module.exports = { installExistingStore, normalizeExistingCheckout, toProduct };
+async function readStoreSettings(repository) {
+  return repository.firestore
+    ? (
+        await repository.firestore
+          .collection("store_settings")
+          .doc("storefront")
+          .get()
+      ).data()
+    : repository.storefrontSettings;
+}
+module.exports = {
+  installExistingStore,
+  normalizeExistingCheckout,
+  toProduct,
+  readStoreSettings,
+  existingConfig,
+};
