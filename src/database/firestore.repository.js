@@ -1347,38 +1347,29 @@ class FirestoreRepository {
       updateData.changeGiven = changeGiven;
     }
 
-    // A baixa idempotente é registrada antes do estado pago. Se ela falhar,
-    // a confirmação não é persistida; se a confirmação falhar depois, o retry
-    // reconhece o marcador e não reduz o estoque novamente.
-    await this.deductStock(
+    if (
+      verifiedVia === 'MERCADO_PAGO_WEBHOOK' &&
+      process.env.NODE_ENV === 'production' &&
+      (!this.firestore || this._firestoreClientDisabled)
+    ) {
+      throw new Error('Firestore indisponível; pagamento não foi confirmado no pedido.');
+    }
+
+    // Estoque e pagamento mudam juntos na transação do pedido. Se a baixa
+    // falhar, a venda continua pendente; retries concorrentes não repetem a
+    // baixa nem disparam uma segunda confirmação.
+    const confirmation = await this.deductStock(
       order.items,
       order.customerPhone || 'Caixa',
       order.id || orderId,
+      updateData,
     );
-
-    if (this.firestore && !this._firestoreClientDisabled) {
-      try {
-        await this.firestore.collection('orders').doc(String(orderId)).update(updateData);
-      } catch (err) {
-        if (
-          err.code === 7 ||
-          err.code === 'permission-denied' ||
-          err.message?.includes('PERMISSION_DENIED') ||
-          err.message?.includes('Missing or insufficient')
-        ) {
-          this._firestoreClientDisabled = true;
-        } else {
-          Logger.warn('Erro ao atualizar status de pagamento no Firestore', { error: err.message });
-        }
-        if (verifiedVia === 'MERCADO_PAGO_WEBHOOK') {
-          throw new Error('Não foi possível persistir a confirmação do Mercado Pago.');
-        }
-      }
-    } else if (
-      verifiedVia === 'MERCADO_PAGO_WEBHOOK' &&
-      process.env.NODE_ENV === 'production'
-    ) {
-      throw new Error('Firestore indisponível; pagamento não foi confirmado no pedido.');
+    if (confirmation.alreadyConfirmed) {
+      return {
+        ...order,
+        ...(confirmation.orderData || {}),
+        alreadyConfirmed: true,
+      };
     }
 
     const local = this.inMemoryOrders.get(String(orderId));
@@ -2038,7 +2029,7 @@ class FirestoreRepository {
     return value;
   }
 
-  async deductStock(orderItems, customerPhone = '', orderId = '') {
+  async deductStock(orderItems, customerPhone = '', orderId = '', orderUpdates = null) {
     const stockControlEnabled = (await this.getInventorySettings()).stockControlEnabled;
     const items = Array.isArray(orderItems) ? orderItems : [];
     const id = orderId ? String(orderId) : '';
@@ -2054,25 +2045,43 @@ class FirestoreRepository {
             if (!orderSnapshot.exists) {
               throw new Error('Pedido não encontrado para registrar a baixa de estoque.');
             }
-            if (orderSnapshot.data()?.stockDeducted) {
-              return { success: true, deducted: [], alreadyDeducted: true };
+            const orderData = orderSnapshot.data() || {};
+            if (
+              orderUpdates &&
+              ['CONFIRMED', 'PAID_CONFIRMED'].includes(orderData.status)
+            ) {
+              return {
+                success: true,
+                deducted: [],
+                alreadyConfirmed: true,
+                orderData,
+              };
+            }
+            if (orderData.stockDeducted) {
+              if (!orderUpdates) {
+                return { success: true, deducted: [], alreadyDeducted: true };
+              }
+              transaction.update(orderRef, orderUpdates);
+              return { success: true, deducted: [], newlyConfirmed: true };
             }
           }
 
-          const markOrderDeducted = () => {
+          const markOrderHandled = () => {
             if (orderRef) {
               transaction.update(orderRef, {
                 stockDeducted: true,
                 stockDeductedAt: now,
+                ...(orderUpdates || {}),
               });
             }
           };
 
           if (!stockControlEnabled || items.length === 0) {
-            markOrderDeducted();
+            markOrderHandled();
             return {
               success: true,
               deducted: [],
+              ...(orderUpdates ? { newlyConfirmed: true } : {}),
               ...(!stockControlEnabled ? { trackingDisabled: true } : {}),
             };
           }
@@ -2090,7 +2099,6 @@ class FirestoreRepository {
                 productData = productSnapshot.data();
               }
             }
-
             if (!productData && item.name) {
               const querySnapshot = await transaction.get(
                 this.firestore.collection('products')
@@ -2103,10 +2111,8 @@ class FirestoreRepository {
                 productData = productSnapshot.data();
               }
             }
-
             if (docRef && productData) {
-              const key = docRef.id;
-              const existing = resolvedItems.find((entry) => entry.docRef.id === key);
+              const existing = resolvedItems.find((entry) => entry.docRef.id === docRef.id);
               const quantity = Number(item.quantity) || 1;
               if (existing) {
                 existing.quantity += quantity;
@@ -2150,15 +2156,24 @@ class FirestoreRepository {
             });
           }
 
-          markOrderDeducted();
-          return { success: true, deducted };
+          markOrderHandled();
+          return {
+            success: true,
+            deducted,
+            ...(orderUpdates ? { newlyConfirmed: true } : {}),
+          };
         });
 
-        if (id) {
-          const order = this.inMemoryOrders.get(id);
-          if (order) {
-            order.stockDeducted = true;
-            order.stockDeductedAt = order.stockDeductedAt || now;
+        const localOrder = id ? this.inMemoryOrders.get(id) : null;
+        if (localOrder) {
+          if (result.orderData) {
+            Object.assign(localOrder, result.orderData);
+          } else {
+            localOrder.stockDeducted = true;
+            localOrder.stockDeductedAt = localOrder.stockDeductedAt || now;
+            if (orderUpdates && result.newlyConfirmed) {
+              Object.assign(localOrder, orderUpdates);
+            }
           }
         }
         for (const item of result.deducted) {
@@ -2174,8 +2189,6 @@ class FirestoreRepository {
         );
         return result;
       } catch (err) {
-        // Uma venda vinculada a pedido não pode confirmar usando apenas memória:
-        // isso deixaria Firestore e estoque divergentes.
         if (id) {
           throw new Error('Não foi possível persistir a baixa de estoque do pedido.', {
             cause: err,
@@ -2195,15 +2208,32 @@ class FirestoreRepository {
       if (!order) {
         throw new Error('Pedido não encontrado para registrar a baixa de estoque.');
       }
+      if (
+        orderUpdates &&
+        ['CONFIRMED', 'PAID_CONFIRMED'].includes(order.status)
+      ) {
+        return {
+          success: true,
+          deducted: [],
+          alreadyConfirmed: true,
+          orderData: { ...order },
+        };
+      }
       if (order.stockDeducted) {
-        return { success: true, deducted: [], alreadyDeducted: true };
+        if (!orderUpdates) {
+          return { success: true, deducted: [], alreadyDeducted: true };
+        }
+        Object.assign(order, orderUpdates);
+        return { success: true, deducted: [], newlyConfirmed: true };
       }
       if (!stockControlEnabled || items.length === 0) {
         order.stockDeducted = true;
         order.stockDeductedAt = now;
+        if (orderUpdates) Object.assign(order, orderUpdates);
         return {
           success: true,
           deducted: [],
+          ...(orderUpdates ? { newlyConfirmed: true } : {}),
           ...(!stockControlEnabled ? { trackingDisabled: true } : {}),
         };
       }
@@ -2239,8 +2269,13 @@ class FirestoreRepository {
       const order = this.inMemoryOrders.get(id);
       order.stockDeducted = true;
       order.stockDeductedAt = now;
+      if (orderUpdates) Object.assign(order, orderUpdates);
     }
-    return { success: true, deducted };
+    return {
+      success: true,
+      deducted,
+      ...(orderUpdates ? { newlyConfirmed: true } : {}),
+    };
   }
 
   async getStockMovements(limit = 20) {

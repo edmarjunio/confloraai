@@ -1229,6 +1229,9 @@ function createApp({
             paymentAmount: payment.transaction_amount,
           },
         );
+        if (confirmedOrder.alreadyConfirmed) {
+          return res.sendStatus(200);
+        }
         const receiptText = formatOrderReceipt({
           ...confirmedOrder,
           paymentStatus: 'APPROVED',
@@ -1487,13 +1490,7 @@ function createApp({
         paymentCheckoutUrl: mercadoPagoPreference?.checkoutUrl || '',
       }, { requirePersistence: resolvedPaymentMethod === 'PIX' });
 
-      // Registrar a baixa junto ao pedido permite que a confirmação PIX e os
-      // webhooks repetidos reconheçam que o estoque já foi reduzido.
-      await messageService.firestoreRepo.deductStock(
-        orderItems,
-        customerPhone,
-        order.id,
-      );
+      await messageService.firestoreRepo.deductStock(orderItems, customerPhone, order.id);
       const receiptText = formatOrderReceipt(order);
       let receiptDelivery = { sent: false, reason: 'Envio não solicitado.' };
       if (resolvedPaymentMethod === 'PIX') {

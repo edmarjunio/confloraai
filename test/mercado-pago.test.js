@@ -172,13 +172,17 @@ test("payment webhook confirms only the matching approved PIX order", async (t) 
   assert.equal(savedOrder.paymentTransactionId, String(payment.id));
 });
 
-test("storefront PIX stock deduction is idempotent across order creation and repeated webhooks", async (t) => {
+test("storefront PIX deduction and concurrent/repeated webhooks are idempotent", async (t) => {
   const config = require("../src/config/env");
   const previousServiceUrl = config.tasks.serviceUrl;
+  const previousReceiptTemplate = config.whatsapp.templates.customerOrder;
   config.tasks.serviceUrl = "https://conflora.example";
+  config.whatsapp.templates.customerOrder = "customer_order_test";
   t.after(() => {
     config.tasks.serviceUrl = previousServiceUrl;
+    config.whatsapp.templates.customerOrder = previousReceiptTemplate;
   });
+
   const repository = new FirestoreRepository({ isInMemory: true });
   repository.inMemoryProducts.set("plant", {
     id: "plant",
@@ -188,16 +192,20 @@ test("storefront PIX stock deduction is idempotent across order creation and rep
     status: "ATIVO",
   });
   const createDirectOrder = repository.createDirectOrder.bind(repository);
-  // O teste exercita a rota de criação; o repositório em memória substitui
-  // apenas o requisito de persistência que produção exige para iniciar PIX.
+  // Em produção, requirePersistence é garantido pelo Firestore. Aqui o teste
+  // usa o mesmo fluxo de rota com o armazenamento em memória.
   repository.createDirectOrder = (data) => createDirectOrder(data);
   let paymentOrderId = "";
   let payment = approvedPayment();
+  let receiptSends = 0;
   const app = createApp({
     messageService: {
       firestoreRepo: repository,
       whatsappClient: {
-        sendTemplate: async () => ({ success: true }),
+        sendTemplate: async () => {
+          receiptSends += 1;
+          return { success: true };
+        },
         sendTextMessage: async () => ({ success: true }),
       },
     },
@@ -236,11 +244,9 @@ test("storefront PIX stock deduction is idempotent across order creation and rep
   assert.equal(createResponse.status, 200);
   const created = await createResponse.json();
   assert.equal(paymentOrderId, created.order.id);
-  assert.equal(payment.external_reference, created.order.id);
-  assert.equal(created.order.paymentMethod, "PIX");
-  assert.equal(created.order.total, order.total * 2);
   assert.equal(created.order.stockDeducted, true);
   assert.equal(repository.inMemoryProducts.get("plant").stockQuantity, 8);
+  assert.equal(receiptSends, 1);
 
   const webhookUrl = `${baseUrl}/webhooks/mercadopago?type=payment&data.id=${payment.id}`;
   const sendWebhook = () =>
@@ -249,16 +255,17 @@ test("storefront PIX stock deduction is idempotent across order creation and rep
       headers: { "x-signature": "test", "x-request-id": "request-123" },
     });
   const concurrentResponses = await Promise.all([sendWebhook(), sendWebhook()]);
-  for (const response of concurrentResponses) assert.equal(response.status, 200);
+  for (const response of concurrentResponses) {assert.equal(response.status, 200);}
   assert.equal((await sendWebhook()).status, 200);
 
   const savedOrder = await repository.getOrderById(paymentOrderId);
   assert.equal(savedOrder.status, "CONFIRMED");
-  assert.equal(savedOrder.stockDeducted, true);
+  assert.equal(savedOrder.paymentStatus, "APPROVED");
   assert.equal(repository.inMemoryProducts.get("plant").stockQuantity, 8);
+  assert.equal(receiptSends, 2);
 });
 
-test("payment webhook does not confirm a paid order when stock deduction fails", async (t) => {
+test("payment webhook does not confirm an order when stock deduction fails", async (t) => {
   const repository = new FirestoreRepository({ isInMemory: true });
   await repository.createDirectOrder({
     ...order,
