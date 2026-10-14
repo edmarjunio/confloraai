@@ -95,6 +95,11 @@ class CatalogRepository {
       }
     }
 
+    if (!config.sheets.lookupEnabled) {
+      Logger.info('Busca no Google Sheets desativada; WhatsApp usa apenas o catálogo do Firestore.');
+      return;
+    }
+
     const googleapis = getGoogleApis();
     if (!googleapis) {
       Logger.warn('Módulo googleapis não encontrado; usando dados existentes em memória.');

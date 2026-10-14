@@ -171,3 +171,126 @@ test('ADMIN NOTIFICATIONS: OrderService.confirmOrder dispara notificação para 
   assert.equal(whatsappSaleNotif.customerName, 'Dona Florinda');
   assert.equal(whatsappSaleNotif.orderTotal, 90);
 });
+
+test('CAIXA DISCOUNTS: desconto acima de 5% aguarda Admin e só vira pedido após aceite', async () => {
+  const repo = new FirestoreRepository({ isInMemory: true });
+  await repo.saveProduct({ id: 'discount-plant', name: 'Muda de Teste', price: 100, status: 'ATIVO' });
+  const app = createApp({ messageService: { firestoreRepo: repo } });
+  const server = app.listen(0);
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+  async function login(userId, pin) {
+    const response = await fetch(`${baseUrl}/api/admin/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, pin }),
+    });
+    assert.equal(response.status, 200);
+    return response.headers.get('set-cookie')?.split(';')[0];
+  }
+
+  try {
+    const anonymousSale = await fetch(`${baseUrl}/api/caixa/orders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        items: [{ productId: 'discount-plant', quantity: 1 }],
+        paymentMethod: 'DINHEIRO',
+      }),
+    });
+    assert.equal(anonymousSale.status, 401);
+
+    const cashierCookie = await login('usr-caixa1', '0000');
+    const saleResponse = await fetch(`${baseUrl}/api/caixa/orders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie: cashierCookie },
+      body: JSON.stringify({
+        items: [{ productId: 'discount-plant', price: 1, quantity: 1 }],
+        paymentMethod: 'PIX',
+        customerName: 'Cliente Teste',
+        discountPercent: 10,
+      }),
+    });
+    assert.equal(saleResponse.status, 202);
+    const pending = await saleResponse.json();
+    assert.equal(pending.approvalRequired, true);
+    assert.equal((await repo.getAllOrders(100)).some((order) => order.customerName === 'Cliente Teste'), false);
+
+    const adminCookie = await login('usr-edmar', '1234');
+    const deniedResponse = await fetch(`${baseUrl}/api/admin/discount-approvals`, {
+      headers: { cookie: cashierCookie },
+    });
+    assert.equal(deniedResponse.status, 403);
+
+    const reviewResponse = await fetch(`${baseUrl}/api/admin/discount-approvals/${pending.approval.id}/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+      body: JSON.stringify({ action: 'APPROVED' }),
+    });
+    assert.equal(reviewResponse.status, 200);
+    const approved = await reviewResponse.json();
+    assert.equal(approved.order.subtotal, 100);
+    assert.equal(approved.order.discountAmount, 10);
+    assert.equal(approved.order.total, 90);
+    assert.equal(approved.order.status, 'AWAITING_PIX');
+
+    const rejectedSale = await fetch(`${baseUrl}/api/caixa/orders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie: cashierCookie },
+      body: JSON.stringify({
+        items: [{ productId: 'discount-plant', quantity: 1 }],
+        paymentMethod: 'DINHEIRO',
+        discountPercent: 12,
+      }),
+    });
+    const rejectedRequest = await rejectedSale.json();
+    const missingReason = await fetch(`${baseUrl}/api/admin/discount-approvals/${rejectedRequest.approval.id}/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+      body: JSON.stringify({ action: 'REJECTED', rejectionReason: '   ' }),
+    });
+    assert.equal(missingReason.status, 400);
+    const rejection = await fetch(`${baseUrl}/api/admin/discount-approvals/${rejectedRequest.approval.id}/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+      body: JSON.stringify({ action: 'REJECTED', rejectionReason: 'Margem insuficiente' }),
+    });
+    assert.equal(rejection.status, 200);
+    const cashierNotifications = await repo.getUserNotifications('usr-caixa1');
+    assert.ok(cashierNotifications.some((notification) => notification.type === 'DISCOUNT_APPROVAL_REJECTED' && notification.reason === 'Margem insuficiente'));
+  } finally {
+    server.close();
+  }
+});
+
+test('CAIXA CUSTOMERS: busca e cadastro rápido exigem perfil de colaborador', async () => {
+  const repo = new FirestoreRepository({ isInMemory: true });
+  await repo.saveCustomerProfile('5564999887766', { name: 'Maria Silva' });
+  const app = createApp({ messageService: { firestoreRepo: repo } });
+  const server = app.listen(0);
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+  try {
+    const unauthorized = await fetch(`${baseUrl}/api/caixa/customers?q=Maria`);
+    assert.equal(unauthorized.status, 401);
+    const loginResponse = await fetch(`${baseUrl}/api/admin/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: 'usr-caixa1', pin: '0000' }),
+    });
+    const cookie = loginResponse.headers.get('set-cookie')?.split(';')[0];
+    const searchResponse = await fetch(`${baseUrl}/api/caixa/customers?q=Maria`, { headers: { cookie } });
+    assert.equal(searchResponse.status, 200);
+    assert.deepEqual(await searchResponse.json(), [{ name: 'Maria Silva', phone: '5564999887766' }]);
+
+    const createResponse = await fetch(`${baseUrl}/api/caixa/customers`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie },
+      body: JSON.stringify({ name: 'João Souza', phone: '(64) 99911-2233' }),
+    });
+    assert.equal(createResponse.status, 201);
+    assert.equal((await repo.getCustomerProfile('64999112233')).name, 'João Souza');
+  } finally {
+    server.close();
+  }
+});

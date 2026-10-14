@@ -23,21 +23,21 @@ function renderAdminGerencialHtml() {
       } catch (_) {}
     })();
   </script>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Conflora — Painel Gerencial & Fluxo de Caixa (Looker)</title>
   <style>
     :root {
-      --primary: #15803d;
-      --primary-hover: #166534;
+      --primary: #2e9348;
+      --primary-hover: #25783b;
       --primary-light: #dcfce7;
       --primary-dark: #14532d;
       --pix: #059669;
       --card: #2563eb;
       --cash: #d97706;
-      --bg: #f8fafc;
+      --bg: #f8f9fa;
       --surface: #ffffff;
       --border: #e2e8f0;
-      --text: #0f172a;
+      --text: #1a1a1a;
       --muted: #64748b;
       --danger: #dc2626;
       --radius: 12px;
@@ -493,6 +493,49 @@ function renderAdminGerencialHtml() {
       box-shadow: 0 4px 16px rgba(0,0,0,0.3);
     }
     .toast.hidden { display: none; }
+    @media (max-width: 900px) {
+      header { flex-wrap: wrap; padding: 12px 16px; }
+      .header-actions { width: 100%; flex-wrap: wrap; }
+      .header-actions .close-day { flex: 1 1 100%; justify-content: center; }
+      .main-container { padding: 14px 14px 28px; gap: 14px; }
+      .details-grid { grid-template-columns: minmax(0, 1fr); }
+      .toolbar { align-items: stretch; }
+      .toolbar-right { flex-wrap: wrap; }
+      .date-input { min-height: 42px; }
+    }
+    @media (max-width: 600px) {
+      header { position: static; gap: 10px; }
+      .brand { min-width: 0; }
+      .brand-title { font-size: 15px; }
+      .brand-sub { max-width: 240px; font-size: 10px; line-height: 1.4; }
+      .header-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+      .header-actions .btn-action { min-height: 42px; justify-content: center; padding: 8px; font-size: 11px; }
+      .header-actions .close-day { grid-column: 1 / -1; }
+      .main-container { padding: 12px 10px calc(20px + env(safe-area-inset-bottom)); }
+      .toolbar { padding: 12px; gap: 10px; }
+      .toolbar-left h1 { font-size: 18px; line-height: 1.25; }
+      .toolbar-left p { font-size: 12px; line-height: 1.45; }
+      .toolbar-right { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; }
+      .toolbar-right .btn-action { grid-column: 1 / -1; min-height: 42px; justify-content: center; }
+      .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+      .summary-card { padding: 12px; }
+      .summary-card.highlight { grid-column: 1 / -1; }
+      .summary-val { font-size: clamp(18px, 6vw, 22px); }
+      .summary-label { font-size: 10px; line-height: 1.3; }
+      .details-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+      .panel-card { padding: 14px; gap: 12px; }
+      .panel-header { align-items: flex-start; gap: 8px; flex-wrap: wrap; }
+      .panel-title { font-size: 14px; }
+      .payment-legend { grid-template-columns: minmax(0, 1fr); }
+      .legend-item { display: grid; grid-template-columns: 1fr auto; align-items: center; }
+      .legend-title { grid-column: 1; }
+      .legend-val { grid-column: 2; grid-row: 1 / span 2; }
+      .legend-sub { grid-column: 1; }
+      .modal-overlay { align-items: flex-end; padding: 0; }
+      .modal-card { max-height: 90dvh; overflow-y: auto; border-radius: 16px 16px 0 0; padding: 18px 16px calc(20px + env(safe-area-inset-bottom)); }
+      .toast { bottom: calc(14px + env(safe-area-inset-bottom)); max-width: calc(100vw - 24px); text-align: center; }
+      button, .btn-action { min-height: 42px; }
+    }
   </style>
 </head>
 <body>

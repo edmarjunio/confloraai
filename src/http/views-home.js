@@ -1769,6 +1769,9 @@ function renderHomeHtml() {
         <button type="button" class="lang-btn" id="langEnBtn" onclick="setLanguage('en-US')" title="English (US)">🇺🇸 EN</button>
         <button type="button" class="lang-btn" id="langEsBtn" onclick="setLanguage('es-ES')" title="Español">🇪🇸 ES</button>
       </div>
+      <button id="caixaAccessBtn" type="button" class="admin-link-btn" onclick="window.location.href='/caixa'" style="display:none;">
+        ▣ Abrir caixa
+      </button>
       <button id="adminStatusBtn" type="button" class="status-pill-btn" onclick="openStatusModal()" style="display:none;" data-i18n="header.systemStatus">
         📡 Status
       </button>
@@ -1781,7 +1784,7 @@ function renderHomeHtml() {
         <span id="userHeaderBadge" style="font-size:10px; padding:2px 6px; border-radius:10px; color:white; font-weight:800;"></span>
         <button type="button" class="google-auth-btn" onclick="logoutCurrentUser()">Sair</button>
       </div>
-      <button type="button" class="admin-link-btn" onclick="handleAdminPanelClick()" data-i18n="header.adminPortal">
+      <button id="teamPanelBtn" type="button" class="admin-link-btn" onclick="handleAdminPanelClick()" data-i18n="header.adminPortal">
         ⚙️ Painel da Equipe
       </button>
     </div>
@@ -2168,6 +2171,10 @@ function renderHomeHtml() {
       </div>
 
       <div style="display:flex; flex-direction:column; gap:8px; margin-top:14px;">
+        <a id="receiptPaymentLink" href="#" target="_blank" rel="noopener noreferrer" class="checkout-submit-btn" style="text-align:center; text-decoration:none; display:none;">
+          Pagar com Pix no Mercado Pago
+        </a>
+        <p id="receiptDeliveryWarning" class="error" hidden></p>
         <a id="receiptOwnerWaLink" href="#" target="_blank" class="checkout-submit-btn" style="text-align:center; text-decoration:none; display:flex; align-items:center; justify-content:center; gap:8px; background:#25d366;">
           <span style="font-size:18px;">💬</span> <span data-i18n="receipt.notifyOwner">Notificar WhatsApp do Viveiro</span>
         </a>
@@ -3838,9 +3845,9 @@ function renderHomeHtml() {
           orderType: cartStore.orderType,
           deliveryAddress: cartStore.orderType === 'DELIVERY' ? address : 'Retirada no Viveiro Conflora',
           paymentMethod: cartStore.paymentMethod,
-          subtotal: totals.subtotal,
-          coupon: cartStore.activeCoupon ? cartStore.activeCoupon.code : '',
-          discount: totals.discount,
+          subtotal: Number(ord.subtotal ?? totals.subtotal),
+          coupon: ord.coupon || '',
+          discount: Number(ord.discount ?? totals.discount),
           cashTendered,
           changeDue,
           items: items.map(i => ({
@@ -3872,6 +3879,9 @@ function renderHomeHtml() {
 
           lastCompletedOrderReceipt = {
             order: ord,
+            receiptText: ord.receiptText || '',
+            receiptDelivery: data.receiptDelivery || ord.receiptDelivery || null,
+            paymentCheckoutUrl: ord.paymentCheckoutUrl || '',
             customerName: name,
             customerPhone: phone,
             deliveryAddress: cartStore.orderType === 'DELIVERY' ? address : 'Retirada no Viveiro Conflora',
@@ -3883,7 +3893,7 @@ function renderHomeHtml() {
             total: ord.total || totals.total,
             cashTendered,
             changeDue,
-            items: payload.items,
+            items: ord.items || payload.items,
             date: new Date().toLocaleString('pt-BR'),
           };
 
@@ -3955,67 +3965,22 @@ function renderHomeHtml() {
       const paper = document.getElementById('receiptPaperContent');
       const waBtn = document.getElementById('receiptOwnerWaLink');
       if (!modal || !paper) return;
-
-      const itemsHtml = rec.items.map(it => {
-        const sub = it.price * it.quantity;
-        return \`
-          <div class="receipt-row" style="margin-bottom:4px;">
-            <span>\${it.quantity}\${it.unit === 'KG' ? 'kg' : 'x'} \${it.name}</span>
-            <span>R$ \${sub.toFixed(2).replace('.', ',')}</span>
-          </div>
-        \`;
-      }).join('');
-
-      let trocoHtml = '';
-      if (rec.paymentMethod === 'DINHEIRO') {
-        if (rec.changeDue > 0) {
-          trocoHtml = \`
-            <div class="receipt-row">
-              <span>Dinheiro informado:</span>
-              <span>R$ \${Number(rec.cashTendered).toFixed(2).replace('.', ',')}</span>
-            </div>
-            <div class="receipt-row" style="color:#166534; font-weight:bold;">
-              <span>Troco a devolver:</span>
-              <span>R$ \${Number(rec.changeDue).toFixed(2).replace('.', ',')}</span>
-            </div>
-          \`;
-        } else {
-          trocoHtml = \`
-            <div class="receipt-row" style="color:#166534;">
-              <span>Dinheiro:</span>
-              <span>Valor exato (sem troco)</span>
-            </div>
-          \`;
-        }
+      paper.textContent = rec.receiptText || buildOwnerWhatsAppMessage(rec);
+      paper.style.whiteSpace = 'pre-wrap';
+      const paymentLink = document.getElementById('receiptPaymentLink');
+      if (paymentLink) {
+        paymentLink.href = rec.paymentCheckoutUrl || '#';
+        paymentLink.style.display = rec.paymentCheckoutUrl ? 'flex' : 'none';
       }
-
-      paper.innerHTML = \`
-        <div style="text-align:center; font-weight:bold; margin-bottom:8px;">
-          🌿 CONFLORA HORTA E VIVEIRO<br>
-          <span style="font-size:11px; font-weight:normal;">Mineiros - GO • Telefone: (64) 99935-1616</span>
-        </div>
-        <div class="receipt-divider"></div>
-        <div class="receipt-row"><strong>PEDIDO #\${rec.order.id}</strong><span>\${rec.date}</span></div>
-        <div class="receipt-row"><span>Cliente: \${rec.customerName}</span><span>\${rec.customerPhone}</span></div>
-        <div style="font-size:11px; margin-top:2px;">📍 \${rec.deliveryAddress} (\${rec.orderType === 'DELIVERY' ? 'Entrega' : 'Retirada'})</div>
-        <div class="receipt-divider"></div>
-        <div style="font-weight:bold; margin-bottom:6px;">ITENS:</div>
-        \${itemsHtml}
-        <div class="receipt-divider"></div>
-        <div class="receipt-row"><span>Subtotal:</span><span>R$ \${Number(rec.subtotal).toFixed(2).replace('.', ',')}</span></div>
-        \${rec.discount > 0 ? ('<div class="receipt-row" style="color:#166534;"><span>Cupom (' + rec.coupon + '):</span><span>- R$ ' + Number(rec.discount).toFixed(2).replace('.', ',') + '</span></div>') : ''}
-        <div class="receipt-row" style="font-size:15px; font-weight:bold; margin-top:4px;">
-          <span>TOTAL:</span>
-          <span>R$ \${Number(rec.total).toFixed(2).replace('.', ',')}</span>
-        </div>
-        <div class="receipt-divider"></div>
-        <div class="receipt-row"><span>Pagamento:</span><span>\${rec.paymentMethod}</span></div>
-        \${trocoHtml}
-        <div class="receipt-divider"></div>
-        <div style="text-align:center; font-size:11px; color:#64748b; margin-top:6px;">
-          Obrigado pela preferência! Já estamos preparando suas plantas com todo carinho 🌱.
-        </div>
-      \`;
+      const deliveryWarning = document.getElementById('receiptDeliveryWarning');
+      if (deliveryWarning) {
+        const failedReceiptDelivery =
+          rec.paymentMethod === 'PIX' && rec.receiptDelivery?.sent === false;
+        deliveryWarning.hidden = !failedReceiptDelivery;
+        deliveryWarning.textContent = failedReceiptDelivery
+          ? 'Não foi possível enviar o recibo pelo WhatsApp: ' + rec.receiptDelivery.reason
+          : '';
+      }
 
       // Monta notificação formatada para o WhatsApp do proprietário
       const msg = buildOwnerWhatsAppMessage(rec);
@@ -4034,7 +3999,7 @@ function renderHomeHtml() {
 
     function copyReceiptText() {
       if (!lastCompletedOrderReceipt) return;
-      const text = buildOwnerWhatsAppMessage(lastCompletedOrderReceipt);
+      const text = lastCompletedOrderReceipt.receiptText || buildOwnerWhatsAppMessage(lastCompletedOrderReceipt);
       navigator.clipboard.writeText(text).then(() => {
         alert(localization.translate('receipt.copySuccess', '📋 Recibo copiado com sucesso para a área de transferência!'));
       });
@@ -4309,6 +4274,8 @@ function renderHomeHtml() {
       const name = document.getElementById('userHeaderName');
       const badge = document.getElementById('userHeaderBadge');
       const adminStatusBtn = document.getElementById('adminStatusBtn');
+      const caixaAccessBtn = document.getElementById('caixaAccessBtn');
+      const teamPanelBtn = document.getElementById('teamPanelBtn');
 
       if (authBtn) authBtn.style.display = 'none';
       if (pill) pill.style.display = 'inline-flex';
@@ -4320,6 +4287,12 @@ function renderHomeHtml() {
       }
       if (adminStatusBtn) {
         adminStatusBtn.style.display = user.role === 'ADMIN' ? 'inline-flex' : 'none';
+      }
+      if (caixaAccessBtn) {
+        caixaAccessBtn.style.display = user.role === 'CAIXA' ? 'inline-flex' : 'none';
+      }
+      if (teamPanelBtn) {
+        teamPanelBtn.style.display = user.role === 'CAIXA' ? 'none' : 'inline-flex';
       }
 
       const custName = document.getElementById('custName');
@@ -4444,9 +4417,13 @@ function renderHomeHtml() {
         const authBtn = document.getElementById('authOpenBtn');
         const pill = document.getElementById('userHeaderPill');
         const adminStatusBtn = document.getElementById('adminStatusBtn');
+        const caixaAccessBtn = document.getElementById('caixaAccessBtn');
+        const teamPanelBtn = document.getElementById('teamPanelBtn');
         if (authBtn) authBtn.style.display = 'inline-flex';
         if (pill) pill.style.display = 'none';
         if (adminStatusBtn) adminStatusBtn.style.display = 'none';
+        if (caixaAccessBtn) caixaAccessBtn.style.display = 'none';
+        if (teamPanelBtn) teamPanelBtn.style.display = 'inline-flex';
         closeCustomerPortalModal();
       }
     }

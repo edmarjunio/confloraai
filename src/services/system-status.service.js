@@ -59,6 +59,19 @@ class SystemStatusService {
     const start = Date.now();
     const firestoreSource = Boolean(this.catalogRepo?.firestoreRepo);
     const source = firestoreSource ? 'Catálogo Firestore' : 'Catálogo configurado';
+    if (!config.sheets?.lookupEnabled) {
+      return {
+        status: 'DISABLED',
+        badge: 'Busca no Sheets desativada',
+        color: '#64748b',
+        spreadsheetId: config.sheets?.spreadsheetId || 'Não configurado',
+        sheetName: this.catalogRepo?.sheetName || 'PRODUTOS',
+        itemsActive: this.catalogRepo?.items?.length || 0,
+        source,
+        latencyMs: Date.now() - start,
+        message: 'A busca de catálogo no Google Sheets está desativada por configuração.',
+      };
+    }
     try {
       if (!this.catalogRepo?.refreshCatalog) {throw new Error('Catálogo não configurado.');}
       await this.catalogRepo.refreshCatalog();

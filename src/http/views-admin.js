@@ -238,6 +238,11 @@ function renderAdminHtml(storeConfig) {
     <!-- ABA 7: CADASTRO DE PRODUTOS COM MÚLTIPLAS IMAGENS (ADMIN) -->
     <div id="tab-products" class="tab-content">
       <h2 id="productFormTitle">Cadastro & Alteração de Produtos</h2>
+      <div class="product-admin-toolbar">
+        <button type="button" id="adminQuickEntryButton" class="action-btn btn-blue" onclick="openAdminQuickEntry()">+ Entrada rápida</button>
+        <button type="button" id="productInventoryToggle" class="action-btn btn-gray" disabled onclick="toggleProductInventory()">Carregando controle de estoque...</button>
+        <span id="productInventoryStatus" class="muted" role="status"></span>
+      </div>
       <form id="prodForm" onsubmit="handleProductSubmit(event)" class="product-form">
         <input type="hidden" id="formProdId" />
         <div>
@@ -265,9 +270,18 @@ function renderAdminHtml(storeConfig) {
           <select id="formProdStatus"><option value="ATIVO">ATIVO</option><option value="INATIVO">INATIVO — oculto no catálogo</option></select>
         </div>
         <div style="grid-column: 1/-1;">
-          <label style="font-size:12px; font-weight:bold;">📸 Fotos do Produto Direto pro Firestore (Upload Múltiplo Local):</label>
-          <input type="file" id="formProdPhotoFile" accept="image/*" multiple onchange="handleProdPhotoFileSelect(event)" style="width:100%; padding:6px; border:1px solid #cbd5e1; border-radius:6px; background:#f8fafc;" />
-          <div style="font-size:10px; color:#15803d; margin-top:2px;">⚡ <strong>Qualidade Máxima &amp; Zoom HD:</strong> Fotos são redimensionadas no servidor até 1600px com fidelidade botânica nítida para a funcionalidade de zoom no catálogo, mantendo o tamanho leve e seguro dentro do Firestore (&lt;1MB).</div>
+          <label style="font-size:12px; font-weight:bold;">📸 Fotos do Produto no Firebase Storage (Upload Múltiplo Local):</label>
+          <div class="photo-upload-actions">
+            <label class="photo-upload-control">
+              <span>Escolher fotos da galeria</span>
+              <input type="file" id="formProdPhotoFile" accept="image/*" multiple onchange="handleProdPhotoFileSelect(event)" />
+            </label>
+            <label class="photo-upload-control">
+              <span>📷 Tirar foto com a câmera traseira</span>
+              <input type="file" id="formProdCameraFile" accept="image/*" capture="environment" onchange="handleProdPhotoFileSelect(event)" />
+            </label>
+          </div>
+          <div style="font-size:10px; color:#15803d; margin-top:2px;">⚡ <strong>Qualidade Máxima &amp; Zoom HD:</strong> Fotos são otimizadas no servidor antes do envio ao Firebase Storage e ficam disponíveis no catálogo.</div>
           <div id="formProdPhotoPreviewBox" style="display:none; margin-top:8px; padding:10px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
               <div style="font-size:12px; font-weight:bold; color:#14532d;">📸 Galeria de Fotos (<span id="formProdPhotoCount">0</span> foto(s)):</div>
@@ -369,16 +383,16 @@ function renderAdminHtml(storeConfig) {
         <button class="action-btn btn-green" id="btnSubmitImport" disabled onclick="submitImportPayload()">2. Importar planilha</button>
       </div>
 
-      <!-- SEÇÃO: TRANSFERÊNCIA DE FOTOS DO GOOGLE DRIVE PARA O FIRESTORE -->
+      <!-- SEÇÃO: TRANSFERÊNCIA DE FOTOS DO GOOGLE DRIVE PARA O FIREBASE STORAGE -->
       <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:8px; padding:18px; margin-top:20px;">
-        <h3 style="color:#14532d; font-size:15px; margin-bottom:6px; display:flex; align-items:center; gap:8px;">Armazenamento de Fotos no Cloud Firestore
+        <h3 style="color:#14532d; font-size:15px; margin-bottom:6px; display:flex; align-items:center; gap:8px;">Armazenamento de Fotos no Firebase Storage
         </h3>
         <p style="font-size:12px; color:#166534; line-height:1.6; margin-bottom:12px;">
-          Você usava o armazenamento do Google Drive com caminhos na planilha. Agora todas as fotos são transferidas e armazenadas <strong>diretamente no Firestore</strong> (coleção <code>product_images</code>), mantendo o padrão oficial de nomes (<code>{slug-do-produto}_{id}.jpg</code>) e tags botânicas da Conflora.
+          As fotos do Google Drive são transferidas e armazenadas <strong>no Firebase Storage</strong>; o produto mantém a URL de exibição e o caminho do arquivo para permitir sua remoção. Tags e metadados continuam no Firestore.
         </p>
         <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
           <button class="action-btn btn-green" id="btnTransferDrivePhotos" onclick="transferDrivePhotosFromAdmin()">
-            ⚡ Sincronizar &amp; Transferir Fotos do Drive pro Firestore
+            ⚡ Sincronizar &amp; Transferir Fotos do Drive pro Storage
           </button>
           <span id="transferPhotosStatus" style="font-size:12px; color:#475569;"></span>
         </div>
@@ -661,6 +675,7 @@ function renderAdminHtml(storeConfig) {
       if (tab === 'stock') loadStockProducts();
       if (tab === 'price') loadPriceProducts();
       if (tab === 'products') loadAdminProducts();
+      if (tab === 'products') loadInventorySettings();
       if (tab === 'team') loadTeam();
       if (tab === 'notifs') loadNotifications();
       if (tab === 'status') loadAdminStatusData();
@@ -911,35 +926,157 @@ function renderAdminHtml(storeConfig) {
     async function loadNotifications() {
       const container = document.getElementById('notificationsContainer');
       try {
+        if (!currentUser) return;
         const res = await fetch('/api/admin/notifications?userId=' + currentUser.id);
         const list = await res.json();
-        container.innerHTML = '';
-        
-        const unreadCount = list.filter(n => !n.read).length;
+        container.replaceChildren();
+
+        const notifications = Array.isArray(list) ? list : [];
+        const unreadCount = notifications.filter(n => !n.read).length;
         document.getElementById('notifBadge').innerText = unreadCount;
 
-        if (list.length === 0) {
-          container.innerHTML = '<div style="color:#64748b; padding:20px;">Nenhuma notificação no momento.</div>';
-          return;
+        if (notifications.length === 0) {
+          const empty = document.createElement('p');
+          empty.className = 'muted';
+          empty.textContent = 'Nenhuma notificação no momento.';
+          container.appendChild(empty);
         }
 
-        list.forEach(n => {
+        notifications.forEach(n => {
           const div = document.createElement('div');
           const isSale = n.type === 'SALE_COMPLETED';
           div.className = 'notif-card ' + (n.type === 'REJECTED' ? 'rejected' : (isSale ? 'sale' : (n.type === 'APPROVED' ? 'approved' : '')));
-          div.innerHTML = \`
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <strong style="\${isSale ? 'color:#15803d; font-size:14px;' : ''}">\${n.title || 'Aviso da Administração'}</strong>
-              <span style="font-size:11px; color:#64748b;">\${new Date(n.createdAt).toLocaleTimeString()}</span>
-            </div>
-            <div style="margin-top:6px;">\${n.message}</div>
-            \${n.reason ? \`<div style="margin-top:6px; font-weight:bold; color:#991b1b;">Motivo do Cancelamento: "\${n.reason}"</div>\` : ''}
-            \${isSale ? \`<div style="margin-top:8px; display:flex; gap:8px;"><button type="button" class="btn" style="padding:4px 10px; font-size:11px; background:#15803d; color:white; border-radius:4px; border:none; cursor:pointer;" onclick="switchTab('orders')">Ver Pedidos ➔</button></div>\` : ''}
-          \`;
+          const heading = document.createElement('strong');
+          heading.textContent = n.title || 'Aviso da Administração';
+          const timestamp = document.createElement('time');
+          timestamp.dateTime = n.createdAt || '';
+          timestamp.textContent = n.createdAt ? new Date(n.createdAt).toLocaleString('pt-BR') : '';
+          const top = document.createElement('div');
+          top.className = 'notification-heading';
+          top.append(heading, timestamp);
+          const message = document.createElement('p');
+          message.textContent = n.message || '';
+          div.append(top, message);
+          if (n.reason) {
+            const reason = document.createElement('p');
+            reason.className = 'notification-reason';
+            reason.textContent = 'Motivo: ' + n.reason;
+            div.appendChild(reason);
+          }
+          if (isSale) {
+            const ordersButton = document.createElement('button');
+            ordersButton.type = 'button';
+            ordersButton.className = 'action-btn btn-green';
+            ordersButton.textContent = 'Ver pedidos';
+            ordersButton.addEventListener('click', () => showTab('orders'));
+            div.appendChild(ordersButton);
+          }
+          if (n.type === 'DISCOUNT_APPROVAL_PENDING') {
+            const reviewButton = document.createElement('button');
+            reviewButton.type = 'button';
+            reviewButton.className = 'action-btn btn-green';
+            reviewButton.textContent = 'Abrir auditoria';
+            reviewButton.addEventListener('click', () => {
+              showTab('notifs');
+              document.getElementById('discountApprovalsPanel')?.scrollIntoView({ behavior: 'smooth' });
+            });
+            div.appendChild(reviewButton);
+          }
           container.appendChild(div);
         });
+
+        if (String(currentUser.role).toUpperCase() === 'ADMIN') {
+          await renderDiscountApprovals(container);
+        }
       } catch (err) {
-        container.innerHTML = 'Erro ao carregar notificações: ' + err.message;
+        container.textContent = 'Erro ao carregar notificações: ' + err.message;
+      }
+    }
+
+    async function renderDiscountApprovals(container) {
+      const response = await fetch('/api/admin/discount-approvals');
+      if (!response.ok) return;
+      const approvals = await response.json();
+      if (!Array.isArray(approvals) || approvals.length === 0) return;
+
+      const panel = document.createElement('section');
+      panel.id = 'discountApprovalsPanel';
+      panel.className = 'discount-approvals-panel';
+      const title = document.createElement('h2');
+      title.textContent = 'Aprovações de desconto pendentes';
+      panel.appendChild(title);
+
+      approvals.forEach((approval) => {
+        const card = document.createElement('article');
+        card.className = 'discount-approval-card';
+        const heading = document.createElement('h3');
+        heading.textContent = 'Venda para ' + (approval.customerName || 'Cliente');
+        const meta = document.createElement('p');
+        meta.className = 'muted';
+        meta.textContent = (approval.operatorName || 'Operador') + ' · ' + (approval.customerPhone || 'Sem telefone');
+        const items = document.createElement('ul');
+        items.className = 'discount-approval-items';
+        (approval.items || []).forEach((item) => {
+          const row = document.createElement('li');
+          const quantity = Number(item.quantity) || 0;
+          const subtotal = Number(item.price || 0) * quantity;
+          row.textContent = quantity + ' × ' + (item.name || 'Produto') + ' · ' + Number(item.price || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) + ' un · ' + subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+          items.appendChild(row);
+        });
+        const totals = document.createElement('div');
+        totals.className = 'discount-approval-totals';
+        const subtotalLine = document.createElement('p');
+        subtotalLine.textContent = 'Subtotal: ' + Number(approval.subtotal || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        const discountLine = document.createElement('p');
+        discountLine.textContent = 'Desconto: ' + Number(approval.discountPercent || 0) + '% · − ' + Number(approval.discountAmount || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        const totalLine = document.createElement('strong');
+        totalLine.textContent = 'Total da venda: ' + Number(approval.total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        totals.append(subtotalLine, discountLine, totalLine);
+        const actions = document.createElement('div');
+        actions.className = 'discount-review-actions';
+        const accept = document.createElement('button');
+        accept.type = 'button';
+        accept.className = 'discount-review-accept';
+        accept.setAttribute('aria-label', 'Aceitar desconto');
+        accept.textContent = '✓ Aceitar';
+        accept.addEventListener('click', () => reviewDiscountApproval(approval.id, 'APPROVED', accept, reject));
+        const reject = document.createElement('button');
+        reject.type = 'button';
+        reject.className = 'discount-review-reject';
+        reject.setAttribute('aria-label', 'Recusar desconto');
+        reject.textContent = '× Recusar';
+        reject.addEventListener('click', () => reviewDiscountApproval(approval.id, 'REJECTED', reject, accept));
+        actions.append(accept, reject);
+        card.append(heading, meta, items, totals, actions);
+        panel.appendChild(card);
+      });
+      container.appendChild(panel);
+    }
+
+    async function reviewDiscountApproval(approvalId, action, button, alternateButton) {
+      let rejectionReason = '';
+      if (action === 'REJECTED') {
+        rejectionReason = window.prompt('Informe o motivo da recusa:') || '';
+        if (!rejectionReason.trim()) {
+          if (rejectionReason !== '') alert('O motivo da recusa é obrigatório.');
+          return;
+        }
+      }
+      button.disabled = true;
+      alternateButton.disabled = true;
+      try {
+        const response = await fetch('/api/admin/discount-approvals/' + encodeURIComponent(approvalId) + '/review', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, rejectionReason }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Não foi possível revisar o desconto.');
+        await loadNotifications();
+      } catch (error) {
+        button.disabled = false;
+        alternateButton.disabled = false;
+        alert(error.message);
       }
     }
 
@@ -1362,6 +1499,25 @@ function renderAdminHtml(storeConfig) {
       document.getElementById('inventorySettingsStatus').textContent = settings.stockControlEnabled
         ? 'Ativado: o catálogo limita compras ao saldo disponível e as vendas dão baixa no estoque.'
         : 'Desativado: produtos ativos podem ser vendidos mesmo com saldo zero. As vendas não alteram o saldo; você pode cadastrar as entradas normalmente.';
+      const toggleButton = document.getElementById('productInventoryToggle');
+      if (toggleButton) {
+        toggleButton.textContent = settings.stockControlEnabled
+          ? '📦 Estoque: ATIVO (Controlando)'
+          : '⚡ Vender Tudo (Sem controle de estoque)';
+        toggleButton.className = 'action-btn ' + (settings.stockControlEnabled ? 'btn-green' : 'btn-amber');
+        toggleButton.setAttribute('aria-pressed', String(settings.stockControlEnabled));
+        toggleButton.disabled = false;
+      }
+      const productStatus = document.getElementById('productInventoryStatus');
+      if (productStatus) {
+        productStatus.textContent = settings.stockControlEnabled
+          ? 'Produtos sem saldo ficam bloqueados na venda.'
+          : 'Produtos ativos podem ser vendidos com saldo zero.';
+      }
+    }
+    function openAdminQuickEntry() {
+      if (currentUser?.role !== 'ADMIN') return;
+      showTab('stock');
     }
     async function loadInventorySettings() {
       const panel = document.getElementById('inventorySettingsPanel');
@@ -1375,6 +1531,34 @@ function renderAdminHtml(storeConfig) {
         checkbox.disabled = false;
       } catch (error) {
         document.getElementById('inventorySettingsStatus').textContent = error.message;
+        const toggleButton = document.getElementById('productInventoryToggle');
+        if (toggleButton) {
+          toggleButton.textContent = 'Não foi possível carregar o controle de estoque';
+          toggleButton.disabled = true;
+        }
+      }
+    }
+    async function toggleProductInventory() {
+      const toggleButton = document.getElementById('productInventoryToggle');
+      const productStatus = document.getElementById('productInventoryStatus');
+      if (!toggleButton || toggleButton.disabled) return;
+      toggleButton.disabled = true;
+      if (productStatus) productStatus.textContent = 'Salvando configuração...';
+      try {
+        const currentResponse = await fetch('/api/admin/inventory-settings');
+        if (!currentResponse.ok) throw new Error('Não foi possível carregar a configuração.');
+        const current = await currentResponse.json();
+        const response = await fetch('/api/admin/inventory-settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stockControlEnabled: !current.stockControlEnabled }),
+        });
+        const settings = await response.json();
+        if (!response.ok) throw new Error(settings.error || 'Não foi possível salvar a configuração.');
+        showInventorySettings(settings);
+      } catch (error) {
+        if (productStatus) productStatus.textContent = error.message;
+        toggleButton.disabled = false;
       }
     }
     async function saveInventorySettings() {
@@ -1521,7 +1705,7 @@ function renderAdminHtml(storeConfig) {
         const isPrimary = index === 0;
         card.style.cssText = 'position:relative; background:#ffffff; border:1px solid ' + (isPrimary ? '#22c55e' : '#cbd5e1') + '; border-radius:8px; padding:6px; display:flex; flex-direction:column; align-items:center; gap:4px; box-shadow:0 1px 3px rgba(0,0,0,0.05);';
 
-        const imgSrc = item.dataUrl || item.url || '';
+        const imgSrc = item.previewUrl || item.dataUrl || item.url || '';
         const badge = isPrimary
           ? '<span style="position:absolute; top:4px; left:4px; background:#16a34a; color:white; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:10px;">⭐ Capa</span>'
           : '<span style="position:absolute; top:4px; left:4px; background:rgba(0,0,0,0.6); color:white; font-size:10px; padding:1px 5px; border-radius:10px;">#' + (index + 1) + '</span>';
@@ -1557,23 +1741,35 @@ function renderAdminHtml(storeConfig) {
 
     function removePendingPhoto(index) {
       if (index < 0 || index >= pendingPhotosList.length) return;
-      pendingPhotosList.splice(index, 1);
+      const [removedPhoto] = pendingPhotosList.splice(index, 1);
+      if (removedPhoto.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(removedPhoto.previewUrl);
       renderPendingPhotosGrid();
     }
 
     function clearAllPendingPhotos() {
+      pendingPhotosList.forEach((photo) => {
+        if (photo.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(photo.previewUrl);
+      });
       pendingPhotosList = [];
-      const fileInput = document.getElementById('formProdPhotoFile');
-      if (fileInput) fileInput.value = '';
+      for (const inputId of ['formProdPhotoFile', 'formProdCameraFile']) {
+        const fileInput = document.getElementById(inputId);
+        if (fileInput) fileInput.value = '';
+      }
       renderPendingPhotosGrid();
     }
 
     function handleProdPhotoFileSelect(event) {
-      const files = event.target.files;
+      const files = Array.from(event.target.files || []);
       if (!files || files.length === 0) return;
+      event.target.value = '';
 
       const name = document.getElementById('formProdName').value || 'produto';
       const id = document.getElementById('formProdId').value || 'novo';
+      const oversizedFile = files.find((file) => file.size > 20 * 1024 * 1024);
+      if (oversizedFile) {
+        alert('Cada foto deve ter até 20 MB. A imagem original será otimizada no servidor.');
+        return;
+      }
       const tagsInput = document.getElementById('formProdTags');
       if (!tagsInput.value) {
         const cat = document.getElementById('formProdCat').value;
@@ -1584,19 +1780,14 @@ function renderAdminHtml(storeConfig) {
         if (tagsBox) tagsBox.textContent = '🏷️ Tags Conflora: ' + autoTags;
       }
 
-      Array.from(files).forEach((file) => {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-          const dataUrl = e.target.result;
-          const stdName = slugifyClient(name) + '_' + id + '_' + (pendingPhotosList.length + 1) + '.jpg';
-          pendingPhotosList.push({
-            dataUrl,
-            fileName: stdName,
-            isExisting: false,
-          });
-          renderPendingPhotosGrid();
+      files.forEach((file) => {
+        const upload = {
+          file,
+          previewUrl: URL.createObjectURL(file),
+          fileName: slugifyClient(name) + '_' + id + '_' + (pendingPhotosList.length + 1) + '.jpg',
+          isExisting: false,
         };
-        reader.readAsDataURL(file);
+        pendingPhotosList.push(upload);
       });
     }
 
@@ -1610,7 +1801,7 @@ function renderAdminHtml(storeConfig) {
       document.getElementById('formProdPrice').value = Number(p.valor_num || p.price || 0);
       document.getElementById('formProdStock').value = p.stockQuantity ?? p.estoque ?? 0;
       document.getElementById('formProdStatus').value = productIsInactive(p) ? 'INATIVO' : 'ATIVO';
-      document.getElementById('formProdImages').value = (p.images || [p.imageUrl || p.imageurl]).filter(Boolean).join(', ');
+      document.getElementById('formProdImages').value = '';
       document.getElementById('formProdTags').value = p.tagsAi || p.tags_ia || '';
       document.getElementById('formProdDesc').value = p.descriptionAi || p.descricao_ia || '';
       document.getElementById('formProdPhotoBase64').value = '';
@@ -1645,8 +1836,13 @@ function renderAdminHtml(storeConfig) {
     }
 
     async function deleteProduct(id) {
-      if (!confirm('Deseja excluir este produto do Firestore?')) return;
-      await fetch('/api/admin/products/' + id, { method: 'DELETE' });
+      if (!confirm('Deseja excluir este produto e suas fotos?')) return;
+      const response = await fetch('/api/admin/products/' + id, { method: 'DELETE' });
+      const result = await response.json();
+      if (!response.ok) {
+        alert('Não foi possível excluir o produto: ' + (result.error || 'Falha ao remover o produto.'));
+        return;
+      }
       loadAdminProducts();
     }
 
@@ -1662,9 +1858,16 @@ function renderAdminHtml(storeConfig) {
       const tags = document.getElementById('formProdTags').value;
       const desc = document.getElementById('formProdDesc').value;
 
-      const newUploads = pendingPhotosList.filter(p => p.dataUrl && !p.isExisting).map(p => p.dataUrl);
+      const newUploads = pendingPhotosList.filter(p => p.file && !p.isExisting);
       const existingUrls = pendingPhotosList.filter(p => p.isExisting && p.url).map(p => p.url);
       const combinedImgs = [...existingUrls, ...externalImgs];
+      const savedProduct = allProducts.find(product => String(product.id) === String(id));
+      const storedImages = Array.isArray(savedProduct?.images) && savedProduct.images.length
+        ? savedProduct.images
+        : (savedProduct?.imageUrl ? [savedProduct.imageUrl] : []);
+      const imagesForInitialSave = newUploads.length
+        ? [...new Set([...storedImages, ...externalImgs])]
+        : combinedImgs;
 
       const payload = {
         id,
@@ -1675,17 +1878,12 @@ function renderAdminHtml(storeConfig) {
         price,
         stockQuantity: stock,
         status: document.getElementById('formProdStatus').value,
-        images: combinedImgs,
-        imageUrl: combinedImgs[0] || '',
+        images: imagesForInitialSave,
+        imageUrl: imagesForInitialSave[0] || '',
         tagsAi: tags,
         tags_ia: tags,
         descriptionAi: desc,
       };
-
-      if (newUploads.length > 0) {
-        payload.photosBase64 = newUploads;
-        payload.photoBase64 = newUploads[0];
-      }
 
       const res = await fetch('/api/admin/products', {
         method: 'POST',
@@ -1695,7 +1893,55 @@ function renderAdminHtml(storeConfig) {
       const data = await res.json();
 
       if (data.success) {
-        alert('✅ Produto e fotos salvos com sucesso no Firestore com alta qualidade para zoom!');
+        document.getElementById('formProdId').value = id;
+        try {
+          for (const upload of newUploads) {
+            const photoResponse = await fetch('/api/admin/products/' + encodeURIComponent(id) + '/photo', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/octet-stream',
+                'X-Photo-Content-Type': upload.file.type || 'image/jpeg',
+                'X-Photo-Append': 'true',
+                'X-Product-Name': name,
+              },
+              body: upload.file,
+            });
+            const photoResult = await photoResponse.json();
+            if (!photoResponse.ok || !photoResult.success) {
+              throw new Error(photoResult.error || 'Não foi possível enviar uma das fotos.');
+            }
+            if (upload.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(upload.previewUrl);
+            upload.url = photoResult.photos?.[0]?.url || photoResult.photo?.url || '';
+            upload.previewUrl = upload.url;
+            upload.dataUrl = upload.url;
+            upload.file = null;
+            upload.isExisting = Boolean(upload.url);
+          }
+
+          const finalImages = [...new Set([
+            ...pendingPhotosList.filter(photo => photo.isExisting && photo.url).map(photo => photo.url),
+            ...externalImgs,
+          ])];
+          const finalResponse = await fetch('/api/admin/products', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ...payload,
+              images: finalImages,
+              imageUrl: finalImages[0] || '',
+            }),
+          });
+          const finalResult = await finalResponse.json();
+          if (!finalResponse.ok || !finalResult.success) {
+            throw new Error(finalResult.error || 'Não foi possível concluir a substituição das fotos.');
+          }
+        } catch (error) {
+          renderPendingPhotosGrid();
+          loadAdminProducts();
+          alert('Produto salvo, mas não foi possível concluir o ciclo das fotos: ' + error.message + '. Tente novamente.');
+          return;
+        }
+        alert('✅ Produto salvo e fotos enviadas ao Firebase Storage em alta qualidade para zoom!');
         resetProdForm();
         loadAdminProducts();
         loadPriceProducts();
@@ -1709,20 +1955,20 @@ function renderAdminHtml(storeConfig) {
       const status = document.getElementById('transferPhotosStatus');
       const box = document.getElementById('transferPhotosResultBox');
       btn.disabled = true;
-      status.textContent = '⏳ Analisando catálogo e transferindo fotos para o Firestore...';
+      status.textContent = '⏳ Analisando catálogo e transferindo fotos para o Firebase Storage...';
       box.style.display = 'none';
 
       try {
         const res = await fetch('/api/admin/transfer-drive-photos', { method: 'POST' });
         const data = await res.json();
         if (data.success) {
-          status.textContent = '✅ ' + data.count + ' fotos sincronizadas no Firestore!';
+          status.textContent = '✅ ' + data.count + ' fotos sincronizadas no Firebase Storage!';
           box.style.display = 'block';
-          box.innerHTML = '<strong>Resultado da Transferência para o Firestore (coleção product_images):</strong><br>' +
+          box.innerHTML = '<strong>Resultado da transferência para o Firebase Storage:</strong><br>' +
             (data.details && data.details.length > 0
               ? data.details.slice(0, 15).map(d => '• <strong>' + d.name + '</strong> ➔ Arquivo: <code>' + d.fileName + '</code> | Tags: <em>' + d.tags + '</em>').join('<br>') +
                 (data.details.length > 15 ? '<br><em>... e mais ' + (data.details.length - 15) + ' produtos sincronizados.</em>' : '')
-              : 'Todos os produtos já possuem fotos gravadas e sincronizadas no Firestore com o padrão oficial.');
+              : 'Todos os produtos já possuem fotos sincronizadas no Firebase Storage.');
           await loadAdminProducts();
           await loadPriceProducts();
         } else {
@@ -1799,15 +2045,32 @@ function renderAdminHtml(storeConfig) {
 
       const items = [{ productId: p.id, name: p.descricao || p.name, price: Number(p.valor_num || p.price || 0), quantity: qty }];
 
-      await fetch('/api/admin/orders/manual', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customerName: name, customerPhone: phone, items, paymentMethod: pay })
-      });
+      try {
+        const response = await fetch('/api/admin/orders/manual', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ customerName: name, customerPhone: phone, items, paymentMethod: pay })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Não foi possível registrar a venda.');
 
-      alert('Venda registrada com sucesso no caixa!');
-      closeManualOrderModal();
-      loadCashierDaily();
+        if (result.order?.paymentCheckoutUrl) {
+          const paymentWindow = window.open(result.order.paymentCheckoutUrl, '_blank', 'noopener,noreferrer');
+          if (!paymentWindow) {
+            window.prompt('Copie o link seguro do pagamento Pix:', result.order.paymentCheckoutUrl);
+          }
+          const receiptWarning = result.receiptDelivery?.sent === false
+            ? ' Aviso: ' + result.receiptDelivery.reason
+            : '';
+          alert('Venda registrada. Aguardando aprovação do Pix pelo Mercado Pago.' + receiptWarning);
+        } else {
+          alert('Venda registrada com sucesso no caixa!');
+        }
+        closeManualOrderModal();
+        loadCashierDaily();
+      } catch (error) {
+        alert(error.message || 'Não foi possível registrar a venda.');
+      }
     }
 
     // 13. PLANILHA MODELO E IMPORTADOR COM AUDITORIA LINHA A LINHA

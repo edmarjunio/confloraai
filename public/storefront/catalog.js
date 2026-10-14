@@ -5,15 +5,61 @@ import {
   quantityControl,
   storageGet,
   storageSet,
-  notify,
 } from "./ui.js";
 import { icon } from "./icons.js";
 import { searchProducts } from "./guided-search.mjs";
 
+const PRODUCT_HIGHLIGHTS = [
+  { label: "Sol Pleno", icon: "☀", tone: "sun", terms: ["sol pleno", "pleno sol"] },
+  { label: "Meia Sombra", icon: "◐", tone: "shade", terms: ["meia sombra", "luz indireta"] },
+  { label: "Sombra", icon: "☾", tone: "shade", terms: ["sombra"] },
+  { label: "Irrigado", icon: "💧", tone: "water", terms: ["irrigado", "solo umido", "solo humido"] },
+  { label: "Aquático", icon: "💧", tone: "water", terms: ["aquatico", "aquatica"] },
+  { label: "Ave Exótica", icon: "✦", tone: "pet", terms: ["ave exotica", "ave ornamental"] },
+  { label: "Pet Friendly", icon: "🐾", tone: "pet", terms: ["pet friendly", "seguro para pets"] },
+  { label: "Frutífera", icon: "●", tone: "fruit", terms: ["frutifera", "frutifero"] },
+  { label: "Florífera", icon: "✿", tone: "flower", terms: ["florifera", "florifero", "flores ornamentais"] },
+];
+
+function normalizeProductText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function getProductHighlights(product) {
+  const specificationText = Object.values(product.specifications || {})
+    .flatMap((specification) => [specification?.label, specification?.value])
+    .filter(Boolean);
+  const sourceText = normalizeProductText([
+    product.name,
+    product.categoryName,
+    product.subcategoryName,
+    product.description,
+    product.descriptionAi,
+    product.descricao_ia,
+    ...(Array.isArray(product.tags) ? product.tags : []),
+    ...(Array.isArray(product.searchAliases) ? product.searchAliases : []),
+    product.ambiente_ideal,
+    product.cuidados_basicos,
+    ...specificationText,
+  ].join(" "));
+
+  return PRODUCT_HIGHLIGHTS.filter((highlight) => {
+    if (highlight.label === "Sombra" && sourceText.includes("meia sombra")) {
+      return false;
+    }
+    return highlight.terms.some((term) => sourceText.includes(term));
+  }).slice(0, 2);
+}
+
 export function createCatalog(state, add, navigate) {
-  let category = "";
   let pageSize = 24;
-  let statusFilter = "ATIVO"; // "ATIVO" | "TODOS" | "INATIVO"
+  let selectedCategory = "";
+  let showingFavorites = false;
   const favoriteKey = `store:${state.slug}:favorites`;
   const saved = storageGet(favoriteKey, []);
   const favorites = new Set(Array.isArray(saved) ? saved : []);
@@ -36,6 +82,9 @@ export function createCatalog(state, add, navigate) {
       }
       storageSet(favoriteKey, [...favorites]);
       button.setAttribute("aria-pressed", String(favorites.has(product.id)));
+      if (showingFavorites) {
+        render();
+      }
     });
     return button;
   }
@@ -47,10 +96,38 @@ export function createCatalog(state, add, navigate) {
     return names?.length ? names.join(" · ") : (product.categoryName || product.category || "");
   };
 
+  function categoryOptions(products) {
+    const categories = new Map();
+    const configured = state.config?.categories || [];
+    for (const product of products) {
+      const ids = Array.isArray(product.categories) ? product.categories : [];
+      if (ids.length) {
+        for (const id of ids) {
+          const category = configured.find((item) => item.id === id);
+          const name = category?.name || product.categoryName || product.category;
+          if (name && category?.isActive !== false) {
+            categories.set(id, { id, name });
+          }
+        }
+      } else {
+        const name = product.categoryName || product.category;
+        const id = name ? `name:${normalizeProductText(name)}` : "";
+        if (id && !categories.has(id)) {
+          categories.set(id, { id, name });
+        }
+      }
+    }
+    return [...categories.values()].sort((a, b) =>
+      a.name.localeCompare(b.name, "pt-BR"),
+    );
+  }
+
   function card(product, compact = false) {
     const photo = element("img", {
       src: product.imageUrl || "/store-assets/placeholder.svg",
-      alt: product.name,
+      alt: product.imageIsIllustrative
+        ? `Imagem ilustrativa de ${product.name}`
+        : product.name,
       loading: "lazy",
       decoding: "async",
     });
@@ -72,6 +149,7 @@ export function createCatalog(state, add, navigate) {
       product.stock?.tracked &&
       product.stock.quantity < (product.saleUnit?.minimum || 1);
     const unavailable = isInactive || outOfStock;
+    const highlights = !compact && !isInactive ? getProductHighlights(product) : [];
 
     const button = element("button", {
       class: "primary",
@@ -92,11 +170,9 @@ export function createCatalog(state, add, navigate) {
       class: "card-quick-edit",
       title: "Editar produto",
       text: "✏️",
-      onclick: (e) => {
-        e.stopPropagation();
-        if (state.productEntry) {
-          state.productEntry.open(product);
-        }
+      onclick: (event) => {
+        event.stopPropagation();
+        state.productEntry?.open(product);
       },
     });
 
@@ -104,34 +180,22 @@ export function createCatalog(state, add, navigate) {
       "article",
       { class: compact ? "recommendation" : `product-card ${isInactive ? "is-inactive" : ""}` },
       [
+        ...(highlights.length
+          ? [element("div", { class: "product-feature-tags", "aria-label": "Características do produto" }, highlights.map((highlight) => element("span", {
+            class: `product-feature-tag ${highlight.tone}`,
+            text: `${highlight.icon} ${highlight.label}`,
+          })))]
+          : []),
         ...(!compact ? [favorite(product), editBtn] : []),
         ...(isInactive
-          ? [
-              element("div", {
-                class: "badge-inactive",
-                text: "⚠️ INATIVO - Indisponível",
-              }),
-            ]
+          ? [element("div", { class: "badge-inactive", text: "⚠️ INATIVO - Indisponível" })]
           : []),
-        element(
-          "button",
-          {
-            class: "product-photo",
-            "aria-label": `Ver ${product.name}`,
-            onclick: open,
-          },
-          [photo],
-        ),
+        element("button", { class: "product-photo", "aria-label": `Ver ${product.name}`, onclick: open }, [photo]),
         element("div", { class: "product-content" }, [
-          element("button", {
-            class: "product-name",
-            text: product.name,
-            onclick: open,
-          }),
+          element("button", { class: "product-name", text: product.name, onclick: open }),
           element("small", {
             class: "muted",
-            text:
-              categoryLabel(product) || product.tags?.slice(0, 2).join(" · "),
+            text: categoryLabel(product) || product.tags?.slice(0, 2).join(" · "),
           }),
           element("strong", {
             text: `${money(product.price.amountMinor)}${(product.saleUnit?.code || "UN") === "UN" ? "" : " / " + (product.saleUnit?.label || product.saleUnit?.code)}`,
@@ -142,195 +206,107 @@ export function createCatalog(state, add, navigate) {
     );
   }
 
-  function renderStatusFilters() {
-    const bar = $("#statusFilters");
-    if (!bar) return;
-    const filters = [
-      { id: "ATIVO", label: "🟢 Ativos" },
-      { id: "TODOS", label: "📋 Todos" },
-      { id: "INATIVO", label: "🔴 Inativos" },
-    ];
-    bar.replaceChildren(
-      ...filters.map((f) =>
+  function render() {
+    const rawQuery = $("#search").value.trim();
+    let baseList = state.products.filter(
+      (product) => product.status !== "INATIVO" && product.isAvailable !== false,
+    );
+    if (showingFavorites) {
+      baseList = baseList.filter((product) => favorites.has(product.id));
+    }
+    const categories = categoryOptions(baseList);
+    $("#categoryFilterControl").hidden = categories.length === 0;
+    if (!categories.some((category) => category.id === selectedCategory)) {
+      selectedCategory = "";
+    }
+    $("#categoryFilterControl").replaceChildren(
+      element("button", {
+        type: "button",
+        class: `category-chip${selectedCategory ? "" : " is-active"}`,
+        text: "Todas",
+        "aria-pressed": String(!selectedCategory),
+        onclick: () => {
+          selectedCategory = "";
+          pageSize = 24;
+          render();
+        },
+      }),
+      ...categories.map((category) =>
         element("button", {
           type: "button",
-          class: `status-filter-btn ${statusFilter === f.id ? "active" : ""}`,
-          text: f.label,
+          class: `category-chip${selectedCategory === category.id ? " is-active" : ""}`,
+          text: category.name,
+          "aria-pressed": String(selectedCategory === category.id),
           onclick: () => {
-            statusFilter = f.id;
-            renderStatusFilters();
+            selectedCategory = category.id;
+            pageSize = 24;
             render();
           },
         }),
       ),
     );
-  }
-
-  function renderStockToggle() {
-    const btn = $("#stockToggleBtn");
-    if (!btn) return;
-    const isTracked =
-      state.config?.inventory?.stockControlEnabled ??
-      state.products.some((p) => p.stock?.tracked);
-
-    if (isTracked) {
-      btn.textContent = "📦 Estoque: ATIVO (Controlando)";
-      btn.className = "stock-toggle-btn stock-active";
-      btn.title = "Clique para permitir venda livre sem controle de estoque";
-    } else {
-      btn.textContent = "⚡ Vender Tudo (Sem controle de estoque)";
-      btn.className = "stock-toggle-btn stock-disabled";
-      btn.title = "Clique para ativar controle de estoque dos produtos";
-    }
-
-    btn.onclick = async () => {
-      btn.disabled = true;
-      try {
-        const nextState = !isTracked;
-        await state.api("/inventory-settings", {
-          method: "PUT",
-          body: { stockControlEnabled: nextState },
-        });
-        notify(
-          nextState
-            ? "Controle de estoque ATIVADO: produtos sem saldo serão bloqueados."
-            : "Controle de estoque DESATIVADO: agora todos os produtos podem ser vendidos livremente!",
-        );
-        if (state.reloadProducts) {
-          await state.reloadProducts();
+    if (selectedCategory) {
+      baseList = baseList.filter((product) => {
+        const ids = Array.isArray(product.categories) ? product.categories : [];
+        if (ids.includes(selectedCategory)) {
+          return true;
         }
-      } catch (err) {
-        notify("Erro ao alternar estoque: " + err.message);
-      } finally {
-        btn.disabled = false;
-      }
-    };
-  }
-
-  function render() {
-    renderStatusFilters();
-    renderStockToggle();
-
-    const rawQuery = $("#search").value.trim();
-
-    // 1. Filtrar pelo status selecionado (ATIVO por padrão)
-    let baseList = state.products;
-    if (statusFilter === "ATIVO") {
-      baseList = baseList.filter(
-        (p) => p.status !== "INATIVO" && p.isAvailable !== false,
-      );
-    } else if (statusFilter === "INATIVO") {
-      baseList = baseList.filter(
-        (p) => p.status === "INATIVO" || p.isAvailable === false,
-      );
+        const fallbackName = product.categoryName || product.category;
+        return (
+          !ids.length &&
+          selectedCategory === `name:${normalizeProductText(fallbackName)}`
+        );
+      });
     }
 
-    // 2. Filtrar pela categoria selecionada
-    if (category) {
-      baseList = baseList.filter(
-        (p) =>
-          p.categories?.includes(category) ||
-          p.categoryName === category ||
-          p.category === category,
-      );
-    }
-
-    let list;
-    if (rawQuery) {
-      list = searchProducts(
-        baseList,
-        rawQuery,
-        state.config?.assistant?.synonyms || [],
-      ).map((result) => result.product);
-      if (!list.length && category) {
-        list = searchProducts(
-          state.products,
+    const list = rawQuery
+      ? searchProducts(
+          baseList,
           rawQuery,
           state.config?.assistant?.synonyms || [],
-        ).map((result) => result.product);
-      }
-    } else {
-      list = [...baseList];
-      const sort = $("#sort").value;
-      list.sort(
-        (a, b) =>
-          (sort === "sales"
-            ? (b.salesCount || 0) - (a.salesCount || 0)
-            : sort === "price"
-              ? a.price.amountMinor - b.price.amountMinor
-              : sort === "priceDesc"
-                ? b.price.amountMinor - a.price.amountMinor
-                : 0) || a.name.localeCompare(b.name, "pt-BR"),
-      );
+        ).map((result) => result.product)
+      : [...baseList];
+    const sortOrder = $("#sortOrder").value;
+    if (!rawQuery || sortOrder !== "az") {
+      list.sort((a, b) => {
+        if (sortOrder === "price-asc" || sortOrder === "price-desc") {
+          const priceDifference =
+            (a.price?.amountMinor || 0) - (b.price?.amountMinor || 0);
+          if (priceDifference) {
+            return sortOrder === "price-asc" ? priceDifference : -priceDifference;
+          }
+        } else if (sortOrder === "za") {
+          return b.name.localeCompare(a.name, "pt-BR");
+        }
+        return a.name.localeCompare(b.name, "pt-BR");
+      });
     }
 
     $("#products").replaceChildren(
       ...list.slice(0, pageSize).map((p) => card(p)),
     );
     if (!list.length) {
-      const msg =
-        statusFilter === "INATIVO"
-          ? "Nenhum produto inativo no catálogo."
-          : "Nenhum produto encontrado. Tente outra busca ou categoria.";
       $("#products").append(
         element("p", {
           class: "empty",
-          text: msg,
+          text: showingFavorites
+            ? "Você ainda não salvou produtos. Toque no coração para guardá-los aqui."
+            : "Nenhum produto encontrado. Tente outra busca.",
         }),
       );
     }
     $("#resultCount").textContent = `${list.length} produtos`;
+    $("#catalogTitle").textContent = showingFavorites
+      ? "Seus produtos salvos"
+      : "Explore o catálogo";
     $("#loadMore").hidden = list.length <= pageSize;
   }
 
-  function categories() {
-    // Pegar categorias que possuem produtos ATIVOS
-    const activeProducts = state.products.filter(
-      (p) => p.status !== "INATIVO" && p.isAvailable !== false,
-    );
-    const activeCategoryIds = new Set(
-      activeProducts.flatMap((p) => p.categories || []),
-    );
-    const activeCategoryNames = new Set(
-      activeProducts.map((p) => p.categoryName || p.category).filter(Boolean),
-    );
-
-    let categoryList = (state.config?.categories || []).filter(
-      (c) =>
-        c.isActive &&
-        (activeCategoryIds.has(c.id) || activeCategoryNames.has(c.name)),
-    );
-
-    // Se o catálogo for genérico e não tiver categories pré-configuradas:
-    if (!categoryList.length && activeCategoryNames.size > 0) {
-      categoryList = [...activeCategoryNames].map((name, index) => ({
-        id: name,
-        name,
-        isActive: true,
-        order: index,
-      }));
-    }
-
-    const items = [
-      { id: "", name: "Todas" },
-      ...categoryList.sort((a, b) => a.order - b.order),
-    ];
-
-    $("#categories").replaceChildren(
-      ...items.map((c) =>
-        element("button", {
-          text: c.name,
-          class: c.id === category ? "pill active" : "pill",
-          "aria-pressed": String(c.id === category),
-          onclick: () => {
-            category = c.id;
-            pageSize = 24;
-            categories();
-            render();
-          },
-        }),
-      ),
-    );
+  function setFavoritesView(show) {
+    showingFavorites = show;
+    selectedCategory = "";
+    pageSize = 24;
+    render();
   }
 
   function details(id) {
@@ -380,7 +356,9 @@ export function createCatalog(state, add, navigate) {
     const mainPhoto = element("img", {
       class: "detail-photo",
       src: images[0].url,
-      alt: images[0].alt,
+      alt: product.imageIsIllustrative
+        ? `Imagem ilustrativa de ${product.name}`
+        : images[0].alt,
     });
     mainPhoto.addEventListener(
       "error",
@@ -592,11 +570,14 @@ export function createCatalog(state, add, navigate) {
     pageSize = 24;
     render();
   });
-  $("#sort").addEventListener("change", render);
+  $("#sortOrder").addEventListener("change", () => {
+    pageSize = 24;
+    render();
+  });
   $("#loadMore").addEventListener("click", () => {
     pageSize += 24;
     render();
   });
 
-  return { render, categories, details, card };
+  return { render, details, card, setFavoritesView };
 }

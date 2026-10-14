@@ -13,6 +13,25 @@ const {
 } = require('../src/catalog/product-photo.service');
 const { createApp } = require('../src/http/app');
 
+function createMemoryProductImageStorage() {
+  const files = new Map();
+
+  return {
+    files,
+    async uploadProductImage({ productId, fileName, buffer }) {
+      const imagePath = `products/${productId}/${Date.now()}-${fileName}`;
+      files.set(imagePath, Buffer.from(buffer));
+      return {
+        imagePath,
+        imageUrl: `https://storage.test/${imagePath}`,
+      };
+    },
+    async deleteProductImage(imagePath) {
+      return files.delete(imagePath);
+    },
+  };
+}
+
 test('1. Padrão oficial de nomes de arquivo e tags botânicas', () => {
   // Slugify
   assert.equal(slugify('Palmeira Rabo de Raposa (Muda Média)'), 'palmeira-rabo-de-raposa-muda-media');
@@ -204,7 +223,11 @@ test('5. Rota HTTP GET /api/images/:id entrega a imagem do Firestore com headers
 });
 
 test('6. API administrativa transfere fotos do Drive e aceita upload direto via /api/admin/products/:id/photo', async () => {
-  const repo = new FirestoreRepository({ isInMemory: true });
+  const productImageStorage = createMemoryProductImageStorage();
+  const repo = new FirestoreRepository({
+    isInMemory: true,
+    productImageStorage,
+  });
 
   // Popula produto com caminho do Drive
   await repo.saveProduct({
@@ -245,9 +268,12 @@ test('6. API administrativa transfere fotos do Drive e aceita upload direto via 
     assert.equal(transferData.success, true);
     assert.equal(transferData.count, 1);
 
-    // Verifica que cebolinha foi atualizada para /api/images/img_prod-mig-01
+    // Verifica que cebolinha foi atualizada com a URL e o caminho do Storage
     const cebolinha = await repo.getProductById('prod-mig-01');
-    assert.equal(cebolinha.imageUrl, '/api/images/img_prod-mig-01');
+    assert.ok(cebolinha.imageUrl.startsWith('https://storage.test/products/prod-mig-01/'));
+    assert.ok(cebolinha.imagePath.startsWith('products/prod-mig-01/'));
+    const transferredImagePath = cebolinha.imagePath;
+    assert.ok(productImageStorage.files.has(transferredImagePath));
     assert.ok(cebolinha.tagsAi.includes('cheiro verde') || cebolinha.tagsAi.includes('cebolinha'));
 
     // 3. Testa upload direto no endpoint dedicado /api/admin/products/:id/photo
@@ -265,7 +291,36 @@ test('6. API administrativa transfere fotos do Drive e aceita upload direto via 
     assert.equal(uploadRes.status, 200);
     assert.equal(uploadData.success, true);
     assert.equal(uploadData.photo.fileName, 'cebolinha-verde-da-horta_prod-mig-01.jpg');
+    assert.ok(uploadData.photo.url.startsWith('https://storage.test/products/prod-mig-01/'));
+    assert.ok(productImageStorage.files.has(uploadData.photo.imagePath));
+    assert.equal(productImageStorage.files.has(transferredImagePath), false);
     assert.ok(uploadData.photo.tags.includes('cheiro verde') || uploadData.photo.tags.includes('cebolinha'));
+
+    const cameraUploadRes = await fetch(`http://127.0.0.1:${port}/api/admin/products/prod-mig-01/photo`, {
+      method: 'POST',
+      headers: {
+        cookie,
+        'Content-Type': 'application/octet-stream',
+        'X-Photo-Content-Type': 'image/jpeg',
+        'X-Photo-Append': 'true',
+      },
+      body: Buffer.from(sampleBase64, 'base64'),
+    });
+    const cameraUploadData = await cameraUploadRes.json();
+    assert.equal(cameraUploadRes.status, 200);
+    assert.equal(cameraUploadData.success, true);
+    assert.ok(cameraUploadData.photos[0].url.startsWith('https://storage.test/products/prod-mig-01/'));
+    assert.ok(productImageStorage.files.has(cameraUploadData.photos[0].imagePath));
+    assert.equal(cameraUploadData.product.imagePaths.length, 2);
+    assert.ok(await repo.getProductPhoto('img_prod-mig-01_1'));
+
+    const deleteRes = await fetch(`http://127.0.0.1:${port}/api/admin/products/prod-mig-01`, {
+      method: 'DELETE',
+      headers: { cookie },
+    });
+    assert.equal(deleteRes.status, 200);
+    assert.equal(await repo.getProductById('prod-mig-01'), null);
+    assert.equal(productImageStorage.files.size, 0);
   } finally {
     server.close();
   }

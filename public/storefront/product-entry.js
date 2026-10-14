@@ -434,10 +434,5 @@ export function createProductEntry(state, onSaved) {
   if (headerBtn) {
     headerBtn.addEventListener("click", () => open(null));
   }
-  const catalogBtn = $("#catalogEntryBtn");
-  if (catalogBtn) {
-    catalogBtn.addEventListener("click", () => open(null));
-  }
-
   return { open, render };
 }

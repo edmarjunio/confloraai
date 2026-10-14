@@ -1,0 +1,5 @@
+*.log
+repomix-output.xml
+bun.lock
+package-lock.json
+test-results*

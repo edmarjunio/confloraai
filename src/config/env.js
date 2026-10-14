@@ -61,6 +61,7 @@ const config = Object.freeze({
     spreadsheetId: process.env.SPREADSHEET_ID || '1p9gVQkuZkVagi4gyP4Tp8fdItHm6W-wkT2osxTstQVU',
     sheetName: process.env.SHEET_NAME || 'PRODUTOS',
     cacheSeconds: parseInt(process.env.SHEETS_CACHE_SECONDS || '60', 10),
+    lookupEnabled: process.env.CATALOG_SHEETS_LOOKUP_ENABLED === 'true',
   },
 
   tasks: {
@@ -74,6 +75,7 @@ const config = Object.freeze({
     graphVersion: process.env.WHATSAPP_GRAPH_VERSION || 'v21.0',
     phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || '',
     token: process.env.WHATSAPP_TOKEN || '',
+    assistantEnabled: process.env.WHATSAPP_AI_ENABLED === 'true',
     verifyToken: process.env.WHATSAPP_VERIFY_TOKEN || '',
     metaAppSecret: process.env.META_APP_SECRET || '',
     ownerNumber: process.env.OWNER_WHATSAPP_NUMBER || '',
@@ -81,8 +83,14 @@ const config = Object.freeze({
       orderNotification: process.env.OWNER_ORDER_TEMPLATE || 'nova_venda_conflora',
       receiptImage: process.env.OWNER_RECEIPT_IMAGE_TEMPLATE || 'comprovante_pix_imagem',
       receiptDocument: process.env.OWNER_RECEIPT_DOCUMENT_TEMPLATE || 'comprovante_pix_documento',
+      customerOrder: process.env.WHATSAPP_CUSTOMER_ORDER_TEMPLATE || '',
       language: process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'pt_BR',
     },
+  },
+
+  mercadoPago: {
+    accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN || '',
+    webhookSecret: process.env.MERCADO_PAGO_WEBHOOK_SECRET || '',
   },
 
   pix: {
@@ -95,6 +103,7 @@ const config = Object.freeze({
     apiKey: process.env.FIREBASE_API_KEY || '',
     authDomain: process.env.FIREBASE_AUTH_DOMAIN || '',
     projectId: process.env.FIREBASE_PROJECT_ID || serviceAccountProjectId || process.env.GCP_PROJECT_ID || 'confloraai',
+    storageBucket: process.env.FIREBASE_STORAGE_BUCKET || `${process.env.FIREBASE_PROJECT_ID || serviceAccountProjectId || process.env.GCP_PROJECT_ID || 'confloraai'}.firebasestorage.app`,
     appId: process.env.FIREBASE_APP_ID || '',
   },
 });

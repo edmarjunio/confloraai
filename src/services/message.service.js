@@ -1,6 +1,7 @@
 const { INTENTS } = require('../router/message.router');
 const Logger = require('../shared/logger');
 const { formatCurrency } = require('../shared/string.util');
+const { isApprovedPixPayment } = require('../integrations/mercado-pago.client');
 
 class MessageService {
   /**
@@ -22,6 +23,7 @@ class MessageService {
     firestoreRepo,
     orderService,
     whatsappClient,
+    mercadoPagoClient = null,
     learningService = null,
   }) {
     this.router = router;
@@ -31,6 +33,7 @@ class MessageService {
     this.firestoreRepo = firestoreRepo;
     this.orderService = orderService;
     this.whatsappClient = whatsappClient;
+    this.mercadoPagoClient = mercadoPagoClient;
     this.learningService = learningService;
   }
 
@@ -44,7 +47,13 @@ class MessageService {
    * @param {string} [input.messageId='']
    * @returns {Promise<{ reply: string, intent: string, imagesSent?: number, latencyMs: number }>}
    */
-  async handleCustomerMessage({ phone, message, customerName = '', messageId = '' }) {
+  async handleCustomerMessage({
+    phone,
+    message,
+    customerName = '',
+    messageId = '',
+    verifyOnly = false,
+  }) {
     const startTime = performance.now();
 
     // 1. Prevenção de duplicidade (Idempotência da Meta)
@@ -63,7 +72,7 @@ class MessageService {
     }
 
     // 3. Garantir catálogo atualizado em memória
-    if (!this.catalogRepo.isCacheValid()) {
+    if (!verifyOnly && !this.catalogRepo.isCacheValid()) {
       await this.catalogRepo.refreshCatalog().catch((err) => {
         Logger.warn('Aviso: usando cache existente do catálogo', { error: err.message });
       });
@@ -76,7 +85,7 @@ class MessageService {
     const customerProfile = await this.firestoreRepo.getCustomerProfile(phone);
     const pendingOrder = await this.firestoreRepo.getOrder(phone);
 
-    // 5.1 Verificação automática de comprovante PIX vinculado ao cliente (Venda no Caixa / Piso da Loja)
+    // Comprovantes só podem confirmar pagamentos conferidos diretamente no Mercado Pago.
     const pendingPixSale = await this.firestoreRepo.findPendingPixOrderByPhone(phone);
     if (pendingPixSale) {
       const isReceiptText =
@@ -85,31 +94,58 @@ class MessageService {
         message.length > 25;
 
       if (isReceiptText) {
-        Logger.info(`Comprovante PIX vinculado e validado automaticamente para telefone ${phone}, pedido ${pendingPixSale.id}`);
-        await this.firestoreRepo.confirmOrderPayment(pendingPixSale.id, {
-          verifiedVia: 'WHATSAPP_PIX_AUTO',
-        });
-
-        const autoPixReply = (
-          `✅ *Pagamento PIX Confirmado com Sucesso!*\n\n` +
-          `Recebemos o seu comprovante no valor de *${formatCurrency(pendingPixSale.total)}*.\n\n` +
-          `🌱 Seu pedido está *finalizado e liberado sem precisar passar no caixa*!\n\n` +
-          `Muito obrigado pela compra e volte sempre à Conflora!`
-        );
-
-        await this.firestoreRepo.appendMessage(phone, 'assistant', autoPixReply);
-        if (this.whatsappClient) {
-          await this.whatsappClient.sendTextMessage(phone, autoPixReply).catch(() => {});
+        let verifiedPayment = null;
+        try {
+          const payments =
+            await this.mercadoPagoClient?.findPaymentsByOrderId(pendingPixSale.id);
+          verifiedPayment = payments?.find((payment) =>
+            isApprovedPixPayment(payment, pendingPixSale),
+          );
+        } catch (error) {
+          Logger.error('Falha ao consultar o pagamento PIX no Mercado Pago', error, {
+            orderId: pendingPixSale.id,
+          });
         }
 
+        let autoPixReply;
+        if (verifiedPayment) {
+          await this.firestoreRepo.confirmOrderPayment(pendingPixSale.id, {
+            verifiedVia: 'MERCADO_PAGO_WEBHOOK',
+            paymentTransactionId: verifiedPayment.id,
+            paymentAmount: verifiedPayment.transaction_amount,
+          });
+          autoPixReply =
+            `✅ Pagamento PIX confirmado pelo Mercado Pago.\n\n` +
+            `Pedido #${pendingPixSale.ticketNumber || pendingPixSale.id.slice(-8)} ` +
+            `no valor de ${formatCurrency(pendingPixSale.total)}. Obrigado pela compra!`;
+        } else {
+          autoPixReply =
+            'Recebemos sua mensagem, mas ainda não identificamos um PIX aprovado ' +
+            'para este pedido. Comprovantes e pagamentos agendados não confirmam ' +
+            'a venda; aguarde a confirmação do Mercado Pago.';
+        }
+        await this.firestoreRepo.appendMessage(phone, 'assistant', autoPixReply);
+        if (this.whatsappClient) {
+          await this.whatsappClient.sendTextMessage(phone, autoPixReply);
+        }
         const latencyMs = Math.round((performance.now() - startTime) * 100) / 100;
         return {
           reply: autoPixReply,
-          intent: 'PIX_RECEIPT_VERIFIED',
+          intent: verifiedPayment
+            ? 'PIX_RECEIPT_VERIFIED'
+            : 'PIX_RECEIPT_AWAITING_PAYMENT',
           imagesSent: 0,
           latencyMs,
         };
       }
+    }
+    if (verifyOnly) {
+      return {
+        reply: '',
+        intent: 'ASSISTANT_DISABLED',
+        imagesSent: 0,
+        latencyMs: Math.round((performance.now() - startTime) * 100) / 100,
+      };
     }
 
     // 6. Roteamento inteligente de intenção

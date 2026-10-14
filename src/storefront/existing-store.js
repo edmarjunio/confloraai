@@ -1,6 +1,7 @@
 const profile = require("../../config/stores/conflora.example.json");
 const { rankProductSales } = require("../catalog/product-sales");
 const { productStatus } = require("../catalog/product-status");
+const { resolveHdProductImage } = require("../catalog/image-resolver");
 const {
   ensure,
   digest,
@@ -12,30 +13,35 @@ const {
 // Compatibility boundary for the existing store. SaaS tenants never use these collections.
 function toProduct(item, { stockControlEnabled = true } = {}) {
   const category = String(item.category || item.categoria || "Geral");
+  const name = item.name || item.descricao || "Produto";
+  const subcategory = String(item.subcategory || item.subcategoria || "");
   const unit = item.unit || item.unidade || "UN";
   const photo = (value) =>
     typeof value === "string" &&
     /^(https:\/\/|\/api\/images\/|\/store-assets\/)/.test(value)
       ? value
       : "";
+  const images = (Array.isArray(item.images) ? item.images : [])
+    .map((image) => ({
+      url: photo(typeof image === "string" ? image : image.url),
+      alt: name,
+    }))
+    .filter((image) => image.url);
+  const registeredImage = photo(item.imageUrl || item.imageurl) || images[0]?.url || "";
   return {
     id: String(item.id),
-    name: item.name || item.descricao || "Produto",
+    name,
     description: item.description || item.descriptionAi || "",
     price: {
       amountMinor: Math.round(Number(item.price ?? item.valor_num ?? 0) * 100),
       currency: "BRL",
     },
-    imageUrl: photo(item.imageUrl || item.imageurl),
-    images: (Array.isArray(item.images) ? item.images : [])
-      .map((image) => ({
-        url: photo(typeof image === "string" ? image : image.url),
-        alt: item.name || "",
-      }))
-      .filter((image) => image.url),
+    imageUrl: registeredImage || resolveHdProductImage(name, category, subcategory),
+    imageIsIllustrative: !registeredImage,
+    images,
     categories: [digest(category).slice(0, 16)],
     categoryName: category,
-    subcategoryName: String(item.subcategory || item.subcategoria || ""),
+    subcategoryName: subcategory,
     navigationPath: [
       category,
       String(item.subcategory || item.subcategoria || ""),

@@ -23,12 +23,12 @@ function renderCaixaHtml() {
       } catch (_) {}
     })();
   </script>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Conflora — Caixa & Frente de Loja</title>
   <style>
     :root {
-      --primary: #15803d;
-      --primary-hover: #166534;
+      --primary: #2e9348;
+      --primary-hover: #25783b;
       --primary-light: #dcfce7;
       --primary-dark: #14532d;
       --pix: #059669;
@@ -37,17 +37,17 @@ function renderCaixaHtml() {
       --card-bg: #eff6ff;
       --cash: #d97706;
       --cash-bg: #fffbeb;
-      --bg: #f8fafc;
+      --bg: #f8f9fa;
       --surface: #ffffff;
       --border: #e2e8f0;
-      --text: #0f172a;
+      --text: #1a1a1a;
       --muted: #64748b;
       --danger: #dc2626;
       --radius: 12px;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
@@ -110,6 +110,10 @@ function renderCaixaHtml() {
       color: #334155;
       font-weight: 500;
     }
+    .operator-access { display: flex; align-items: center; gap: 6px; }
+    .operator-access input { width: 82px; padding: 6px 8px; font-size: 12px; }
+    .operator-access button, .operator-session button { min-height: 34px; padding: 6px 10px; border: 0; border-radius: 8px; background: var(--primary); color: #fff; font-size: 12px; font-weight: 700; }
+    .operator-session { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 10px; background: #fff; font-size: 12px; }
     .nav-tabs {
       display: flex;
       gap: 4px;
@@ -246,9 +250,12 @@ function renderCaixaHtml() {
       grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
       gap: 10px;
     }
+    @media (min-width: 1024px) {
+      .products-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    }
     @media (max-width: 480px) {
       .products-grid {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 8px;
         padding: 8px;
       }
@@ -258,6 +265,7 @@ function renderCaixaHtml() {
       border: 1px solid var(--border);
       border-radius: 10px;
       padding: 10px;
+      min-width: 0;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
@@ -714,6 +722,38 @@ function renderCaixaHtml() {
       transition: opacity 0.2s ease;
     }
     .toast.hidden { display: none; }
+    .discount-control { display: grid; grid-template-columns: 1fr 110px; align-items: center; gap: 8px; font-size: 13px; font-weight: 650; }
+    .discount-control input { padding: 8px 10px; }
+    .financial-summary { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
+    .financial-summary > div { display: flex; justify-content: space-between; gap: 10px; }
+    .financial-summary strong { color: var(--text); font-weight: 650; }
+    .customer-quick-form { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
+    [hidden] { display: none !important; }
+    @media (max-width: 640px) {
+      header { padding-bottom: 12px; }
+      .header-right { width: 100%; justify-content: flex-end; }
+      .operator-access { display: grid; grid-template-columns: minmax(0, 1fr) 76px auto; width: 100%; }
+      .operator-access select { min-width: 0; width: 100%; }
+      .operator-access input { width: 100%; }
+      .operator-session { justify-content: space-between; }
+      .header-right .nav-tabs { position: fixed; inset: auto 0 0; z-index: 500; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); border-radius: 0; border-top: 1px solid var(--border); background: #fff; box-shadow: 0 -4px 16px rgba(26, 26, 26, 0.08); }
+      .tab-btn { justify-content: center; min-height: 44px; padding: 6px 2px; gap: 3px; font-size: 11px; }
+      main { padding-bottom: 82px; }
+      .pos-layout { gap: 10px; }
+      .catalog-panel, .cart-panel { border-radius: 12px; }
+      .modal-overlay { align-items: flex-end; padding: 0; }
+      .modal-card { max-height: 88dvh; border-radius: 16px 16px 0 0; padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
+      .modal-card::before { content: ""; width: 42px; height: 5px; border-radius: 5px; background: #cbd5e1; align-self: center; margin-top: -8px; }
+      .discount-control { grid-template-columns: 1fr 96px; }
+    }
+    .pos-layout.cart-mode { grid-template-columns: minmax(0, 1fr); height: auto; }
+    .pos-layout.cart-mode .catalog-panel { display: none; }
+    .pos-layout.cart-mode .cart-panel { width: 100%; max-width: 720px; min-height: calc(100dvh - 150px); margin: 0 auto; }
+    .pos-layout.cart-mode .cart-items { max-height: none; }
+    @media (max-width: 860px) {
+      .pos-layout.cart-mode { display: grid; }
+      .pos-layout.cart-mode .cart-panel { min-height: calc(100dvh - 185px); }
+    }
   </style>
 </head>
 <body>
@@ -729,16 +769,24 @@ function renderCaixaHtml() {
     </a>
 
     <div class="header-right">
-      <select id="operatorSelect" class="operator-select">
-        <option value="Colaborador Loja">👤 Colaborador Loja</option>
-        <option value="Edmar Júnio">👤 Edmar Júnio</option>
-        <option value="Atendente Caixa">👤 Atendente Caixa</option>
-        <option value="Vendedor 1">👤 Vendedor 1</option>
-      </select>
+      <div class="operator-access" id="operatorAccess">
+        <select id="operatorSelect" class="operator-select" aria-label="Operador do caixa">
+          <option value="Atendente do Caixa">Atendente do Caixa</option>
+        </select>
+        <input type="password" id="operatorPin" inputmode="numeric" autocomplete="current-password" placeholder="PIN" aria-label="PIN do operador">
+        <button id="operatorLoginBtn" type="button">Entrar</button>
+      </div>
+      <div class="operator-session" id="operatorSession" hidden>
+        <span id="operatorSessionLabel"></span>
+        <button id="operatorLogoutBtn" type="button">Sair</button>
+      </div>
 
       <div class="nav-tabs">
         <button class="tab-btn active" id="tabBtnPos" onclick="switchTab('pos')">
           ⚡ Venda
+        </button>
+        <button class="tab-btn" id="tabBtnCart" onclick="switchTab('cart')">
+          🧾 Comanda <span id="cartBadge" class="badge-count zero">0</span>
         </button>
         <button class="tab-btn" id="tabBtnQueue" onclick="switchTab('queue')">
           📥 Fila <span id="queueBadge" class="badge-count zero">0</span>
@@ -787,18 +835,36 @@ function renderCaixaHtml() {
         </div>
 
         <div class="checkout-box">
+          <div class="financial-summary">
+            <div><span>Subtotal</span><strong id="cartSubtotalDisplay">R$ 0,00</strong></div>
+            <div><span>Desconto</span><strong id="cartDiscountDisplay">- R$ 0,00</strong></div>
+          </div>
           <div class="total-row">
             <span>TOTAL A PAGAR</span>
             <strong id="cartTotalDisplay">R$ 0,00</strong>
           </div>
+          <div id="discountApprovalStatus" class="live-status-box waiting" hidden role="status" aria-live="polite">
+            <span>Solicitação enviada ao Admin</span>
+            <small>O carrinho ficará bloqueado até a revisão.</small>
+          </div>
 
           <div class="customer-fields">
-            <div class="cust-input-group">
-              <input type="tel" id="custPhone" class="cust-input" placeholder="📱 WhatsApp do Cliente (DDD + número)">
-              <input type="text" id="custName" class="cust-input" placeholder="👤 Nome (opcional)" style="flex:0.8;">
+            <input type="search" id="custSearch" class="cust-input" list="custSuggestions" placeholder="Buscar cliente por nome ou celular..." autocomplete="off">
+            <datalist id="custSuggestions"></datalist>
+            <input type="hidden" id="custPhone">
+            <input type="hidden" id="custName">
+            <button type="button" class="btn-action" id="quickRegisterToggle" hidden>＋ Cadastro rápido</button>
+            <div class="customer-quick-form" id="customerQuickForm" hidden>
+              <input type="text" id="quickCustomerName" class="cust-input" placeholder="Nome do cliente">
+              <input type="tel" id="quickCustomerPhone" class="cust-input" placeholder="Celular com DDD">
+              <button type="button" class="btn-action primary" id="quickCustomerSave">Salvar cadastro</button>
             </div>
+            <label class="discount-control" for="discountPercent">
+              <span>Desconto da venda (%)</span>
+              <input type="number" id="discountPercent" class="cust-input" min="0" max="100" step="0.5" value="0" inputmode="decimal">
+            </label>
             <div class="cust-hint">
-              <span>⚡ O WhatsApp vincula o comprovante para liberação automática sem fila no caixa!</span>
+              <span>Descontos acima de 5% precisam da aprovação do administrador.</span>
             </div>
           </div>
 
@@ -854,7 +920,7 @@ function renderCaixaHtml() {
     </div>
   </main>
 
-  <!-- MODAL PIX (COM AUTO-VERIFICAÇÃO DE COMPROVANTE) -->
+  <!-- MODAL PIX (CONFIRMAÇÃO AUTOMÁTICA PELO MERCADO PAGO) -->
   <div id="modalPix" class="modal-overlay hidden">
     <div class="modal-card">
       <div class="modal-header">
@@ -864,24 +930,21 @@ function renderCaixaHtml() {
 
       <div class="live-status-box waiting" id="pixLiveStatus">
         <span style="font-size:18px;">🟡</span>
-        <span id="pixStatusText">Aguardando cliente enviar comprovante no WhatsApp...</span>
-        <small style="font-weight:400; opacity:0.85;">Ao receber o comprovante no WhatsApp da loja, o pedido finaliza automaticamente!</small>
+        <span id="pixStatusText">Aguardando pagamento aprovado pelo Mercado Pago...</span>
+        <small style="font-weight:400; opacity:0.85;">O pedido é confirmado automaticamente após a aprovação real do PIX.</small>
       </div>
 
       <div class="qr-container">
-        <div style="font-size:13px; color:#64748b; margin-bottom:6px;">Aponte a câmera ou app do banco:</div>
-        <img id="pixQrImg" class="qr-img" alt="QR Code PIX">
+        <div style="font-size:13px; color:#64748b; margin-bottom:6px;">O QR Code Pix aparece na página segura do Mercado Pago:</div>
         <div style="font-size:22px; font-weight:800; color:var(--pix);" id="pixTotalText">R$ 0,00</div>
+        <a id="pixCheckoutLink" class="btn-action pix-confirm" target="_blank" rel="noopener noreferrer" style="display:block; margin-top:10px; text-decoration:none;">
+          Abrir pagamento Pix
+        </a>
       </div>
 
-      <div>
-        <label style="font-size:11px; font-weight:700; color:#64748b;">Código Copia e Cola:</label>
-        <div class="pix-code-box" id="pixCodeBox"></div>
-        <button class="btn-action" style="margin-top:6px; width:100%;" onclick="copyPixCode()">📋 Copiar Código PIX</button>
-      </div>
+      <pre id="pixReceiptText" style="max-height:180px; overflow:auto; white-space:pre-wrap; background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:10px; font-family:inherit; font-size:12px; line-height:1.5;"></pre>
 
       <div style="display:flex; flex-direction:column; gap:6px;">
-        <button class="btn-action pix-confirm" id="btnConfirmPixManual" onclick="confirmCurrentPixManual()">⚡ Validar / Confirmar PIX Manualmente</button>
         <button class="btn-action" id="btnSendPixWhatsApp" onclick="resendPixWhatsApp()">📲 Reenviar Dados no WhatsApp</button>
       </div>
     </div>
@@ -923,16 +986,106 @@ function renderCaixaHtml() {
     let activePixOrderId = null;
     let pixPollingInterval = null;
     let activeCashierOrder = null;
+    let activeApprovalId = null;
+    let approvalPollingInterval = null;
+    let customerSuggestions = new Map();
+    let customerSearchTimer = null;
+    let saleSubmitting = false;
+    let currentOperatorUser = null;
+    let customerAuthWarningShown = false;
+    let availableOperators = [];
 
     // INICIALIZAÇÃO
     window.addEventListener('DOMContentLoaded', async () => {
+      await loadOperatorSession();
       await loadProducts();
       await loadQueueOrders();
-      setInterval(loadQueueOrders, 3000); // Polling leve da fila a cada 3s
+      setInterval(() => {
+        if (!document.hidden) loadQueueOrders();
+      }, 15000);
 
       document.getElementById('prodSearch').addEventListener('input', renderProducts);
       document.getElementById('cashReceivedInput').addEventListener('input', calculateChange);
+      document.getElementById('discountPercent').addEventListener('input', renderCart);
+      document.getElementById('custSearch').addEventListener('input', scheduleCustomerSearch);
+      document.getElementById('custSearch').addEventListener('change', selectCustomerSuggestion);
+      document.getElementById('quickRegisterToggle').addEventListener('click', openQuickCustomerForm);
+      document.getElementById('quickCustomerSave').addEventListener('click', saveQuickCustomer);
+      document.getElementById('operatorLoginBtn').addEventListener('click', loginOperator);
+      document.getElementById('operatorLogoutBtn').addEventListener('click', logoutOperator);
+      document.getElementById('operatorPin').addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') loginOperator();
+      });
     });
+
+    async function loadOperatorSession() {
+      try {
+        const [sessionResponse, operatorsResponse] = await Promise.all([
+          fetch('/api/auth/me'),
+          fetch('/api/admin/auth/users'),
+        ]);
+        if (operatorsResponse.ok) {
+          availableOperators = (await operatorsResponse.json()).filter((user) => ['ADMIN', 'CAIXA'].includes(user.role));
+          const select = document.getElementById('operatorSelect');
+          select.replaceChildren(...availableOperators.map((user) => {
+            const option = document.createElement('option');
+            option.value = user.name;
+            option.textContent = user.name;
+            option.dataset.userId = user.id;
+            return option;
+          }));
+        }
+        if (sessionResponse.ok) {
+          const session = await sessionResponse.json();
+          if (['ADMIN', 'CAIXA'].includes(session.user?.role)) currentOperatorUser = session.user;
+        }
+        if (currentOperatorUser) document.getElementById('operatorSelect').value = currentOperatorUser.name;
+        updateOperatorSession();
+      } catch (_) {
+        updateOperatorSession();
+      }
+    }
+
+    function updateOperatorSession() {
+      const isAuthenticated = !!currentOperatorUser;
+      document.getElementById('operatorAccess').hidden = isAuthenticated;
+      document.getElementById('operatorSession').hidden = !isAuthenticated;
+      if (isAuthenticated) {
+        document.getElementById('operatorSessionLabel').textContent = currentOperatorUser.name + ' · ' + currentOperatorUser.role;
+      }
+    }
+
+    async function loginOperator() {
+      const selectedOperator = availableOperators.find((user) => user.name === document.getElementById('operatorSelect').value);
+      const pin = document.getElementById('operatorPin').value.trim();
+      if (!selectedOperator || !pin) {
+        showToast('Selecione o operador e informe o PIN.');
+        return;
+      }
+      try {
+        const response = await fetch('/api/admin/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: selectedOperator.id, pin }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'PIN inválido.');
+        currentOperatorUser = result.user;
+        customerAuthWarningShown = false;
+        document.getElementById('operatorPin').value = '';
+        updateOperatorSession();
+        await loadQueueOrders();
+        showToast('Caixa liberado para ' + currentOperatorUser.name + '.');
+      } catch (error) {
+        showToast(error.message);
+      }
+    }
+
+    async function logoutOperator() {
+      await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+      currentOperatorUser = null;
+      updateOperatorSession();
+    }
 
     function showToast(msg) {
       const t = document.getElementById('toast');
@@ -944,10 +1097,13 @@ function renderCaixaHtml() {
 
     function switchTab(tab) {
       document.getElementById('tabBtnPos').classList.toggle('active', tab === 'pos');
+      document.getElementById('tabBtnCart').classList.toggle('active', tab === 'cart');
       document.getElementById('tabBtnQueue').classList.toggle('active', tab === 'queue');
       document.getElementById('tabBtnHistory').classList.toggle('active', tab === 'history');
 
-      document.getElementById('viewPos').style.display = tab === 'pos' ? 'grid' : 'none';
+      const isPosView = tab === 'pos' || tab === 'cart';
+      document.getElementById('viewPos').style.display = isPosView ? 'grid' : 'none';
+      document.getElementById('viewPos').classList.toggle('cart-mode', tab === 'cart');
       document.getElementById('viewQueue').style.display = tab === 'queue' ? 'flex' : 'none';
       document.getElementById('viewHistory').style.display = tab === 'history' ? 'block' : 'none';
 
@@ -1043,6 +1199,12 @@ function renderCaixaHtml() {
     }
 
     function getCartTotal() {
+      const subtotal = getCartSubtotal();
+      const percent = Math.max(0, Math.min(100, Number(document.getElementById('discountPercent').value) || 0));
+      return Math.max(0, Number((subtotal * (1 - percent / 100)).toFixed(2)));
+    }
+
+    function getCartSubtotal() {
       return cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
     }
 
@@ -1050,8 +1212,14 @@ function renderCaixaHtml() {
       const container = document.getElementById('cartItems');
       const totalDisplay = document.getElementById('cartTotalDisplay');
       const total = getCartTotal();
+      const subtotal = getCartSubtotal();
+      const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
       totalDisplay.textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
+      document.getElementById('cartSubtotalDisplay').textContent = 'R$ ' + subtotal.toFixed(2).replace('.', ',');
+      document.getElementById('cartDiscountDisplay').textContent = '- R$ ' + (subtotal - total).toFixed(2).replace('.', ',');
+      document.getElementById('cartBadge').textContent = cartCount;
+      document.getElementById('cartBadge').classList.toggle('zero', cartCount === 0);
 
       if (!cart.length) {
         container.innerHTML = '<div class="cart-empty">Nenhum produto adicionado.<br>Toque em um item do catálogo para lançar.</div>';
@@ -1076,6 +1244,12 @@ function renderCaixaHtml() {
 
     // SUBMETER VENDA
     async function submitSale(paymentMethod) {
+      if (saleSubmitting || activeApprovalId) return;
+      if (!currentOperatorUser) {
+        showToast('Entre com o PIN do operador para registrar uma venda.');
+        document.getElementById('operatorPin').focus();
+        return;
+      }
       if (!cart.length) {
         showToast('Adicione ao menos um produto para lançar a venda.');
         return;
@@ -1084,6 +1258,11 @@ function renderCaixaHtml() {
       const custPhone = document.getElementById('custPhone').value.trim();
       const custName = document.getElementById('custName').value.trim();
       const operatorName = document.getElementById('operatorSelect').value;
+      const discountPercent = Number(document.getElementById('discountPercent').value) || 0;
+      if (!Number.isFinite(discountPercent) || discountPercent < 0 || discountPercent > 100) {
+        showToast('Informe um desconto entre 0% e 100%.');
+        return;
+      }
 
       if (paymentMethod === 'PIX' && !custPhone) {
         if (!confirm('Recomendamos informar o WhatsApp do cliente para validar o comprovante automaticamente. Deseja continuar mesmo sem telefone?')) {
@@ -1093,12 +1272,14 @@ function renderCaixaHtml() {
       }
 
       try {
+        saleSubmitting = true;
         const payload = {
           items: cart,
           paymentMethod,
           customerPhone: custPhone,
           customerName: custName,
           operatorName,
+          discountPercent,
         };
 
         const res = await fetch('/api/caixa/orders', {
@@ -1109,11 +1290,17 @@ function renderCaixaHtml() {
 
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Erro ao registrar venda');
+        if (data.approvalRequired) {
+          activeApprovalId = data.approval.id;
+          setApprovalPending(true);
+          pollDiscountApproval();
+          return;
+        }
 
         const order = data.order;
         clearCart();
-        document.getElementById('custPhone').value = '';
-        document.getElementById('custName').value = '';
+        clearCustomerSelection();
+        document.getElementById('discountPercent').value = '0';
 
         if (paymentMethod === 'PIX') {
           openPixModal(order);
@@ -1123,10 +1310,129 @@ function renderCaixaHtml() {
         }
       } catch (err) {
         showToast('Erro: ' + err.message);
+      } finally {
+        saleSubmitting = false;
       }
     }
 
-    // MODAL PIX & POLLING DE COMPROVANTE WHATSAPP
+    function setApprovalPending(isPending) {
+      document.getElementById('discountApprovalStatus').hidden = !isPending;
+      document.getElementById('discountPercent').disabled = isPending;
+      document.getElementById('prodSearch').disabled = isPending;
+      document.querySelectorAll('#viewPos .btn-pay, #viewPos .btn-clear-cart, #viewPos .btn-qty').forEach((button) => {
+        button.disabled = isPending;
+      });
+      document.getElementById('productsGrid').style.pointerEvents = isPending ? 'none' : '';
+    }
+
+    function pollDiscountApproval() {
+      clearInterval(approvalPollingInterval);
+      showToast('Desconto enviado ao Admin. Aguardando aprovação.');
+      approvalPollingInterval = setInterval(async () => {
+        if (!activeApprovalId) return;
+        try {
+          const response = await fetch('/api/caixa/discount-approvals/' + encodeURIComponent(activeApprovalId));
+          const result = await response.json();
+          if (!response.ok || result.status === 'PENDING') return;
+          clearInterval(approvalPollingInterval);
+          activeApprovalId = null;
+          setApprovalPending(false);
+          if (result.status === 'APPROVED' && result.order) {
+            clearCart();
+            clearCustomerSelection();
+            document.getElementById('discountPercent').value = '0';
+            if (result.order.paymentMethod === 'PIX') openPixModal(result.order);
+            else showToast('Desconto aprovado. Venda liberada para recebimento.');
+            loadQueueOrders();
+            return;
+          }
+          showToast('Desconto recusado: ' + (result.reason || 'consulte o administrador.'));
+        } catch (_) {}
+      }, 2500);
+    }
+
+    function scheduleCustomerSearch() {
+      clearTimeout(customerSearchTimer);
+      customerSearchTimer = setTimeout(searchCustomers, 350);
+    }
+
+    async function searchCustomers() {
+      const query = document.getElementById('custSearch').value.trim();
+      const suggestions = document.getElementById('custSuggestions');
+      customerSuggestions = new Map();
+      suggestions.replaceChildren();
+      document.getElementById('quickRegisterToggle').hidden = true;
+      if (query.length < 3) return;
+      try {
+        const response = await fetch('/api/caixa/customers?q=' + encodeURIComponent(query));
+        if (response.status === 401) {
+          if (!customerAuthWarningShown) showToast('Entre com seu PIN para consultar clientes.');
+          customerAuthWarningShown = true;
+          return;
+        }
+        if (!response.ok) return;
+        const customers = await response.json();
+        customers.forEach((customer) => {
+          const label = customer.name + ' · ' + customer.phone;
+          customerSuggestions.set(label, customer);
+          const option = document.createElement('option');
+          option.value = label;
+          suggestions.appendChild(option);
+        });
+        document.getElementById('quickRegisterToggle').hidden = customers.length > 0;
+      } catch (_) {}
+    }
+
+    function selectCustomerSuggestion() {
+      const customer = customerSuggestions.get(document.getElementById('custSearch').value);
+      if (!customer) return;
+      document.getElementById('custName').value = customer.name || '';
+      document.getElementById('custPhone').value = customer.phone || '';
+      document.getElementById('customerQuickForm').hidden = true;
+    }
+
+    function openQuickCustomerForm() {
+      const query = document.getElementById('custSearch').value.trim();
+      const digits = query.replace(/\D/g, '');
+      document.getElementById('quickCustomerName').value = digits ? '' : query;
+      document.getElementById('quickCustomerPhone').value = digits;
+      document.getElementById('customerQuickForm').hidden = false;
+      document.getElementById(digits ? 'quickCustomerName' : 'quickCustomerPhone').focus();
+    }
+
+    async function saveQuickCustomer() {
+      const name = document.getElementById('quickCustomerName').value.trim();
+      const phone = document.getElementById('quickCustomerPhone').value.trim();
+      if (!name || phone.replace(/\D/g, '').length < 10) {
+        showToast('Informe nome e celular com DDD para cadastrar.');
+        return;
+      }
+      try {
+        const response = await fetch('/api/caixa/customers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, phone }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Não foi possível cadastrar o cliente.');
+        document.getElementById('custSearch').value = name + ' · ' + phone;
+        document.getElementById('custName').value = name;
+        document.getElementById('custPhone').value = phone;
+        document.getElementById('customerQuickForm').hidden = true;
+        showToast('Cliente cadastrado e selecionado.');
+      } catch (err) {
+        showToast(err.message);
+      }
+    }
+
+    function clearCustomerSelection() {
+      document.getElementById('custSearch').value = '';
+      document.getElementById('custPhone').value = '';
+      document.getElementById('custName').value = '';
+      document.getElementById('customerQuickForm').hidden = true;
+    }
+
+    // MODAL PIX & VERIFICAÇÃO DE PAGAMENTO NO MERCADO PAGO
     function openPixModal(order) {
       activePixOrderId = order.id;
       const modal = document.getElementById('modalPix');
@@ -1134,16 +1440,21 @@ function renderCaixaHtml() {
 
       document.getElementById('modalPixTitle').textContent = \`Pagamento PIX · Pedido #\${order.ticketNumber || order.id.slice(-4)}\`;
       document.getElementById('pixTotalText').textContent = 'R$ ' + Number(order.total || 0).toFixed(2).replace('.', ',');
-      document.getElementById('pixCodeBox').textContent = order.pixCode || '';
-
-      const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(order.pixCode || '');
-      document.getElementById('pixQrImg').src = qrUrl;
+      document.getElementById('pixReceiptText').textContent = order.receiptText || '';
+      const checkoutLink = document.getElementById('pixCheckoutLink');
+      checkoutLink.href = order.paymentCheckoutUrl || '#';
+      checkoutLink.hidden = !order.paymentCheckoutUrl;
+      if (
+        order.receiptDelivery?.sent === false &&
+        order.receiptDelivery.reason !== 'Envio não solicitado.'
+      ) {
+        showToast('Recibo não enviado pelo WhatsApp: ' + order.receiptDelivery.reason);
+      }
 
       const statusBox = document.getElementById('pixLiveStatus');
       statusBox.className = 'live-status-box waiting';
-      document.getElementById('pixStatusText').textContent = 'Aguardando cliente enviar comprovante no WhatsApp...';
+      document.getElementById('pixStatusText').textContent = 'Aguardando pagamento aprovado pelo Mercado Pago...';
 
-      // Polling a cada 2s para detectar quando o comprovante do cliente cair no WhatsApp
       clearInterval(pixPollingInterval);
       pixPollingInterval = setInterval(async () => {
         if (!activePixOrderId) return;
@@ -1156,13 +1467,13 @@ function renderCaixaHtml() {
             statusBox.innerHTML = \`
               <span style="font-size:24px;">🎉</span>
               <span>PAGAMENTO PIX CONFIRMADO! ✅</span>
-              <p style="font-size:12px; font-weight:400; margin-top:4px;">Comprovante validado com sucesso! Cliente liberado sem fila no caixa.</p>
+              <p style="font-size:12px; font-weight:400; margin-top:4px;">Pagamento aprovado pelo Mercado Pago.</p>
             \`;
             showToast('✅ PIX Confirmado com sucesso!');
             loadQueueOrders();
           }
         } catch (_) {}
-      }, 2000);
+      }, 10000);
     }
 
     function closePixModal() {
@@ -1171,38 +1482,18 @@ function renderCaixaHtml() {
       document.getElementById('modalPix').classList.add('hidden');
     }
 
-    function copyPixCode() {
-      const code = document.getElementById('pixCodeBox').textContent;
-      navigator.clipboard.writeText(code).then(() => showToast('Chave PIX copiada!'));
-    }
-
-    async function confirmCurrentPixManual() {
-      if (!activePixOrderId) return;
-      if (!confirm('Deseja confirmar o recebimento do PIX manualmente?')) return;
-      try {
-        await fetch(\`/api/caixa/orders/\${activePixOrderId}/confirm\`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ verifiedVia: 'PIX_MANUAL_COLABORADOR' }),
-        });
-        showToast('PIX confirmado manualmente!');
-        closePixModal();
-        loadQueueOrders();
-      } catch (err) {
-        showToast('Erro: ' + err.message);
-      }
-    }
-
     async function resendPixWhatsApp() {
       if (!activePixOrderId) return;
       const phone = prompt('Digite o número de WhatsApp do cliente com DDD (apenas números):');
       if (!phone) return;
       try {
-        await fetch(\`/api/caixa/orders/\${activePixOrderId}/send-whatsapp\`, {
+        const response = await fetch(\`/api/caixa/orders/\${activePixOrderId}/send-whatsapp\`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ phone }),
         });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Falha no envio pelo WhatsApp.');
         showToast('Dados do PIX enviados no WhatsApp!');
       } catch (err) {
         showToast('Erro: ' + err.message);
@@ -1211,6 +1502,7 @@ function renderCaixaHtml() {
 
     // CARREGAR FILA DO CAIXA & HISTÓRICO
     async function loadQueueOrders() {
+      if (!currentOperatorUser) return;
       try {
         const res = await fetch('/api/caixa/orders');
         const data = await res.json();

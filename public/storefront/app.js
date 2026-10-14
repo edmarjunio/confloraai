@@ -43,6 +43,13 @@ function navigate(path) {
   route();
   window.scrollTo({ top: 0 });
 }
+function setBottomNavigationActive(activeButton) {
+  for (const button of document.querySelectorAll(".mobile-bar-item")) {
+    const isActive = button === activeButton;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  }
+}
 async function route() {
   if (!state.config) {
     return;
@@ -105,7 +112,6 @@ function applyConfig() {
   $("#brand").classList.toggle("has-logo", !!config.branding.logoUrl);
   document.querySelector("meta[name=theme-color]").content =
     config.branding.colors.primary;
-  catalog?.categories();
   cart?.configure();
   chat?.configure();
 }
@@ -336,7 +342,10 @@ function onboarding() {
     $("#coach").hidden = true;
     clearHighlight();
   });
-  if (!location.pathname.endsWith("/admin")) {
+  if (
+    !location.pathname.endsWith("/admin") &&
+    !window.matchMedia("(max-width: 768px)").matches
+  ) {
     state.coachFor("catalog");
   }
 }
@@ -361,6 +370,36 @@ for (const dialog of document.querySelectorAll("dialog")) {
     }
   });
 }
+$("#navCatalogBtn").addEventListener("click", (event) => {
+  setBottomNavigationActive(event.currentTarget);
+  catalog?.setFavoritesView(false);
+  $("#catalogView").scrollIntoView({ behavior: "smooth" });
+});
+$("#navCategoriesBtn").addEventListener("click", (event) => {
+  setBottomNavigationActive(event.currentTarget);
+  catalog?.setFavoritesView(false);
+  $("#categoryFilterControl").scrollIntoView({
+    behavior: "smooth",
+    block: "center",
+  });
+});
+$("#navFavoritesBtn").addEventListener("click", (event) => {
+  setBottomNavigationActive(event.currentTarget);
+  catalog?.setFavoritesView(true);
+  $("#catalogView").scrollIntoView({ behavior: "smooth" });
+});
+$("#navAiBtn").addEventListener("click", (event) => {
+  setBottomNavigationActive(event.currentTarget);
+  const assistantButton = $("#aiFab");
+  if (assistantButton && !assistantButton.hidden) {
+    assistantButton.click();
+  } else if (!$("#chatDialog").open) {
+    openDialog($("#chatDialog"));
+  }
+});
+$("#cartDialog").addEventListener("close", () => {
+  setBottomNavigationActive($("#navCatalogBtn"));
+});
 $("#brand").addEventListener("click", (event) => {
   event.preventDefault();
   navigate(basePath || "/");
@@ -401,7 +440,6 @@ try {
     ]);
     applyConfig();
     if (catalog) {
-      catalog.categories();
       catalog.render();
     }
   };

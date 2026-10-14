@@ -415,6 +415,9 @@ Configure `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`, `FIREBASE_PROJECT_ID` e
 usando a configuração do aplicativo Web no console Firebase. Esses campos são
 configuração pública do aplicativo; nunca use a chave privada da conta de serviço.
 O projeto do aplicativo Web deve corresponder ao projeto usado para validar tokens.
+Para uploads e remoções das fotos dos produtos, configure `FIREBASE_STORAGE_BUCKET`
+com o bucket padrão do Firebase Storage; sem esse valor, é usado
+`<FIREBASE_PROJECT_ID>.firebasestorage.app`.
 
 Em Authentication, habilite o provedor Google e adicione o domínio da aplicação
 (e `localhost` para desenvolvimento) aos domínios autorizados.

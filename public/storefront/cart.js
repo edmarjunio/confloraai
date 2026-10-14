@@ -6,7 +6,6 @@ import {
   storageGet,
   storageSet,
   openDialog,
-  copyText,
   quantityControl,
 } from "./ui.js";
 import { icon } from "./icons.js";
@@ -201,8 +200,6 @@ export function createCart(state) {
     );
     $("#serviceAreaLabel").hidden = !checkout.delivery.serviceAreas.length;
     $("#pickupAddress").textContent = checkout.pickup.address;
-    $("#pixKey").textContent = checkout.pix.key;
-    $("#pixRecipient").textContent = checkout.pix.recipientName;
     updateCheckout();
   }
   function updateCheckout() {
@@ -227,9 +224,6 @@ export function createCart(state) {
         ? `(${digits.slice(0, 2)}) ${digits.slice(2, digits.length > 10 ? 7 : 6)}${digits.length > 6 ? "-" + digits.slice(digits.length > 10 ? 7 : 6) : ""}`
         : digits;
   });
-  $("#copyPix").addEventListener("click", () =>
-    copyText(state.config.checkout.pix.key),
-  );
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (sending || !items.length) {
@@ -276,28 +270,31 @@ export function createCart(state) {
       storageSet(`${key}:pending`, null);
       render();
       form.hidden = true;
+      $("#checkoutCustomer").hidden = true;
       const receipt = $("#receipt");
       receipt.hidden = false;
       receipt.replaceChildren(
-        element("h2", { text: "Pedido recebido!" }),
-        element("p", {
-          text: `Pedido #${order.id.slice(0, 8)} · ${money(order.totalMinor)}`,
-        }),
-        element("p", {
-          text: "Status: Pendente. A loja vai confirmar seu pedido e pagamento.",
-        }),
-        ...order.items.map((item) =>
-          element("p", {
-            text: `${item.quantity} × ${item.name} — ${money(item.subtotalMinor)}`,
-          }),
-        ),
+        element("h2", { text: "Recibo do pedido" }),
+        element("pre", { text: order.receiptText || `Pedido #${order.id}\nTotal: ${money(order.totalMinor)}` }),
       );
-      if (order.paymentMethod === "PIX") {
+      if (order.paymentMethod === "PIX" && order.paymentCheckoutUrl) {
         receipt.append(
-          element("p", { text: `PIX: ${state.config.checkout.pix.key}` }),
-          element("button", {
-            text: "Copiar chave PIX",
-            onclick: () => copyText(state.config.checkout.pix.key),
+          element("a", {
+            class: "primary",
+            text: "Pagar com Pix no Mercado Pago",
+            href: order.paymentCheckoutUrl,
+            target: "_blank",
+            rel: "noopener noreferrer",
+          }),
+        );
+      } else if (order.paymentMethod === "PIX") {
+        receipt.append(element("p", { text: "Não foi possível gerar o pagamento PIX. Entre em contato com a loja." }));
+      }
+      if (order.paymentMethod === "PIX" && order.receiptDelivery?.sent === false) {
+        receipt.append(
+          element("p", {
+            class: "error",
+            text: `Não foi possível enviar o recibo pelo WhatsApp: ${order.receiptDelivery.reason}`,
           }),
         );
       }
@@ -330,6 +327,7 @@ export function createCart(state) {
   });
   function open() {
     form.hidden = false;
+    $("#checkoutCustomer").hidden = false;
     $("#receipt").hidden = true;
     render();
     if (state.user) {

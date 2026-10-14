@@ -56,6 +56,25 @@ test("existing catalogue maps photos, specifications and categories without expo
   assert.equal(product.supplierCost, undefined);
 });
 
+test("main catalogue uses a thematic photo only when a product has no registered photo", () => {
+  const illustrative = toProduct({
+    id: "avocado-no-photo",
+    name: "ABACATE KG",
+    category: "Hortifrutti",
+  });
+  assert.equal(illustrative.imageIsIllustrative, true);
+  assert.match(illustrative.imageUrl, /images\.unsplash\.com/);
+
+  const registered = toProduct({
+    id: "avocado-photo",
+    name: "ABACATE KG",
+    category: "Hortifrutti",
+    imageUrl: "/api/images/avocado-real",
+  });
+  assert.equal(registered.imageUrl, "/api/images/avocado-real");
+  assert.equal(registered.imageIsIllustrative, false);
+});
+
 test("untracked stock allows zero-stock sales but never inactive products", async () => {
   let enabled = false;
   let status = "ATIVO";

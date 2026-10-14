@@ -85,7 +85,10 @@ export function createExistingApi() {
     if (route === "/orders" && options.method === "POST") {
       const result = await request("/api/storefront/orders", options);
       catalogPromise = null;
-      return order(result.order);
+      return {
+        ...order(result.order),
+        receiptDelivery: result.receiptDelivery,
+      };
     }
     if (route === "/orders") {
       const result = await request("/api/customer/orders");

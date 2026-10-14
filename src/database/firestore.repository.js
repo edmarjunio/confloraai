@@ -4,12 +4,47 @@ const { safeUser } = require('../security/web-session');
 const config = require('../config/env');
 const Logger = require('../shared/logger');
 const { productStatus } = require('../catalog/product-status');
+const productImageStorageService = require('../catalog/product-image-storage');
 const {
   generateStandardTags,
   generateStandardDescription,
   isGoogleDrivePath,
   buildFirestorePhotoDocument,
 } = require('../catalog/product-photo.service');
+
+function getProductImageEntries(product) {
+  if (!product) {
+    return [];
+  }
+
+  const urls = Array.isArray(product.images) && product.images.length > 0
+    ? product.images.filter((url) => typeof url === 'string' && url)
+    : (product.imageUrl ? [product.imageUrl] : []);
+  const paths = Array.isArray(product.imagePaths) ? product.imagePaths : [];
+
+  return urls.map((url, index) => ({
+    url,
+    path: paths[index] || (index === 0 ? product.imagePath : '') || '',
+  }));
+}
+
+function getUpdatedProductImageEntries(product, previousProduct) {
+  const previousPathsByUrl = new Map(
+    getProductImageEntries(previousProduct)
+      .filter((image) => image.path)
+      .map((image) => [image.url, image.path]),
+  );
+  const requestedPaths = Array.isArray(product.imagePaths) ? product.imagePaths : [];
+
+  return getProductImageEntries(product).map((image, index) => ({
+    ...image,
+    path:
+      requestedPaths[index] ||
+      (index === 0 ? product.imagePath : '') ||
+      previousPathsByUrl.get(image.url) ||
+      '',
+  }));
+}
 
 // As colunas originais são preservadas;
 // os aliases mantêm compatibilidade com o app.
@@ -370,8 +405,10 @@ class FirestoreRepository {
   constructor({
     firestoreInstance = null,
     isInMemory = false,
+    productImageStorage = productImageStorageService,
   } = {}) {
     this.firestore = firestoreInstance;
+    this.productImageStorage = productImageStorage;
     this.isInMemory =
       isInMemory || process.env.NODE_ENV === 'test';
 
@@ -384,6 +421,7 @@ class FirestoreRepository {
     this.inMemoryStockMovements = [];
     this.inMemoryUsers = new Map();
     this.inMemoryOrderAlterations = new Map();
+    this.inMemoryDiscountApprovals = new Map();
     this.inMemoryNotifications = [];
     this._firestoreClientDisabled = false;
 
@@ -878,14 +916,17 @@ class FirestoreRepository {
           source: 'GOOGLE_DRIVE_MIGRATION',
         });
 
+        const storedImage = await this.uploadProductImage(photoDoc);
         await this.saveProductPhoto(photoDoc);
 
         const updated = {
           ...prod,
-          imageUrl: `/api/images/${photoDoc.id}`,
-          images: [`/api/images/${photoDoc.id}`],
+          imageUrl: storedImage.imageUrl,
+          imagePath: storedImage.imagePath,
+          imagePaths: [storedImage.imagePath],
+          images: [storedImage.imageUrl],
           imageFileId: photoDoc.id,
-          imagePathCache: `/api/images/${photoDoc.id}`,
+          imagePathCache: storedImage.imageUrl,
           tagsAi: photoDoc.tagsAi,
           tags_ia: photoDoc.tagsAi,
           descriptionAi: photoDoc.descriptionAi,
@@ -894,13 +935,14 @@ class FirestoreRepository {
         };
 
         await this.saveProduct(updated);
+        const savedProduct = await this.getProductById(prod.id);
         transferred++;
         details.push({
           productId: prod.id,
           name: prod.name || prod.descricao,
           fileName: photoDoc.fileName,
           tags: photoDoc.tagsAi,
-          url: updated.imageUrl,
+          url: savedProduct?.imageUrl || '',
         });
       }
     }
@@ -908,11 +950,21 @@ class FirestoreRepository {
     return { success: true, count: transferred, details };
   }
 
+  async uploadProductImage(photoDoc) {
+    return this.productImageStorage.uploadProductImage({
+      productId: photoDoc.productId,
+      fileName: photoDoc.fileName,
+      buffer: Buffer.from(photoDoc.data, 'base64'),
+      contentType: photoDoc.contentType || 'image/jpeg',
+    });
+  }
+
   async saveProduct(product) {
     if (!product || !product.id) {
       return;
     }
 
+    const previousProduct = await this.getProductById(product.id);
     const dataWithTs = { ...product, updatedAt: new Date().toISOString() };
     if (product.status !== undefined || product.STATUS !== undefined) {
       const status = productStatus(product);
@@ -934,6 +986,7 @@ class FirestoreRepository {
     if (rawPhotosList && rawPhotosList.length > 0) {
       const { compressProductPhoto } = require('../catalog/image-compressor');
       const savedUrls = [];
+      const savedPaths = [];
       let firstPhotoDoc = null;
 
       for (let idx = 0; idx < rawPhotosList.length; idx++) {
@@ -954,20 +1007,24 @@ class FirestoreRepository {
         }
 
         await this.saveProductPhoto(pDoc);
-        savedUrls.push(`/api/images/${pDoc.id}`);
+        const storedImage = await this.uploadProductImage(pDoc);
+        savedUrls.push(storedImage.imageUrl);
+        savedPaths.push(storedImage.imagePath);
         if (idx === 0) {
           firstPhotoDoc = pDoc;
         }
       }
 
-      const existingImgs = Array.isArray(product.images)
-        ? product.images.filter((x) => x && !savedUrls.includes(x))
-        : [];
+      const existingImages = getProductImageEntries(product)
+        .filter((image) => !savedUrls.includes(image.url));
+      const existingImgs = existingImages.map((image) => image.url);
       dataWithTs.images = [...savedUrls, ...existingImgs];
+      dataWithTs.imagePaths = [...savedPaths, ...existingImages.map((image) => image.path)];
       dataWithTs.imageUrl = savedUrls[0] || existingImgs[0] || '';
+      dataWithTs.imagePath = dataWithTs.imagePaths[0] || '';
       if (firstPhotoDoc) {
         dataWithTs.imageFileId = firstPhotoDoc.id;
-        dataWithTs.imagePathCache = `/api/images/${firstPhotoDoc.id}`;
+        dataWithTs.imagePathCache = dataWithTs.imageUrl;
         dataWithTs.tagsAi = firstPhotoDoc.tagsAi;
         dataWithTs.tags_ia = firstPhotoDoc.tagsAi;
         dataWithTs.descriptionAi = firstPhotoDoc.descriptionAi;
@@ -994,14 +1051,20 @@ class FirestoreRepository {
       }
 
       await this.saveProductPhoto(photoDoc);
+      const storedImage = await this.uploadProductImage(photoDoc);
 
-      const existingImgs = Array.isArray(product.images)
-        ? product.images.filter((x) => x && x !== `/api/images/${photoDoc.id}`)
-        : [];
-      dataWithTs.imageUrl = `/api/images/${photoDoc.id}`;
-      dataWithTs.images = [dataWithTs.imageUrl, ...existingImgs];
+      const existingImages = getProductImageEntries(product)
+        .filter((image) => (
+          image.url !== storedImage.imageUrl &&
+          image.url !== `/api/images/${photoDoc.id}`
+        ));
+      const existingImgs = existingImages.map((image) => image.url);
+      dataWithTs.imageUrl = storedImage.imageUrl;
+      dataWithTs.imagePath = storedImage.imagePath;
+      dataWithTs.images = [storedImage.imageUrl, ...existingImgs];
+      dataWithTs.imagePaths = [storedImage.imagePath, ...existingImages.map((image) => image.path)];
       dataWithTs.imageFileId = photoDoc.id;
-      dataWithTs.imagePathCache = dataWithTs.imageUrl;
+      dataWithTs.imagePathCache = storedImage.imageUrl;
       dataWithTs.tagsAi = photoDoc.tagsAi;
       dataWithTs.tags_ia = photoDoc.tagsAi;
       dataWithTs.descriptionAi = photoDoc.descriptionAi;
@@ -1022,6 +1085,29 @@ class FirestoreRepository {
         dataWithTs.descriptionAi = desc;
         dataWithTs.descricao_ia = desc;
       }
+    }
+
+    const updatesImageReferences =
+      ['imageUrl', 'imagePath', 'images', 'imagePaths'].some((key) =>
+        Object.prototype.hasOwnProperty.call(product, key),
+      ) ||
+      Boolean(rawPhotosList || product.photoBase64 || product.photoData || product.photoDoc);
+    const previousImagePaths = getProductImageEntries(previousProduct)
+      .map((image) => image.path)
+      .filter(Boolean);
+    let nextImagePaths = previousImagePaths;
+
+    if (updatesImageReferences) {
+      const imageEntries = getUpdatedProductImageEntries(dataWithTs, previousProduct);
+      dataWithTs.images = imageEntries.map((image) => image.url);
+      dataWithTs.imagePaths = imageEntries.map((image) => image.path);
+      dataWithTs.imageUrl = imageEntries[0]?.url || '';
+      dataWithTs.imagePath = imageEntries[0]?.path || '';
+      dataWithTs.imagePathCache = dataWithTs.imageUrl;
+      if (!dataWithTs.imageUrl) {
+        dataWithTs.imageFileId = '';
+      }
+      nextImagePaths = imageEntries.map((image) => image.path).filter(Boolean);
     }
 
     if (this.firestore && !this._firestoreClientDisabled) {
@@ -1045,11 +1131,25 @@ class FirestoreRepository {
     }
 
     this.inMemoryProducts.set(String(product.id), { ...this.inMemoryProducts.get(String(product.id)), ...dataWithTs });
+    const nextImagePathSet = new Set(nextImagePaths);
+    for (const imagePath of new Set(previousImagePaths)) {
+      if (!nextImagePathSet.has(imagePath)) {
+        await this.productImageStorage.deleteProductImage(imagePath);
+      }
+    }
   }
 
   async deleteProduct(productId) {
     if (!productId) {
       return false;
+    }
+
+    const product = await this.getProductById(productId);
+    const imagePaths = getProductImageEntries(product)
+      .map((image) => image.path)
+      .filter(Boolean);
+    for (const imagePath of new Set(imagePaths)) {
+      await this.productImageStorage.deleteProductImage(imagePath);
     }
 
     if (this.firestore && !this._firestoreClientDisabled) {
@@ -1095,14 +1195,22 @@ class FirestoreRepository {
     operatorId = '',
     ticketNumber = '',
     pixCode = '',
+    orderId = '',
+    mercadoPagoPreferenceId = '',
+    paymentCheckoutUrl = '',
+    requirePersistence = false,
+    discountAmount = 0,
+    discountPercent = 0,
   }) {
-    const total = (items || []).reduce(
+    const subtotal = (items || []).reduce(
       (sum, item) =>
         sum +
         Number(item.price || 0) *
           Number(item.quantity || 1),
       0
     );
+    const normalizedDiscount = Math.min(subtotal, Math.max(0, Number(discountAmount) || 0));
+    const total = Number((subtotal - normalizedDiscount).toFixed(2));
 
     const shortTicket = ticketNumber || String(Math.floor(100 + Math.random() * 900));
 
@@ -1113,17 +1221,25 @@ class FirestoreRepository {
       deliveryAddress: 'Venda Presencial no Balcão Conflora',
       paymentMethod: (paymentMethod || 'DINHEIRO').toUpperCase(),
       items: items || [],
+      subtotal: Number(subtotal.toFixed(2)),
+      discountAmount: Number(normalizedDiscount.toFixed(2)),
+      discountPercent: Number(discountPercent) || 0,
       total,
       notes,
       operatorName: operatorName || 'Colaborador',
       operatorId: operatorId || '',
       ticketNumber: shortTicket,
       pixCode: pixCode || '',
+      mercadoPagoPreferenceId,
+      paymentCheckoutUrl,
       source: 'CAIXA_MANUAL',
       status: status || 'CONFIRMED',
     };
+    if (orderId) {
+      orderData.id = String(orderId);
+    }
 
-    const order = await this.createDirectOrder(orderData);
+    const order = await this.createDirectOrder(orderData, { requirePersistence });
 
     if (order.status === 'CONFIRMED' || order.status === 'PAID_CONFIRMED') {
       await this.deductStock(
@@ -1177,7 +1293,10 @@ class FirestoreRepository {
 
     const allOrders = await this.getAllOrders(100);
     const pendingPix = allOrders.filter(
-      (o) => o.status === 'AWAITING_PIX' || o.status === 'AGUARDANDO_PIX'
+      (o) =>
+        ['AWAITING_PIX', 'AGUARDANDO_PIX', 'PENDING'].includes(o.status) &&
+        String(o.paymentMethod || '').toUpperCase() === 'PIX' &&
+        Boolean(o.mercadoPagoPreferenceId),
     );
 
     const match = pendingPix.find((o) => {
@@ -1199,7 +1318,13 @@ class FirestoreRepository {
     return match || null;
   }
 
-  async confirmOrderPayment(orderId, { verifiedVia = 'CAIXA_MANUAL', receivedAmount = null, changeGiven = 0 } = {}) {
+  async confirmOrderPayment(orderId, {
+    verifiedVia = 'CAIXA_MANUAL',
+    receivedAmount = null,
+    changeGiven = 0,
+    paymentTransactionId = '',
+    paymentAmount = null,
+  } = {}) {
     const order = await this.getOrderById(orderId);
     if (!order) {
       throw new Error('Pedido não encontrado.');
@@ -1212,6 +1337,12 @@ class FirestoreRepository {
       verifiedVia,
       updatedAt: now,
     };
+    if (verifiedVia === 'MERCADO_PAGO_WEBHOOK') {
+      updateData.paymentStatus = 'APPROVED';
+      updateData.paymentProvider = 'MERCADO_PAGO';
+      updateData.paymentTransactionId = String(paymentTransactionId);
+      updateData.paymentVerifiedAmount = paymentAmount;
+    }
     if (verifiedVia.includes('PIX') || order.paymentMethod === 'PIX') {
       updateData.pixVerified = true;
     }
@@ -1234,7 +1365,15 @@ class FirestoreRepository {
         } else {
           Logger.warn('Erro ao atualizar status de pagamento no Firestore', { error: err.message });
         }
+        if (verifiedVia === 'MERCADO_PAGO_WEBHOOK') {
+          throw new Error('Não foi possível persistir a confirmação do Mercado Pago.');
+        }
       }
+    } else if (
+      verifiedVia === 'MERCADO_PAGO_WEBHOOK' &&
+      process.env.NODE_ENV === 'production'
+    ) {
+      throw new Error('Firestore indisponível; pagamento não foi confirmado no pedido.');
     }
 
     const local = this.inMemoryOrders.get(String(orderId));
@@ -2172,7 +2311,7 @@ class FirestoreRepository {
     };
   }
 
-  async createDirectOrder(orderData) {
+  async createDirectOrder(orderData, { requirePersistence = false } = {}) {
     const now = new Date().toISOString();
 
     const dataWithTs = {
@@ -2182,15 +2321,22 @@ class FirestoreRepository {
       updatedAt: now,
     };
 
+    if (requirePersistence && (!this.firestore || this._firestoreClientDisabled)) {
+      throw new Error('Não é possível iniciar o PIX sem persistência disponível para o pedido.');
+    }
+
     if (this.firestore && !this._firestoreClientDisabled) {
       try {
-        const ref = await this.firestore
-          .collection('orders')
-          .add(dataWithTs);
+        const collection = this.firestore.collection('orders');
+        const ref = dataWithTs.id
+          ? collection.doc(String(dataWithTs.id))
+          : collection.doc();
+        const { id: _id, ...documentData } = dataWithTs;
+        await ref.set(documentData);
 
         const saved = {
           id: ref.id,
-          ...dataWithTs,
+          ...documentData,
         };
         this.inMemoryOrders.set(ref.id, saved);
         return saved;
@@ -2208,14 +2354,23 @@ class FirestoreRepository {
             { error: err.message }
           );
         }
+        if (requirePersistence) {
+          throw new Error('Não foi possível salvar o pedido PIX com segurança.');
+        }
       }
     }
 
-    const localId = `order-${Date.now()}`;
+    if (requirePersistence) {
+      throw new Error('Não foi possível salvar o pedido PIX com segurança.');
+    }
+
+    const localId = dataWithTs.id
+      ? String(dataWithTs.id)
+      : `order-${Date.now()}`;
 
     const orderObj = {
-      id: localId,
       ...dataWithTs,
+      id: localId,
     };
 
     this.inMemoryOrders.set(localId, orderObj);
@@ -2557,6 +2712,55 @@ class FirestoreRepository {
     return this.inMemoryCustomers.get(phone) || null;
   }
 
+  async searchCustomers(query, limit = 8) {
+    const term = String(query || '').trim();
+    if (term.length < 3) return [];
+
+    const normalizedTerm = term.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const phoneTerm = term.replace(/\D/g, '');
+    const customers = new Map();
+    const addCustomer = (profile, phone = '') => {
+      if (!profile) return;
+      const customerPhone = String(profile.phone || phone).replace(/\D/g, '');
+      if (!customerPhone) return;
+      customers.set(customerPhone, {
+        name: String(profile.name || profile.customerName || 'Cliente'),
+        phone: customerPhone,
+      });
+    };
+
+    if (phoneTerm.length >= 7) {
+      addCustomer(await this.getCustomerProfile(phoneTerm), phoneTerm);
+    }
+
+    if (this.firestore) {
+      try {
+        const snapshot = await this.firestore
+          .collection('customers')
+          .where('nameSearch', '>=', normalizedTerm)
+          .where('nameSearch', '<=', `${normalizedTerm}\uf8ff`)
+          .limit(Math.min(20, Math.max(1, limit)))
+          .get();
+        snapshot.docs.forEach((doc) => addCustomer(doc.data(), doc.id));
+      } catch (err) {
+        Logger.warn('Erro ao buscar clientes por nome', { error: err.message });
+      }
+    }
+
+    for (const [phone, profile] of this.inMemoryCustomers) {
+      const profileName = String(profile.name || profile.customerName || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
+      const normalizedPhone = String(profile.phone || phone).replace(/\D/g, '');
+      if (profileName.includes(normalizedTerm) || (phoneTerm.length >= 3 && normalizedPhone.includes(phoneTerm))) {
+        addCustomer(profile, phone);
+      }
+    }
+
+    return Array.from(customers.values()).slice(0, Math.min(20, Math.max(1, limit)));
+  }
+
   async saveCustomerProfile(phone, profileData) {
     if (!phone) {
       return;
@@ -2564,7 +2768,11 @@ class FirestoreRepository {
 
     const dataWithTs = {
       ...profileData,
-      phone,
+      phone: String(phone).replace(/\D/g, ''),
+      nameSearch: String(profileData.name || profileData.customerName || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase(),
       updatedAt: new Date().toISOString(),
     };
 
@@ -3363,6 +3571,87 @@ class FirestoreRepository {
   }
 
   // --- Notificações ---
+
+  async createDiscountApproval(approvalData) {
+    const id = `discount-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const approval = {
+      id,
+      ...approvalData,
+      status: 'PENDING',
+      createdAt: new Date().toISOString(),
+    };
+
+    if (this.firestore) {
+      await this.firestore.collection('discount_approvals').doc(id).set(approval);
+    }
+    this.inMemoryDiscountApprovals.set(id, approval);
+
+    let admins = [];
+    try {
+      admins = (await this.getAllUsers()).filter((user) => user.active !== false && user.role === 'ADMIN');
+    } catch (err) {
+      Logger.warn('Erro ao listar administradores para aprovação de desconto', { error: err.message });
+    }
+    if (!admins.length) {
+      admins = [{ id: 'usr-edmar', name: 'Edmar Júnio (Admin)' }];
+    }
+    for (const admin of admins) {
+      await this.createNotification({
+        toUserId: admin.id,
+        toUserName: admin.name,
+        targetRole: 'ADMIN',
+        type: 'DISCOUNT_APPROVAL_PENDING',
+        approvalId: id,
+        title: 'Aprovação de desconto pendente',
+        message: `${approval.operatorName || 'Operador'} solicitou ${approval.discountPercent}% de desconto em uma venda de ${Number(approval.total).toFixed(2).replace('.', ',')} para ${approval.customerName || 'Cliente'}.`,
+        orderTotal: approval.total,
+      });
+    }
+    return approval;
+  }
+
+  async getDiscountApproval(approvalId) {
+    if (this.firestore) {
+      try {
+        const doc = await this.firestore.collection('discount_approvals').doc(String(approvalId)).get();
+        if (doc.exists) {
+          const approval = { id: doc.id, ...doc.data() };
+          this.inMemoryDiscountApprovals.set(approval.id, approval);
+          return approval;
+        }
+      } catch (err) {
+        Logger.warn('Erro ao buscar aprovação de desconto', { error: err.message });
+      }
+    }
+    return this.inMemoryDiscountApprovals.get(String(approvalId)) || null;
+  }
+
+  async getPendingDiscountApprovals() {
+    if (this.firestore) {
+      try {
+        const snapshot = await this.firestore.collection('discount_approvals').where('status', '==', 'PENDING').get();
+        const approvals = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+        approvals.forEach((approval) => this.inMemoryDiscountApprovals.set(approval.id, approval));
+        return approvals.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      } catch (err) {
+        Logger.warn('Erro ao listar aprovações de desconto', { error: err.message });
+      }
+    }
+    return Array.from(this.inMemoryDiscountApprovals.values())
+      .filter((approval) => approval.status === 'PENDING')
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  async updateDiscountApproval(approvalId, updates) {
+    const approval = await this.getDiscountApproval(approvalId);
+    if (!approval) return null;
+    const updated = { ...approval, ...updates, updatedAt: new Date().toISOString() };
+    if (this.firestore) {
+      await this.firestore.collection('discount_approvals').doc(String(approvalId)).set(updated, { merge: true });
+    }
+    this.inMemoryDiscountApprovals.set(String(approvalId), updated);
+    return updated;
+  }
 
   /**
    * Envia notificação de venda finalizada para todos os usuários com papel ADMIN.

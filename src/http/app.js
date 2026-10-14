@@ -1,3 +1,4 @@
+const { randomUUID } = require('node:crypto');
 const { createWebSessions, safeUser } = require('../security/web-session');
 const { readProductWorkbook } = require('../catalog/spreadsheet-import');
 const { rankProductSales } = require('../catalog/product-sales');
@@ -19,6 +20,8 @@ const Logger = require('../shared/logger');
 const { SignatureValidator } = require('../security/signature.validator');
 const { SystemStatusService } = require('../services/system-status.service');
 const { renderHomeHtml, renderAdminHtml, renderCaixaHtml, renderAdminGerencialHtml } = require('./views');
+const { MercadoPagoClient, isApprovedPixPayment } = require('../integrations/mercado-pago.client');
+const { formatOrderReceipt } = require('../orders/receipt.util');
 
 const FETCH_SHIM_SCRIPT = `<script>
   (function() {
@@ -859,9 +862,69 @@ function renderTermsOfServiceHtml() {
 </html>`;
 }
 
-function createApp({ messageService, taskQueueClient, verifyGoogleToken = verifyFirebaseToken, storeRepository, storeAssistant }) {
+function whatsappCustomerPhone(phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  return digits && !digits.startsWith('55') && digits.length <= 11
+    ? `55${digits}`
+    : digits;
+}
+
+function mercadoPagoNotificationUrl() {
+  const baseUrl = String(config.tasks.serviceUrl || '').trim();
+  if (!baseUrl.startsWith('https://')) {
+    throw new Error('Configure SERVICE_URL com a URL HTTPS pública para os webhooks do Mercado Pago.');
+  }
+  return new URL('/webhooks/mercadopago', baseUrl).toString();
+}
+
+async function sendCustomerOrderReceipt(whatsappClient, phone, receiptText) {
+  const targetPhone = whatsappCustomerPhone(phone);
+  if (!/^\d{12,15}$/.test(targetPhone)) {
+    return { sent: false, reason: 'Telefone do cliente inválido ou não informado.' };
+  }
+  const template = config.whatsapp.templates.customerOrder;
+  if (!template) {
+    return { sent: false, reason: 'Configure um modelo aprovado de recibo para WhatsApp.' };
+  }
+  try {
+    const result = await whatsappClient.sendTemplate(
+      targetPhone,
+      template,
+      config.whatsapp.templates.language,
+      [
+        {
+          type: 'body',
+          parameters: [{ type: 'text', text: receiptText }],
+        },
+      ],
+    );
+    if (result?.mock || result?.success === false) {
+      return { sent: false, reason: 'WhatsApp sem credenciais válidas ou envio não confirmado.' };
+    }
+    return { sent: true };
+  } catch (error) {
+    Logger.error('Falha ao enviar recibo de pedido pelo WhatsApp', error);
+    return { sent: false, reason: 'Não foi possível enviar o recibo pelo WhatsApp.' };
+  }
+}
+
+function createApp({
+  messageService,
+  taskQueueClient,
+  verifyGoogleToken = verifyFirebaseToken,
+  storeRepository,
+  storeAssistant,
+  mercadoPagoClient,
+}) {
   const express = getExpress();
   if (!express) { throw new Error('Express module not available'); }
+  const payments =
+    mercadoPagoClient ||
+    new MercadoPagoClient({
+      accessToken: config.mercadoPago.accessToken,
+      webhookSecret: config.mercadoPago.webhookSecret,
+    });
+  messageService.mercadoPagoClient = payments;
   const app = express();
   app.use('/api', (_req, res, next) => {
     res.setHeader('Cache-Control', 'private, no-store');
@@ -1077,6 +1140,17 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
 
           const taskPayload = { phone, message: text, customerName, messageId };
 
+          if (!config.whatsapp.assistantEnabled) {
+            setImmediate(() => {
+              messageService
+                .handleCustomerMessage({ ...taskPayload, verifyOnly: true })
+                .catch((error) =>
+                  Logger.error('Falha ao verificar comprovante recebido pelo WhatsApp', error),
+                );
+            });
+            continue;
+          }
+
           if (taskQueueClient) {
             await taskQueueClient.enqueueProcessMessage(taskPayload).catch((err) => {
               Logger.error('Erro ao enfileirar tarefa; processando diretamente', err);
@@ -1092,8 +1166,97 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
     }
   });
 
+  app.post('/webhooks/mercadopago', async (req, res) => {
+    const paymentId = String(req.query['data.id'] || req.body?.data?.id || '');
+    const signatureIsValid = payments.verifyWebhookSignature({
+      signature: req.headers['x-signature'],
+      requestId: req.headers['x-request-id'],
+      paymentId,
+    });
+    if (!signatureIsValid) {
+      Logger.warn('Webhook do Mercado Pago recusado: assinatura inválida.');
+      return res.sendStatus(401);
+    }
+
+    const eventType = req.query.type || req.body?.type || req.body?.action || '';
+    if (!String(eventType).startsWith('payment')) {
+      return res.sendStatus(200);
+    }
+
+    try {
+      const payment = await payments.getPayment(paymentId);
+      const orderId = String(payment.external_reference || '');
+      if (!orderId) {
+        Logger.warn('Notificação do Mercado Pago sem referência de pedido.', {
+          paymentId,
+        });
+        return res.sendStatus(200);
+      }
+      const order = await messageService.firestoreRepo.getOrderById(orderId);
+      if (!order) {
+        Logger.warn('Pagamento do Mercado Pago ainda sem pedido correspondente.', {
+          orderId,
+          paymentId,
+        });
+        return res.sendStatus(200);
+      }
+      if (order.status === 'CANCELLED') {
+        Logger.error('PIX aprovado para um pedido cancelado; necessário tratar pagamento e pedido.', {
+          orderId,
+          paymentId,
+        });
+        return res.sendStatus(200);
+      }
+      if (
+        String(order.paymentMethod || '').toUpperCase() !== 'PIX' ||
+        !isApprovedPixPayment(payment, order)
+      ) {
+        Logger.warn('Pagamento do Mercado Pago não corresponde ao PIX do pedido.', {
+          orderId,
+          paymentId,
+          status: payment.status,
+          paymentMethod: payment.payment_method_id,
+          amount: payment.transaction_amount,
+        });
+        return res.sendStatus(200);
+      }
+      if (order.status !== 'CONFIRMED' && order.status !== 'PAID_CONFIRMED') {
+        const confirmedOrder = await messageService.firestoreRepo.confirmOrderPayment(
+          order.id,
+          {
+            verifiedVia: 'MERCADO_PAGO_WEBHOOK',
+            paymentTransactionId: payment.id,
+            paymentAmount: payment.transaction_amount,
+          },
+        );
+        const receiptText = formatOrderReceipt({
+          ...confirmedOrder,
+          paymentStatus: 'APPROVED',
+        });
+        const delivery = await sendCustomerOrderReceipt(
+          messageService.whatsappClient,
+          order.customerPhone,
+          receiptText,
+        );
+        if (!delivery.sent) {
+          Logger.warn('PIX confirmado; não foi possível enviar a atualização ao cliente.', {
+            orderId,
+            reason: delivery.reason,
+          });
+        }
+      }
+      return res.sendStatus(200);
+    } catch (error) {
+      Logger.error('Falha ao processar notificação do Mercado Pago.', error);
+      return res.sendStatus(500);
+    }
+  });
+
   // Cloud Tasks Processing Endpoint
   app.post('/tasks/processar-mensagem', async (req, res) => {
+    if (!config.whatsapp.assistantEnabled) {
+      return res.status(410).json({ error: 'Atendimento automático desativado.' });
+    }
     const secret = req.headers['x-conflora-task-secret'];
     if (config.tasks.taskSecret && secret !== config.tasks.taskSecret) {
       return res.sendStatus(401);
@@ -1225,30 +1388,121 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
         return res.status(400).json({ error: 'Dados do pedido incompletos.' });
       }
 
-      const calculatedSubtotal = Number(subtotal) || items.reduce((acc, it) => acc + (Number(it.price || 0) * Number(it.quantity || 1)), 0);
-      const appliedDiscount = Math.max(0, Number(discount) || 0);
+      let orderItems = items;
+      let calculatedSubtotal;
+      let appliedDiscount;
+      let resolvedCoupon = coupon || '';
+      if (req.path === '/api/orders') {
+        if (items.length > 100) {
+          return res.status(400).json({ error: 'O pedido excede o limite de itens.' });
+        }
+        const products = await messageService.firestoreRepo.getAllProducts();
+        const productsById = new Map(products.map((product) => [String(product.id), product]));
+        orderItems = [];
+        for (const item of items) {
+          const product = productsById.get(String(item.productId));
+          const quantity = Number(item.quantity);
+          if (
+            !product ||
+            product.status === 'INATIVO' ||
+            product.isAvailable === false ||
+            !Number.isFinite(quantity) ||
+            quantity <= 0
+          ) {
+            return res.status(400).json({ error: 'Produto ou quantidade inválida no pedido.' });
+          }
+          orderItems.push({
+            productId: String(product.id),
+            name: product.name || product.descricao || 'Produto',
+            price: Number(product.price || product.valor_num || 0),
+            quantity,
+            unit: item.unit || product.unit || product.unidade || 'UN',
+          });
+        }
+        calculatedSubtotal = Number(
+          orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0).toFixed(2),
+        );
+        const legacyCoupons = {
+          CONFLORA10: { type: 'PERCENT', value: 10 },
+          CONFLORA15: { type: 'PERCENT', value: 15 },
+          VERDE5: { type: 'FIXED', value: 5 },
+          BEMVINDO: { type: 'PERCENT', value: 10 },
+          PRIMEIRACOMPRA: { type: 'PERCENT', value: 10 },
+          CERRADO20: { type: 'PERCENT', value: 20 },
+        };
+        resolvedCoupon = String(coupon || '').trim().toUpperCase();
+        const couponRule = legacyCoupons[resolvedCoupon];
+        if (resolvedCoupon && !couponRule) {
+          return res.status(400).json({ error: 'Cupom inválido.' });
+        }
+        appliedDiscount = couponRule
+          ? Number(
+              (
+                couponRule.type === 'PERCENT'
+                  ? calculatedSubtotal * couponRule.value / 100
+                  : Math.min(calculatedSubtotal, couponRule.value)
+              ).toFixed(2),
+            )
+          : 0;
+      } else {
+        calculatedSubtotal = Number(subtotal) || items.reduce((acc, it) => acc + (Number(it.price || 0) * Number(it.quantity || 1)), 0);
+        appliedDiscount = Math.max(0, Number(discount) || 0);
+      }
       const finalTotal = Math.max(0, calculatedSubtotal - appliedDiscount);
+      const resolvedPaymentMethod = String(paymentMethod || 'PIX').toUpperCase();
+      const orderId = randomUUID();
+      let mercadoPagoPreference = null;
+      if (resolvedPaymentMethod === 'PIX') {
+        if (!payments.checkoutConfigured) {
+          return res.status(503).json({
+            error: 'Pagamento PIX indisponível. Configure as credenciais e o segredo de webhook do Mercado Pago.',
+          });
+        }
+        mercadoPagoPreference = await payments.createPixCheckout({
+          order: { id: orderId, total: finalTotal },
+          payerEmail: req.user?.email || '',
+          notificationUrl: mercadoPagoNotificationUrl(),
+        });
+      }
 
       const order = await messageService.firestoreRepo.createDirectOrder({
+        id: orderId,
         customerId: req.user?.id || '',
         customerEmail: req.user?.email || '',
         customerName,
         customerPhone,
         orderType: orderType || 'DELIVERY',
         deliveryAddress: deliveryAddress || 'Retirada no Viveiro Conflora',
-        paymentMethod: paymentMethod || 'PIX',
-        items,
+        paymentMethod: resolvedPaymentMethod,
+        items: orderItems,
         subtotal: calculatedSubtotal,
-        coupon: coupon || '',
+        coupon: resolvedCoupon,
         discount: appliedDiscount,
         total: finalTotal,
         cashTendered: Number(cashTendered) || 0,
         changeDue: Number(changeDue) || 0,
         status: 'PENDING',
         source: 'WEB_CATALOG',
-      });
+        mercadoPagoPreferenceId: mercadoPagoPreference?.id || '',
+        paymentCheckoutUrl: mercadoPagoPreference?.checkoutUrl || '',
+      }, { requirePersistence: resolvedPaymentMethod === 'PIX' });
 
-      await messageService.firestoreRepo.deductStock(items, customerPhone);
+      await messageService.firestoreRepo.deductStock(orderItems, customerPhone);
+      const receiptText = formatOrderReceipt(order);
+      let receiptDelivery = { sent: false, reason: 'Envio não solicitado.' };
+      if (resolvedPaymentMethod === 'PIX') {
+        receiptDelivery = await sendCustomerOrderReceipt(
+          messageService.whatsappClient,
+          customerPhone,
+          receiptText,
+        );
+        if (!receiptDelivery.sent) {
+          Logger.warn('Pedido PIX criado; não foi possível enviar o recibo ao cliente.', {
+            orderId: order.id,
+            reason: receiptDelivery.reason,
+          });
+        }
+      }
 
       // Notificação para todos os usuários ADMIN sobre a venda finalizada
       await messageService.firestoreRepo.notifyAllAdminUsersOfSale(order, { source: 'WEB_CATALOG' }).catch((err) => {
@@ -1259,12 +1513,12 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       const ownerNumber = req.storeConfig?.checkout.contactPhone || process.env.OWNER_WHATSAPP_NUMBER || '5564999351616';
       if (messageService.whatsappClient && ownerNumber) {
         try {
-          const itemsListText = items
+          const itemsListText = orderItems
             .map((it) => `• ${it.quantity}x ${it.name} (R$ ${Number(it.price || 0).toFixed(2).replace('.', ',')} un) = R$ ${(Number(it.price || 0) * Number(it.quantity || 1)).toFixed(2).replace('.', ',')}`)
             .join('\n');
 
           const couponText = appliedDiscount > 0
-            ? `🎟️ *Cupom:* ${coupon} (-R$ ${appliedDiscount.toFixed(2).replace('.', ',')})\n`
+            ? `🎟️ *Cupom:* ${resolvedCoupon} (-R$ ${appliedDiscount.toFixed(2).replace('.', ',')})\n`
             : '';
 
           let cashDetails = '';
@@ -1300,7 +1554,16 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
         }
       }
 
-      res.status(200).json({ success: true, order });
+      res.status(200).json({
+        success: true,
+        order: {
+          ...order,
+          receiptText,
+          paymentCheckoutUrl: mercadoPagoPreference?.checkoutUrl || '',
+          receiptDelivery,
+        },
+        receiptDelivery,
+      });
     } catch (err) {
       Logger.error('Erro ao registrar pedido web', err);
       res.status(err.status || 500).json({ error: err.message });
@@ -1335,6 +1598,19 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
     try {
       const { id } = req.params;
       const { status } = req.body;
+      const order = await messageService.firestoreRepo.getOrderById(id);
+      if (!order) {
+        return res.status(404).json({ error: 'Pedido não encontrado.' });
+      }
+      if (
+        String(order.paymentMethod || '').toUpperCase() === 'PIX' &&
+        ['CONFIRMED', 'DELIVERED', 'PAID_CONFIRMED'].includes(String(status).toUpperCase()) &&
+        !order.paymentTransactionId
+      ) {
+        return res.status(409).json({
+          error: 'O PIX só pode ser confirmado após aprovação verificada pelo Mercado Pago.',
+        });
+      }
       const result = await messageService.firestoreRepo.updateOrderStatus(id, status);
       res.status(200).json(result);
     } catch (err) {
@@ -1347,20 +1623,88 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
   app.post('/api/admin/orders/manual', async (req, res) => {
     try {
       const { customerName, customerPhone, items, paymentMethod, notes } = req.body;
+      if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ error: 'Nenhum produto adicionado à venda.' });
+      }
+      const products = await messageService.firestoreRepo.getAllProducts();
+      const productsById = new Map(products.map((product) => [String(product.id), product]));
+      const normalizedItems = [];
+      for (const item of items) {
+        const product = productsById.get(String(item.productId));
+        const quantity = Number(item.quantity);
+        if (
+          !product ||
+          product.status === 'INATIVO' ||
+          product.isAvailable === false ||
+          !Number.isFinite(quantity) ||
+          quantity <= 0
+        ) {
+          return res.status(400).json({ error: 'Produto ou quantidade inválida na venda.' });
+        }
+        normalizedItems.push({
+          productId: String(product.id),
+          name: product.name || product.descricao || 'Produto',
+          price: Number(product.price || product.valor_num || 0),
+          quantity,
+          unit: product.unit || product.unidade || 'UN',
+        });
+      }
+      const resolvedPaymentMethod = String(paymentMethod || 'DINHEIRO').toUpperCase();
+      const orderId = randomUUID();
+      let mercadoPagoPreference = null;
+      if (resolvedPaymentMethod === 'PIX') {
+        if (!payments.checkoutConfigured) {
+          return res.status(503).json({
+            error: 'Pagamento PIX indisponível. Configure as credenciais e o segredo de webhook do Mercado Pago.',
+          });
+        }
+        const total = normalizedItems.reduce(
+          (sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1),
+          0,
+        );
+        mercadoPagoPreference = await payments.createPixCheckout({
+          order: { id: orderId, total },
+          notificationUrl: mercadoPagoNotificationUrl(),
+        });
+      }
       const order = await messageService.firestoreRepo.createManualOrder({
         customerName,
         customerPhone,
-        items,
-        paymentMethod,
+        items: normalizedItems,
+        paymentMethod: resolvedPaymentMethod,
         notes,
+        orderId,
+        status: resolvedPaymentMethod === 'PIX' ? 'AWAITING_PIX' : 'CONFIRMED',
+        mercadoPagoPreferenceId: mercadoPagoPreference?.id || '',
+        paymentCheckoutUrl: mercadoPagoPreference?.checkoutUrl || '',
+        requirePersistence: resolvedPaymentMethod === 'PIX',
       });
+      const receiptText = formatOrderReceipt(order);
+      let receiptDelivery = { sent: false, reason: 'Envio não solicitado.' };
+      if (resolvedPaymentMethod === 'PIX') {
+        receiptDelivery = await sendCustomerOrderReceipt(
+          messageService.whatsappClient,
+          customerPhone,
+          receiptText,
+        );
+        if (!receiptDelivery.sent) {
+          Logger.warn('Venda manual PIX criada; não foi possível enviar o recibo ao cliente.', {
+            orderId: order.id,
+            reason: receiptDelivery.reason,
+          });
+        }
+      }
 
       // Notificação para todos os usuários ADMIN sobre a venda manual no balcão
       await messageService.firestoreRepo.notifyAllAdminUsersOfSale(order, { source: 'CAIXA_MANUAL' }).catch((err) => {
         Logger.warn('Aviso: falha ao notificar administradores sobre venda manual no caixa', { error: err.message });
       });
 
-      res.status(200).json({ success: true, order });
+      res.status(200).json({
+        success: true,
+        order: { ...order, receiptText, receiptDelivery },
+        receiptDelivery,
+      });
     } catch (err) {
       Logger.error('Erro ao lançar pedido manual no caixa', err);
       res.status(500).json({ error: err.message });
@@ -1388,6 +1732,43 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
     }
   });
 
+  app.get('/api/caixa/customers', async (req, res) => {
+    try {
+      if (!req.user || !['ADMIN', 'CAIXA'].includes(req.user.role)) {
+        return res.status(401).json({ error: 'Entre com seu perfil de colaborador para consultar clientes.' });
+      }
+      const customers = await messageService.firestoreRepo.searchCustomers(req.query.q, 8);
+      res.status(200).json(customers);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/caixa/customers', async (req, res) => {
+    try {
+      if (!req.user || !['ADMIN', 'CAIXA'].includes(req.user.role)) {
+        return res.status(401).json({ error: 'Entre com seu perfil de colaborador para cadastrar clientes.' });
+      }
+      const name = String(req.body?.name || '').trim().slice(0, 100);
+      const phone = String(req.body?.phone || '').replace(/\D/g, '');
+      if (!name || phone.length < 10 || phone.length > 13) {
+        return res.status(400).json({ error: 'Informe um nome e um celular válido com DDD.' });
+      }
+      await messageService.firestoreRepo.saveCustomerProfile(phone, { name });
+      res.status(201).json({ success: true, customer: { name, phone } });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.use('/api/caixa', (req, res, next) => {
+    if (!req.user) return res.status(401).json({ error: 'Entre com seu perfil de colaborador.' });
+    if (!['ADMIN', 'CAIXA'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Acesso permitido somente para CAIXA ou ADMIN.' });
+    }
+    next();
+  });
+
   app.post('/api/caixa/orders', async (req, res) => {
     try {
       const {
@@ -1397,68 +1778,139 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
         paymentMethod,
         notes,
         operatorName,
+        discountPercent = 0,
       } = req.body;
 
       if (!Array.isArray(items) || items.length === 0) {
         return res.status(400).json({ error: 'Nenhum item adicionado à venda.' });
       }
 
+      const requestedDiscountPercent = Number(discountPercent);
+      if (!Number.isFinite(requestedDiscountPercent) || requestedDiscountPercent < 0 || requestedDiscountPercent > 100) {
+        return res.status(400).json({ error: 'Percentual de desconto inválido.' });
+      }
+
+      const products = await messageService.firestoreRepo.getAllProducts();
+      const productsById = new Map(products.map((product) => [String(product.id), product]));
+      const normalizedItems = items.map((item) => {
+        const product = productsById.get(String(item.productId));
+        const quantity = Number(item.quantity);
+        if (!product || product.status === 'INATIVO' || product.isAvailable === false || !Number.isFinite(quantity) || quantity <= 0) {
+          throw new Error('Produto ou quantidade inválida na venda.');
+        }
+        return {
+          productId: String(product.id),
+          name: product.name || product.descricao || 'Produto',
+          price: Number(product.price || product.valor_num || 0),
+          quantity,
+          unit: product.unit || product.unidade || 'UN',
+        };
+      });
       const payMethod = (paymentMethod || 'DINHEIRO').toUpperCase();
+      if (!['PIX', 'CARTAO', 'DINHEIRO'].includes(payMethod)) {
+        return res.status(400).json({ error: 'Forma de pagamento inválida.' });
+      }
       const isPix = payMethod === 'PIX';
       const status = isPix ? 'AWAITING_PIX' : 'AWAITING_CASHIER';
+      const subtotal = Number(normalizedItems.reduce((sum, item) => sum + item.price * item.quantity, 0).toFixed(2));
+      const discountAmount = Number((subtotal * requestedDiscountPercent / 100).toFixed(2));
+      const total = Number((subtotal - discountAmount).toFixed(2));
+      const resolvedCustomerName = customerName || (customerPhone ? `Cliente ${String(customerPhone).slice(-4)}` : 'Cliente Balcão');
+      const resolvedOperatorName = operatorName || req.user?.name || 'Colaborador';
 
-      const total = items.reduce(
-        (sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1),
-        0
-      );
-
+      if (requestedDiscountPercent > 5) {
+        const approval = await messageService.firestoreRepo.createDiscountApproval({
+          customerName: resolvedCustomerName,
+          customerPhone: customerPhone || '',
+          items: normalizedItems,
+          paymentMethod: payMethod,
+          notes: notes || '',
+          operatorName: resolvedOperatorName,
+          operatorId: req.user?.id || '',
+          requestedBy: req.user?.id || '',
+          requestedByName: req.user?.name || resolvedOperatorName,
+          subtotal,
+          discountAmount,
+          discountPercent: requestedDiscountPercent,
+          total,
+        });
+        return res.status(202).json({ success: true, approvalRequired: true, approval });
+      }
       const ticketNumber = String(Math.floor(100 + Math.random() * 900));
-
-      const { generatePixCode } = require('../orders/pix.util');
-      let pixCode = '';
+      const orderId = randomUUID();
+      let mercadoPagoPreference = null;
       if (isPix) {
-        pixCode = generatePixCode({
-          key: process.env.STORE_PIX_KEY || config.pix.key || '64999351616',
-          name: config.pix.holder || 'Conflora Horta e Viveiro',
-          city: 'Mineiros',
-          amount: total,
-          txid: `CONF${ticketNumber}`,
+        if (!payments.checkoutConfigured) {
+          return res.status(503).json({
+            error: 'Pagamento PIX indisponível. Configure as credenciais e o segredo de webhook do Mercado Pago.',
+          });
+        }
+        mercadoPagoPreference = await payments.createPixCheckout({
+          order: { id: orderId, total, ticketNumber },
+          notificationUrl: mercadoPagoNotificationUrl(),
         });
       }
 
       const order = await messageService.firestoreRepo.createManualOrder({
-        customerName: customerName || (customerPhone ? `Cliente ${customerPhone.slice(-4)}` : `Balcão #${ticketNumber}`),
+        customerName: resolvedCustomerName || `Balcão #${ticketNumber}`,
         customerPhone: customerPhone || '',
-        items,
+        items: normalizedItems,
         paymentMethod: payMethod,
         notes,
-        operatorName: operatorName || req.user?.name || 'Colaborador',
+        operatorName: resolvedOperatorName,
         operatorId: req.user?.id || '',
         ticketNumber,
-        pixCode,
+        orderId,
+        pixCode: '',
+        mercadoPagoPreferenceId: mercadoPagoPreference?.id || '',
+        paymentCheckoutUrl: mercadoPagoPreference?.checkoutUrl || '',
         status,
+        discountAmount,
+        discountPercent: requestedDiscountPercent,
+        requirePersistence: isPix,
       });
 
-      // Se PIX e tiver telefone do cliente, envia chave PIX automaticamente no WhatsApp
-      if (isPix && customerPhone && messageService.whatsappClient) {
-        const cleanPhone = String(customerPhone).replace(/\D/g, '');
-        const pixMsg = (
-          `🌱 *Conflora Horta e Viveiro*\n\n` +
-          `Olá ${customerName ? customerName + '! ' : '!'}Aqui estão os dados para pagamento PIX do seu pedido *#${ticketNumber}*:\n\n` +
-          `💰 *Valor Total:* R$ ${total.toFixed(2).replace('.', ',')}\n` +
-          `🔑 *Chave PIX:* \`${process.env.STORE_PIX_KEY || config.pix.key || '64999351616'}\`\n` +
-          `👤 *Titular:* ${config.pix.holder || 'Conflora Horta e Viveiro'}\n\n` +
-          `📋 *Código Copia e Cola:*\n\`${pixCode}\`\n\n` +
-          `📸 *Assim que efetuar o pagamento, basta enviar o comprovante aqui nesta conversa que seu pedido será liberado automaticamente sem fila no caixa!*`
+      const receiptText = formatOrderReceipt(order);
+      let receiptDelivery = { sent: false, reason: 'Envio não solicitado.' };
+      if (isPix) {
+        receiptDelivery = await sendCustomerOrderReceipt(
+          messageService.whatsappClient,
+          customerPhone,
+          receiptText,
         );
-        messageService.whatsappClient.sendTextMessage(cleanPhone, pixMsg).catch((err) => {
-          Logger.warn('Aviso: falha ao enviar PIX no WhatsApp', { error: err.message });
-        });
+        if (!receiptDelivery.sent) {
+          Logger.warn('Pedido PIX criado; não foi possível enviar o recibo ao cliente.', {
+            orderId: order.id,
+            reason: receiptDelivery.reason,
+          });
+        }
       }
 
-      res.status(200).json({ success: true, order });
+      res.status(200).json({
+        success: true,
+        order: {
+          ...order,
+          receiptText,
+          paymentCheckoutUrl: mercadoPagoPreference?.checkoutUrl || '',
+          receiptDelivery,
+        },
+        receiptDelivery,
+      });
     } catch (err) {
       Logger.error('Erro ao lançar pedido no PDV', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/caixa/discount-approvals/:id', async (req, res) => {
+    try {
+      const approval = await messageService.firestoreRepo.getDiscountApproval(req.params.id);
+      if (!approval) return res.status(404).json({ error: 'Solicitação não encontrada.' });
+      if (req.user.role !== 'ADMIN' && approval.requestedBy !== req.user.id) {
+        return res.status(403).json({ error: 'Esta aprovação pertence a outro operador.' });
+      }
+      res.status(200).json({ status: approval.status, order: approval.order || null, reason: approval.rejectionReason || '' });
+    } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
@@ -1506,6 +1958,18 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
     try {
       const { id } = req.params;
       const { verifiedVia, receivedAmount, changeGiven } = req.body || {};
+      const existingOrder = await messageService.firestoreRepo.getOrderById(id);
+      if (!existingOrder) {
+        return res.status(404).json({ error: 'Pedido não encontrado.' });
+      }
+      if (
+        String(existingOrder.paymentMethod || '').toUpperCase() === 'PIX' &&
+        !existingOrder.paymentTransactionId
+      ) {
+        return res.status(409).json({
+          error: 'O PIX só pode ser confirmado após aprovação verificada pelo Mercado Pago.',
+        });
+      }
       const order = await messageService.firestoreRepo.confirmOrderPayment(id, {
         verifiedVia: verifiedVia || 'CAIXA_CONFIRMACAO',
         receivedAmount: typeof receivedAmount === 'number' ? receivedAmount : null,
@@ -1540,18 +2004,18 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       if (!targetPhone) {
         return res.status(400).json({ error: 'Telefone inválido.' });
       }
-      if (messageService.whatsappClient) {
-        const msg = (
-          `🌱 *Conflora Horta e Viveiro*\n\n` +
-          `Olá ${order.customerName}! Aqui estão os dados para pagamento do pedido *#${order.ticketNumber || order.id.slice(-4)}*:\n\n` +
-          `💰 *Valor Total:* R$ ${Number(order.total || 0).toFixed(2).replace('.', ',')}\n` +
-          `🔑 *Chave PIX:* \`${process.env.STORE_PIX_KEY || config.pix.key || '64999351616'}\`\n\n` +
-          (order.pixCode ? `📋 *Copia e Cola:*\n\`${order.pixCode}\`\n\n` : '') +
-          `📸 *Basta responder com o comprovante aqui nesta conversa que seu pedido será liberado automaticamente sem fila no caixa!*`
-        );
-        await messageService.whatsappClient.sendTextMessage(targetPhone, msg);
+      if (!messageService.whatsappClient) {
+        return res.status(503).json({ error: 'WhatsApp indisponível no momento.' });
       }
-      res.status(200).json({ success: true });
+      const delivery = await sendCustomerOrderReceipt(
+        messageService.whatsappClient,
+        targetPhone,
+        formatOrderReceipt(order),
+      );
+      if (!delivery.sent) {
+        return res.status(503).json({ error: delivery.reason });
+      }
+      res.status(200).json({ success: true, receiptSent: true });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -1598,16 +2062,21 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
     }
   });
 
-  // Admin: Enviar Foto(s) de Produto Direto para o Firestore (com compressão inteligente, padrão Conflora e preservação para zoom)
-  app.post('/api/admin/products/:id/photo', async (req, res) => {
+  // Admin: Otimizar fotos, enviar ao Storage e salvar os metadados no Firestore
+  app.post('/api/admin/products/:id/photo', express.raw({ type: 'application/octet-stream', limit: '20mb' }), async (req, res) => {
     try {
       const { id } = req.params;
-      const prod = (await messageService.firestoreRepo.getProductById(id)) || { id, name: req.body.name || 'Produto' };
+      const rawPhoto = Buffer.isBuffer(req.body) ? req.body : null;
+      const body = rawPhoto ? {} : (req.body || {});
+      const prod = (await messageService.firestoreRepo.getProductById(id)) || { id, name: req.headers['x-product-name'] || 'Produto' };
 
-      const { photoBase64, photosBase64, photos, contentType, maxWidth, maxHeight, quality, format, append } = req.body || {};
-      const incomingList = Array.isArray(photosBase64) && photosBase64.length > 0
+      const { photoBase64, photosBase64, photos, contentType, maxWidth, maxHeight, quality, format, append } = body;
+      const incomingList = rawPhoto
+        ? [{ base64: rawPhoto.toString('base64'), contentType: req.headers['x-photo-content-type'] || 'image/jpeg' }]
+        : Array.isArray(photosBase64) && photosBase64.length > 0
         ? photosBase64
         : (Array.isArray(photos) && photos.length > 0 ? photos : (photoBase64 ? [photoBase64] : null));
+      const shouldAppend = rawPhoto ? req.headers['x-photo-append'] === 'true' : append;
 
       if (!incomingList || incomingList.length === 0) {
         return res.status(400).json({ error: 'Envie os dados da foto em base64.' });
@@ -1615,7 +2084,16 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
 
       const { buildOptimizedFirestorePhotoDocument } = require('../catalog/product-photo.service');
       const savedPhotos = [];
-      const existingImages = (append && Array.isArray(prod.images)) ? [...prod.images] : [];
+      const existingImages = shouldAppend
+        ? (Array.isArray(prod.images) ? [...prod.images] : (prod.imageUrl ? [prod.imageUrl] : []))
+        : [];
+      const existingImagePaths = shouldAppend
+        ? existingImages.map((_, index) => (
+          Array.isArray(prod.imagePaths)
+            ? prod.imagePaths[index] || ''
+            : (index === 0 ? prod.imagePath || '' : '')
+        ))
+        : [];
       const startIndex = existingImages.length;
 
       for (let i = 0; i < incomingList.length; i++) {
@@ -1636,20 +2114,29 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
           preserveZoomQuality: true,
         });
 
+        const storedImage = await messageService.firestoreRepo.uploadProductImage(photoDoc);
         await messageService.firestoreRepo.saveProductPhoto(photoDoc);
-        savedPhotos.push(photoDoc);
+        savedPhotos.push({ ...photoDoc, ...storedImage });
       }
 
-      const newUrls = savedPhotos.map((p) => `/api/images/${p.id}`);
-      const allUrls = append ? Array.from(new Set([...existingImages, ...newUrls])) : newUrls;
+      const imageEntries = new Map();
+      existingImages.forEach((url, index) => {
+        imageEntries.set(url, { url, path: existingImagePaths[index] || '' });
+      });
+      savedPhotos.forEach((photo) => {
+        imageEntries.set(photo.imageUrl, { url: photo.imageUrl, path: photo.imagePath });
+      });
+      const allImages = Array.from(imageEntries.values());
       const primaryPhoto = savedPhotos[0];
 
       const updatedProduct = {
         ...prod,
-        imageUrl: allUrls[0] || `/api/images/${primaryPhoto.id}`,
-        images: allUrls,
+        imageUrl: allImages[0]?.url || primaryPhoto.imageUrl,
+        imagePath: allImages[0]?.path || primaryPhoto.imagePath,
+        imagePaths: allImages.map((image) => image.path),
+        images: allImages.map((image) => image.url),
         imageFileId: primaryPhoto.id,
-        imagePathCache: allUrls[0],
+        imagePathCache: allImages[0]?.url || primaryPhoto.imageUrl,
         tagsAi: primaryPhoto.tagsAi,
         tags_ia: primaryPhoto.tagsAi,
         descriptionAi: primaryPhoto.descriptionAi,
@@ -1670,19 +2157,21 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
           fileName: primaryPhoto.fileName,
           tags: primaryPhoto.tagsAi,
           url: updatedProduct.imageUrl,
+          imagePath: updatedProduct.imagePath,
           compression: primaryPhoto.compression || null,
         },
         photos: savedPhotos.map((p) => ({
           id: p.id,
           fileName: p.fileName,
           tags: p.tagsAi,
-          url: `/api/images/${p.id}`,
+          url: p.imageUrl,
+          imagePath: p.imagePath,
           compression: p.compression || null,
         })),
         product: updatedProduct,
       });
     } catch (err) {
-      Logger.error('Erro no upload de foto para o Firestore', err);
+      Logger.error('Erro no upload de foto para o Firebase Storage', err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1730,7 +2219,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
     }
   });
 
-  // Admin: Transferir Fotos do Google Drive da Planilha para o Firestore com Padrão de Nomes e Tags
+  // Admin: Transferir fotos do Google Drive para o Firebase Storage e salvar os metadados
   app.post('/api/admin/transfer-drive-photos', async (_req, res) => {
     try {
       const result = await messageService.firestoreRepo.transferAllDrivePhotosToFirestore();
@@ -1739,7 +2228,7 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
       }
       res.status(200).json(result);
     } catch (err) {
-      Logger.error('Erro ao transferir fotos do Google Drive para o Firestore', err);
+      Logger.error('Erro ao transferir fotos do Google Drive para o Firebase Storage', err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -2011,6 +2500,119 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
     }
   });
 
+  app.get('/api/admin/discount-approvals', async (_req, res) => {
+    try {
+      const approvals = await messageService.firestoreRepo.getPendingDiscountApprovals();
+      res.status(200).json(approvals);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/admin/discount-approvals/:id/review', async (req, res) => {
+    try {
+      const { action, rejectionReason = '' } = req.body || {};
+      if (!['APPROVED', 'REJECTED'].includes(action)) {
+        return res.status(400).json({ error: 'Ação de auditoria inválida.' });
+      }
+      if (action === 'REJECTED' && !String(rejectionReason).trim()) {
+        return res.status(400).json({ error: 'Informe o motivo da recusa.' });
+      }
+
+      const repo = messageService.firestoreRepo;
+      const approval = await repo.getDiscountApproval(req.params.id);
+      if (!approval) return res.status(404).json({ error: 'Solicitação não encontrada.' });
+      if (approval.status !== 'PENDING') return res.status(409).json({ error: 'Esta solicitação já foi revisada.' });
+
+      if (action === 'REJECTED') {
+        const reason = String(rejectionReason).trim().slice(0, 500);
+        const reviewed = await repo.updateDiscountApproval(req.params.id, {
+          status: 'REJECTED',
+          rejectionReason: reason,
+          reviewedAt: new Date().toISOString(),
+          reviewedBy: req.user.id,
+        });
+        if (approval.requestedBy) {
+          await repo.createNotification({
+            toUserId: approval.requestedBy,
+            type: 'DISCOUNT_APPROVAL_REJECTED',
+            approvalId: approval.id,
+            title: 'Desconto recusado pelo administrador',
+            message: `A solicitação de ${approval.discountPercent}% foi recusada. Motivo: ${reason}`,
+            reason,
+          });
+        }
+        return res.status(200).json({ success: true, approval: reviewed });
+      }
+
+      const isPix = approval.paymentMethod === 'PIX';
+      const ticketNumber = String(Math.floor(100 + Math.random() * 900));
+      const orderId = randomUUID();
+      let mercadoPagoPreference = null;
+      if (isPix) {
+        if (!payments.checkoutConfigured) {
+          return res.status(503).json({
+            error: 'Pagamento PIX indisponível. Configure as credenciais e o segredo de webhook do Mercado Pago.',
+          });
+        }
+        mercadoPagoPreference = await payments.createPixCheckout({
+          order: { id: orderId, total: Number(approval.total || 0), ticketNumber },
+          notificationUrl: mercadoPagoNotificationUrl(),
+        });
+      }
+      const order = await repo.createManualOrder({
+        ...approval,
+        items: approval.items,
+        status: isPix ? 'AWAITING_PIX' : 'AWAITING_CASHIER',
+        ticketNumber,
+        pixCode: '',
+        orderId,
+        mercadoPagoPreferenceId: mercadoPagoPreference?.id || '',
+        paymentCheckoutUrl: mercadoPagoPreference?.checkoutUrl || '',
+        discountAmount: approval.discountAmount,
+        discountPercent: approval.discountPercent,
+        requirePersistence: isPix,
+      });
+      const receiptText = formatOrderReceipt(order);
+      let receiptDelivery = { sent: false, reason: 'Envio não solicitado.' };
+      const orderWithReceipt = { ...order, receiptText };
+      if (isPix) {
+        receiptDelivery = await sendCustomerOrderReceipt(
+          messageService.whatsappClient,
+          approval.customerPhone,
+          receiptText,
+        );
+        if (!receiptDelivery.sent) {
+          Logger.warn('Desconto aprovado; não foi possível enviar o recibo PIX ao cliente.', {
+            orderId: order.id,
+            reason: receiptDelivery.reason,
+          });
+        }
+      }
+      orderWithReceipt.receiptDelivery = receiptDelivery;
+      const reviewed = await repo.updateDiscountApproval(req.params.id, {
+        status: 'APPROVED',
+        reviewedAt: new Date().toISOString(),
+        reviewedBy: req.user.id,
+        order: orderWithReceipt,
+      });
+      if (approval.requestedBy) {
+        await repo.createNotification({
+          toUserId: approval.requestedBy,
+          type: 'DISCOUNT_APPROVAL_ACCEPTED',
+          approvalId: approval.id,
+          orderId: order.id,
+          title: 'Desconto aprovado pelo administrador',
+          message: `Pedido #${order.ticketNumber} aprovado. Total: R$ ${Number(order.total).toFixed(2).replace('.', ',')}.`,
+        });
+      }
+      res.status(200).json({ success: true, approval: reviewed, order: orderWithReceipt });
+    } catch (err) {
+      Logger.error('Erro ao revisar aprovação de desconto', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Notificações: Buscar para o usuário (Caixa ou Admin)
   app.get('/api/admin/notifications', async (req, res) => {
     try {
@@ -2079,6 +2681,9 @@ function createApp({ messageService, taskQueueClient, verifyGoogleToken = verify
   // Local Testing Chat Endpoint
   if (config.isDev || process.env.NODE_ENV !== 'production') {
     app.post('/chat', async (req, res) => {
+      if (!config.whatsapp.assistantEnabled) {
+        return res.status(410).json({ error: 'Atendimento automático desativado.' });
+      }
       const { telefone, nome, mensagem } = req.body;
       if (!telefone || !mensagem) {
         return res.status(400).json({ error: 'Campos "telefone" e "mensagem" são obrigatórios.' });

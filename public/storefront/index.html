@@ -69,29 +69,28 @@
     </header>
     <main id="main" class="main">
       <section id="catalogView">
-        <div class="catalog-header-bar">
-          <div class="status-filters-bar" id="statusFilters" role="group" aria-label="Filtrar produtos por status"></div>
-          <div class="store-ops-bar">
-            <button id="stockToggleBtn" class="stock-toggle-btn" type="button" title="Alternar controle de estoque"></button>
-            <button id="catalogEntryBtn" class="catalog-entry-btn" type="button" title="Dar entrada em produtos ou estoque">+ Entrada rápida</button>
-          </div>
-        </div>
-        <div class="catalog-tools">
-          <nav id="categories" aria-label="Categorias"></nav>
-          <label
-            >Ordenar
-            <select id="sort">
-              <option value="name">A a Z</option>
-              <option value="sales">Mais vendidos</option>
-              <option value="price">Menor preço</option>
-              <option value="priceDesc">Maior preço</option>
-            </select></label
-          >
-        </div>
         <div class="section-title">
           <h1 id="catalogTitle">Explore o catálogo</h1>
-          <span id="resultCount"></span>
+          <div class="catalog-tools">
+            <span id="resultCount"></span>
+            <label class="catalog-sort"
+              >Ordenar
+              <select id="sortOrder" aria-label="Ordenar produtos">
+                <option value="az">A a Z</option>
+                <option value="za">Z a A</option>
+                <option value="price-asc">Menor preço</option>
+                <option value="price-desc">Maior preço</option>
+              </select>
+            </label>
+          </div>
         </div>
+        <div
+          id="categoryFilterControl"
+          class="catalog-category-filter"
+          role="group"
+          aria-label="Filtrar por categoria"
+          hidden
+        ></div>
         <div id="products" class="products"></div>
         <button id="loadMore" class="quiet" hidden>
           Mostrar mais produtos
@@ -105,21 +104,21 @@
       ><strong id="mobileTotal">R$ 0,00</strong>
     </button>
     <nav id="mobileBottomBar" class="mobile-bottom-bar" aria-label="Navegação mobile">
-      <button type="button" class="mobile-bar-item active" id="navCatalogBtn" aria-label="Catálogo" onclick="document.getElementById('catalogView')?.scrollIntoView({behavior:'smooth'})">
+      <button type="button" class="mobile-bar-item active" id="navCatalogBtn" aria-label="Catálogo" aria-pressed="true">
         <svg class="bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
         <span>Catálogo</span>
       </button>
-      <button type="button" class="mobile-bar-item" id="navCategoriesBtn" aria-label="Categorias" onclick="document.getElementById('categories')?.scrollIntoView({behavior:'smooth'})">
-        <svg class="bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      <button type="button" class="mobile-bar-item" id="navCategoriesBtn" aria-label="Categorias" aria-pressed="false">
+        <svg class="bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16M4 12h16M4 19h16"/><circle cx="8" cy="5" r="2" fill="currentColor"/><circle cx="15" cy="12" r="2" fill="currentColor"/><circle cx="10" cy="19" r="2" fill="currentColor"/></svg>
         <span>Categorias</span>
       </button>
-      <button type="button" class="mobile-bar-item" id="navAiBtn" aria-label="Ajuda IA" onclick="document.getElementById('aiFab')?.click() || document.getElementById('chatDialog')?.showModal()">
+      <button type="button" class="mobile-bar-item" id="navAiBtn" aria-label="Ajuda IA" aria-pressed="false">
         <svg class="bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
         <span>Ajuda IA</span>
       </button>
-      <button type="button" class="mobile-bar-item" id="navCartBtn" aria-label="Sacola" onclick="document.getElementById('cartButton')?.click()">
-        <svg class="bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-        <span>Sacola</span>
+      <button type="button" class="mobile-bar-item" id="navFavoritesBtn" aria-label="Salvos" aria-pressed="false">
+        <svg class="bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z"/></svg>
+        <span>Salvos</span>
       </button>
     </nav>
     <button id="aiFab" class="ai-fab" aria-haspopup="dialog" hidden>
@@ -136,14 +135,14 @@
         <h2 id="cartTitle">Sua sacola</h2>
         <button data-close aria-label="Fechar sacola">×</button>
       </div>
-      <div id="cartItems"></div>
-      <div class="total">
-        <span>Total dos produtos</span><strong id="cartTotal"></strong>
-      </div>
-      <form id="checkoutForm">
-        <h3><span data-icon="user" aria-hidden="true"></span>Seus dados</h3>
+      <section id="checkoutCustomer" aria-labelledby="checkoutCustomerTitle">
+        <h3 id="checkoutCustomerTitle">
+          <span data-icon="user" aria-hidden="true"></span>Dados para esta compra
+        </h3>
+        <p>Você pode editar os dados deste pedido sem alterar seu cadastro.</p>
         <label
           >Nome<input
+            form="checkoutForm"
             name="name"
             autocomplete="name"
             required
@@ -151,6 +150,7 @@
             maxlength="100" /></label
         ><label
           >WhatsApp / Telefone<input
+            form="checkoutForm"
             name="phone"
             type="tel"
             autocomplete="tel"
@@ -158,6 +158,12 @@
             placeholder="(00) 9 0000-0000"
             maxlength="25"
         /></label>
+      </section>
+      <div id="cartItems"></div>
+      <div class="total">
+        <span>Total dos produtos</span><strong id="cartTotal"></strong>
+      </div>
+      <form id="checkoutForm">
         <fieldset>
           <legend>
             <span data-icon="truck" aria-hidden="true"></span>Entrega ou
@@ -184,19 +190,8 @@
           <div id="paymentOptions" class="choices"></div>
         </fieldset>
         <div id="pixBox" class="pix" hidden>
-          <strong>Chave da loja (PIX)</strong><span id="pixRecipient"></span>
-          <div class="pix-copy">
-            <code id="pixKey"></code
-            ><button
-              type="button"
-              id="copyPix"
-              aria-label="Copiar chave PIX"
-              title="Copiar chave PIX"
-            >
-              <span data-icon="copy"></span>
-            </button>
-          </div>
-          <small>Copiar a chave não confirma o pagamento.</small>
+          <strong>Pagamento seguro pelo Mercado Pago</strong>
+          <small>O QR Code Pix será exibido na página de pagamento.</small>
         </div>
         <label id="cashLabel" hidden
           >Dinheiro em mãos (R$)<input

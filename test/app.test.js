@@ -523,7 +523,7 @@ test('18. Status Dashboard & Google Auth: Diagnóstico de conexões e autentica�
   assert.ok(status.firestore);
   assert.ok(status.defaultCatalog);
   assert.strictEqual(status.defaultCatalog.totalItems, 111);
-  assert.ok(['ONLINE', 'FALLBACK_OFFICIAL'].includes(status.googleSheets.status));
+  assert.ok(['ONLINE', 'FALLBACK_OFFICIAL', 'DISABLED'].includes(status.googleSheets.status));
 
   // 2. Teste do webhook
   statusService.recordWebhookHit('5564999351616');
