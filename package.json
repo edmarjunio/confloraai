@@ -14,6 +14,8 @@
     "check:full": "node --check src/server.js && node --check src/http/app.js && node --check src/services/message.service.js && node --check src/ai/agent.service.js && node --check src/catalog/catalog.repository.js && node --check src/catalog/image-compressor.js && node --check src/catalog/product-photo.service.js && node --check src/orders/order.service.js && node --check src/integrations/whatsapp.client.js && node --check src/integrations/task-queue.client.js && node --check src/router/message.router.js && node --check src/services/direct-price.service.js && node scripts/check-storefront.js --manual",
     "test": "echo 'Testes automaticos pausados no modo Agente. Use npm run test:dev'",
     "test:dev": "node --test test/*.test.js",
+    "test:pix": "node --test test/mercado-pago.test.js test/order-integrity.test.js",
+    "check:pix": "node scripts/check-pix-config.js",
     "test:all": "npm install && npm run check:full && npm run test:dev && npm run dev",
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",

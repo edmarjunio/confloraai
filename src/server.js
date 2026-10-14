@@ -18,9 +18,6 @@ async function bootstrap() {
   // 1. Repositórios de dados
   const firestoreRepo = new FirestoreRepository();
   const catalogRepo = new CatalogRepository({
-    spreadsheetId: config.sheets.spreadsheetId,
-    sheetName: config.sheets.sheetName,
-    cacheTtlSeconds: config.sheets.cacheSeconds,
     firestoreRepo,
   });
 

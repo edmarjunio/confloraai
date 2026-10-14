@@ -1198,7 +1198,7 @@ function createApp({
           orderId,
           paymentId,
         });
-        return res.sendStatus(200);
+        return res.sendStatus(503);
       }
       if (order.status === 'CANCELLED') {
         Logger.error('PIX aprovado para um pedido cancelado; necessário tratar pagamento e pedido.', {
@@ -1220,7 +1220,7 @@ function createApp({
         });
         return res.sendStatus(200);
       }
-      if (order.status !== 'CONFIRMED' && order.status !== 'PAID_CONFIRMED') {
+      if (!['CONFIRMED', 'PAID_CONFIRMED', 'DELIVERED'].includes(order.status)) {
         const confirmedOrder = await messageService.firestoreRepo.confirmOrderPayment(
           order.id,
           {
@@ -1490,7 +1490,7 @@ function createApp({
         paymentCheckoutUrl: mercadoPagoPreference?.checkoutUrl || '',
       }, { requirePersistence: resolvedPaymentMethod === 'PIX' });
 
-      await messageService.firestoreRepo.deductStock(orderItems, customerPhone, order.id);
+      // Pedidos pendentes não baixam estoque; a confirmação faz a baixa atômica.
       const receiptText = formatOrderReceipt(order);
       let receiptDelivery = { sent: false, reason: 'Envio não solicitado.' };
       if (resolvedPaymentMethod === 'PIX') {
