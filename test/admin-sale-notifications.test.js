@@ -60,6 +60,7 @@ test('ADMIN NOTIFICATIONS: Notifica todos os usuários com papel ADMIN quando um
 
 test('ADMIN NOTIFICATIONS: POST /api/orders dispara notificação para todos os administradores', async () => {
   const repo = new FirestoreRepository({ isInMemory: true });
+  await repo.saveProduct({ id: 'p10', name: 'Planta Teste', price: 80, stockQuantity: 10 });
   await repo.saveUser({
     id: 'usr-admin-store',
     name: 'Admin Loja',
@@ -80,7 +81,7 @@ test('ADMIN NOTIFICATIONS: POST /api/orders dispara notificação para todos os 
         customerName: 'Cliente Notif Admin Teste',
         customerPhone: '5564998877665',
         orderType: 'PICKUP',
-        paymentMethod: 'PIX',
+        paymentMethod: 'DINHEIRO',
         subtotal: 80.0,
         items: [
           { productId: 'p10', name: 'Planta Teste', quantity: 1, price: 80.0 },
@@ -104,6 +105,7 @@ test('ADMIN NOTIFICATIONS: POST /api/orders dispara notificação para todos os 
 
 test('ADMIN NOTIFICATIONS: POST /api/admin/orders/manual dispara notificação para administradores', async () => {
   const repo = new FirestoreRepository({ isInMemory: true });
+  await repo.saveProduct({ id: 'p20', name: 'Adubo Orgânico', price: 25, stockQuantity: 10 });
   const app = createApp({ messageService: { firestoreRepo: repo } });
   const server = app.listen(0);
   const { port } = server.address();
@@ -172,10 +174,19 @@ test('ADMIN NOTIFICATIONS: OrderService.confirmOrder dispara notificação para 
   assert.equal(whatsappSaleNotif.orderTotal, 90);
 });
 
-test('CAIXA DISCOUNTS: desconto acima de 5% aguarda Admin e só vira pedido após aceite', async () => {
+test('CAIXA DISCOUNTS: desconto acima de 5% aguarda Admin e só vira pedido após aceite', async (t) => {
   const repo = new FirestoreRepository({ isInMemory: true });
+  const config = require('../src/config/env');
+  const previousServiceUrl = config.tasks.serviceUrl;
+  config.tasks.serviceUrl = 'https://conflora.example';
+  t.after(() => { config.tasks.serviceUrl = previousServiceUrl; });
+  const createDirectOrder = repo.createDirectOrder.bind(repo);
+  repo.createDirectOrder = (data) => createDirectOrder(data);
   await repo.saveProduct({ id: 'discount-plant', name: 'Muda de Teste', price: 100, status: 'ATIVO' });
-  const app = createApp({ messageService: { firestoreRepo: repo } });
+  const app = createApp({ messageService: { firestoreRepo: repo }, mercadoPagoClient: {
+    checkoutConfigured: true,
+    createPixCheckout: async () => ({ id: 'test-preference', checkoutUrl: 'https://conflora.example/pay' }),
+  } });
   const server = app.listen(0);
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
 

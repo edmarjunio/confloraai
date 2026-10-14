@@ -1198,7 +1198,7 @@ function createApp({
           orderId,
           paymentId,
         });
-        return res.sendStatus(200);
+        return res.sendStatus(503);
       }
       if (order.status === 'CANCELLED') {
         Logger.error('PIX aprovado para um pedido cancelado; necessário tratar pagamento e pedido.', {
@@ -1220,7 +1220,7 @@ function createApp({
         });
         return res.sendStatus(200);
       }
-      if (order.status !== 'CONFIRMED' && order.status !== 'PAID_CONFIRMED') {
+      if (!['CONFIRMED', 'PAID_CONFIRMED', 'DELIVERED'].includes(order.status)) {
         const confirmedOrder = await messageService.firestoreRepo.confirmOrderPayment(
           order.id,
           {
@@ -1284,7 +1284,7 @@ function createApp({
     }
   });
 
-  // Live Inventory & Stock Movements API (Firestore com fallback garantido na planilha padrão LISTA DE PRODUTOS)
+  // Live Inventory & Stock Movements API (somente Firestore)
   const handleInventoryRequest = async (_req, res) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
@@ -1490,7 +1490,7 @@ function createApp({
         paymentCheckoutUrl: mercadoPagoPreference?.checkoutUrl || '',
       }, { requirePersistence: resolvedPaymentMethod === 'PIX' });
 
-      await messageService.firestoreRepo.deductStock(orderItems, customerPhone, order.id);
+      // A confirmação efetiva a baixa de estoque junto com o pagamento.
       const receiptText = formatOrderReceipt(order);
       let receiptDelivery = { sent: false, reason: 'Envio não solicitado.' };
       if (resolvedPaymentMethod === 'PIX') {
@@ -2256,18 +2256,6 @@ function createApp({
       res.status(200).json(result);
     } catch (err) {
       Logger.error('Erro na importação de dados da planilha', err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  // Admin: Restaurar / Popular Catálogo Padrão
-  app.post('/api/admin/seed-catalog', async (_req, res) => {
-    try {
-      const { DEFAULT_CATALOG_ITEMS } = require('../catalog/default-catalog');
-      await messageService.firestoreRepo.batchUpsertProducts(DEFAULT_CATALOG_ITEMS);
-      res.status(200).json({ success: true, count: DEFAULT_CATALOG_ITEMS.length });
-    } catch (err) {
-      Logger.error('Erro ao semear catálogo padrão', err);
       res.status(500).json({ error: err.message });
     }
   });

@@ -1,26 +1,6 @@
 const { normalizeText, parseCurrencyString, toSingular } = require('../shared/string.util');
 const Logger = require('../shared/logger');
-const { DEFAULT_CATALOG_ITEMS } = require('./default-catalog');
-
-let googleApisModule = null;
-function getGoogleApis() {
-  if (!googleApisModule) {
-    try {
-      googleApisModule = require('googleapis');
-    } catch {
-      return null;
-    }
-  }
-  return googleApisModule;
-}
-
-const IGNORED_CATEGORIES = new Set([
-  'recebimento',
-  'troco do dia',
-  'administrativo',
-  'servicos financeiro',
-  'servicos',
-]);
+const { normalizeCatalogItem } = require('./normalize-catalog-item');
 
 function buildDriveDirectImageUrl(fileId, rawUrl) {
   if (rawUrl && typeof rawUrl === 'string' && (rawUrl.startsWith('http') || rawUrl.startsWith('/api/images/'))) {
@@ -36,158 +16,27 @@ function buildDriveDirectImageUrl(fileId, rawUrl) {
 }
 
 class CatalogRepository {
-  /**
-   * @param {Object} options
-   * @param {string} options.spreadsheetId
-   * @param {string} [options.sheetName='PRODUTOS']
-   * @param {number} [options.cacheTtlSeconds=60]
-   * @param {Array<Object>} [options.mockData=null]
-   * @param {import('../database/firestore.repository').FirestoreRepository} [options.firestoreRepo=null]
-   */
-  constructor({
-    spreadsheetId,
-    sheetName = 'PRODUTOS',
-    cacheTtlSeconds = 60,
-    mockData = null,
-    firestoreRepo = null,
-  }) {
-    this.spreadsheetId = spreadsheetId;
-    this.sheetName = sheetName;
-    this.cacheTtlMs = cacheTtlSeconds * 1000;
+  constructor({ mockData = null, firestoreRepo = null } = {}) {
+    if (mockData && process.env.NODE_ENV !== 'test') throw new Error('Catálogo simulado permitido apenas em testes.');
     this.items = [];
     this.productByNameMap = new Map();
     this.productByTagMap = new Map();
     this.productsByCategoryMap = new Map();
     this.categoriesSet = new Set();
     this.subcategoriesSet = new Set();
-    this.lastCacheTime = 0;
     this.mockData = mockData;
     this.firestoreRepo = firestoreRepo;
-
-    if (this.mockData) {
-      this.loadItems(this.mockData);
-    } else {
-      this.loadItems(DEFAULT_CATALOG_ITEMS);
-      this.lastCacheTime = 0;
-    }
+    if (mockData) this.loadItems(mockData);
   }
 
   async refreshCatalog() {
-    if (this.mockData) {
-      this.loadItems(this.mockData);
-      return;
-    }
-
-    if (this.isCacheValid()) {
-      return;
-    }
-
-    // 1. Tentar ler primeiro do Cloud Firestore
-    if (this.firestoreRepo && typeof this.firestoreRepo.getAllProducts === 'function') {
-      try {
-        const firestoreProducts = await this.firestoreRepo.getAllProducts();
-        if (firestoreProducts && firestoreProducts.length > 0) {
-          this.loadItems(firestoreProducts);
-          return;
-        }
-      } catch (err) {
-        Logger.warn('Aviso: erro ao carregar produtos do Firestore no catálogo; continuando com fallback', { error: err.message });
-      }
-    }
-
-    if (!config.sheets.lookupEnabled) {
-      Logger.info('Busca no Google Sheets desativada; WhatsApp usa apenas o catálogo do Firestore.');
-      return;
-    }
-
-    const googleapis = getGoogleApis();
-    if (!googleapis) {
-      Logger.warn('Módulo googleapis não encontrado; usando dados existentes em memória.');
-      return;
-    }
-
+    if (this.mockData) return this.loadItems(this.mockData);
     try {
-      const auth = new googleapis.google.auth.GoogleAuth({
-        scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
-      });
-      const sheets = googleapis.google.sheets({ version: 'v4', auth });
-
-      const response = await sheets.spreadsheets.values.get({
-        spreadsheetId: this.spreadsheetId,
-        range: `${this.sheetName}!A1:O1500`,
-      });
-
-      const rows = response.data.values || [];
-      if (rows.length < 2) {
-        Logger.warn('Tabela de produtos vazia ou sem cabeçalhos.');
-        return;
-      }
-
-      const headers = rows[0].map((h) => normalizeText(h));
-      const idIdx = headers.indexOf('product id');
-      const descIdx = headers.indexOf('descricao');
-      const statusIdx = headers.indexOf('status');
-      const valorIdx = headers.indexOf('valor');
-      const valorNumIdx = headers.indexOf('valor num');
-      const catIdx = headers.indexOf('categoria');
-      const subCatIdx = headers.indexOf('subcategoria');
-      const varIdx = headers.indexOf('variacao');
-      const imgUrlIdx = headers.indexOf('imageurl');
-      const imgFileIdIdx = headers.indexOf('imagefileid');
-      const descAiIdx = headers.indexOf('descricao ia');
-      const tagsAiIdx = headers.indexOf('tags ia');
-
-      const parsedItems = [];
-
-      for (let i = 1; i < rows.length; i++) {
-        const row = rows[i];
-        const status = (row[statusIdx] || 'ATIVO').trim().toUpperCase();
-        if (status !== 'ATIVO') {
-          continue;
-        }
-
-        const name = (row[descIdx] || '').trim();
-        if (!name) {
-          continue;
-        }
-
-        const rawCat = row[catIdx] || '';
-        const rawSubCat = subCatIdx >= 0 ? row[subCatIdx] || '' : '';
-        const normalizedCat = normalizeText(rawCat);
-
-        if (IGNORED_CATEGORIES.has(normalizedCat)) {
-          continue;
-        }
-
-        const price = valorNumIdx >= 0 && row[valorNumIdx]
-          ? parseCurrencyString(row[valorNumIdx])
-          : parseCurrencyString(row[valorIdx]);
-
-        parsedItems.push({
-          id: row[idIdx] || `item-${i}`,
-          name,
-          category: rawCat,
-          subcategory: rawSubCat,
-          variation: varIdx >= 0 ? row[varIdx] || '' : '',
-          price,
-          status: 'ATIVO',
-          imageFileId: imgFileIdIdx >= 0 ? row[imgFileIdIdx] || '' : '',
-          imageUrl: imgUrlIdx >= 0 ? row[imgUrlIdx] || '' : '',
-          descriptionAi: descAiIdx >= 0 ? (row[descAiIdx] || '').trim() : '',
-          tagsAi: tagsAiIdx >= 0 ? (row[tagsAiIdx] || '').trim() : '',
-        });
-      }
-
-      this.loadItems(parsedItems);
-      Logger.info(`Catálogo atualizado em tempo real. ${this.items.length} itens comerciais ativos indexados.`);
+      if (!this.firestoreRepo) throw new Error('Repositório Firestore não configurado.');
+      this.loadItems(await this.firestoreRepo.getAllProducts());
     } catch (error) {
-      Logger.warn('Google Sheets indisponível no ambiente atual; catálogo em contingência ativo', {
-        details: error.message,
-      });
-      if (this.items.length === 0) {
-        Logger.info('Carregando catálogo padrão de contingência Conflora...');
-        this.loadItems(DEFAULT_CATALOG_ITEMS);
-      }
+      this.loadItems([]);
+      throw error;
     }
   }
 
@@ -196,7 +45,7 @@ class CatalogRepository {
       return;
     }
 
-    const { normalizeCatalogItem } = require('./default-catalog');
+
     this.items = rawItems
       .filter((item) => (item.status || 'ATIVO').toUpperCase() === 'ATIVO')
       .map((item) => normalizeCatalogItem(item));
@@ -337,7 +186,6 @@ class CatalogRepository {
       }
     }
 
-    this.lastCacheTime = Date.now();
   }
 
   isCategoryOrSubcategory(text) {
@@ -456,9 +304,7 @@ class CatalogRepository {
     return Array.from(matchedProducts.values());
   }
 
-  isCacheValid() {
-    return this.items.length > 0 && Date.now() - this.lastCacheTime < this.cacheTtlMs;
-  }
+
 }
 
 module.exports = {

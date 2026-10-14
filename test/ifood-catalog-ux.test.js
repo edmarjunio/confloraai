@@ -132,6 +132,7 @@ test('10. FINALIZAÇÃO, RECIBO DO CLIENTE E NOTIFICAÇÃO DO PROPRIETÁRIO VIA 
 
   // Teste de API do Backend: POST /api/orders persiste cupom, desconto e dados de troco
   const repo = new FirestoreRepository({ isInMemory: true });
+  await repo.saveProduct({ id: 'p1', name: 'Muda de Jabuticaba Híbrida', price: 50, stockQuantity: 10 });
   const app = createApp({ messageService: { firestoreRepo: repo } });
   const server = app.listen(0);
   const { port } = server.address();
