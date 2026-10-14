@@ -522,7 +522,8 @@ test('18. Status Dashboard & Google Auth: Diagnóstico de conexões e autentica�
   assert.ok(status.whatsapp);
   assert.ok(status.firestore);
   assert.ok(status.defaultCatalog);
-  assert.strictEqual(status.defaultCatalog.totalItems, 111);
+  assert.strictEqual(status.defaultCatalog.status, 'DISABLED');
+  assert.strictEqual(status.defaultCatalog.totalItems, 0);
   assert.ok(['ONLINE', 'FALLBACK_OFFICIAL', 'DISABLED'].includes(status.googleSheets.status));
 
   // 2. Teste do webhook
@@ -594,3 +595,4 @@ test('18. Status Dashboard & Google Auth: Diagnóstico de conexões e autentica�
     server.close();
   }
 });
+

@@ -8,12 +8,10 @@ class MercadoPagoClient {
     accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN || "",
     webhookSecret = process.env.MERCADO_PAGO_WEBHOOK_SECRET || "",
     fetchImpl = globalThis.fetch,
-    expectedLiveMode = config.mercadoPago.expectedLiveMode,
   } = {}) {
     this.accessToken = accessToken;
     this.webhookSecret = webhookSecret;
     this.fetchImpl = fetchImpl;
-    this.expectedLiveMode = expectedLiveMode;
   }
 
   get configured() {
@@ -103,9 +101,6 @@ class MercadoPagoClient {
       !preference.init_point.startsWith("https://")
     ) {
       throw new Error("O Mercado Pago não retornou um link de pagamento válido.");
-    }
-    if (this.expectedLiveMode !== null && preference.live_mode !== this.expectedLiveMode) {
-      throw new Error('O modo do checkout Mercado Pago não corresponde ao ambiente configurado.');
     }
     return {
       id: preference.id,

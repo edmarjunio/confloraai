@@ -72,7 +72,7 @@ class MessageService {
     }
 
     // 3. Garantir catálogo atualizado em memória
-    if (!verifyOnly && !this.catalogRepo.isCacheValid()) {
+    if (!verifyOnly) {
       await this.catalogRepo.refreshCatalog().catch((err) => {
         Logger.warn('Aviso: usando cache existente do catálogo', { error: err.message });
       });
@@ -269,3 +269,4 @@ class MessageService {
 module.exports = {
   MessageService,
 };
+
