@@ -406,42 +406,6 @@ function getFirestoreModule() {
 
   return firestoreModule;
 }
-
-const PAID_ORDER_STATUSES = new Set(['CONFIRMED', 'PAID_CONFIRMED', 'DELIVERED']);
-
-function validateOrderConfirmation(order, updates) {
-  if (order.status === 'CANCELLED') {
-    throw new Error('Pedido cancelado não pode receber baixa ou confirmação.');
-  }
-  if (!updates || String(order.paymentMethod).toUpperCase() !== 'PIX') return;
-  if (PAID_ORDER_STATUSES.has(order.status) && order.paymentTransactionId) return;
-  if (
-    updates.verifiedVia !== 'MERCADO_PAGO_WEBHOOK' ||
-    !/^\d+$/.test(updates.paymentTransactionId || '') ||
-    !Number.isFinite(Number(updates.paymentVerifiedAmount)) ||
-    Number(order.total) <= 0 ||
-    Math.round(Number(updates.paymentVerifiedAmount) * 100) !== Math.round(Number(order.total) * 100)
-  ) {
-    throw new Error('Confirmação PIX exige pagamento verificado com o valor do pedido.');
-  }
-}
-
-function validateStockQuantity(item) {
-  const quantity = Number(item.quantity);
-  if (!Number.isFinite(quantity) || quantity <= 0) {
-    throw new Error('Quantidade inválida para baixa de estoque.');
-  }
-  return quantity;
-}
-
-function remainingStock(product, quantity) {
-  const stock = Number(product.stockQuantity ?? product.estoque ?? 0);
-  if (!Number.isFinite(stock) || stock < quantity) {
-    throw new Error(`Estoque insuficiente para ${product.name || 'produto'}.`);
-  }
-  return stock - quantity;
-}
-
 class FirestoreRepository {
   constructor({
     firestoreInstance = null,
@@ -667,17 +631,17 @@ class FirestoreRepository {
   // --- Produtos e Estoque (AppSheet & WhatsApp) ---
 
   async getAllProducts() {
-    if (this.isInMemory) return Array.from(this.inMemoryProducts.values());
-    if (!this.firestore) throw new Error('Firestore indisponível.');
+    if (this.isInMemory) {return Array.from(this.inMemoryProducts.values());}
+    if (!this.firestore) {throw new Error('Firestore indisponível.');}
     const snapshot = await this.firestore.collection('products').get();
     return snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }));
   }
 
   async getProductById(productId) {
-    if (!productId) return null;
+    if (!productId) {return null;}
     const id = String(productId).trim();
-    if (this.isInMemory) return this.inMemoryProducts.get(id) || null;
-    if (!this.firestore) throw new Error('Firestore indisponível.');
+    if (this.isInMemory) {return this.inMemoryProducts.get(id) || null;}
+    if (!this.firestore) {throw new Error('Firestore indisponível.');}
     const snapshot = await this.firestore.collection('products').doc(id).get();
     return snapshot.exists ? { ...snapshot.data(), id: snapshot.id } : null;
   }
@@ -1195,7 +1159,7 @@ class FirestoreRepository {
     }
 
     const shouldConfirm = PAID_ORDER_STATUSES.has(orderData.status);
-    if (shouldConfirm) orderData.status = 'PENDING';
+    if (shouldConfirm) {orderData.status = 'PENDING';}
     const order = await this.createDirectOrder(orderData, { requirePersistence });
     return shouldConfirm ? this.confirmOrderPayment(order.id) : order;
   }
@@ -1230,14 +1194,14 @@ class FirestoreRepository {
           this.inMemoryOrders.set(idStr, restDoc);
           return restDoc;
         }
-      } catch (_) {}
+      } catch {}
     }
     return this.inMemoryOrders.get(idStr) || null;
   }
 
   async findPendingPixOrderByPhone(phone) {
     const cleanTarget = String(phone || '').replace(/\D/g, '');
-    if (!cleanTarget) return null;
+    if (!cleanTarget) {return null;}
 
     const allOrders = await this.getAllOrders(100);
     const pendingPix = allOrders.filter(
@@ -1249,11 +1213,11 @@ class FirestoreRepository {
 
     const match = pendingPix.find((o) => {
       const oPhone = String(o.customerPhone || o.phone || '').replace(/\D/g, '');
-      if (!oPhone) return false;
-      if (oPhone === cleanTarget) return true;
+      if (!oPhone) {return false;}
+      if (oPhone === cleanTarget) {return true;}
       const oNo55 = oPhone.startsWith('55') && oPhone.length >= 12 ? oPhone.slice(2) : oPhone;
       const tNo55 = cleanTarget.startsWith('55') && cleanTarget.length >= 12 ? cleanTarget.slice(2) : cleanTarget;
-      if (oNo55 === tNo55) return true;
+      if (oNo55 === tNo55) {return true;}
       if (oNo55.length === 11 && tNo55.length === 10) {
         return oNo55.slice(0, 2) === tNo55.slice(0, 2) && oNo55.slice(3) === tNo55.slice(2);
       }
@@ -1341,14 +1305,14 @@ class FirestoreRepository {
     const id = String(orderId);
     const updates = { ...extra, status, updatedAt: new Date().toISOString() };
     const validate = (order) => {
-      if (!order) throw new Error('Pedido não encontrado.');
-      if (order.status === status) return;
+      if (!order) {throw new Error('Pedido não encontrado.');}
+      if (order.status === status) {return;}
       if (status === 'CANCELLED') {
         if (PAID_ORDER_STATUSES.has(order.status) || order.stockDeducted || order.paymentTransactionId) {
           throw new Error('Pedido com baixa ou pagamento exige conciliação/estorno antes de cancelar.');
         }
       } else if (status === 'DELIVERED') {
-        if (!PAID_ORDER_STATUSES.has(order.status)) throw new Error('Confirme o pagamento antes da entrega.');
+        if (!PAID_ORDER_STATUSES.has(order.status)) {throw new Error('Confirme o pagamento antes da entrega.');}
       } else {
         throw new Error('Transição de status não permitida.');
       }
@@ -1361,11 +1325,11 @@ class FirestoreRepository {
         transaction.update(ref, updates);
       });
     } else {
-      if (!this.isInMemory || this.firestore) throw new Error('Firestore indisponível para alterar pedido.');
+      if (!this.isInMemory || this.firestore) {throw new Error('Firestore indisponível para alterar pedido.');}
       validate(this.inMemoryOrders.get(id));
     }
     const local = this.inMemoryOrders.get(id);
-    if (local) Object.assign(local, updates);
+    if (local) {Object.assign(local, updates);}
     return { success: true, orderId: id, status };
   }
 
@@ -1433,7 +1397,7 @@ class FirestoreRepository {
    * DAO Modularizado: Métricas executivas diárias consolidando fluxo de caixa, formas de pagamento,
    * vendas por colaborador e ranking de produtos mais vendidos com alto desempenho.
    */
-  async getDailyExecutiveMetrics({ date = new Date().toISOString().slice(0, 10), storeId = '' } = {}) {
+  async getDailyExecutiveMetrics({ date = new Date().toISOString().slice(0, 10)} = {}) {
     try {
       const targetDate = String(date || '').slice(0, 10);
       const allOrders = await this.getAllOrders(500);
@@ -1457,12 +1421,12 @@ class FirestoreRepository {
       const targetOrders = [];
 
       for (const ord of allOrders) {
-        if (!ord || !ord.createdAt) continue;
+        if (!ord || !ord.createdAt) {continue;}
         const ordDate = ord.createdAt.slice(0, 10);
-        if (ordDate !== targetDate) continue;
+        if (ordDate !== targetDate) {continue;}
 
         const isCompleted = ['CONFIRMED', 'PAID_CONFIRMED', 'DELIVERED', 'COMPLETED'].includes(String(ord.status || '').toUpperCase());
-        if (!isCompleted) continue;
+        if (!isCompleted) {continue;}
 
         targetOrders.push(ord);
 
@@ -1472,11 +1436,11 @@ class FirestoreRepository {
 
         // Pagamento
         let pay = String(ord.paymentMethod || 'DINHEIRO').toUpperCase();
-        if (pay.includes('PIX')) pay = 'PIX';
-        else if (pay.includes('CARD') || pay.includes('CARTAO') || pay.includes('DEBITO') || pay.includes('CREDITO')) pay = 'CARTAO';
-        else pay = 'DINHEIRO';
+        if (pay.includes('PIX')) {pay = 'PIX';}
+        else if (pay.includes('CARD') || pay.includes('CARTAO') || pay.includes('DEBITO') || pay.includes('CREDITO')) {pay = 'CARTAO';}
+        else {pay = 'DINHEIRO';}
 
-        if (!byPayment[pay]) byPayment[pay] = { count: 0, total: 0 };
+        if (!byPayment[pay]) {byPayment[pay] = { count: 0, total: 0 };}
         byPayment[pay].count++;
         byPayment[pay].total += val;
 
@@ -1491,7 +1455,7 @@ class FirestoreRepository {
         const items = Array.isArray(ord.items) ? ord.items : [];
         for (const item of items) {
           const itemKey = item.productId || item.id || item.name;
-          if (!itemKey) continue;
+          if (!itemKey) {continue;}
           const itemName = item.name || 'Produto';
           const qty = Number(item.quantity || 1);
           const itemRev = Number(item.price || 0) * qty;
@@ -1515,7 +1479,7 @@ class FirestoreRepository {
             hourlyDistribution[hour].count++;
             hourlyDistribution[hour].total += val;
           }
-        } catch (_) {}
+        } catch {}
       }
 
       // Ranking de colaboradores
@@ -2191,7 +2155,7 @@ class FirestoreRepository {
       if (!stockControlEnabled || items.length === 0) {
         order.stockDeducted = true;
         order.stockDeductedAt = now;
-        if (orderUpdates) Object.assign(order, orderUpdates);
+        if (orderUpdates) {Object.assign(order, orderUpdates);}
         return {
           success: true,
           deducted: [],
@@ -2212,15 +2176,15 @@ class FirestoreRepository {
         const matches = item.productId
           ? String(productId) === String(item.productId)
           : product.name === item.name || product.canonicalName === item.name;
-        if (!matches) continue;
+        if (!matches) {continue;}
         found = true;
         const previous = resolvedItems.get(productId);
         resolvedItems.set(productId, { product, quantity: (previous?.quantity || 0) + quantity });
         break;
       }
-      if (!found) throw new Error(`Produto não encontrado para baixa: ${item.productId || item.name}.`);
+      if (!found) {throw new Error(`Produto não encontrado para baixa: ${item.productId || item.name}.`);}
     }
-    for (const { product, quantity } of resolvedItems.values()) remainingStock(product, quantity);
+    for (const { product, quantity } of resolvedItems.values()) {remainingStock(product, quantity);}
     const deducted = [];
     for (const [productId, { product, quantity }] of resolvedItems) {
         const previousStock = Number(product.stockQuantity ?? product.estoque ?? 0);
@@ -2242,7 +2206,7 @@ class FirestoreRepository {
       const order = this.inMemoryOrders.get(id);
       order.stockDeducted = true;
       order.stockDeductedAt = now;
-      if (orderUpdates) Object.assign(order, orderUpdates);
+      if (orderUpdates) {Object.assign(order, orderUpdates);}
     }
     return {
       success: true,
@@ -2386,7 +2350,7 @@ class FirestoreRepository {
         const ref = dataWithTs.id
           ? collection.doc(String(dataWithTs.id))
           : collection.doc();
-        const { id: _id, ...documentData } = dataWithTs;
+        const { ...documentData } = dataWithTs;
         await ref.set(documentData);
 
         const saved = {
@@ -2511,7 +2475,7 @@ class FirestoreRepository {
           }
           return restOrders.slice(0, limit);
         }
-      } catch (_) {}
+      } catch {}
     }
 
     return Array.from(
@@ -2527,7 +2491,7 @@ class FirestoreRepository {
       const order = await this.confirmOrderPayment(orderId);
       return { success: true, orderId, status: order.status };
     }
-    if (normalizedStatus === 'CANCELLED') return this.cancelOrder(orderId);
+    if (normalizedStatus === 'CANCELLED') {return this.cancelOrder(orderId);}
     return this.transitionOrder(orderId, normalizedStatus);
   }
 
@@ -2724,15 +2688,15 @@ class FirestoreRepository {
 
   async searchCustomers(query, limit = 8) {
     const term = String(query || '').trim();
-    if (term.length < 3) return [];
+    if (term.length < 3) {return [];}
 
     const normalizedTerm = term.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     const phoneTerm = term.replace(/\D/g, '');
     const customers = new Map();
     const addCustomer = (profile, phone = '') => {
-      if (!profile) return;
+      if (!profile) {return;}
       const customerPhone = String(profile.phone || phone).replace(/\D/g, '');
-      if (!customerPhone) return;
+      if (!customerPhone) {return;}
       customers.set(customerPhone, {
         name: String(profile.name || profile.customerName || 'Cliente'),
         phone: customerPhone,
@@ -3654,7 +3618,7 @@ class FirestoreRepository {
 
   async updateDiscountApproval(approvalId, updates) {
     const approval = await this.getDiscountApproval(approvalId);
-    if (!approval) return null;
+    if (!approval) {return null;}
     const updated = { ...approval, ...updates, updatedAt: new Date().toISOString() };
     if (this.firestore) {
       await this.firestore.collection('discount_approvals').doc(String(approvalId)).set(updated, { merge: true });

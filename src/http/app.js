@@ -1284,7 +1284,7 @@ function createApp({
     }
   });
 
-  // Live Inventory & Stock Movements API (Firestore com fallback garantido na planilha padrão LISTA DE PRODUTOS)
+  // Live Inventory & Stock Movements API (somente Firestore)
   const handleInventoryRequest = async (_req, res) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
@@ -1490,7 +1490,7 @@ function createApp({
         paymentCheckoutUrl: mercadoPagoPreference?.checkoutUrl || '',
       }, { requirePersistence: resolvedPaymentMethod === 'PIX' });
 
-      // Pedidos pendentes não baixam estoque; a confirmação faz a baixa atômica.
+      // A confirmação efetiva a baixa de estoque junto com o pagamento.
       const receiptText = formatOrderReceipt(order);
       let receiptDelivery = { sent: false, reason: 'Envio não solicitado.' };
       if (resolvedPaymentMethod === 'PIX') {
@@ -1765,7 +1765,7 @@ function createApp({
   });
 
   app.use('/api/caixa', (req, res, next) => {
-    if (!req.user) return res.status(401).json({ error: 'Entre com seu perfil de colaborador.' });
+    if (!req.user)  {res.status(401).json({ error: 'Entre com seu perfil de colaborador.' });}
     if (!['ADMIN', 'CAIXA'].includes(req.user.role)) {
       return res.status(403).json({ error: 'Acesso permitido somente para CAIXA ou ADMIN.' });
     }
@@ -1908,7 +1908,7 @@ function createApp({
   app.get('/api/caixa/discount-approvals/:id', async (req, res) => {
     try {
       const approval = await messageService.firestoreRepo.getDiscountApproval(req.params.id);
-      if (!approval) return res.status(404).json({ error: 'Solicitação não encontrada.' });
+      if (!approval) {return res.status(404).json({ error: 'Solicitação não encontrada.' });}
       if (req.user.role !== 'ADMIN' && approval.requestedBy !== req.user.id) {
         return res.status(403).json({ error: 'Esta aprovação pertence a outro operador.' });
       }
@@ -1922,7 +1922,7 @@ function createApp({
     try {
       const user = req.user;
       let role = user?.role || '';
-      let operatorName = req.query.operatorName || user?.name || '';
+      const operatorName = req.query.operatorName || user?.name || '';
       let userId = user?.id || '';
 
       if (!role && operatorName) {
@@ -2260,18 +2260,6 @@ function createApp({
     }
   });
 
-  // Admin: Restaurar / Popular Catálogo Padrão
-  app.post('/api/admin/seed-catalog', async (_req, res) => {
-    try {
-      const { DEFAULT_CATALOG_ITEMS } = require('../catalog/default-catalog');
-      await messageService.firestoreRepo.batchUpsertProducts(DEFAULT_CATALOG_ITEMS);
-      res.status(200).json({ success: true, count: DEFAULT_CATALOG_ITEMS.length });
-    } catch (err) {
-      Logger.error('Erro ao semear catálogo padrão', err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
   // System Diagnostics & Connection Status API (Exclusivo Admin)
   app.get('/api/admin/system-status', async (_req, res) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -2524,8 +2512,8 @@ function createApp({
 
       const repo = messageService.firestoreRepo;
       const approval = await repo.getDiscountApproval(req.params.id);
-      if (!approval) return res.status(404).json({ error: 'Solicitação não encontrada.' });
-      if (approval.status !== 'PENDING') return res.status(409).json({ error: 'Esta solicitação já foi revisada.' });
+      if (!approval) {return res.status(404).json({ error: 'Solicitação não encontrada.' });}
+      if (approval.status !== 'PENDING') {return res.status(409).json({ error: 'Esta solicitação já foi revisada.' });}
 
       if (action === 'REJECTED') {
         const reason = String(rejectionReason).trim().slice(0, 500);
