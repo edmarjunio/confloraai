@@ -98,6 +98,36 @@ test("PIX Checkout Pro creates a secure preference tied to the order", async () 
   );
 });
 
+test('webhook signatures accept milliseconds and reject expired or malformed hashes', () => {
+  const now = Date.now();
+  const client = new MercadoPagoClient({ webhookSecret: 'secret' });
+  const signed = (timestamp) => {
+    const hash = createHmac('sha256', 'secret').update(`id:123;request-id:req;ts:${timestamp};`).digest('hex');
+    return `ts=${timestamp},v1=${hash}`;
+  };
+  const input = { requestId: 'req', paymentId: '123', now };
+  assert.equal(client.verifyWebhookSignature({ ...input, signature: signed(now) }), true);
+  assert.equal(client.verifyWebhookSignature({ ...input, signature: signed(now - 360000) }), false);
+  assert.equal(client.verifyWebhookSignature({ ...input, signature: signed(now) + 'zz' }), false);
+  assert.equal(client.verifyWebhookSignature({ ...input, paymentId: '124', signature: signed(now) }), false);
+});
+
+test('signed notifications retry while the order is unavailable and reject invalid signatures', async (t) => {
+  const client = new MercadoPagoClient({ webhookSecret: 'secret' });
+  client.getPayment = async () => approvedPayment();
+  const repo = new FirestoreRepository({ isInMemory: true });
+  const server = createApp({ messageService: { firestoreRepo: repo }, mercadoPagoClient: client }).listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const timestamp = Date.now();
+  const hash = createHmac('sha256', 'secret').update(`id:987654321;request-id:req;ts:${timestamp};`).digest('hex');
+  const url = `http://127.0.0.1:${server.address().port}/webhooks/mercadopago?type=payment&data.id=987654321`;
+  assert.equal((await fetch(url, { method: 'POST' })).status, 401);
+  assert.equal((await fetch(url, { method: 'POST', headers: {
+    'x-request-id': 'req', 'x-signature': `ts=${timestamp},v1=${hash}`,
+  } })).status, 503);
+});
+
 test("PIX confirmation requires an approved matching BRL payment", () => {
   assert.equal(isApprovedPixPayment(approvedPayment(), order), true);
   assert.equal(isApprovedPixPayment(approvedPayment({ status: "pending" }), order), false);
@@ -139,6 +169,7 @@ test("PIX orders cannot fall back to volatile in-memory persistence", async () =
 
 test("payment webhook confirms only the matching approved PIX order", async (t) => {
   const repository = new FirestoreRepository({ isInMemory: true });
+  repository.inMemoryProducts.set('plant', { name: 'Muda de teste', stockQuantity: 10 });
   await repository.createDirectOrder({
     ...order,
     status: "AWAITING_PIX",
@@ -244,8 +275,8 @@ test("storefront PIX deduction and concurrent/repeated webhooks are idempotent",
   assert.equal(createResponse.status, 200);
   const created = await createResponse.json();
   assert.equal(paymentOrderId, created.order.id);
-  assert.equal(created.order.stockDeducted, true);
-  assert.equal(repository.inMemoryProducts.get("plant").stockQuantity, 8);
+  assert.equal(created.order.stockDeducted, undefined);
+  assert.equal(repository.inMemoryProducts.get("plant").stockQuantity, 10);
   assert.equal(receiptSends, 1);
 
   const webhookUrl = `${baseUrl}/webhooks/mercadopago?type=payment&data.id=${payment.id}`;

@@ -6,6 +6,12 @@ const Logger = require('../shared/logger');
 const { productStatus } = require('../catalog/product-status');
 const productImageStorageService = require('../catalog/product-image-storage');
 const {
+  PAID_ORDER_STATUSES,
+  validateOrderConfirmation,
+  validateStockQuantity,
+  remainingStock,
+} = require('../orders/order-integrity');
+const {
   generateStandardTags,
   generateStandardDescription,
   isGoogleDrivePath,
@@ -400,7 +406,6 @@ function getFirestoreModule() {
 
   return firestoreModule;
 }
-
 class FirestoreRepository {
   constructor({
     firestoreInstance = null,
@@ -626,108 +631,19 @@ class FirestoreRepository {
   // --- Produtos e Estoque (AppSheet & WhatsApp) ---
 
   async getAllProducts() {
-    if (this.isInMemory) {
-      return Array.from(this.inMemoryProducts.values());
-    }
-
-    if (this.firestore && !this._firestoreClientDisabled) {
-      try {
-        const snapshot = await this.firestore
-          .collection('products')
-          .get();
-
-        const products = snapshot.docs.map((doc) => ({
-          ...doc.data(),
-          id: doc.id,
-        }));
-
-        this.inMemoryProducts.clear();
-
-        for (const product of products) {
-          this.inMemoryProducts.set(product.id, product);
-        }
-
-        return products;
-      } catch (err) {
-        if (
-          err.code === 7 ||
-          err.message?.includes('PERMISSION_DENIED') ||
-          err.message?.includes('Missing or insufficient permissions')
-        ) {
-          this._firestoreClientDisabled = true;
-        } else {
-          Logger.warn('Erro ao buscar produtos no Firestore client', {
-            error: err.message,
-          });
-        }
-      }
-    }
-
-    // Fallback via Firebase REST API usando API Key
-    if (config.firebase?.apiKey) {
-      try {
-        const restProducts = await this.fetchAllProductsViaRest();
-        if (restProducts && restProducts.length > 0) {
-          this.inMemoryProducts.clear();
-          for (const product of restProducts) {
-            this.inMemoryProducts.set(product.id, product);
-          }
-          return restProducts;
-        }
-      } catch (restErr) {
-        Logger.warn('Aviso: fallback REST do Firestore não disponível', {
-          error: restErr.message,
-        });
-      }
-    }
-
-    return Array.from(this.inMemoryProducts.values());
+    if (this.isInMemory) {return Array.from(this.inMemoryProducts.values());}
+    if (!this.firestore) {throw new Error('Firestore indisponível.');}
+    const snapshot = await this.firestore.collection('products').get();
+    return snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }));
   }
 
   async getProductById(productId) {
-    if (!productId) {
-      return null;
-    }
-    const cleanId = String(productId).trim();
-    if (this.isInMemory) {
-      return this.inMemoryProducts.get(cleanId) || null;
-    }
-    if (this.inMemoryProducts.has(cleanId)) {
-      return this.inMemoryProducts.get(cleanId);
-    }
-
-    if (this.firestore && !this._firestoreClientDisabled) {
-      try {
-        const doc = await this.firestore
-          .collection('products')
-          .doc(cleanId)
-          .get();
-        if (doc.exists) {
-          const prod = { ...doc.data(), id: doc.id };
-          this.inMemoryProducts.set(cleanId, prod);
-          return prod;
-        }
-      } catch (err) {
-        if (
-          err.code === 7 ||
-          err.message?.includes('PERMISSION_DENIED')
-        ) {
-          this._firestoreClientDisabled = true;
-        }
-      }
-    }
-
-    if (config.firebase?.apiKey) {
-      try {
-        const prod = await this.fetchDocViaRest('products', cleanId);
-        if (prod) {
-          this.inMemoryProducts.set(cleanId, prod);
-          return prod;
-        }
-      } catch {}
-    }
-
-    return this.inMemoryProducts.get(cleanId) || null;
+    if (!productId) {return null;}
+    const id = String(productId).trim();
+    if (this.isInMemory) {return this.inMemoryProducts.get(id) || null;}
+    if (!this.firestore) {throw new Error('Firestore indisponível.');}
+    const snapshot = await this.firestore.collection('products').doc(id).get();
+    return snapshot.exists ? { ...snapshot.data(), id: snapshot.id } : null;
   }
 
   async saveProductPhoto(photoDoc) {
@@ -951,6 +867,9 @@ class FirestoreRepository {
   }
 
   async uploadProductImage(photoDoc) {
+    if (this.isInMemory && this.productImageStorage === productImageStorageService) {
+      return { imagePath: '', imageUrl: `/api/images/${photoDoc.id}` };
+    }
     return this.productImageStorage.uploadProductImage({
       productId: photoDoc.productId,
       fileName: photoDoc.fileName,
@@ -1239,13 +1158,10 @@ class FirestoreRepository {
       orderData.id = String(orderId);
     }
 
+    const shouldConfirm = PAID_ORDER_STATUSES.has(orderData.status);
+    if (shouldConfirm) {orderData.status = 'PENDING';}
     const order = await this.createDirectOrder(orderData, { requirePersistence });
-
-    if (order.status === 'CONFIRMED' || order.status === 'PAID_CONFIRMED') {
-      await this.deductStock(items, customerPhone || 'Balcão', order.id);
-    }
-
-    return order;
+    return shouldConfirm ? this.confirmOrderPayment(order.id) : order;
   }
 
   async getOrderById(orderId) {
@@ -1278,14 +1194,14 @@ class FirestoreRepository {
           this.inMemoryOrders.set(idStr, restDoc);
           return restDoc;
         }
-      } catch (_) {}
+      } catch {}
     }
     return this.inMemoryOrders.get(idStr) || null;
   }
 
   async findPendingPixOrderByPhone(phone) {
     const cleanTarget = String(phone || '').replace(/\D/g, '');
-    if (!cleanTarget) return null;
+    if (!cleanTarget) {return null;}
 
     const allOrders = await this.getAllOrders(100);
     const pendingPix = allOrders.filter(
@@ -1297,11 +1213,11 @@ class FirestoreRepository {
 
     const match = pendingPix.find((o) => {
       const oPhone = String(o.customerPhone || o.phone || '').replace(/\D/g, '');
-      if (!oPhone) return false;
-      if (oPhone === cleanTarget) return true;
+      if (!oPhone) {return false;}
+      if (oPhone === cleanTarget) {return true;}
       const oNo55 = oPhone.startsWith('55') && oPhone.length >= 12 ? oPhone.slice(2) : oPhone;
       const tNo55 = cleanTarget.startsWith('55') && cleanTarget.length >= 12 ? cleanTarget.slice(2) : cleanTarget;
-      if (oNo55 === tNo55) return true;
+      if (oNo55 === tNo55) {return true;}
       if (oNo55.length === 11 && tNo55.length === 10) {
         return oNo55.slice(0, 2) === tNo55.slice(0, 2) && oNo55.slice(3) === tNo55.slice(2);
       }
@@ -1382,36 +1298,39 @@ class FirestoreRepository {
   }
 
   async cancelOrder(orderId, reason = '') {
-    const now = new Date().toISOString();
-    const updateData = {
-      status: 'CANCELLED',
-      cancelReason: reason || 'Cancelado no caixa',
-      updatedAt: now,
-    };
+    return this.transitionOrder(orderId, 'CANCELLED', { cancelReason: reason || 'Cancelado no caixa' });
+  }
 
-    if (this.firestore && !this._firestoreClientDisabled) {
-      try {
-        await this.firestore.collection('orders').doc(String(orderId)).update(updateData);
-      } catch (err) {
-        if (
-          err.code === 7 ||
-          err.code === 'permission-denied' ||
-          err.message?.includes('PERMISSION_DENIED') ||
-          err.message?.includes('Missing or insufficient')
-        ) {
-          this._firestoreClientDisabled = true;
-        } else {
-          Logger.warn('Erro ao cancelar pedido no Firestore', { error: err.message });
+  async transitionOrder(orderId, status, extra = {}) {
+    const id = String(orderId);
+    const updates = { ...extra, status, updatedAt: new Date().toISOString() };
+    const validate = (order) => {
+      if (!order) {throw new Error('Pedido não encontrado.');}
+      if (order.status === status) {return;}
+      if (status === 'CANCELLED') {
+        if (PAID_ORDER_STATUSES.has(order.status) || order.stockDeducted || order.paymentTransactionId) {
+          throw new Error('Pedido com baixa ou pagamento exige conciliação/estorno antes de cancelar.');
         }
+      } else if (status === 'DELIVERED') {
+        if (!PAID_ORDER_STATUSES.has(order.status)) {throw new Error('Confirme o pagamento antes da entrega.');}
+      } else {
+        throw new Error('Transição de status não permitida.');
       }
+    };
+    if (this.firestore && !this._firestoreClientDisabled) {
+      await this.firestore.runTransaction(async (transaction) => {
+        const ref = this.firestore.collection('orders').doc(id);
+        const snapshot = await transaction.get(ref);
+        validate(snapshot.exists ? snapshot.data() : null);
+        transaction.update(ref, updates);
+      });
+    } else {
+      if (!this.isInMemory || this.firestore) {throw new Error('Firestore indisponível para alterar pedido.');}
+      validate(this.inMemoryOrders.get(id));
     }
-
-    const local = this.inMemoryOrders.get(String(orderId));
-    if (local) {
-      Object.assign(local, updateData);
-    }
-
-    return { success: true, orderId, status: 'CANCELLED' };
+    const local = this.inMemoryOrders.get(id);
+    if (local) {Object.assign(local, updates);}
+    return { success: true, orderId: id, status };
   }
 
   async getCashierOrders({ operatorName = '', role = '', userId = '' } = {}) {
@@ -1478,7 +1397,7 @@ class FirestoreRepository {
    * DAO Modularizado: Métricas executivas diárias consolidando fluxo de caixa, formas de pagamento,
    * vendas por colaborador e ranking de produtos mais vendidos com alto desempenho.
    */
-  async getDailyExecutiveMetrics({ date = new Date().toISOString().slice(0, 10), storeId = '' } = {}) {
+  async getDailyExecutiveMetrics({ date = new Date().toISOString().slice(0, 10)} = {}) {
     try {
       const targetDate = String(date || '').slice(0, 10);
       const allOrders = await this.getAllOrders(500);
@@ -1502,12 +1421,12 @@ class FirestoreRepository {
       const targetOrders = [];
 
       for (const ord of allOrders) {
-        if (!ord || !ord.createdAt) continue;
+        if (!ord || !ord.createdAt) {continue;}
         const ordDate = ord.createdAt.slice(0, 10);
-        if (ordDate !== targetDate) continue;
+        if (ordDate !== targetDate) {continue;}
 
         const isCompleted = ['CONFIRMED', 'PAID_CONFIRMED', 'DELIVERED', 'COMPLETED'].includes(String(ord.status || '').toUpperCase());
-        if (!isCompleted) continue;
+        if (!isCompleted) {continue;}
 
         targetOrders.push(ord);
 
@@ -1517,11 +1436,11 @@ class FirestoreRepository {
 
         // Pagamento
         let pay = String(ord.paymentMethod || 'DINHEIRO').toUpperCase();
-        if (pay.includes('PIX')) pay = 'PIX';
-        else if (pay.includes('CARD') || pay.includes('CARTAO') || pay.includes('DEBITO') || pay.includes('CREDITO')) pay = 'CARTAO';
-        else pay = 'DINHEIRO';
+        if (pay.includes('PIX')) {pay = 'PIX';}
+        else if (pay.includes('CARD') || pay.includes('CARTAO') || pay.includes('DEBITO') || pay.includes('CREDITO')) {pay = 'CARTAO';}
+        else {pay = 'DINHEIRO';}
 
-        if (!byPayment[pay]) byPayment[pay] = { count: 0, total: 0 };
+        if (!byPayment[pay]) {byPayment[pay] = { count: 0, total: 0 };}
         byPayment[pay].count++;
         byPayment[pay].total += val;
 
@@ -1536,7 +1455,7 @@ class FirestoreRepository {
         const items = Array.isArray(ord.items) ? ord.items : [];
         for (const item of items) {
           const itemKey = item.productId || item.id || item.name;
-          if (!itemKey) continue;
+          if (!itemKey) {continue;}
           const itemName = item.name || 'Produto';
           const qty = Number(item.quantity || 1);
           const itemRev = Number(item.price || 0) * qty;
@@ -1560,7 +1479,7 @@ class FirestoreRepository {
             hourlyDistribution[hour].count++;
             hourlyDistribution[hour].total += val;
           }
-        } catch (_) {}
+        } catch {}
       }
 
       // Ranking de colaboradores
@@ -2031,7 +1950,7 @@ class FirestoreRepository {
 
   async deductStock(orderItems, customerPhone = '', orderId = '', orderUpdates = null) {
     const stockControlEnabled = (await this.getInventorySettings()).stockControlEnabled;
-    const items = Array.isArray(orderItems) ? orderItems : [];
+    let items = Array.isArray(orderItems) ? orderItems : [];
     const id = orderId ? String(orderId) : '';
     const now = new Date().toISOString();
 
@@ -2046,9 +1965,11 @@ class FirestoreRepository {
               throw new Error('Pedido não encontrado para registrar a baixa de estoque.');
             }
             const orderData = orderSnapshot.data() || {};
+            validateOrderConfirmation(orderData, orderUpdates);
+            items = Array.isArray(orderData.items) ? orderData.items : [];
             if (
               orderUpdates &&
-              ['CONFIRMED', 'PAID_CONFIRMED'].includes(orderData.status)
+              PAID_ORDER_STATUSES.has(orderData.status)
             ) {
               return {
                 success: true,
@@ -2086,8 +2007,9 @@ class FirestoreRepository {
             };
           }
 
-          const resolvedItems = [];
+          const resolvedItems = new Map();
           for (const item of items) {
+            const quantity = validateStockQuantity(item);
             let docRef = item.productId
               ? this.firestore.collection('products').doc(String(item.productId))
               : null;
@@ -2099,7 +2021,7 @@ class FirestoreRepository {
                 productData = productSnapshot.data();
               }
             }
-            if (!productData && item.name) {
+            if (!item.productId && !productData && item.name) {
               const querySnapshot = await transaction.get(
                 this.firestore.collection('products')
                   .where('name', '==', item.name)
@@ -2112,25 +2034,26 @@ class FirestoreRepository {
               }
             }
             if (docRef && productData) {
-              const existing = resolvedItems.find((entry) => entry.docRef.id === docRef.id);
-              const quantity = Number(item.quantity) || 1;
+              const existing = resolvedItems.get(docRef.id);
               if (existing) {
                 existing.quantity += quantity;
               } else {
-                resolvedItems.push({ docRef, productData, item, quantity });
+                resolvedItems.set(docRef.id, { docRef, productData, item, quantity });
               }
+            } else {
+              throw new Error(`Produto não encontrado para baixa: ${item.productId || item.name}.`);
             }
           }
 
           const deducted = [];
-          for (const entry of resolvedItems) {
+          for (const entry of resolvedItems.values()) {
             const currentStock =
               typeof entry.productData.stockQuantity === 'number'
                 ? entry.productData.stockQuantity
                 : typeof entry.productData.estoque === 'number'
                   ? entry.productData.estoque
                   : 0;
-            const newStock = Math.max(0, currentStock - entry.quantity);
+            const newStock = remainingStock(entry.productData, entry.quantity);
             transaction.update(entry.docRef, {
               stockQuantity: newStock,
               estoque: newStock,
@@ -2145,6 +2068,7 @@ class FirestoreRepository {
               previousStock: currentStock,
               newStock,
               type: 'SALE_WHATSAPP',
+              orderId: id,
               customerPhone,
               createdAt: now,
             });
@@ -2199,7 +2123,7 @@ class FirestoreRepository {
           { error: err.message }
         );
       }
-    } else if (id && this.firestore) {
+    } else if (id && (this.firestore || !this.isInMemory)) {
       throw new Error('Firestore indisponível para registrar a baixa de estoque do pedido.');
     }
 
@@ -2208,9 +2132,11 @@ class FirestoreRepository {
       if (!order) {
         throw new Error('Pedido não encontrado para registrar a baixa de estoque.');
       }
+      validateOrderConfirmation(order, orderUpdates);
+      items = Array.isArray(order.items) ? order.items : [];
       if (
         orderUpdates &&
-        ['CONFIRMED', 'PAID_CONFIRMED'].includes(order.status)
+        PAID_ORDER_STATUSES.has(order.status)
       ) {
         return {
           success: true,
@@ -2229,7 +2155,7 @@ class FirestoreRepository {
       if (!stockControlEnabled || items.length === 0) {
         order.stockDeducted = true;
         order.stockDeductedAt = now;
-        if (orderUpdates) Object.assign(order, orderUpdates);
+        if (orderUpdates) {Object.assign(order, orderUpdates);}
         return {
           success: true,
           deducted: [],
@@ -2241,17 +2167,28 @@ class FirestoreRepository {
       return { success: true, deducted: [], trackingDisabled: true };
     }
 
-    const deducted = [];
+    // Valida todo o lote antes de alterar qualquer produto no modo local.
+    const resolvedItems = new Map();
     for (const item of items) {
+      const quantity = validateStockQuantity(item);
+      let found = false;
       for (const [productId, product] of this.inMemoryProducts.entries()) {
         const matches = item.productId
           ? String(productId) === String(item.productId)
           : product.name === item.name || product.canonicalName === item.name;
-        if (!matches) continue;
-
-        const currentStock = product.stockQuantity ?? product.estoque ?? 0;
-        const quantity = Number(item.quantity) || 1;
-        const newStock = Math.max(0, currentStock - quantity);
+        if (!matches) {continue;}
+        found = true;
+        const previous = resolvedItems.get(productId);
+        resolvedItems.set(productId, { product, quantity: (previous?.quantity || 0) + quantity });
+        break;
+      }
+      if (!found) {throw new Error(`Produto não encontrado para baixa: ${item.productId || item.name}.`);}
+    }
+    for (const { product, quantity } of resolvedItems.values()) {remainingStock(product, quantity);}
+    const deducted = [];
+    for (const [productId, { product, quantity }] of resolvedItems) {
+        const previousStock = Number(product.stockQuantity ?? product.estoque ?? 0);
+        const newStock = remainingStock(product, quantity);
         product.stockQuantity = newStock;
         product.estoque = newStock;
         this.inMemoryProducts.set(productId, product);
@@ -2261,15 +2198,15 @@ class FirestoreRepository {
           qty: quantity,
           newStock,
         });
-        break;
-      }
+        this.inMemoryStockMovements.push({ productId, orderId: id, quantityDeducted: quantity,
+          previousStock, newStock, type: 'SALE_WHATSAPP', customerPhone, createdAt: now });
     }
 
     if (id) {
       const order = this.inMemoryOrders.get(id);
       order.stockDeducted = true;
       order.stockDeductedAt = now;
-      if (orderUpdates) Object.assign(order, orderUpdates);
+      if (orderUpdates) {Object.assign(order, orderUpdates);}
     }
     return {
       success: true,
@@ -2413,7 +2350,7 @@ class FirestoreRepository {
         const ref = dataWithTs.id
           ? collection.doc(String(dataWithTs.id))
           : collection.doc();
-        const { id: _id, ...documentData } = dataWithTs;
+        const { ...documentData } = dataWithTs;
         await ref.set(documentData);
 
         const saved = {
@@ -2538,7 +2475,7 @@ class FirestoreRepository {
           }
           return restOrders.slice(0, limit);
         }
-      } catch (_) {}
+      } catch {}
     }
 
     return Array.from(
@@ -2549,58 +2486,13 @@ class FirestoreRepository {
   }
 
   async updateOrderStatus(orderId, status) {
-    const now = new Date().toISOString();
-
-    if (this.firestore && !this._firestoreClientDisabled) {
-      try {
-        await this.firestore
-          .collection('orders')
-          .doc(String(orderId))
-          .update({
-            status,
-            updatedAt: now,
-          });
-
-        return {
-          success: true,
-          orderId,
-          status,
-        };
-      } catch (err) {
-        if (
-          err.code === 7 ||
-          err.code === 'permission-denied' ||
-          err.message?.includes('PERMISSION_DENIED') ||
-          err.message?.includes('Missing or insufficient')
-        ) {
-          this._firestoreClientDisabled = true;
-        } else {
-          Logger.warn(
-            'Erro ao atualizar status do pedido no Firestore',
-            { error: err.message }
-          );
-        }
-      }
+    const normalizedStatus = String(status).toUpperCase();
+    if (['CONFIRMED', 'PAID_CONFIRMED'].includes(normalizedStatus)) {
+      const order = await this.confirmOrderPayment(orderId);
+      return { success: true, orderId, status: order.status };
     }
-
-    const ord = this.inMemoryOrders.get(
-      String(orderId)
-    );
-
-    if (ord) {
-      ord.status = status;
-      ord.updatedAt = now;
-
-      return {
-        success: true,
-        orderId,
-        status,
-      };
-    }
-
-    return {
-      success: false,
-    };
+    if (normalizedStatus === 'CANCELLED') {return this.cancelOrder(orderId);}
+    return this.transitionOrder(orderId, normalizedStatus);
   }
 
   async isDuplicateMessage(messageId) {
@@ -2796,15 +2688,15 @@ class FirestoreRepository {
 
   async searchCustomers(query, limit = 8) {
     const term = String(query || '').trim();
-    if (term.length < 3) return [];
+    if (term.length < 3) {return [];}
 
     const normalizedTerm = term.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     const phoneTerm = term.replace(/\D/g, '');
     const customers = new Map();
     const addCustomer = (profile, phone = '') => {
-      if (!profile) return;
+      if (!profile) {return;}
       const customerPhone = String(profile.phone || phone).replace(/\D/g, '');
-      if (!customerPhone) return;
+      if (!customerPhone) {return;}
       customers.set(customerPhone, {
         name: String(profile.name || profile.customerName || 'Cliente'),
         phone: customerPhone,
@@ -3726,7 +3618,7 @@ class FirestoreRepository {
 
   async updateDiscountApproval(approvalId, updates) {
     const approval = await this.getDiscountApproval(approvalId);
-    if (!approval) return null;
+    if (!approval) {return null;}
     const updated = { ...approval, ...updates, updatedAt: new Date().toISOString() };
     if (this.firestore) {
       await this.firestore.collection('discount_approvals').doc(String(approvalId)).set(updated, { merge: true });

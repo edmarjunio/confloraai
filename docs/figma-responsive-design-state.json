@@ -1,0 +1,1029 @@
+{
+  "fileKey": "ixVGq8mtkZnuAbregH28Ss",
+  "url": "https://www.figma.com/design/ixVGq8mtkZnuAbregH28Ss",
+  "status": "partial_rate_limited",
+  "roots": [
+    {
+      "id": "3:191",
+      "name": "catalog • Catálogo / 1440",
+      "width": 1440,
+      "height": 840
+    },
+    {
+      "id": "3:261",
+      "name": "catalog • Catálogo / 768",
+      "width": 768,
+      "height": 1102
+    },
+    {
+      "id": "3:330",
+      "name": "catalog • Catálogo / 390",
+      "width": 390,
+      "height": 1404
+    },
+    {
+      "id": "3:405",
+      "name": "product • Detalhe do produto / 1440",
+      "width": 1440,
+      "height": 880
+    },
+    {
+      "id": "3:450",
+      "name": "product • Detalhe do produto / 768",
+      "width": 768,
+      "height": 880
+    },
+    {
+      "id": "3:495",
+      "name": "product • Detalhe do produto / 390",
+      "width": 390,
+      "height": 920
+    },
+    {
+      "id": "3:545",
+      "name": "chat • Encontre sua planta / 1440",
+      "width": 1440,
+      "height": 790
+    },
+    {
+      "id": "3:589",
+      "name": "chat • Encontre sua planta / 768",
+      "width": 768,
+      "height": 790
+    },
+    {
+      "id": "3:633",
+      "name": "chat • Encontre sua planta / 390",
+      "width": 390,
+      "height": 830
+    },
+    {
+      "id": "3:682",
+      "name": "cart • Minha sacola / 1440",
+      "width": 1440,
+      "height": 634
+    },
+    {
+      "id": "3:737",
+      "name": "cart • Minha sacola / 768",
+      "width": 768,
+      "height": 896
+    },
+    {
+      "id": "3:792",
+      "name": "cart • Minha sacola / 390",
+      "width": 390,
+      "height": 936
+    },
+    {
+      "id": "3:852",
+      "name": "checkout • Finalizar pedido / 1440",
+      "width": 1440,
+      "height": 872
+    },
+    {
+      "id": "3:902",
+      "name": "checkout • Finalizar pedido / 768",
+      "width": 768,
+      "height": 872
+    },
+    {
+      "id": "3:952",
+      "name": "checkout • Finalizar pedido / 390",
+      "width": 390,
+      "height": 912
+    },
+    {
+      "id": "3:1007",
+      "name": "order • Pedido recebido / 1440",
+      "width": 1440,
+      "height": 648
+    },
+    {
+      "id": "3:1043",
+      "name": "order • Pedido recebido / 768",
+      "width": 768,
+      "height": 648
+    },
+    {
+      "id": "3:1079",
+      "name": "order • Pedido recebido / 390",
+      "width": 390,
+      "height": 688
+    },
+    {
+      "id": "3:1120",
+      "name": "orders • Meus pedidos / 1440",
+      "width": 1440,
+      "height": 654
+    },
+    {
+      "id": "3:1153",
+      "name": "orders • Meus pedidos / 768",
+      "width": 768,
+      "height": 654
+    },
+    {
+      "id": "3:1186",
+      "name": "orders • Meus pedidos / 390",
+      "width": 390,
+      "height": 694
+    },
+    {
+      "id": "3:1224",
+      "name": "login • Entrar na minha conta / 1440",
+      "width": 1440,
+      "height": 646
+    },
+    {
+      "id": "3:1259",
+      "name": "login • Entrar na minha conta / 768",
+      "width": 768,
+      "height": 646
+    },
+    {
+      "id": "3:1294",
+      "name": "login • Entrar na minha conta / 390",
+      "width": 390,
+      "height": 686
+    },
+    {
+      "id": "3:1334",
+      "name": "register • Criar conta / 1440",
+      "width": 1440,
+      "height": 834
+    },
+    {
+      "id": "3:1381",
+      "name": "register • Criar conta / 768",
+      "width": 768,
+      "height": 834
+    },
+    {
+      "id": "3:1428",
+      "name": "register • Criar conta / 390",
+      "width": 390,
+      "height": 874
+    },
+    {
+      "id": "3:1480",
+      "name": "dashboard • Visão geral / 1440",
+      "width": 1440,
+      "height": 1174
+    },
+    {
+      "id": "3:1557",
+      "name": "dashboard • Visão geral / 768",
+      "width": 768,
+      "height": 1174
+    },
+    {
+      "id": "3:1624",
+      "name": "dashboard • Visão geral / 390",
+      "width": 390,
+      "height": 1214
+    },
+    {
+      "id": "3:1696",
+      "name": "pos • Caixa PDV / 1440",
+      "width": 1440,
+      "height": 772
+    },
+    {
+      "id": "3:1774",
+      "name": "pos • Caixa PDV / 768",
+      "width": 768,
+      "height": 1058
+    },
+    {
+      "id": "3:1842",
+      "name": "pos • Caixa PDV / 390",
+      "width": 390,
+      "height": 1098
+    },
+    {
+      "id": "3:1915",
+      "name": "opening • Abrir caixa / 1440",
+      "width": 1440,
+      "height": 740
+    },
+    {
+      "id": "3:1966",
+      "name": "opening • Abrir caixa / 768",
+      "width": 768,
+      "height": 740
+    },
+    {
+      "id": "3:2007",
+      "name": "opening • Abrir caixa / 390",
+      "width": 390,
+      "height": 780
+    },
+    {
+      "id": "3:2053",
+      "name": "payment • Receber pagamento / 1440",
+      "width": 1440,
+      "height": 722
+    },
+    {
+      "id": "3:2104",
+      "name": "payment • Receber pagamento / 768",
+      "width": 768,
+      "height": 722
+    },
+    {
+      "id": "3:2145",
+      "name": "payment • Receber pagamento / 390",
+      "width": 390,
+      "height": 762
+    },
+    {
+      "id": "3:2191",
+      "name": "receipt • Venda concluída / 1440",
+      "width": 1440,
+      "height": 648
+    },
+    {
+      "id": "3:2237",
+      "name": "receipt • Venda concluída / 768",
+      "width": 768,
+      "height": 648
+    },
+    {
+      "id": "3:2273",
+      "name": "receipt • Venda concluída / 390",
+      "width": 390,
+      "height": 688
+    },
+    {
+      "id": "3:2314",
+      "name": "held • Vendas em espera / 1440",
+      "width": 1440,
+      "height": 616
+    },
+    {
+      "id": "3:2354",
+      "name": "held • Vendas em espera / 768",
+      "width": 768,
+      "height": 616
+    },
+    {
+      "id": "3:2384",
+      "name": "held • Vendas em espera / 390",
+      "width": 390,
+      "height": 656
+    },
+    {
+      "id": "3:2419",
+      "name": "closing • Fechar caixa / 1440",
+      "width": 1440,
+      "height": 798
+    },
+    {
+      "id": "3:2476",
+      "name": "closing • Fechar caixa / 768",
+      "width": 768,
+      "height": 798
+    },
+    {
+      "id": "3:2523",
+      "name": "closing • Fechar caixa / 390",
+      "width": 390,
+      "height": 838
+    },
+    {
+      "id": "3:2575",
+      "name": "sales • Vendas / 1440",
+      "width": 1440,
+      "height": 692
+    },
+    {
+      "id": "3:2621",
+      "name": "sales • Vendas / 768",
+      "width": 768,
+      "height": 692
+    },
+    {
+      "id": "3:2657",
+      "name": "sales • Vendas / 390",
+      "width": 390,
+      "height": 732
+    },
+    {
+      "id": "3:2698",
+      "name": "sale • Detalhe da venda / 1440",
+      "width": 1440,
+      "height": 648
+    },
+    {
+      "id": "3:2746",
+      "name": "sale • Detalhe da venda / 768",
+      "width": 768,
+      "height": 648
+    },
+    {
+      "id": "3:2784",
+      "name": "sale • Detalhe da venda / 390",
+      "width": 390,
+      "height": 688
+    },
+    {
+      "id": "3:2827",
+      "name": "products • Produtos / 1440",
+      "width": 1440,
+      "height": 654
+    },
+    {
+      "id": "3:2870",
+      "name": "products • Produtos / 768",
+      "width": 768,
+      "height": 654
+    },
+    {
+      "id": "3:2903",
+      "name": "products • Produtos / 390",
+      "width": 390,
+      "height": 694
+    },
+    {
+      "id": "3:2941",
+      "name": "editor • Editar produto / 1440",
+      "width": 1440,
+      "height": 1116
+    },
+    {
+      "id": "3:3016",
+      "name": "editor • Editar produto / 768",
+      "width": 768,
+      "height": 1116
+    },
+    {
+      "id": "3:3081",
+      "name": "editor • Editar produto / 390",
+      "width": 390,
+      "height": 1156
+    },
+    {
+      "id": "3:3151",
+      "name": "stock • Estoque / 1440",
+      "width": 1440,
+      "height": 654
+    },
+    {
+      "id": "3:3194",
+      "name": "stock • Estoque / 768",
+      "width": 768,
+      "height": 654
+    },
+    {
+      "id": "3:3227",
+      "name": "stock • Estoque / 390",
+      "width": 390,
+      "height": 694
+    },
+    {
+      "id": "3:3265",
+      "name": "stockentry • Movimentar estoque / 1440",
+      "width": 1440,
+      "height": 834
+    },
+    {
+      "id": "3:3322",
+      "name": "stockentry • Movimentar estoque / 768",
+      "width": 768,
+      "height": 834
+    },
+    {
+      "id": "3:3369",
+      "name": "stockentry • Movimentar estoque / 390",
+      "width": 390,
+      "height": 874
+    },
+    {
+      "id": "3:3421",
+      "name": "customers • Clientes / 1440",
+      "width": 1440,
+      "height": 654
+    },
+    {
+      "id": "3:3464",
+      "name": "customers • Clientes / 768",
+      "width": 768,
+      "height": 654
+    },
+    {
+      "id": "3:3497",
+      "name": "customers • Clientes / 390",
+      "width": 390,
+      "height": 694
+    },
+    {
+      "id": "3:3535",
+      "name": "customer • Detalhe do cliente / 1440",
+      "width": 1440,
+      "height": 610
+    },
+    {
+      "id": "3:3580",
+      "name": "customer • Detalhe do cliente / 768",
+      "width": 768,
+      "height": 610
+    },
+    {
+      "id": "3:3615",
+      "name": "customer • Detalhe do cliente / 390",
+      "width": 390,
+      "height": 650
+    },
+    {
+      "id": "3:3655",
+      "name": "finance • Financeiro / 1440",
+      "width": 1440,
+      "height": 768
+    },
+    {
+      "id": "3:3707",
+      "name": "finance • Financeiro / 768",
+      "width": 768,
+      "height": 768
+    },
+    {
+      "id": "3:3749",
+      "name": "finance • Financeiro / 390",
+      "width": 390,
+      "height": 808
+    },
+    {
+      "id": "3:3796",
+      "name": "team • Equipe e permissões / 1440",
+      "width": 1440,
+      "height": 654
+    },
+    {
+      "id": "3:3839",
+      "name": "team • Equipe e permissões / 768",
+      "width": 768,
+      "height": 654
+    },
+    {
+      "id": "3:3872",
+      "name": "team • Equipe e permissões / 390",
+      "width": 390,
+      "height": 694
+    },
+    {
+      "id": "3:3910",
+      "name": "invite • Convidar pessoa / 1440",
+      "width": 1440,
+      "height": 740
+    },
+    {
+      "id": "3:3961",
+      "name": "invite • Convidar pessoa / 768",
+      "width": 768,
+      "height": 740
+    },
+    {
+      "id": "3:4002",
+      "name": "invite • Convidar pessoa / 390",
+      "width": 390,
+      "height": 780
+    },
+    {
+      "id": "3:4048",
+      "name": "settings • Configurações da loja / 1440",
+      "width": 1440,
+      "height": 928
+    },
+    {
+      "id": "3:4111",
+      "name": "settings • Configurações da loja / 768",
+      "width": 768,
+      "height": 928
+    },
+    {
+      "id": "3:4164",
+      "name": "settings • Configurações da loja / 390",
+      "width": 390,
+      "height": 968
+    },
+    {
+      "id": "3:4222",
+      "name": "assistant • Configurar assistente / 1440",
+      "width": 1440,
+      "height": 834
+    },
+    {
+      "id": "3:4279",
+      "name": "assistant • Configurar assistente / 768",
+      "width": 768,
+      "height": 834
+    },
+    {
+      "id": "3:4326",
+      "name": "assistant • Configurar assistente / 390",
+      "width": 390,
+      "height": 874
+    },
+    {
+      "id": "3:4378",
+      "name": "states • Estados da experiência / 1440",
+      "width": 1440,
+      "height": 992
+    },
+    {
+      "id": "3:4423",
+      "name": "states • Estados da experiência / 768",
+      "width": 768,
+      "height": 992
+    },
+    {
+      "id": "3:4468",
+      "name": "states • Estados da experiência / 390",
+      "width": 390,
+      "height": 1032
+    }
+  ],
+  "linksPending": [
+    {
+      "id": "3:203",
+      "target": "chat"
+    },
+    {
+      "id": "3:227",
+      "target": "product"
+    },
+    {
+      "id": "3:241",
+      "target": "product"
+    },
+    {
+      "id": "3:255",
+      "target": "product"
+    },
+    {
+      "id": "3:273",
+      "target": "chat"
+    },
+    {
+      "id": "3:295",
+      "target": "product"
+    },
+    {
+      "id": "3:309",
+      "target": "product"
+    },
+    {
+      "id": "3:324",
+      "target": "product"
+    },
+    {
+      "id": "3:347",
+      "target": "chat"
+    },
+    {
+      "id": "3:369",
+      "target": "product"
+    },
+    {
+      "id": "3:384",
+      "target": "product"
+    },
+    {
+      "id": "3:399",
+      "target": "product"
+    },
+    {
+      "id": "3:441",
+      "target": "cart"
+    },
+    {
+      "id": "3:486",
+      "target": "cart"
+    },
+    {
+      "id": "3:536",
+      "target": "cart"
+    },
+    {
+      "id": "3:713",
+      "target": "catalog"
+    },
+    {
+      "id": "3:731",
+      "target": "checkout"
+    },
+    {
+      "id": "3:768",
+      "target": "catalog"
+    },
+    {
+      "id": "3:786",
+      "target": "checkout"
+    },
+    {
+      "id": "3:828",
+      "target": "catalog"
+    },
+    {
+      "id": "3:846",
+      "target": "checkout"
+    },
+    {
+      "id": "3:890",
+      "target": "order"
+    },
+    {
+      "id": "3:940",
+      "target": "order"
+    },
+    {
+      "id": "3:995",
+      "target": "order"
+    },
+    {
+      "id": "3:1031",
+      "target": "orders"
+    },
+    {
+      "id": "3:1067",
+      "target": "orders"
+    },
+    {
+      "id": "3:1108",
+      "target": "orders"
+    },
+    {
+      "id": "3:1146",
+      "target": "order"
+    },
+    {
+      "id": "3:1179",
+      "target": "order"
+    },
+    {
+      "id": "3:1217",
+      "target": "order"
+    },
+    {
+      "id": "3:1247",
+      "target": "orders"
+    },
+    {
+      "id": "3:1282",
+      "target": "orders"
+    },
+    {
+      "id": "3:1322",
+      "target": "orders"
+    },
+    {
+      "id": "3:1369",
+      "target": "orders"
+    },
+    {
+      "id": "3:1416",
+      "target": "orders"
+    },
+    {
+      "id": "3:1468",
+      "target": "orders"
+    },
+    {
+      "id": "3:1551",
+      "target": "sales"
+    },
+    {
+      "id": "3:1618",
+      "target": "sales"
+    },
+    {
+      "id": "3:1690",
+      "target": "sales"
+    },
+    {
+      "id": "3:1737",
+      "target": "catalog"
+    },
+    {
+      "id": "3:1755",
+      "target": "payment"
+    },
+    {
+      "id": "3:1761",
+      "target": "customers"
+    },
+    {
+      "id": "3:1767",
+      "target": "held"
+    },
+    {
+      "id": "3:1805",
+      "target": "catalog"
+    },
+    {
+      "id": "3:1823",
+      "target": "payment"
+    },
+    {
+      "id": "3:1829",
+      "target": "customers"
+    },
+    {
+      "id": "3:1835",
+      "target": "held"
+    },
+    {
+      "id": "3:1878",
+      "target": "catalog"
+    },
+    {
+      "id": "3:1896",
+      "target": "payment"
+    },
+    {
+      "id": "3:1902",
+      "target": "customers"
+    },
+    {
+      "id": "3:1908",
+      "target": "held"
+    },
+    {
+      "id": "3:1954",
+      "target": "pos"
+    },
+    {
+      "id": "3:1995",
+      "target": "pos"
+    },
+    {
+      "id": "3:2041",
+      "target": "pos"
+    },
+    {
+      "id": "3:2092",
+      "target": "receipt"
+    },
+    {
+      "id": "3:2133",
+      "target": "receipt"
+    },
+    {
+      "id": "3:2179",
+      "target": "receipt"
+    },
+    {
+      "id": "3:2225",
+      "target": "pos"
+    },
+    {
+      "id": "3:2261",
+      "target": "pos"
+    },
+    {
+      "id": "3:2302",
+      "target": "pos"
+    },
+    {
+      "id": "3:2347",
+      "target": "pos"
+    },
+    {
+      "id": "3:2377",
+      "target": "pos"
+    },
+    {
+      "id": "3:2412",
+      "target": "pos"
+    },
+    {
+      "id": "3:2464",
+      "target": "dashboard"
+    },
+    {
+      "id": "3:2511",
+      "target": "dashboard"
+    },
+    {
+      "id": "3:2563",
+      "target": "dashboard"
+    },
+    {
+      "id": "3:2614",
+      "target": "sale"
+    },
+    {
+      "id": "3:2650",
+      "target": "sale"
+    },
+    {
+      "id": "3:2691",
+      "target": "sale"
+    },
+    {
+      "id": "3:2734",
+      "target": "sales"
+    },
+    {
+      "id": "3:2772",
+      "target": "sales"
+    },
+    {
+      "id": "3:2815",
+      "target": "sales"
+    },
+    {
+      "id": "3:2863",
+      "target": "editor"
+    },
+    {
+      "id": "3:2896",
+      "target": "editor"
+    },
+    {
+      "id": "3:2934",
+      "target": "editor"
+    },
+    {
+      "id": "3:3004",
+      "target": "products"
+    },
+    {
+      "id": "3:3069",
+      "target": "products"
+    },
+    {
+      "id": "3:3139",
+      "target": "products"
+    },
+    {
+      "id": "3:3187",
+      "target": "stockentry"
+    },
+    {
+      "id": "3:3220",
+      "target": "stockentry"
+    },
+    {
+      "id": "3:3258",
+      "target": "stockentry"
+    },
+    {
+      "id": "3:3310",
+      "target": "stock"
+    },
+    {
+      "id": "3:3357",
+      "target": "stock"
+    },
+    {
+      "id": "3:3409",
+      "target": "stock"
+    },
+    {
+      "id": "3:3457",
+      "target": "customer"
+    },
+    {
+      "id": "3:3490",
+      "target": "customer"
+    },
+    {
+      "id": "3:3528",
+      "target": "customer"
+    },
+    {
+      "id": "3:3568",
+      "target": "sales"
+    },
+    {
+      "id": "3:3603",
+      "target": "sales"
+    },
+    {
+      "id": "3:3643",
+      "target": "sales"
+    },
+    {
+      "id": "3:3700",
+      "target": "sales"
+    },
+    {
+      "id": "3:3742",
+      "target": "sales"
+    },
+    {
+      "id": "3:3789",
+      "target": "sales"
+    },
+    {
+      "id": "3:3832",
+      "target": "invite"
+    },
+    {
+      "id": "3:3865",
+      "target": "invite"
+    },
+    {
+      "id": "3:3903",
+      "target": "invite"
+    },
+    {
+      "id": "3:3949",
+      "target": "team"
+    },
+    {
+      "id": "3:3990",
+      "target": "team"
+    },
+    {
+      "id": "3:4036",
+      "target": "team"
+    },
+    {
+      "id": "3:4099",
+      "target": "dashboard"
+    },
+    {
+      "id": "3:4152",
+      "target": "dashboard"
+    },
+    {
+      "id": "3:4210",
+      "target": "dashboard"
+    },
+    {
+      "id": "3:4267",
+      "target": "settings"
+    },
+    {
+      "id": "3:4314",
+      "target": "settings"
+    },
+    {
+      "id": "3:4366",
+      "target": "settings"
+    }
+  ],
+  "pendingScreens": [
+    {
+      "id": "delivery",
+      "area": "Cliente",
+      "title": "Entrega e endereço",
+      "sub": "Escolha como receber sua compra.",
+      "kind": "form",
+      "fields": [
+        [
+          "Recebimento",
+          "Entrega local"
+        ],
+        [
+          "CEP",
+          "75830-000"
+        ],
+        [
+          "Rua e número",
+          "Informe seu endereço"
+        ],
+        [
+          "Bairro",
+          "Informe seu bairro"
+        ],
+        [
+          "Complemento",
+          "Opcional"
+        ]
+      ],
+      "rows": [
+        [
+          "Taxa de entrega",
+          "A confirmar"
+        ]
+      ],
+      "action": "Continuar",
+      "target": "checkout"
+    },
+    {
+      "id": "recovery",
+      "area": "Cliente",
+      "title": "Recuperar acesso",
+      "sub": "Enviaremos orientações para seu e-mail.",
+      "kind": "form",
+      "fields": [
+        [
+          "E-mail da conta",
+          "seu@email.com"
+        ]
+      ],
+      "action": "Enviar instruções",
+      "target": "login"
+    }
+  ],
+  "pending": [
+    "Prototype connections",
+    "Full visual QA",
+    "Product photography",
+    "Repeated cards and data rows componentization"
+  ]
+}

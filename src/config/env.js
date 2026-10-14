@@ -57,13 +57,6 @@ const config = Object.freeze({
     apiKey: process.env.GEMINI_API_KEY || '',
   },
 
-  sheets: {
-    spreadsheetId: process.env.SPREADSHEET_ID || '1p9gVQkuZkVagi4gyP4Tp8fdItHm6W-wkT2osxTstQVU',
-    sheetName: process.env.SHEET_NAME || 'PRODUTOS',
-    cacheSeconds: parseInt(process.env.SHEETS_CACHE_SECONDS || '60', 10),
-    lookupEnabled: process.env.CATALOG_SHEETS_LOOKUP_ENABLED === 'true',
-  },
-
   tasks: {
     queue: process.env.CLOUD_TASKS_QUEUE || 'conflora-jobs',
     serviceUrl: process.env.SERVICE_URL || '',

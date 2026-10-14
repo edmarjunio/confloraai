@@ -11,6 +11,9 @@ const IMAGE_EXTENSIONS = {
 };
 
 function getStorageBucket() {
+  if (process.env.NODE_ENV === 'test') {
+    throw new Error('Storage real desabilitado nos testes; injete productImageStorage para simular uploads.');
+  }
   const { applicationDefault, cert, getApps, initializeApp } = require('firebase-admin/app');
   const { getStorage } = require('firebase-admin/storage');
   const appName = 'conflora-product-images';

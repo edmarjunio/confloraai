@@ -37,10 +37,12 @@ class MercadoPagoClient {
       }),
     );
     const timestamp = Number(fields.ts);
+    // O provedor documenta milissegundos; aceita também eventos em segundos.
+    const timestampMs = timestamp < 1e12 ? timestamp * 1000 : timestamp;
     if (
-      !fields.v1 ||
+      !/^[a-fA-F0-9]{64}$/.test(fields.v1 || "") ||
       !Number.isSafeInteger(timestamp) ||
-      Math.abs(now - timestamp * 1000) > 5 * 60 * 1000
+      Math.abs(now - timestampMs) > 5 * 60 * 1000
     ) {
       return false;
     }
@@ -167,6 +169,8 @@ function isApprovedPixPayment(payment, order) {
     payment?.currency_id === "BRL" &&
     String(payment?.external_reference || "") === String(order.id) &&
     Number.isFinite(expectedAmount) &&
+    expectedAmount > 0 &&
+    Number.isFinite(amount) &&
     Math.round(amount * 100) === Math.round(expectedAmount * 100) &&
     Number.isFinite(createdAt) &&
     Number.isFinite(approvedAt) &&
