@@ -16,7 +16,7 @@ export function initTeamDrawer() {
   const teamLinkCaixa = document.getElementById('teamLinkCaixa');
   const openEntryBtn = document.getElementById('teamOpenEntryBtn');
 
-  if (!drawerBtn || !overlay || !sheet) return;
+  if (!drawerBtn || !overlay || !sheet) {return;}
 
   let currentOperator = {
     name: 'Atendente Caixa',
@@ -40,7 +40,9 @@ export function initTeamDrawer() {
           return;
         }
       }
-    } catch (_) {}
+    } catch {
+      // ignore
+    }
 
     // Fallback no localStorage
     const savedName = localStorage.getItem('conflora_operator_name');
@@ -65,7 +67,7 @@ export function initTeamDrawer() {
     const subtitleEl = document.getElementById('teamOperatorSubtitle');
     const caixaDescEl = document.getElementById('teamCaixaScopeDesc');
 
-    if (opNameEl) opNameEl.textContent = currentOperator.name;
+    if (opNameEl) {opNameEl.textContent = currentOperator.name;}
     if (opBadgeEl) {
       opBadgeEl.textContent = isCaixa ? 'CARGO: CAIXA' : (isAdmin ? 'CARGO: ADMIN' : 'COLABORADOR');
       opBadgeEl.className = 'team-role-badge ' + (isAdmin ? 'admin' : 'caixa');
@@ -93,7 +95,7 @@ export function initTeamDrawer() {
 
   function openDrawer() {
     overlay.classList.remove('hidden');
-    requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
       sheet.classList.add('active');
     });
   }
@@ -110,11 +112,11 @@ export function initTeamDrawer() {
     openDrawer();
   });
 
-  if (closeBtn) closeBtn.addEventListener('click', closeDrawer);
-  if (backToShopBtn) backToShopBtn.addEventListener('click', closeDrawer);
+  if (closeBtn) {closeBtn.addEventListener('click', closeDrawer);}
+  if (backToShopBtn) {backToShopBtn.addEventListener('click', closeDrawer);}
 
   overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) closeDrawer();
+    if (e.target === overlay) {closeDrawer();}
   });
 
   // Troca de operador
@@ -134,7 +136,7 @@ export function initTeamDrawer() {
   }
 
   async function populateOperatorList() {
-    if (!selectUser) return;
+    if (!selectUser) {return;}
     selectUser.innerHTML = '<option value="">Carregando operadores...</option>';
     try {
       const res = await fetch('/api/admin/auth/users');
@@ -149,7 +151,9 @@ export function initTeamDrawer() {
           return;
         }
       }
-    } catch (_) {}
+    } catch {
+      // ignore
+    }
 
     // Fallback padrão de operadores
     selectUser.innerHTML = `
@@ -162,7 +166,7 @@ export function initTeamDrawer() {
   if (confirmOpBtn && selectUser) {
     confirmOpBtn.addEventListener('click', () => {
       const opt = selectUser.selectedOptions[0];
-      if (!opt) return;
+      if (!opt) {return;}
       const name = opt.getAttribute('data-name') || opt.textContent.trim();
       const role = opt.getAttribute('data-role') || 'CAIXA';
       const id = selectUser.value;

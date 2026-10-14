@@ -14,7 +14,11 @@
     "check:full": "node --check src/server.js && node --check src/http/app.js && node --check src/services/message.service.js && node --check src/ai/agent.service.js && node --check src/catalog/catalog.repository.js && node --check src/catalog/image-compressor.js && node --check src/catalog/product-photo.service.js && node --check src/orders/order.service.js && node --check src/integrations/whatsapp.client.js && node --check src/integrations/task-queue.client.js && node --check src/router/message.router.js && node --check src/services/direct-price.service.js && node scripts/check-storefront.js --manual",
     "test": "echo 'Testes automaticos pausados no modo Agente. Use npm run test:dev'",
     "test:dev": "node --test test/*.test.js",
-    "test:pix": "node --test test/mercado-pago.test.js test/order-integrity.test.js",
+    "test:pix": "node --test test/mercado-pago.test.js test/mercado-pago-live-mode.test.js test/order-integrity.test.js",
+    "test:dev-isolation": "node --test test/dev-environment.test.js test/mercado-pago-live-mode.test.js",
+    "dev:isolated": "node --env-file=.env.dev --watch src/server.js",
+    "seed:dev": "node --env-file=.env.dev scripts/seed-dev.js",
+    "check:dev-pix": "node --env-file=.env.dev scripts/check-dev-pix.js",
     "check:pix": "node scripts/check-pix-config.js",
     "test:all": "npm install && npm run check:full && npm run test:dev && npm run dev",
     "start": "node src/server.js",
@@ -37,12 +41,16 @@
     "googleapis": "183.0.0",
     "lucide-react": "^1.54.0",
     "pdfkit": "^0.20.2",
+    "qrcode": "^1.5.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "sharp": "^0.35.5"
   },
   "devDependencies": {
+    "@babel/core": "^8.0.7",
+    "@babel/plugin-syntax-jsx": "^8.0.1",
     "@playwright/test": "^1.64.0",
+    "esbuild": "^0.28.2",
     "eslint": "10.12.0",
     "prettier": "3.9.9"
   }

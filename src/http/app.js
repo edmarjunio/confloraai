@@ -22,6 +22,8 @@ const { SystemStatusService } = require('../services/system-status.service');
 const { renderHomeHtml, renderAdminHtml, renderCaixaHtml, renderAdminGerencialHtml } = require('./views');
 const { MercadoPagoClient, isApprovedPixPayment } = require('../integrations/mercado-pago.client');
 const { formatOrderReceipt } = require('../orders/receipt.util');
+const { SicrediPixClient } = require('../integrations/sicredi-pix.client');
+const { SicrediPaymentService } = require('../orders/sicredi-payment.service');
 
 const FETCH_SHIM_SCRIPT = `<script>
   (function() {
@@ -915,6 +917,7 @@ function createApp({
   storeRepository,
   storeAssistant,
   mercadoPagoClient,
+  sicrediPixClient,
 }) {
   const express = getExpress();
   if (!express) { throw new Error('Express module not available'); }
@@ -925,7 +928,17 @@ function createApp({
       webhookSecret: config.mercadoPago.webhookSecret,
     });
   messageService.mercadoPagoClient = payments;
+  const sicredi = new SicrediPaymentService({ repository: messageService.firestoreRepo,
+    client: sicrediPixClient || new SicrediPixClient(), whatsapp: messageService.whatsappClient });
   const app = express();
+  app.locals.sicredi = sicredi;
+  if (config.appEnvironment === 'dev') {
+    app.use((_req, res, next) => {
+      res.setHeader('X-Conflora-Environment', 'dev');
+      res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+      next();
+    });
+  }
   app.use('/api', (_req, res, next) => {
     res.setHeader('Cache-Control', 'private, no-store');
     next();
@@ -1065,7 +1078,13 @@ function createApp({
 
   // Health check
   app.get('/health', (_req, res) => {
-    res.status(200).json({ status: 'ok', uptime: process.uptime() });
+    res.status(200).json({
+      status: 'ok', uptime: process.uptime(),
+      environment: config.appEnvironment,
+      projectId: config.gcp.projectId,
+      paymentProvider: 'MERCADO_PAGO',
+      expectedLiveMode: config.mercadoPago.expectedLiveMode,
+    });
   });
 
   // Meta Verification: Política de Privacidade
@@ -1163,6 +1182,33 @@ function createApp({
           }
         }
       }
+    }
+  });
+
+  app.post('/tasks/reconcile-sicredi', async (req, res) => {
+    const expected = process.env.SICREDI_RECONCILE_SECRET || '';
+    const received = String(req.get('Authorization') || '').replace(/^Bearer /, '');
+    const { timingSafeEqual } = require('node:crypto');
+    if (expected.length < 32 || Buffer.byteLength(received) !== Buffer.byteLength(expected) ||
+        !timingSafeEqual(Buffer.from(received), Buffer.from(expected))) { return res.sendStatus(401); }
+    try { return res.json(await sicredi.processJobs()); }
+    catch { return res.status(503).json({ error: 'Conciliação pendente de nova tentativa.' }); }
+  });
+
+  // Payload is only a hint. Settlement always requires authenticated bank queries.
+  app.post(['/webhooks/sicredi', '/webhooks/sicredi/pix'], async (req, res) => {
+    if (!Array.isArray(req.body?.pix) || req.body.pix.length > 100) { return res.sendStatus(400); }
+    try {
+      const txids = [...new Set(req.body.pix.map(item => item.txid))]
+        .filter(txid => /^[a-zA-Z0-9]{26,35}$/.test(txid));
+      for (const txid of txids) {
+        const job = await sicredi.db.collection('sicredi_jobs').doc(txid).get();
+        if (job.exists && job.data().pending) { await sicredi.reconcile(job.data().orderId); }
+      }
+      return res.sendStatus(204);
+    } catch (error) {
+      Logger.warn('Conciliação Sicredi pendente de nova tentativa.', { error: error.message });
+      return res.sendStatus(503);
     }
   });
 
@@ -1740,7 +1786,7 @@ function createApp({
       if (!req.user || !['ADMIN', 'CAIXA'].includes(req.user.role)) {
         return res.status(401).json({ error: 'Entre com seu perfil de colaborador para consultar clientes.' });
       }
-      const customers = await messageService.firestoreRepo.searchCustomers(req.query.q, 8);
+      const customers = await messageService.firestoreRepo.searchCustomers(req.query.q, 10);
       res.status(200).json(customers);
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -1753,23 +1799,62 @@ function createApp({
         return res.status(401).json({ error: 'Entre com seu perfil de colaborador para cadastrar clientes.' });
       }
       const name = String(req.body?.name || '').trim().slice(0, 100);
-      const phone = String(req.body?.phone || '').replace(/\D/g, '');
-      if (!name || phone.length < 10 || phone.length > 13) {
+      const rawPhone = String(req.body?.phone || '').trim();
+      const phoneDigits = rawPhone.replace(/\D/g, '');
+      const cpfCnpj = String(req.body?.cpfCnpj || '').trim().slice(0, 30);
+      const address = String(req.body?.address || req.body?.deliveryAddress || '').trim().slice(0, 250);
+      const notes = String(req.body?.notes || '').trim().slice(0, 250);
+
+      if (!name || phoneDigits.length < 10 || phoneDigits.length > 13) {
         return res.status(400).json({ error: 'Informe um nome e um celular válido com DDD.' });
       }
-      await messageService.firestoreRepo.saveCustomerProfile(phone, { name });
-      res.status(201).json({ success: true, customer: { name, phone } });
+
+      const customerKey = phoneDigits;
+      const customerData = {
+        name,
+        phone: rawPhone,
+        phoneDigits,
+        cpfCnpj,
+        address,
+        deliveryAddress: address,
+        notes,
+        createdAt: new Date().toISOString(),
+      };
+
+      await messageService.firestoreRepo.saveCustomerProfile(customerKey, customerData);
+      res.status(201).json({ success: true, customer: { id: customerKey, ...customerData, phone: phoneDigits } });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
 
   app.use('/api/caixa', (req, res, next) => {
-    if (!req.user)  {res.status(401).json({ error: 'Entre com seu perfil de colaborador.' });}
+    if (!req.user) {
+      return res.status(401).json({ error: 'Entre com seu perfil de colaborador.' });
+    }
     if (!['ADMIN', 'CAIXA'].includes(req.user.role)) {
       return res.status(403).json({ error: 'Acesso permitido somente para CAIXA ou ADMIN.' });
     }
     next();
+  });
+
+  app.get('/api/caixa/pix-attempt/:key', async (req, res) => {
+    if (!/^[a-zA-Z0-9-]{16,80}$/.test(req.params.key)) { return res.sendStatus(400); }
+    const txid = require('node:crypto').createHash('sha256').update(`${req.user.id}:${req.params.key}`).digest('hex').slice(0, 32);
+    try {
+      const snap = await sicredi.db.collection('orders').doc(`sicredi_${txid}`).get();
+      if (!snap.exists) { return res.sendStatus(404); }
+      return res.json({ order: { ...snap.data(), id: snap.id } });
+    } catch { return res.status(503).json({ error: 'Não foi possível recuperar a venda.' }); }
+  });
+
+  app.get('/api/caixa/orders/:id/pix', async (req, res) => {
+    try {
+      const order = await sicredi.readOrder(req.params.id);
+      if (req.user.role !== 'ADMIN' && order.operatorId !== req.user.id) { return res.sendStatus(403); }
+      const updated = await sicredi.reconcile(order.id);
+      return res.json({ order: updated });
+    } catch (error) { return res.status(503).json({ error: error.message }); }
   });
 
   app.post('/api/caixa/orders', async (req, res) => {
@@ -1782,6 +1867,9 @@ function createApp({
         notes,
         operatorName,
         discountPercent = 0,
+        orderType = 'PICKUP',
+        deliveryAddress = '',
+        freightValue = 0,
       } = req.body;
 
       if (!Array.isArray(items) || items.length === 0) {
@@ -1817,7 +1905,8 @@ function createApp({
       const status = isPix ? 'AWAITING_PIX' : 'AWAITING_CASHIER';
       const subtotal = Number(normalizedItems.reduce((sum, item) => sum + item.price * item.quantity, 0).toFixed(2));
       const discountAmount = Number((subtotal * requestedDiscountPercent / 100).toFixed(2));
-      const total = Number((subtotal - discountAmount).toFixed(2));
+      const normalizedFreight = Math.max(0, Number(freightValue) || 0);
+      const total = Number((subtotal - discountAmount + normalizedFreight).toFixed(2));
       const resolvedCustomerName = customerName || (customerPhone ? `Cliente ${String(customerPhone).slice(-4)}` : 'Cliente Balcão');
       const resolvedOperatorName = operatorName || req.user?.name || 'Colaborador';
 
@@ -1836,12 +1925,25 @@ function createApp({
           discountAmount,
           discountPercent: requestedDiscountPercent,
           total,
+          freightValue: normalizedFreight,
+          orderType,
+          deliveryAddress,
         });
         return res.status(202).json({ success: true, approvalRequired: true, approval });
       }
       const ticketNumber = String(Math.floor(100 + Math.random() * 900));
       const orderId = randomUUID();
       let mercadoPagoPreference = null;
+      if (isPix && (process.env.PDV_PIX_PROVIDER || 'SICREDI') === 'SICREDI') {
+        const order = await sicredi.create({
+          customerName: resolvedCustomerName, customerPhone: customerPhone || '',
+          items: normalizedItems, subtotal, total, discountAmount,
+          discountPercent: requestedDiscountPercent, freightValue: normalizedFreight,
+          orderType, deliveryAddress, notes: notes || '',
+          operatorName: resolvedOperatorName, operatorId: req.user.id, source: 'CAIXA_MANUAL',
+        }, req.get('Idempotency-Key'));
+        return res.json({ success: true, order });
+      }
       if (isPix) {
         if (!payments.checkoutConfigured) {
           return res.status(503).json({
@@ -1871,6 +1973,9 @@ function createApp({
         discountAmount,
         discountPercent: requestedDiscountPercent,
         requirePersistence: isPix,
+        orderType: orderType || 'PICKUP',
+        deliveryAddress: deliveryAddress || '',
+        freightValue: normalizedFreight,
       });
 
       const receiptText = formatOrderReceipt(order);
@@ -2537,6 +2642,21 @@ function createApp({
       }
 
       const isPix = approval.paymentMethod === 'PIX';
+      if (isPix && (process.env.PDV_PIX_PROVIDER || 'SICREDI') === 'SICREDI') {
+        const order = await sicredi.create({
+          customerName: approval.customerName, customerPhone: approval.customerPhone || '',
+          items: approval.items, subtotal: approval.subtotal, total: approval.total,
+          discountAmount: approval.discountAmount, discountPercent: approval.discountPercent,
+          freightValue: approval.freightValue || 0, orderType: approval.orderType || 'PICKUP',
+          deliveryAddress: approval.deliveryAddress || '', notes: approval.notes || '',
+          operatorName: approval.operatorName, operatorId: approval.operatorId || approval.requestedBy,
+          source: 'CAIXA_MANUAL',
+        }, `approval-${require('node:crypto').createHash('sha256').update(req.params.id).digest('hex')}`);
+        const reviewed = await repo.updateDiscountApproval(req.params.id, {
+          status: 'APPROVED', reviewedAt: new Date().toISOString(), reviewedBy: req.user.id, order,
+        });
+        return res.json({ success: true, approval: reviewed, order });
+      }
       const ticketNumber = String(Math.floor(100 + Math.random() * 900));
       const orderId = randomUUID();
       let mercadoPagoPreference = null;

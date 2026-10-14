@@ -522,7 +522,8 @@ test('18. Status Dashboard & Google Auth: Diagnóstico de conexões e autentica�
   assert.ok(status.whatsapp);
   assert.ok(status.firestore);
   assert.ok(status.defaultCatalog);
-assert.strictEqual(typeof status.defaultCatalog.totalItems, 'number');
+  assert.strictEqual(status.defaultCatalog.status, 'DISABLED');
+  assert.strictEqual(status.defaultCatalog.totalItems, 0);
   assert.ok(['ONLINE', 'FALLBACK_OFFICIAL', 'DISABLED'].includes(status.googleSheets.status));
 
   // 2. Teste do webhook
@@ -536,7 +537,7 @@ assert.strictEqual(typeof status.defaultCatalog.totalItems, 'number');
   const messageService = { firestoreRepo: repo, catalogRepo: catalog };
   const identities = {
     admin: { uid: 'google-admin', email: 'edmarjuniob@gmail.com', name: 'Edmar Júnio', picture: 'https://example.com/avatar.jpg', email_verified: true, firebase: { sign_in_provider: 'google.com' } },
-    customer: { uid: 'google-customer', email: 'cliente@gmail.com', name: 'Maria Silva', email_verified: true, firebase: { sign_in_provider: 'google.com' } },
+    customer: { uid: 'google-customer', email: 'cliente@gmail.com', name: 'Edmar Junio B Carrijo', email_verified: true, firebase: { sign_in_provider: 'google.com' } },
     unverified: { email: 'edmarjuniob@gmail.com', email_verified: false, firebase: { sign_in_provider: 'google.com' } },
     password: { email: 'edmarjuniob@gmail.com', email_verified: true, firebase: { sign_in_provider: 'password' } },
   };
@@ -570,7 +571,7 @@ assert.strictEqual(typeof status.defaultCatalog.totalItems, 'number');
     const custData = await custRes.json();
     assert.strictEqual(custData.success, true);
     assert.strictEqual(custData.user.role, 'CLIENTE');
-    assert.strictEqual(custData.user.name, 'Maria Silva');
+    assert.strictEqual(custData.user.name, 'Edmar Junio B Carrijo');
     assert.strictEqual(custData.user.email, 'cliente@gmail.com');
     for (const payload of [{ email: 'edmarjuniob@gmail.com' }, { idToken: 'invalid' }, { idToken: 'unverified' }, { idToken: 'password' }]) {
       const response = await fetch(`http://localhost:${port}/api/auth/google`, {
@@ -594,3 +595,4 @@ assert.strictEqual(typeof status.defaultCatalog.totalItems, 'number');
     server.close();
   }
 });
+

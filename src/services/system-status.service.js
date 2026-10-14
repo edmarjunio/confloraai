@@ -21,20 +21,25 @@ class SystemStatusService {
 
   async getSystemStatus() {
     const t0 = Date.now();
+
+    // 1. Google Sheets status
     const sheetsStatus = await this.checkGoogleSheetsStatus();
+
+    // 2. WhatsApp Webhook status
     const whatsappStatus = this.checkWhatsAppStatus();
+
+    // 3. Firestore Database status
     const firestoreStatus = await this.checkFirestoreStatus();
 
-    // 4. Catálogo Real (Fonte Oficial: Firestore via catalogRepo)
-    const activeItems = Array.isArray(this.catalogRepo?.items) ? this.catalogRepo.items : [];
+    // O catálogo estático foi removido; o diagnóstico não deve importá-lo.
     const defaultCatalogStatus = {
-      status: 'ONLINE',
-      badge: 'Firestore Ativo',
-      color: '#10b981',
-      title: 'Catálogo oficial sincronizado do Firestore (Fonte única de verdade)',
-      totalItems: activeItems.length,
-      categoriesCount: new Set(activeItems.map((i) => i.category || i.categoria)).size,
-      autoFallback: 'ATIVO: dados obtidos em tempo real do banco de dados',
+      status: 'DISABLED',
+      badge: 'Catálogo estático desativado',
+      color: '#64748b',
+      title: 'Produtos cadastrados no Firestore',
+      totalItems: 0,
+      categoriesCount: 0,
+      autoFallback: 'DESATIVADO: o catálogo atual vem do Firestore',
       lastVerified: new Date().toISOString(),
     };
 
@@ -67,7 +72,7 @@ class SystemStatusService {
       };
     }
     try {
-      if (!this.catalogRepo?.refreshCatalog) { throw new Error('Catálogo não configurado.'); }
+      if (!this.catalogRepo?.refreshCatalog) {throw new Error('Catálogo não configurado.');}
       await this.catalogRepo.refreshCatalog();
       return {
         status: 'ONLINE', badge: 'Catálogo disponível', color: '#10b981',
@@ -75,7 +80,7 @@ class SystemStatusService {
         sheetName: this.catalogRepo.sheetName || 'PRODUTOS',
         itemsActive: this.catalogRepo.items.length, source,
         latencyMs: Date.now() - start,
-        message: 'Catálogo consultado com sucesso.',
+        message: firestoreSource ? 'Catálogo consultado no Firestore. Esta verificação não testa a conexão Google Sheets.' : 'Catálogo carregado pela fonte configurada.',
         lastSync: new Date().toISOString(),
       };
     } catch (error) {
@@ -83,7 +88,7 @@ class SystemStatusService {
         status: 'ERROR', badge: 'Catálogo indisponível', color: '#ef4444', source,
         spreadsheetId: config.sheets?.spreadsheetId || 'Não configurado', sheetName: 'PRODUTOS',
         itemsActive: 0, latencyMs: Date.now() - start, error: error.message,
-        message: 'Não foi possível consultar o catálogo.',
+        message: 'Não foi possível consultar o catálogo. Nenhum catálogo antigo foi restaurado automaticamente.',
       };
     }
   }
@@ -104,12 +109,16 @@ class SystemStatusService {
       badge: isFullyConfigured ? 'Webhook & Cloud API Prontos' : 'Webhook Ativo (Simulador / Testes)',
       color: isFullyConfigured ? '#10b981' : '#3b82f6',
       webhookRoute: '/webhook',
-      phoneNumberId: phoneId ? `${phoneId.slice(0, 4)}...${phoneId.slice(-4)}` : 'Emulador Local',
+      phoneNumberId: phoneId
+        ? `${phoneId.slice(0, 4)}...${phoneId.slice(-4)}`
+        : 'Emulador Local (5564999351616)',
       hasAccessToken: hasToken,
       hasVerifyToken: hasVerifyToken,
       lastReceivedAt: this.webhookStats.lastReceivedAt || 'Nenhuma mensagem recente',
       totalReceivedCount: this.webhookStats.totalReceived,
-      message: 'Status do Webhook verificado.',
+      message: isFullyConfigured
+        ? 'Webhook Meta operando na rota /webhook e token de verificação validado com sucesso.'
+        : 'Webhook ouvindo requisições na rota /webhook. Simulador do WhatsApp 100% ativo.',
     };
   }
 
@@ -133,7 +142,9 @@ class SystemStatusService {
       color: isConnected ? '#10b981' : '#3b82f6',
       projectId,
       latencyMs: Date.now() - start,
-      message: isConnected ? `Banco Firestore conectado [${projectId}].` : 'Operando em memória.',
+      message: isConnected
+        ? `Banco de dados Firestore conectado com sucesso ao projeto [${projectId}].`
+        : 'Operando com repositório em memória e persistência em cache.',
     };
   }
 }
@@ -141,3 +152,4 @@ class SystemStatusService {
 module.exports = {
   SystemStatusService,
 };
+

@@ -1,10 +1,12 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { validateDevEnvironment } = require('./dev-environment');
 
 // Safely load environment variables from .env file
 try {
-  const envPath = path.resolve(process.cwd(), '.env');
-  if (fs.existsSync(envPath)) {
+  const envPath = path.resolve(process.cwd(), process.env.CONFLORA_ENV_FILE ||
+    (process.env.APP_ENV === 'dev' ? '.env.dev' : '.env'));
+  if (!process.env.K_SERVICE && fs.existsSync(envPath)) {
     const lines = fs.readFileSync(envPath, 'utf-8').split('\n');
     for (const line of lines) {
       const trimmed = line.trim();
@@ -41,12 +43,13 @@ try {
 }
 
 const config = Object.freeze({
+  appEnvironment: process.env.APP_ENV || 'production',
   env: process.env.NODE_ENV || 'development',
   isDev: (process.env.NODE_ENV || 'development') === 'development',
   port: parseInt(process.env.PORT || '3000', 10),
 
   gcp: {
-    projectId: serviceAccountProjectId || process.env.GCP_PROJECT_ID || 'confloraai',
+    projectId: process.env.GCP_PROJECT_ID || serviceAccountProjectId || 'confloraai',
     region: process.env.GCP_REGION || 'southamerica-east1',
     keyFilename: serviceAccountKeyPath,
   },
@@ -82,23 +85,52 @@ const config = Object.freeze({
   },
 
   mercadoPago: {
-    accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN || '',
-    webhookSecret: process.env.MERCADO_PAGO_WEBHOOK_SECRET || '',
+    accessToken: (process.env.MERCADO_PAGO_ACCESS_TOKEN || '').trim(),
+    webhookSecret: (process.env.MERCADO_PAGO_WEBHOOK_SECRET || '').trim(),
+    expectedLiveMode: process.env.MERCADO_PAGO_EXPECT_LIVE_MODE === 'true' ? true :
+      process.env.MERCADO_PAGO_EXPECT_LIVE_MODE === 'false' ? false : null,
+  },
+
+  sicredi: {
+    baseUrl: process.env.SICREDI_PIX_BASE_URL || 'https://api-pix.sicredi.com.br',
+    authUrl: process.env.SICREDI_OAUTH_URL || 'https://api-pix.sicredi.com.br/oauth/token',
+    clientId: (process.env.SICREDI_CLIENT_ID || '').trim(),
+    clientSecret: (process.env.SICREDI_CLIENT_SECRET || '').trim(),
+    certificate: process.env.SICREDI_CERT_PEM || '',
+    privateKey: process.env.SICREDI_KEY_PEM || '',
+    pixKey: process.env.SICREDI_PIX_KEY || process.env.PIX_KEY || '64999351616',
+    beneficiario: process.env.SICREDI_BENEFICIARIO || process.env.PIX_TITULAR || 'Conflora Horta e Viveiro',
+    cidade: process.env.SICREDI_CIDADE || 'Mineiros',
+    webhookSecret: (process.env.SICREDI_WEBHOOK_SECRET || '').trim(),
   },
 
   pix: {
-    key: process.env.PIX_KEY || 'conflora@exemplo.com.br',
-    holder: process.env.PIX_TITULAR || 'Conflora Horta e Viveiro',
+    key: process.env.SICREDI_PIX_KEY || process.env.PIX_KEY || '64999351616',
+    holder: process.env.SICREDI_BENEFICIARIO || process.env.PIX_TITULAR || 'Conflora Horta e Viveiro',
   },
 
   adminSecret: process.env.ADMIN_SECRET || '',
   firebase: {
     apiKey: process.env.FIREBASE_API_KEY || '',
     authDomain: process.env.FIREBASE_AUTH_DOMAIN || '',
-    projectId: process.env.FIREBASE_PROJECT_ID || serviceAccountProjectId || process.env.GCP_PROJECT_ID || 'confloraai',
-    storageBucket: process.env.FIREBASE_STORAGE_BUCKET || `${process.env.FIREBASE_PROJECT_ID || serviceAccountProjectId || process.env.GCP_PROJECT_ID || 'confloraai'}.firebasestorage.app`,
+    projectId: process.env.FIREBASE_PROJECT_ID || process.env.GCP_PROJECT_ID || serviceAccountProjectId || 'confloraai',
+    storageBucket: process.env.FIREBASE_STORAGE_BUCKET || `${process.env.FIREBASE_PROJECT_ID || process.env.GCP_PROJECT_ID || serviceAccountProjectId || 'confloraai'}.firebasestorage.app`,
     appId: process.env.FIREBASE_APP_ID || '',
   },
 });
 
+const credentialProjects = serviceAccountProjectId ? [serviceAccountProjectId] : [];
+if (config.appEnvironment === 'dev') {
+  if (serviceAccountKeyPath && !serviceAccountProjectId) {
+    throw new Error('Credencial local sem projeto válido no ambiente dev.');
+  }
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    const credential = JSON.parse(fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8'));
+    if (!credential.project_id) {throw new Error('Credencial explícita do dev exige project_id.');}
+    credentialProjects.push(credential.project_id);
+  }
+}
+validateDevEnvironment(config, credentialProjects);
+
 module.exports = config;
+

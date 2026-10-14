@@ -1,0 +1,12 @@
+{
+  "hosting": {
+    "site": "confloraai-dev",
+    "public": "firebase-hosting",
+    "ignore": ["**/.*", "**/node_modules/**"],
+    "rewrites": [
+      { "source": "**", "run": { "serviceId": "confloraai-dev", "region": "southamerica-east1" } }
+    ]
+  },
+  "firestore": { "rules": "firestore.dev.rules" },
+  "storage": { "rules": "storage.dev.rules" }
+}

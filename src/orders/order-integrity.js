@@ -1,5 +1,6 @@
-const PAID_ORDER_STATUSES = new Set(['CONFIRMED', 'PAID_CONFIRMED', 'DELIVERED']);
+const PAID_ORDER_STATUSES = new Set(['PAGO', 'CONFIRMED', 'PAID_CONFIRMED', 'DELIVERED']);
 
+/** Validate the persisted order inside the same transaction as its stock writes. */
 function validateOrderConfirmation(order, updates) {
   if (order.status === 'CANCELLED') {
     throw new Error('Pedido cancelado não pode receber baixa ou confirmação.');
