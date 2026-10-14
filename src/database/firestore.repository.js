@@ -1242,11 +1242,7 @@ class FirestoreRepository {
     const order = await this.createDirectOrder(orderData, { requirePersistence });
 
     if (order.status === 'CONFIRMED' || order.status === 'PAID_CONFIRMED') {
-      await this.deductStock(
-        items,
-        customerPhone || 'Balcão'
-      ).catch(() => {});
-      order.stockDeducted = true;
+      await this.deductStock(items, customerPhone || 'Balcão', order.id);
     }
 
     return order;
@@ -1351,29 +1347,29 @@ class FirestoreRepository {
       updateData.changeGiven = changeGiven;
     }
 
-    if (this.firestore && !this._firestoreClientDisabled) {
-      try {
-        await this.firestore.collection('orders').doc(String(orderId)).update(updateData);
-      } catch (err) {
-        if (
-          err.code === 7 ||
-          err.code === 'permission-denied' ||
-          err.message?.includes('PERMISSION_DENIED') ||
-          err.message?.includes('Missing or insufficient')
-        ) {
-          this._firestoreClientDisabled = true;
-        } else {
-          Logger.warn('Erro ao atualizar status de pagamento no Firestore', { error: err.message });
-        }
-        if (verifiedVia === 'MERCADO_PAGO_WEBHOOK') {
-          throw new Error('Não foi possível persistir a confirmação do Mercado Pago.');
-        }
-      }
-    } else if (
+    if (
       verifiedVia === 'MERCADO_PAGO_WEBHOOK' &&
-      process.env.NODE_ENV === 'production'
+      process.env.NODE_ENV === 'production' &&
+      (!this.firestore || this._firestoreClientDisabled)
     ) {
       throw new Error('Firestore indisponível; pagamento não foi confirmado no pedido.');
+    }
+
+    // Estoque e pagamento mudam juntos na transação do pedido. Se a baixa
+    // falhar, a venda continua pendente; retries concorrentes não repetem a
+    // baixa nem disparam uma segunda confirmação.
+    const confirmation = await this.deductStock(
+      order.items,
+      order.customerPhone || 'Caixa',
+      order.id || orderId,
+      updateData,
+    );
+    if (confirmation.alreadyConfirmed) {
+      return {
+        ...order,
+        ...(confirmation.orderData || {}),
+        alreadyConfirmed: true,
+      };
     }
 
     const local = this.inMemoryOrders.get(String(orderId));
@@ -1381,11 +1377,6 @@ class FirestoreRepository {
       Object.assign(local, updateData);
     }
     Object.assign(order, updateData);
-
-    if (!order.stockDeducted && Array.isArray(order.items)) {
-      await this.deductStock(order.items, order.customerPhone || 'Caixa').catch(() => {});
-      order.stockDeducted = true;
-    }
 
     return order;
   }
@@ -2038,161 +2029,252 @@ class FirestoreRepository {
     return value;
   }
 
-  async deductStock(orderItems, customerPhone = '') {
-    if (!(await this.getInventorySettings()).stockControlEnabled) {
-      return { success: true, deducted: [], trackingDisabled: true };
-    }
-    if (
-      !Array.isArray(orderItems) ||
-      orderItems.length === 0
-    ) {
-      return {
-        success: true,
-        deducted: [],
-      };
-    }
+  async deductStock(orderItems, customerPhone = '', orderId = '', orderUpdates = null) {
+    const stockControlEnabled = (await this.getInventorySettings()).stockControlEnabled;
+    const items = Array.isArray(orderItems) ? orderItems : [];
+    const id = orderId ? String(orderId) : '';
+    const now = new Date().toISOString();
 
-    const deductedList = [];
-
-    if (this.firestore) {
+    if (this.firestore && !this._firestoreClientDisabled) {
       try {
-        const now = new Date().toISOString();
-
-        await this.firestore.runTransaction(
-          async (transaction) => {
-            for (const item of orderItems) {
-              const qty = item.quantity || 1;
-
-              // Busca produto por ID ou por nome.
-              let docRef = null;
-              let currentData = null;
-
-              if (item.productId) {
-                docRef = this.firestore
-                  .collection('products')
-                  .doc(String(item.productId));
-
-                const snap = await transaction.get(docRef);
-
-                if (snap.exists) {
-                  currentData = snap.data();
-                }
+        const result = await this.firestore.runTransaction(async (transaction) => {
+          let orderRef = null;
+          if (id) {
+            orderRef = this.firestore.collection('orders').doc(id);
+            const orderSnapshot = await transaction.get(orderRef);
+            if (!orderSnapshot.exists) {
+              throw new Error('Pedido não encontrado para registrar a baixa de estoque.');
+            }
+            const orderData = orderSnapshot.data() || {};
+            if (
+              orderUpdates &&
+              ['CONFIRMED', 'PAID_CONFIRMED'].includes(orderData.status)
+            ) {
+              return {
+                success: true,
+                deducted: [],
+                alreadyConfirmed: true,
+                orderData,
+              };
+            }
+            if (orderData.stockDeducted) {
+              if (!orderUpdates) {
+                return { success: true, deducted: [], alreadyDeducted: true };
               }
+              transaction.update(orderRef, orderUpdates);
+              return { success: true, deducted: [], newlyConfirmed: true };
+            }
+          }
 
-              if (!currentData) {
-                const querySnap = await this.firestore
-                  .collection('products')
+          const markOrderHandled = () => {
+            if (orderRef) {
+              transaction.update(orderRef, {
+                stockDeducted: true,
+                stockDeductedAt: now,
+                ...(orderUpdates || {}),
+              });
+            }
+          };
+
+          if (!stockControlEnabled || items.length === 0) {
+            markOrderHandled();
+            return {
+              success: true,
+              deducted: [],
+              ...(orderUpdates ? { newlyConfirmed: true } : {}),
+              ...(!stockControlEnabled ? { trackingDisabled: true } : {}),
+            };
+          }
+
+          const resolvedItems = [];
+          for (const item of items) {
+            let docRef = item.productId
+              ? this.firestore.collection('products').doc(String(item.productId))
+              : null;
+            let productData = null;
+
+            if (docRef) {
+              const productSnapshot = await transaction.get(docRef);
+              if (productSnapshot.exists) {
+                productData = productSnapshot.data();
+              }
+            }
+            if (!productData && item.name) {
+              const querySnapshot = await transaction.get(
+                this.firestore.collection('products')
                   .where('name', '==', item.name)
-                  .limit(1)
-                  .get();
-
-                if (!querySnap.empty) {
-                  const docSnap = querySnap.docs[0];
-
-                  docRef = docSnap.ref;
-                  currentData = docSnap.data();
-                }
+                  .limit(1),
+              );
+              if (!querySnapshot.empty) {
+                const productSnapshot = querySnapshot.docs[0];
+                docRef = productSnapshot.ref;
+                productData = productSnapshot.data();
               }
-
-              if (docRef && currentData) {
-                const currentStock =
-                  typeof currentData.stockQuantity === 'number'
-                    ? currentData.stockQuantity
-                    : typeof currentData.estoque === 'number'
-                      ? currentData.estoque
-                      : 0;
-
-                const newStock = Math.max(
-                  0,
-                  currentStock - qty
-                );
-
-                transaction.update(docRef, {
-                  stockQuantity: newStock,
-                  estoque: newStock,
-                  updatedAt: now,
-                });
-
-                // Log de movimentação de estoque.
-                const movementRef = this.firestore
-                  .collection('stock_movements')
-                  .doc();
-
-                transaction.set(movementRef, {
-                  productId: docRef.id,
-                  productName: currentData.name || item.name,
-                  quantityDeducted: qty,
-                  previousStock: currentStock,
-                  newStock,
-                  type: 'SALE_WHATSAPP',
-                  customerPhone,
-                  createdAt: now,
-                });
-
-                deductedList.push({
-                  productId: docRef.id,
-                  productName: currentData.name || item.name,
-                  qty,
-                  newStock,
-                });
+            }
+            if (docRef && productData) {
+              const existing = resolvedItems.find((entry) => entry.docRef.id === docRef.id);
+              const quantity = Number(item.quantity) || 1;
+              if (existing) {
+                existing.quantity += quantity;
+              } else {
+                resolvedItems.push({ docRef, productData, item, quantity });
               }
             }
           }
-        );
 
+          const deducted = [];
+          for (const entry of resolvedItems) {
+            const currentStock =
+              typeof entry.productData.stockQuantity === 'number'
+                ? entry.productData.stockQuantity
+                : typeof entry.productData.estoque === 'number'
+                  ? entry.productData.estoque
+                  : 0;
+            const newStock = Math.max(0, currentStock - entry.quantity);
+            transaction.update(entry.docRef, {
+              stockQuantity: newStock,
+              estoque: newStock,
+              updatedAt: now,
+            });
+
+            const movementRef = this.firestore.collection('stock_movements').doc();
+            transaction.set(movementRef, {
+              productId: entry.docRef.id,
+              productName: entry.productData.name || entry.item.name,
+              quantityDeducted: entry.quantity,
+              previousStock: currentStock,
+              newStock,
+              type: 'SALE_WHATSAPP',
+              customerPhone,
+              createdAt: now,
+            });
+            deducted.push({
+              productId: entry.docRef.id,
+              productName: entry.productData.name || entry.item.name,
+              qty: entry.quantity,
+              newStock,
+            });
+          }
+
+          markOrderHandled();
+          return {
+            success: true,
+            deducted,
+            ...(orderUpdates ? { newlyConfirmed: true } : {}),
+          };
+        });
+
+        const localOrder = id ? this.inMemoryOrders.get(id) : null;
+        if (localOrder) {
+          if (result.orderData) {
+            Object.assign(localOrder, result.orderData);
+          } else {
+            localOrder.stockDeducted = true;
+            localOrder.stockDeductedAt = localOrder.stockDeductedAt || now;
+            if (orderUpdates && result.newlyConfirmed) {
+              Object.assign(localOrder, orderUpdates);
+            }
+          }
+        }
+        for (const item of result.deducted) {
+          const product = this.inMemoryProducts.get(String(item.productId));
+          if (product) {
+            product.stockQuantity = item.newStock;
+            product.estoque = item.newStock;
+            this.inMemoryProducts.set(String(item.productId), product);
+          }
+        }
         Logger.info(
-          `Baixa atômica de estoque concluída no Firestore para ${deductedList.length} itens.`
+          `Baixa atômica de estoque concluída no Firestore para ${result.deducted.length} itens.`
         );
-
-        return {
-          success: true,
-          deducted: deductedList,
-        };
+        return result;
       } catch (err) {
+        if (id) {
+          throw new Error('Não foi possível persistir a baixa de estoque do pedido.', {
+            cause: err,
+          });
+        }
         Logger.warn(
           'Erro ao realizar baixa atômica no Firestore; aplicando em memória',
           { error: err.message }
         );
       }
+    } else if (id && this.firestore) {
+      throw new Error('Firestore indisponível para registrar a baixa de estoque do pedido.');
     }
 
-    // Fallback em memória.
-    for (const item of orderItems) {
-      for (
-        const [id, prod] of this.inMemoryProducts.entries()
+    if (id) {
+      const order = this.inMemoryOrders.get(id);
+      if (!order) {
+        throw new Error('Pedido não encontrado para registrar a baixa de estoque.');
+      }
+      if (
+        orderUpdates &&
+        ['CONFIRMED', 'PAID_CONFIRMED'].includes(order.status)
       ) {
-        if (
-          item.productId ? String(id) === String(item.productId) :
-            (prod.name === item.name || prod.canonicalName === item.name)
-        ) {
-          const cur =
-            prod.stockQuantity ?? prod.estoque ?? 0;
-
-          const updated = Math.max(
-            0,
-            cur - (item.quantity || 1)
-          );
-
-          prod.stockQuantity = updated;
-          prod.estoque = updated;
-
-          this.inMemoryProducts.set(id, prod);
-
-          deductedList.push({
-            productId: id,
-            productName: prod.name,
-            qty: item.quantity,
-            newStock: updated,
-          });
-
-          break;
+        return {
+          success: true,
+          deducted: [],
+          alreadyConfirmed: true,
+          orderData: { ...order },
+        };
+      }
+      if (order.stockDeducted) {
+        if (!orderUpdates) {
+          return { success: true, deducted: [], alreadyDeducted: true };
         }
+        Object.assign(order, orderUpdates);
+        return { success: true, deducted: [], newlyConfirmed: true };
+      }
+      if (!stockControlEnabled || items.length === 0) {
+        order.stockDeducted = true;
+        order.stockDeductedAt = now;
+        if (orderUpdates) Object.assign(order, orderUpdates);
+        return {
+          success: true,
+          deducted: [],
+          ...(orderUpdates ? { newlyConfirmed: true } : {}),
+          ...(!stockControlEnabled ? { trackingDisabled: true } : {}),
+        };
+      }
+    } else if (!stockControlEnabled) {
+      return { success: true, deducted: [], trackingDisabled: true };
+    }
+
+    const deducted = [];
+    for (const item of items) {
+      for (const [productId, product] of this.inMemoryProducts.entries()) {
+        const matches = item.productId
+          ? String(productId) === String(item.productId)
+          : product.name === item.name || product.canonicalName === item.name;
+        if (!matches) continue;
+
+        const currentStock = product.stockQuantity ?? product.estoque ?? 0;
+        const quantity = Number(item.quantity) || 1;
+        const newStock = Math.max(0, currentStock - quantity);
+        product.stockQuantity = newStock;
+        product.estoque = newStock;
+        this.inMemoryProducts.set(productId, product);
+        deducted.push({
+          productId,
+          productName: product.name,
+          qty: quantity,
+          newStock,
+        });
+        break;
       }
     }
 
+    if (id) {
+      const order = this.inMemoryOrders.get(id);
+      order.stockDeducted = true;
+      order.stockDeductedAt = now;
+      if (orderUpdates) Object.assign(order, orderUpdates);
+    }
     return {
       success: true,
-      deducted: deductedList,
+      deducted,
+      ...(orderUpdates ? { newlyConfirmed: true } : {}),
     };
   }
 
