@@ -172,6 +172,128 @@ test("payment webhook confirms only the matching approved PIX order", async (t) 
   assert.equal(savedOrder.paymentTransactionId, String(payment.id));
 });
 
+test("storefront PIX stock deduction is idempotent across order creation and repeated webhooks", async (t) => {
+  const config = require("../src/config/env");
+  const previousServiceUrl = config.tasks.serviceUrl;
+  config.tasks.serviceUrl = "https://conflora.example";
+  t.after(() => {
+    config.tasks.serviceUrl = previousServiceUrl;
+  });
+  const repository = new FirestoreRepository({ isInMemory: true });
+  repository.inMemoryProducts.set("plant", {
+    id: "plant",
+    name: "Muda de teste",
+    price: order.total,
+    stockQuantity: 10,
+    status: "ATIVO",
+  });
+  const createDirectOrder = repository.createDirectOrder.bind(repository);
+  // O teste exercita a rota de criação; o repositório em memória substitui
+  // apenas o requisito de persistência que produção exige para iniciar PIX.
+  repository.createDirectOrder = (data) => createDirectOrder(data);
+  let paymentOrderId = "";
+  let payment = approvedPayment();
+  const app = createApp({
+    messageService: {
+      firestoreRepo: repository,
+      whatsappClient: {
+        sendTemplate: async () => ({ success: true }),
+        sendTextMessage: async () => ({ success: true }),
+      },
+    },
+    mercadoPagoClient: {
+      checkoutConfigured: true,
+      createPixCheckout: async ({ order: checkoutOrder }) => {
+        paymentOrderId = checkoutOrder.id;
+        payment = approvedPayment({
+          external_reference: paymentOrderId,
+          transaction_amount: checkoutOrder.total,
+        });
+        return {
+          id: "preference-test",
+          checkoutUrl: "https://www.mercadopago.com.br/checkout/test",
+        };
+      },
+      verifyWebhookSignature: () => true,
+      getPayment: async () => payment,
+    },
+  });
+  const server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+  const createResponse = await fetch(`${baseUrl}/api/orders`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      customerName: "Cliente teste",
+      customerPhone: "64999999999",
+      paymentMethod: "PIX",
+      items: [{ productId: "plant", quantity: 2 }],
+    }),
+  });
+  assert.equal(createResponse.status, 200);
+  const created = await createResponse.json();
+  assert.equal(paymentOrderId, created.order.id);
+  assert.equal(payment.external_reference, created.order.id);
+  assert.equal(created.order.paymentMethod, "PIX");
+  assert.equal(created.order.total, order.total * 2);
+  assert.equal(created.order.stockDeducted, true);
+  assert.equal(repository.inMemoryProducts.get("plant").stockQuantity, 8);
+
+  const webhookUrl = `${baseUrl}/webhooks/mercadopago?type=payment&data.id=${payment.id}`;
+  const sendWebhook = () =>
+    fetch(webhookUrl, {
+      method: "POST",
+      headers: { "x-signature": "test", "x-request-id": "request-123" },
+    });
+  const concurrentResponses = await Promise.all([sendWebhook(), sendWebhook()]);
+  for (const response of concurrentResponses) assert.equal(response.status, 200);
+  assert.equal((await sendWebhook()).status, 200);
+
+  const savedOrder = await repository.getOrderById(paymentOrderId);
+  assert.equal(savedOrder.status, "CONFIRMED");
+  assert.equal(savedOrder.stockDeducted, true);
+  assert.equal(repository.inMemoryProducts.get("plant").stockQuantity, 8);
+});
+
+test("payment webhook does not confirm a paid order when stock deduction fails", async (t) => {
+  const repository = new FirestoreRepository({ isInMemory: true });
+  await repository.createDirectOrder({
+    ...order,
+    status: "AWAITING_PIX",
+    mercadoPagoPreferenceId: "preference-test",
+  });
+  repository.deductStock = async () => {
+    throw new Error("stock persistence unavailable");
+  };
+  const payment = approvedPayment();
+  const app = createApp({
+    messageService: { firestoreRepo: repository },
+    mercadoPagoClient: {
+      configured: true,
+      verifyWebhookSignature: () => true,
+      getPayment: async () => payment,
+    },
+  });
+  const server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+
+  const response = await fetch(
+    `http://127.0.0.1:${server.address().port}/webhooks/mercadopago?type=payment&data.id=${payment.id}`,
+    {
+      method: "POST",
+      headers: { "x-signature": "test", "x-request-id": "request-123" },
+    },
+  );
+  assert.equal(response.status, 500);
+  const savedOrder = await repository.getOrderById(order.id);
+  assert.equal(savedOrder.status, "AWAITING_PIX");
+  assert.equal(savedOrder.stockDeducted, undefined);
+});
+
 test("payment webhook does not confirm amount mismatches", async (t) => {
   const repository = new FirestoreRepository({ isInMemory: true });
   await repository.createDirectOrder({
