@@ -1,4 +1,5 @@
 const { createHmac, timingSafeEqual } = require("node:crypto");
+const config = require('../config/env');
 
 const API_URL = "https://api.mercadopago.com";
 
@@ -7,10 +8,12 @@ class MercadoPagoClient {
     accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN || "",
     webhookSecret = process.env.MERCADO_PAGO_WEBHOOK_SECRET || "",
     fetchImpl = globalThis.fetch,
+    expectedLiveMode = config.mercadoPago.expectedLiveMode,
   } = {}) {
     this.accessToken = accessToken;
     this.webhookSecret = webhookSecret;
     this.fetchImpl = fetchImpl;
+    this.expectedLiveMode = expectedLiveMode;
   }
 
   get configured() {
@@ -101,6 +104,9 @@ class MercadoPagoClient {
     ) {
       throw new Error("O Mercado Pago não retornou um link de pagamento válido.");
     }
+    if (this.expectedLiveMode !== null && preference.live_mode !== this.expectedLiveMode) {
+      throw new Error('O modo do checkout Mercado Pago não corresponde ao ambiente configurado.');
+    }
     return {
       id: preference.id,
       checkoutUrl: preference.init_point,
@@ -158,12 +164,13 @@ class MercadoPagoClient {
   }
 }
 
-function isApprovedPixPayment(payment, order) {
+function isApprovedPixPayment(payment, order, { expectedLiveMode = config.mercadoPago.expectedLiveMode } = {}) {
   const expectedAmount = Number(order.total);
   const amount = Number(payment?.transaction_amount);
   const createdAt = Date.parse(payment?.date_created || "");
   const approvedAt = Date.parse(payment?.date_approved || "");
   return (
+    (expectedLiveMode === null || payment?.live_mode === expectedLiveMode) &&
     payment?.status === "approved" &&
     payment?.payment_method_id === "pix" &&
     payment?.currency_id === "BRL" &&
@@ -179,3 +186,4 @@ function isApprovedPixPayment(payment, order) {
 }
 
 module.exports = { MercadoPagoClient, isApprovedPixPayment };
+
