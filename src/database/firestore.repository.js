@@ -6,6 +6,12 @@ const Logger = require('../shared/logger');
 const { productStatus } = require('../catalog/product-status');
 const productImageStorageService = require('../catalog/product-image-storage');
 const {
+  PAID_ORDER_STATUSES,
+  validateOrderConfirmation,
+  validateStockQuantity,
+  remainingStock,
+} = require('../orders/order-integrity');
+const {
   generateStandardTags,
   generateStandardDescription,
   isGoogleDrivePath,
@@ -661,108 +667,19 @@ class FirestoreRepository {
   // --- Produtos e Estoque (AppSheet & WhatsApp) ---
 
   async getAllProducts() {
-    if (this.isInMemory) {
-      return Array.from(this.inMemoryProducts.values());
-    }
-
-    if (this.firestore && !this._firestoreClientDisabled) {
-      try {
-        const snapshot = await this.firestore
-          .collection('products')
-          .get();
-
-        const products = snapshot.docs.map((doc) => ({
-          ...doc.data(),
-          id: doc.id,
-        }));
-
-        this.inMemoryProducts.clear();
-
-        for (const product of products) {
-          this.inMemoryProducts.set(product.id, product);
-        }
-
-        return products;
-      } catch (err) {
-        if (
-          err.code === 7 ||
-          err.message?.includes('PERMISSION_DENIED') ||
-          err.message?.includes('Missing or insufficient permissions')
-        ) {
-          this._firestoreClientDisabled = true;
-        } else {
-          Logger.warn('Erro ao buscar produtos no Firestore client', {
-            error: err.message,
-          });
-        }
-      }
-    }
-
-    // Fallback via Firebase REST API usando API Key
-    if (config.firebase?.apiKey) {
-      try {
-        const restProducts = await this.fetchAllProductsViaRest();
-        if (restProducts && restProducts.length > 0) {
-          this.inMemoryProducts.clear();
-          for (const product of restProducts) {
-            this.inMemoryProducts.set(product.id, product);
-          }
-          return restProducts;
-        }
-      } catch (restErr) {
-        Logger.warn('Aviso: fallback REST do Firestore não disponível', {
-          error: restErr.message,
-        });
-      }
-    }
-
-    return Array.from(this.inMemoryProducts.values());
+    if (this.isInMemory) return Array.from(this.inMemoryProducts.values());
+    if (!this.firestore) throw new Error('Firestore indisponível.');
+    const snapshot = await this.firestore.collection('products').get();
+    return snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }));
   }
 
   async getProductById(productId) {
-    if (!productId) {
-      return null;
-    }
-    const cleanId = String(productId).trim();
-    if (this.isInMemory) {
-      return this.inMemoryProducts.get(cleanId) || null;
-    }
-    if (this.inMemoryProducts.has(cleanId)) {
-      return this.inMemoryProducts.get(cleanId);
-    }
-
-    if (this.firestore && !this._firestoreClientDisabled) {
-      try {
-        const doc = await this.firestore
-          .collection('products')
-          .doc(cleanId)
-          .get();
-        if (doc.exists) {
-          const prod = { ...doc.data(), id: doc.id };
-          this.inMemoryProducts.set(cleanId, prod);
-          return prod;
-        }
-      } catch (err) {
-        if (
-          err.code === 7 ||
-          err.message?.includes('PERMISSION_DENIED')
-        ) {
-          this._firestoreClientDisabled = true;
-        }
-      }
-    }
-
-    if (config.firebase?.apiKey) {
-      try {
-        const prod = await this.fetchDocViaRest('products', cleanId);
-        if (prod) {
-          this.inMemoryProducts.set(cleanId, prod);
-          return prod;
-        }
-      } catch {}
-    }
-
-    return this.inMemoryProducts.get(cleanId) || null;
+    if (!productId) return null;
+    const id = String(productId).trim();
+    if (this.isInMemory) return this.inMemoryProducts.get(id) || null;
+    if (!this.firestore) throw new Error('Firestore indisponível.');
+    const snapshot = await this.firestore.collection('products').doc(id).get();
+    return snapshot.exists ? { ...snapshot.data(), id: snapshot.id } : null;
   }
 
   async saveProductPhoto(photoDoc) {
@@ -986,6 +903,9 @@ class FirestoreRepository {
   }
 
   async uploadProductImage(photoDoc) {
+    if (this.isInMemory && this.productImageStorage === productImageStorageService) {
+      return { imagePath: '', imageUrl: `/api/images/${photoDoc.id}` };
+    }
     return this.productImageStorage.uploadProductImage({
       productId: photoDoc.productId,
       fileName: photoDoc.fileName,

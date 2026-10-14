@@ -482,7 +482,7 @@ test('17. Firestore Repository: Entrada ágil de estoque, venda balcão e import
   const manualOrder = await repo.createManualOrder({
     customerName: 'Cliente Balcão Mineiros',
     customerPhone: '5564999998888',
-    paymentMethod: 'PIX',
+    paymentMethod: 'DINHEIRO',
     items: [{ productId: prodId, name: products[0].name, price: products[0].price, quantity: 2 }],
   });
   assert.ok(manualOrder.id);
