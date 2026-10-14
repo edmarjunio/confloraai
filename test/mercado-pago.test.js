@@ -139,6 +139,7 @@ test("PIX orders cannot fall back to volatile in-memory persistence", async () =
 
 test("payment webhook confirms only the matching approved PIX order", async (t) => {
   const repository = new FirestoreRepository({ isInMemory: true });
+  repository.inMemoryProducts.set('plant', { name: 'Muda de teste', stockQuantity: 10 });
   await repository.createDirectOrder({
     ...order,
     status: "AWAITING_PIX",
@@ -244,8 +245,8 @@ test("storefront PIX deduction and concurrent/repeated webhooks are idempotent",
   assert.equal(createResponse.status, 200);
   const created = await createResponse.json();
   assert.equal(paymentOrderId, created.order.id);
-  assert.equal(created.order.stockDeducted, true);
-  assert.equal(repository.inMemoryProducts.get("plant").stockQuantity, 8);
+  assert.equal(created.order.stockDeducted, undefined);
+  assert.equal(repository.inMemoryProducts.get("plant").stockQuantity, 10);
   assert.equal(receiptSends, 1);
 
   const webhookUrl = `${baseUrl}/webhooks/mercadopago?type=payment&data.id=${payment.id}`;
