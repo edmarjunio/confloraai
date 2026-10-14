@@ -1,6 +1,5 @@
 const config = require('../config/env');
 const Logger = require('../shared/logger');
-const { DEFAULT_CATALOG_ITEMS } = require('../catalog/default-catalog');
 
 class SystemStatusService {
   constructor({ catalogRepo, firestoreRepo, whatsappClient }) {
@@ -32,14 +31,14 @@ class SystemStatusService {
     // 3. Firestore Database status
     const firestoreStatus = await this.checkFirestoreStatus();
 
-    // 4. Default Catalog (Planilha Oficial LISTA DE PRODUTOS)
+    // O catálogo estático foi removido; o diagnóstico não deve importá-lo.
     const defaultCatalogStatus = {
-      status: 'ONLINE',
-      badge: 'Referência estática',
-      color: '#10b981',
-      title: 'Catálogo inicial de referência (não substitui produtos importados)',
-      totalItems: DEFAULT_CATALOG_ITEMS.length,
-      categoriesCount: new Set(DEFAULT_CATALOG_ITEMS.map((i) => i.category || i.categoria)).size,
+      status: 'DISABLED',
+      badge: 'Catálogo estático desativado',
+      color: '#64748b',
+      title: 'Produtos cadastrados no Firestore',
+      totalItems: 0,
+      categoriesCount: 0,
       autoFallback: 'DESATIVADO: o catálogo atual vem do Firestore',
       lastVerified: new Date().toISOString(),
     };
@@ -153,3 +152,4 @@ class SystemStatusService {
 module.exports = {
   SystemStatusService,
 };
+
