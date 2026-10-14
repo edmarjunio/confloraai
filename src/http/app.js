@@ -926,6 +926,13 @@ function createApp({
     });
   messageService.mercadoPagoClient = payments;
   const app = express();
+  if (config.appEnvironment === 'dev') {
+    app.use((_req, res, next) => {
+      res.setHeader('X-Conflora-Environment', 'dev');
+      res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+      next();
+    });
+  }
   app.use('/api', (_req, res, next) => {
     res.setHeader('Cache-Control', 'private, no-store');
     next();
@@ -1065,7 +1072,13 @@ function createApp({
 
   // Health check
   app.get('/health', (_req, res) => {
-    res.status(200).json({ status: 'ok', uptime: process.uptime() });
+    res.status(200).json({
+      status: 'ok', uptime: process.uptime(),
+      environment: config.appEnvironment,
+      projectId: config.gcp.projectId,
+      paymentProvider: 'MERCADO_PAGO',
+      expectedLiveMode: config.mercadoPago.expectedLiveMode,
+    });
   });
 
   // Meta Verification: Política de Privacidade
@@ -2708,3 +2721,4 @@ module.exports = {
   renderDataDeletionHtml,
   renderTermsOfServiceHtml,
 };
+

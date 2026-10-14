@@ -20,4 +20,6 @@ for (const [name, configured] of checks) {
   console.log(`${configured ? 'OK' : 'PENDENTE'}: ${name}`);
 }
 console.log('Este diagnóstico não valida credenciais na API nem permissões do Firestore.');
+console.log(`Ambiente: ${config.appEnvironment}; projeto: ${config.gcp.projectId}; modo real exigido: ${config.mercadoPago.expectedLiveMode === true}`);
 process.exitCode = checks.every(([, configured]) => configured) ? 0 : 1;
+

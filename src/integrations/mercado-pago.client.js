@@ -1,4 +1,5 @@
 const { createHmac, timingSafeEqual } = require("node:crypto");
+const config = require('../config/env');
 
 const API_URL = "https://api.mercadopago.com";
 
@@ -158,12 +159,13 @@ class MercadoPagoClient {
   }
 }
 
-function isApprovedPixPayment(payment, order) {
+function isApprovedPixPayment(payment, order, { expectedLiveMode = config.mercadoPago.expectedLiveMode } = {}) {
   const expectedAmount = Number(order.total);
   const amount = Number(payment?.transaction_amount);
   const createdAt = Date.parse(payment?.date_created || "");
   const approvedAt = Date.parse(payment?.date_approved || "");
   return (
+    (expectedLiveMode === null || payment?.live_mode === expectedLiveMode) &&
     payment?.status === "approved" &&
     payment?.payment_method_id === "pix" &&
     payment?.currency_id === "BRL" &&
@@ -179,3 +181,4 @@ function isApprovedPixPayment(payment, order) {
 }
 
 module.exports = { MercadoPagoClient, isApprovedPixPayment };
+
