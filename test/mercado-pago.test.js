@@ -255,7 +255,7 @@ test("storefront PIX deduction and concurrent/repeated webhooks are idempotent",
       headers: { "x-signature": "test", "x-request-id": "request-123" },
     });
   const concurrentResponses = await Promise.all([sendWebhook(), sendWebhook()]);
-  for (const response of concurrentResponses) assert.equal(response.status, 200);
+  for (const response of concurrentResponses) {assert.equal(response.status, 200);}
   assert.equal((await sendWebhook()).status, 200);
 
   const savedOrder = await repository.getOrderById(paymentOrderId);
