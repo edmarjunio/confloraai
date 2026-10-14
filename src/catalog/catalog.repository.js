@@ -1,4 +1,4 @@
-const { normalizeText, parseCurrencyString, toSingular } = require('../shared/string.util');
+const { normalizeText, toSingular } = require('../shared/string.util');
 const Logger = require('../shared/logger');
 const { normalizeCatalogItem } = require('./normalize-catalog-item');
 
@@ -17,7 +17,7 @@ function buildDriveDirectImageUrl(fileId, rawUrl) {
 
 class CatalogRepository {
   constructor({ mockData = null, firestoreRepo = null } = {}) {
-    if (mockData && process.env.NODE_ENV !== 'test') throw new Error('Catálogo simulado permitido apenas em testes.');
+    if (mockData && process.env.NODE_ENV !== 'test') {throw new Error('Catálogo simulado permitido apenas em testes.');}
     this.items = [];
     this.productByNameMap = new Map();
     this.productByTagMap = new Map();
@@ -26,13 +26,13 @@ class CatalogRepository {
     this.subcategoriesSet = new Set();
     this.mockData = mockData;
     this.firestoreRepo = firestoreRepo;
-    if (mockData) this.loadItems(mockData);
+    if (mockData) {this.loadItems(mockData);}
   }
 
   async refreshCatalog() {
-    if (this.mockData) return this.loadItems(this.mockData);
+    if (this.mockData) {return this.loadItems(this.mockData);}
     try {
-      if (!this.firestoreRepo) throw new Error('Repositório Firestore não configurado.');
+      if (!this.firestoreRepo) {throw new Error('Repositório Firestore não configurado.');}
       this.loadItems(await this.firestoreRepo.getAllProducts());
     } catch (error) {
       this.loadItems([]);
@@ -87,10 +87,10 @@ class CatalogRepository {
       }
 
       const productGroup = this.productByNameMap.get(normalizedName);
-      if (item.cuidados_basicos && !productGroup.cuidados_basicos) productGroup.cuidados_basicos = item.cuidados_basicos;
-      if (item.ambiente_ideal && !productGroup.ambiente_ideal) productGroup.ambiente_ideal = item.ambiente_ideal;
-      if (item.dicas_armazenamento && !productGroup.dicas_armazenamento) productGroup.dicas_armazenamento = item.dicas_armazenamento;
-      if (item.durabilidade && !productGroup.durabilidade) productGroup.durabilidade = item.durabilidade;
+      if (item.cuidados_basicos && !productGroup.cuidados_basicos) {productGroup.cuidados_basicos = item.cuidados_basicos;}
+      if (item.ambiente_ideal && !productGroup.ambiente_ideal) {productGroup.ambiente_ideal = item.ambiente_ideal;}
+      if (item.dicas_armazenamento && !productGroup.dicas_armazenamento) {productGroup.dicas_armazenamento = item.dicas_armazenamento;}
+      if (item.durabilidade && !productGroup.durabilidade) {productGroup.durabilidade = item.durabilidade;}
       productGroup.items.push(item);
 
       // Preços sem duplicidade ordenados
