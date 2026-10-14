@@ -303,7 +303,10 @@ class CatalogRepository {
 
     return Array.from(matchedProducts.values());
   }
-
+  
+  isCacheValid() {
+    return Array.isArray(this.items) && this.items.length > 0;
+  }
 
 }
 
