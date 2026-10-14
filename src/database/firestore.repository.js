@@ -1242,11 +1242,7 @@ class FirestoreRepository {
     const order = await this.createDirectOrder(orderData, { requirePersistence });
 
     if (order.status === 'CONFIRMED' || order.status === 'PAID_CONFIRMED') {
-      await this.deductStock(
-        items,
-        customerPhone || 'Balcão'
-      ).catch(() => {});
-      order.stockDeducted = true;
+      await this.deductStock(items, customerPhone || 'Balcão', order.id);
     }
 
     return order;
@@ -1351,6 +1347,15 @@ class FirestoreRepository {
       updateData.changeGiven = changeGiven;
     }
 
+    // A baixa idempotente é registrada antes do estado pago. Se ela falhar,
+    // a confirmação não é persistida; se a confirmação falhar depois, o retry
+    // reconhece o marcador e não reduz o estoque novamente.
+    await this.deductStock(
+      order.items,
+      order.customerPhone || 'Caixa',
+      order.id || orderId,
+    );
+
     if (this.firestore && !this._firestoreClientDisabled) {
       try {
         await this.firestore.collection('orders').doc(String(orderId)).update(updateData);
@@ -1381,11 +1386,6 @@ class FirestoreRepository {
       Object.assign(local, updateData);
     }
     Object.assign(order, updateData);
-
-    if (!order.stockDeducted && Array.isArray(order.items)) {
-      await this.deductStock(order.items, order.customerPhone || 'Caixa').catch(() => {});
-      order.stockDeducted = true;
-    }
 
     return order;
   }
@@ -2038,162 +2038,209 @@ class FirestoreRepository {
     return value;
   }
 
-  async deductStock(orderItems, customerPhone = '') {
-    if (!(await this.getInventorySettings()).stockControlEnabled) {
-      return { success: true, deducted: [], trackingDisabled: true };
-    }
-    if (
-      !Array.isArray(orderItems) ||
-      orderItems.length === 0
-    ) {
-      return {
-        success: true,
-        deducted: [],
-      };
-    }
+  async deductStock(orderItems, customerPhone = '', orderId = '') {
+    const stockControlEnabled = (await this.getInventorySettings()).stockControlEnabled;
+    const items = Array.isArray(orderItems) ? orderItems : [];
+    const id = orderId ? String(orderId) : '';
+    const now = new Date().toISOString();
 
-    const deductedList = [];
-
-    if (this.firestore) {
+    if (this.firestore && !this._firestoreClientDisabled) {
       try {
-        const now = new Date().toISOString();
+        const result = await this.firestore.runTransaction(async (transaction) => {
+          let orderRef = null;
+          if (id) {
+            orderRef = this.firestore.collection('orders').doc(id);
+            const orderSnapshot = await transaction.get(orderRef);
+            if (!orderSnapshot.exists) {
+              throw new Error('Pedido não encontrado para registrar a baixa de estoque.');
+            }
+            if (orderSnapshot.data()?.stockDeducted) {
+              return { success: true, deducted: [], alreadyDeducted: true };
+            }
+          }
 
-        await this.firestore.runTransaction(
-          async (transaction) => {
-            for (const item of orderItems) {
-              const qty = item.quantity || 1;
+          const markOrderDeducted = () => {
+            if (orderRef) {
+              transaction.update(orderRef, {
+                stockDeducted: true,
+                stockDeductedAt: now,
+              });
+            }
+          };
 
-              // Busca produto por ID ou por nome.
-              let docRef = null;
-              let currentData = null;
+          if (!stockControlEnabled || items.length === 0) {
+            markOrderDeducted();
+            return {
+              success: true,
+              deducted: [],
+              ...(!stockControlEnabled ? { trackingDisabled: true } : {}),
+            };
+          }
 
-              if (item.productId) {
-                docRef = this.firestore
-                  .collection('products')
-                  .doc(String(item.productId));
+          const resolvedItems = [];
+          for (const item of items) {
+            let docRef = item.productId
+              ? this.firestore.collection('products').doc(String(item.productId))
+              : null;
+            let productData = null;
 
-                const snap = await transaction.get(docRef);
-
-                if (snap.exists) {
-                  currentData = snap.data();
-                }
+            if (docRef) {
+              const productSnapshot = await transaction.get(docRef);
+              if (productSnapshot.exists) {
+                productData = productSnapshot.data();
               }
+            }
 
-              if (!currentData) {
-                const querySnap = await this.firestore
-                  .collection('products')
+            if (!productData && item.name) {
+              const querySnapshot = await transaction.get(
+                this.firestore.collection('products')
                   .where('name', '==', item.name)
-                  .limit(1)
-                  .get();
-
-                if (!querySnap.empty) {
-                  const docSnap = querySnap.docs[0];
-
-                  docRef = docSnap.ref;
-                  currentData = docSnap.data();
-                }
+                  .limit(1),
+              );
+              if (!querySnapshot.empty) {
+                const productSnapshot = querySnapshot.docs[0];
+                docRef = productSnapshot.ref;
+                productData = productSnapshot.data();
               }
+            }
 
-              if (docRef && currentData) {
-                const currentStock =
-                  typeof currentData.stockQuantity === 'number'
-                    ? currentData.stockQuantity
-                    : typeof currentData.estoque === 'number'
-                      ? currentData.estoque
-                      : 0;
-
-                const newStock = Math.max(
-                  0,
-                  currentStock - qty
-                );
-
-                transaction.update(docRef, {
-                  stockQuantity: newStock,
-                  estoque: newStock,
-                  updatedAt: now,
-                });
-
-                // Log de movimentação de estoque.
-                const movementRef = this.firestore
-                  .collection('stock_movements')
-                  .doc();
-
-                transaction.set(movementRef, {
-                  productId: docRef.id,
-                  productName: currentData.name || item.name,
-                  quantityDeducted: qty,
-                  previousStock: currentStock,
-                  newStock,
-                  type: 'SALE_WHATSAPP',
-                  customerPhone,
-                  createdAt: now,
-                });
-
-                deductedList.push({
-                  productId: docRef.id,
-                  productName: currentData.name || item.name,
-                  qty,
-                  newStock,
-                });
+            if (docRef && productData) {
+              const key = docRef.id;
+              const existing = resolvedItems.find((entry) => entry.docRef.id === key);
+              const quantity = Number(item.quantity) || 1;
+              if (existing) {
+                existing.quantity += quantity;
+              } else {
+                resolvedItems.push({ docRef, productData, item, quantity });
               }
             }
           }
-        );
 
+          const deducted = [];
+          for (const entry of resolvedItems) {
+            const currentStock =
+              typeof entry.productData.stockQuantity === 'number'
+                ? entry.productData.stockQuantity
+                : typeof entry.productData.estoque === 'number'
+                  ? entry.productData.estoque
+                  : 0;
+            const newStock = Math.max(0, currentStock - entry.quantity);
+            transaction.update(entry.docRef, {
+              stockQuantity: newStock,
+              estoque: newStock,
+              updatedAt: now,
+            });
+
+            const movementRef = this.firestore.collection('stock_movements').doc();
+            transaction.set(movementRef, {
+              productId: entry.docRef.id,
+              productName: entry.productData.name || entry.item.name,
+              quantityDeducted: entry.quantity,
+              previousStock: currentStock,
+              newStock,
+              type: 'SALE_WHATSAPP',
+              customerPhone,
+              createdAt: now,
+            });
+            deducted.push({
+              productId: entry.docRef.id,
+              productName: entry.productData.name || entry.item.name,
+              qty: entry.quantity,
+              newStock,
+            });
+          }
+
+          markOrderDeducted();
+          return { success: true, deducted };
+        });
+
+        if (id) {
+          const order = this.inMemoryOrders.get(id);
+          if (order) {
+            order.stockDeducted = true;
+            order.stockDeductedAt = order.stockDeductedAt || now;
+          }
+        }
+        for (const item of result.deducted) {
+          const product = this.inMemoryProducts.get(String(item.productId));
+          if (product) {
+            product.stockQuantity = item.newStock;
+            product.estoque = item.newStock;
+            this.inMemoryProducts.set(String(item.productId), product);
+          }
+        }
         Logger.info(
-          `Baixa atômica de estoque concluída no Firestore para ${deductedList.length} itens.`
+          `Baixa atômica de estoque concluída no Firestore para ${result.deducted.length} itens.`
         );
-
-        return {
-          success: true,
-          deducted: deductedList,
-        };
+        return result;
       } catch (err) {
+        // Uma venda vinculada a pedido não pode confirmar usando apenas memória:
+        // isso deixaria Firestore e estoque divergentes.
+        if (id) {
+          throw new Error('Não foi possível persistir a baixa de estoque do pedido.', {
+            cause: err,
+          });
+        }
         Logger.warn(
           'Erro ao realizar baixa atômica no Firestore; aplicando em memória',
           { error: err.message }
         );
       }
+    } else if (id && this.firestore) {
+      throw new Error('Firestore indisponível para registrar a baixa de estoque do pedido.');
     }
 
-    // Fallback em memória.
-    for (const item of orderItems) {
-      for (
-        const [id, prod] of this.inMemoryProducts.entries()
-      ) {
-        if (
-          item.productId ? String(id) === String(item.productId) :
-            (prod.name === item.name || prod.canonicalName === item.name)
-        ) {
-          const cur =
-            prod.stockQuantity ?? prod.estoque ?? 0;
+    if (id) {
+      const order = this.inMemoryOrders.get(id);
+      if (!order) {
+        throw new Error('Pedido não encontrado para registrar a baixa de estoque.');
+      }
+      if (order.stockDeducted) {
+        return { success: true, deducted: [], alreadyDeducted: true };
+      }
+      if (!stockControlEnabled || items.length === 0) {
+        order.stockDeducted = true;
+        order.stockDeductedAt = now;
+        return {
+          success: true,
+          deducted: [],
+          ...(!stockControlEnabled ? { trackingDisabled: true } : {}),
+        };
+      }
+    } else if (!stockControlEnabled) {
+      return { success: true, deducted: [], trackingDisabled: true };
+    }
 
-          const updated = Math.max(
-            0,
-            cur - (item.quantity || 1)
-          );
+    const deducted = [];
+    for (const item of items) {
+      for (const [productId, product] of this.inMemoryProducts.entries()) {
+        const matches = item.productId
+          ? String(productId) === String(item.productId)
+          : product.name === item.name || product.canonicalName === item.name;
+        if (!matches) continue;
 
-          prod.stockQuantity = updated;
-          prod.estoque = updated;
-
-          this.inMemoryProducts.set(id, prod);
-
-          deductedList.push({
-            productId: id,
-            productName: prod.name,
-            qty: item.quantity,
-            newStock: updated,
-          });
-
-          break;
-        }
+        const currentStock = product.stockQuantity ?? product.estoque ?? 0;
+        const quantity = Number(item.quantity) || 1;
+        const newStock = Math.max(0, currentStock - quantity);
+        product.stockQuantity = newStock;
+        product.estoque = newStock;
+        this.inMemoryProducts.set(productId, product);
+        deducted.push({
+          productId,
+          productName: product.name,
+          qty: quantity,
+          newStock,
+        });
+        break;
       }
     }
 
-    return {
-      success: true,
-      deducted: deductedList,
-    };
+    if (id) {
+      const order = this.inMemoryOrders.get(id);
+      order.stockDeducted = true;
+      order.stockDeductedAt = now;
+    }
+    return { success: true, deducted };
   }
 
   async getStockMovements(limit = 20) {

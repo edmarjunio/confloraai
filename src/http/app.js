@@ -1487,7 +1487,13 @@ function createApp({
         paymentCheckoutUrl: mercadoPagoPreference?.checkoutUrl || '',
       }, { requirePersistence: resolvedPaymentMethod === 'PIX' });
 
-      await messageService.firestoreRepo.deductStock(orderItems, customerPhone);
+      // Registrar a baixa junto ao pedido permite que a confirmação PIX e os
+      // webhooks repetidos reconheçam que o estoque já foi reduzido.
+      await messageService.firestoreRepo.deductStock(
+        orderItems,
+        customerPhone,
+        order.id,
+      );
       const receiptText = formatOrderReceipt(order);
       let receiptDelivery = { sent: false, reason: 'Envio não solicitado.' };
       if (resolvedPaymentMethod === 'PIX') {
