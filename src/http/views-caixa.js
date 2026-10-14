@@ -1444,12 +1444,6 @@ function renderCaixaHtml() {
       const checkoutLink = document.getElementById('pixCheckoutLink');
       checkoutLink.href = order.paymentCheckoutUrl || '#';
       checkoutLink.hidden = !order.paymentCheckoutUrl;
-      if (
-        order.receiptDelivery?.sent === false &&
-        order.receiptDelivery.reason !== 'Envio não solicitado.'
-      ) {
-        showToast('Recibo não enviado pelo WhatsApp: ' + order.receiptDelivery.reason);
-      }
 
       const statusBox = document.getElementById('pixLiveStatus');
       statusBox.className = 'live-status-box waiting';
