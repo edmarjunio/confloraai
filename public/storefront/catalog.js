@@ -8,19 +8,17 @@ import {
 } from "./ui.js";
 import { icon } from "./icons.js";
 import { searchProducts } from "./guided-search.mjs";
-import { tr, onLanguageChange } from "./i18n/index.js";
-import { cartStore, uiStore } from "./store/index.js";
 
 const PRODUCT_HIGHLIGHTS = [
-  { key: "highlight.sun", icon: "☀", tone: "sun", terms: ["sol pleno", "pleno sol"] },
-  { key: "highlight.half_shade", icon: "◐", tone: "shade", terms: ["meia sombra", "luz indireta"] },
-  { key: "highlight.shade", icon: "☾", tone: "shade", terms: ["sombra"] },
-  { key: "highlight.watered", icon: "💧", tone: "water", terms: ["irrigado", "solo umido", "solo humido"] },
-  { key: "highlight.aquatic", icon: "💧", tone: "water", terms: ["aquatico", "aquatica"] },
-  { key: "highlight.exotic_bird", icon: "✦", tone: "pet", terms: ["ave exotica", "ave ornamental"] },
-  { key: "highlight.pet_friendly", icon: "🐾", tone: "pet", terms: ["pet friendly", "seguro para pets"] },
-  { key: "highlight.fruit", icon: "●", tone: "fruit", terms: ["frutifera", "frutifero"] },
-  { key: "highlight.flower", icon: "✿", tone: "flower", terms: ["florifera", "florifero", "flores ornamentais"] },
+  { label: "Sol Pleno", icon: "☀", tone: "sun", terms: ["sol pleno", "pleno sol"] },
+  { label: "Meia Sombra", icon: "◐", tone: "shade", terms: ["meia sombra", "luz indireta"] },
+  { label: "Sombra", icon: "☾", tone: "shade", terms: ["sombra"] },
+  { label: "Irrigado", icon: "💧", tone: "water", terms: ["irrigado", "solo umido", "solo humido"] },
+  { label: "Aquático", icon: "💧", tone: "water", terms: ["aquatico", "aquatica"] },
+  { label: "Ave Exótica", icon: "✦", tone: "pet", terms: ["ave exotica", "ave ornamental"] },
+  { label: "Pet Friendly", icon: "🐾", tone: "pet", terms: ["pet friendly", "seguro para pets"] },
+  { label: "Frutífera", icon: "●", tone: "fruit", terms: ["frutifera", "frutifero"] },
+  { label: "Florífera", icon: "✿", tone: "flower", terms: ["florifera", "florifero", "flores ornamentais"] },
 ];
 
 function normalizeProductText(value) {
@@ -51,7 +49,7 @@ function getProductHighlights(product) {
   ].join(" "));
 
   return PRODUCT_HIGHLIGHTS.filter((highlight) => {
-    if (highlight.key === "highlight.shade" && sourceText.includes("meia sombra")) {
+    if (highlight.label === "Sombra" && sourceText.includes("meia sombra")) {
       return false;
     }
     return highlight.terms.some((term) => sourceText.includes(term));
@@ -66,19 +64,12 @@ export function createCatalog(state, add, navigate) {
   const saved = storageGet(favoriteKey, []);
   const favorites = new Set(Array.isArray(saved) ? saved : []);
 
-  // Listen to reactive language changes from Zustand/i18n
-  onLanguageChange(() => {
-    if (!$("#catalogView").hidden) {
-      render();
-    }
-  });
-
   function favorite(product) {
     const button = element(
       "button",
       {
         class: "favorite",
-        "aria-label": tr("catalog.favorite_aria", { name: product.name }),
+        "aria-label": `Favoritar ${product.name}`,
         "aria-pressed": String(favorites.has(product.id)),
       },
       [icon("heart")],
@@ -135,7 +126,7 @@ export function createCatalog(state, add, navigate) {
     const photo = element("img", {
       src: product.imageUrl || "/store-assets/placeholder.svg",
       alt: product.imageIsIllustrative
-        ? tr("catalog.illustrative_image", { name: product.name })
+        ? `Imagem ilustrativa de ${product.name}`
         : product.name,
       loading: "lazy",
       decoding: "async",
@@ -163,14 +154,11 @@ export function createCatalog(state, add, navigate) {
     const button = element("button", {
       class: "primary",
       text: isInactive
-        ? "catalog.item_inactive".tr
+        ? "Item Inativo"
         : unavailable
-          ? "catalog.unavailable".tr
-          : "catalog.add_to_cart".tr,
-      onclick: () => {
-        add(product, product.saleUnit?.minimum || 1);
-        cartStore.getState().addItem(product, product.saleUnit?.minimum || 1);
-      },
+          ? "Indisponível"
+          : "Adicionar",
+      onclick: () => add(product, product.saleUnit?.minimum || 1),
     });
     button.disabled = unavailable;
     if (!isInactive) {
@@ -180,15 +168,11 @@ export function createCatalog(state, add, navigate) {
     const editBtn = element("button", {
       type: "button",
       class: "card-quick-edit",
-      title: "catalog.edit_product".tr,
+      title: "Editar produto",
       text: "✏️",
       onclick: (event) => {
         event.stopPropagation();
-        if (state.productEntry) {
-          state.productEntry.open(product);
-        } else {
-          uiStore.getState().openProductEntry(product);
-        }
+        state.productEntry?.open(product);
       },
     });
 
@@ -197,16 +181,16 @@ export function createCatalog(state, add, navigate) {
       { class: compact ? "recommendation" : `product-card ${isInactive ? "is-inactive" : ""}` },
       [
         ...(highlights.length
-          ? [element("div", { class: "product-feature-tags", "aria-label": "product.specifications".tr }, highlights.map((highlight) => element("span", {
+          ? [element("div", { class: "product-feature-tags", "aria-label": "Características do produto" }, highlights.map((highlight) => element("span", {
             class: `product-feature-tag ${highlight.tone}`,
-            text: `${highlight.icon} ${highlight.key.tr}`,
+            text: `${highlight.icon} ${highlight.label}`,
           })))]
           : []),
         ...(!compact ? [favorite(product), editBtn] : []),
         ...(isInactive
-          ? [element("div", { class: "badge-inactive", text: `⚠️ ${"catalog.item_inactive".tr} - ${"catalog.unavailable".tr}` })]
+          ? [element("div", { class: "badge-inactive", text: "⚠️ INATIVO - Indisponível" })]
           : []),
-        element("button", { class: "product-photo", "aria-label": `${product.name}`, onclick: open }, [photo]),
+        element("button", { class: "product-photo", "aria-label": `Ver ${product.name}`, onclick: open }, [photo]),
         element("div", { class: "product-content" }, [
           element("button", { class: "product-name", text: product.name, onclick: open }),
           element("small", {
@@ -239,11 +223,10 @@ export function createCatalog(state, add, navigate) {
       element("button", {
         type: "button",
         class: `category-chip${selectedCategory ? "" : " is-active"}`,
-        text: "catalog.all_categories".tr,
+        text: "Todas",
         "aria-pressed": String(!selectedCategory),
         onclick: () => {
           selectedCategory = "";
-          uiStore.getState().setActiveCategory("");
           pageSize = 24;
           render();
         },
@@ -256,7 +239,6 @@ export function createCatalog(state, add, navigate) {
           "aria-pressed": String(selectedCategory === category.id),
           onclick: () => {
             selectedCategory = category.id;
-            uiStore.getState().setActiveCategory(category.id);
             pageSize = 24;
             render();
           },
@@ -308,17 +290,16 @@ export function createCatalog(state, add, navigate) {
         element("p", {
           class: "empty",
           text: showingFavorites
-            ? "catalog.empty_desc".tr
-            : "catalog.empty_title".tr,
+            ? "Você ainda não salvou produtos. Toque no coração para guardá-los aqui."
+            : "Nenhum produto encontrado. Tente outra busca.",
         }),
       );
     }
-    $("#resultCount").textContent = tr("catalog.results_count", { count: list.length });
+    $("#resultCount").textContent = `${list.length} produtos`;
     $("#catalogTitle").textContent = showingFavorites
-      ? "mobile.nav_favorites".tr
-      : "catalog.title".tr;
+      ? "Seus produtos salvos"
+      : "Explore o catálogo";
     $("#loadMore").hidden = list.length <= pageSize;
-    $("#loadMore").textContent = "catalog.load_more".tr;
   }
 
   function setFavoritesView(show) {
@@ -334,17 +315,17 @@ export function createCatalog(state, add, navigate) {
     view.replaceChildren(
       element("button", {
         class: "quiet",
-        text: `← ${"product.back_to_catalog".tr}`,
+        text: "← Voltar ao catálogo",
         onclick: () => navigate(state.basePath || "/"),
       }),
     );
     if (!product) {
       view.append(
-        element("h1", { text: "catalog.empty_title".tr }),
+        element("h1", { text: "Produto não encontrado ou indisponível." }),
       );
       return;
     }
-    document.title = `${product.name} · ${state.config?.identity?.name || "Loja"}`;
+    document.title = `${product.name} · ${state.config.identity.name}`;
 
     const isInactive =
       product.status === "INATIVO" || product.isAvailable === false;
@@ -357,7 +338,7 @@ export function createCatalog(state, add, navigate) {
       view.append(
         element("div", {
           class: "inactive-banner",
-          text: `⚠️ ${"catalog.item_inactive".tr} - ${"catalog.unavailable".tr}`,
+          text: "⚠️ AVISO: Este produto está INATIVO no sistema e não está disponível para compra.",
         }),
       );
     }
@@ -376,7 +357,7 @@ export function createCatalog(state, add, navigate) {
       class: "detail-photo",
       src: images[0].url,
       alt: product.imageIsIllustrative
-        ? tr("catalog.illustrative_image", { name: product.name })
+        ? `Imagem ilustrativa de ${product.name}`
         : images[0].alt,
     });
     mainPhoto.addEventListener(
@@ -391,7 +372,7 @@ export function createCatalog(state, add, navigate) {
       value: product.saleUnit?.minimum || 1,
       min: product.saleUnit?.minimum || 1,
       step: product.saleUnit?.increment || 1,
-      "aria-label": "product.quantity".tr,
+      "aria-label": "Quantidade",
     });
     if (product.stock?.tracked) {
       quantity.max = product.stock.quantity;
@@ -409,14 +390,11 @@ export function createCatalog(state, add, navigate) {
       {
         class: "primary",
         text: isInactive
-          ? "catalog.item_inactive".tr
+          ? "Item Inativo"
           : unavailable
-            ? "catalog.unavailable".tr
-            : "catalog.add_to_cart".tr,
-        onclick: () => {
-          add(product, Number(quantity.value));
-          cartStore.getState().addItem(product, Number(quantity.value));
-        },
+            ? "Indisponível"
+            : "Adicionar à sacola",
+        onclick: () => add(product, Number(quantity.value)),
         ...(unavailable ? { disabled: "" } : {}),
       },
       [!isInactive ? icon("cart") : null].filter(Boolean),
@@ -425,13 +403,9 @@ export function createCatalog(state, add, navigate) {
     const editDetailBtn = element("button", {
       type: "button",
       class: "quiet",
-      text: "catalog.edit_product".tr,
+      text: "✏️ Editar Cadastro do Produto",
       onclick: () => {
-        if (state.productEntry) {
-          state.productEntry.open(product);
-        } else {
-          uiStore.getState().openProductEntry(product);
-        }
+        if (state.productEntry) {state.productEntry.open(product);}
       },
     });
 
@@ -449,7 +423,7 @@ export function createCatalog(state, add, navigate) {
               element(
                 "button",
                 {
-                  "aria-label": `${index + 1}`,
+                  "aria-label": `Foto ${index + 1}`,
                   onclick: () => {
                     mainPhoto.src = image.url;
                     mainPhoto.alt = image.alt;
@@ -506,15 +480,13 @@ export function createCatalog(state, add, navigate) {
     const panels = [
       {
         id: "about",
-        label: "product.details".tr,
+        label: "Sobre o produto",
         nodes: [
           element("h2", { text: product.name }),
           element("p", {
             text:
               product.description ||
-              product.descriptionAi ||
-              product.descricao_ia ||
-              "catalog.empty_desc".tr,
+              "Consulte nossa equipe para saber mais sobre este produto.",
           }),
         ],
       },
@@ -528,43 +500,20 @@ export function createCatalog(state, add, navigate) {
       })),
       {
         id: "specifications",
-        label: "product.specifications".tr,
+        label: "Especificações",
         nodes: Object.keys(product.specifications || {}).length
           ? [specs]
           : [
               element("p", {
-                text: "product.details".tr,
+                text: "Consulte nossa equipe para confirmar os detalhes deste produto.",
               }),
             ],
       },
     ];
-
-    if (product.cuidados_basicos) {
-      panels.push({
-        id: "care",
-        label: "product.care_tips".tr,
-        nodes: [
-          element("h2", { text: "product.care_tips".tr }),
-          element("p", { text: product.cuidados_basicos }),
-        ],
-      });
-    }
-
-    if (product.ambiente_ideal) {
-      panels.push({
-        id: "env",
-        label: "product.ideal_env".tr,
-        nodes: [
-          element("h2", { text: "product.ideal_env".tr }),
-          element("p", { text: product.ambiente_ideal }),
-        ],
-      });
-    }
-
     const tabs = element("div", {
       class: "detail-tabs",
       role: "tablist",
-      "aria-label": "product.details".tr,
+      "aria-label": "Informações do produto",
     });
     const content = element("section", {
       class: "detail-information",

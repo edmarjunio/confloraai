@@ -406,141 +406,7 @@ function getFirestoreModule() {
 
   return firestoreModule;
 }
-
-const DEFAULT_CONFLORA_PRODUCTS = [
-  {
-    id: 'prod-palmeira-rabo-de-raposa',
-    name: 'Palmeira Rabo de Raposa',
-    category: 'Plantas / Mudas',
-    subcategory: 'Palmeiras',
-    price: 79.0,
-    stockQuantity: 25,
-    unit: 'UN',
-    status: 'ATIVO',
-    imageUrl: 'https://images.unsplash.com/photo-1596726596162-421712a433a0?w=800&auto=format&fit=crop&q=80',
-    description: 'Palmeira ornamental de crescimento rápido com folhas exuberantes que lembram a cauda de uma raposa. Ideal para sol pleno.',
-    descriptionAi: 'Palmeira ornamental de crescimento rápido com folhas exuberantes que lembram a cauda de uma raposa. Ideal para sol pleno.',
-    tagsAi: 'palmeira, rabo de raposa, wodyetia bifurcata, ornamental, sol pleno',
-    cuidados_basicos: 'Regar de 2 a 3 vezes por semana no plantio; após estabelecida tolera estiagem.',
-    ambiente_ideal: 'Sol pleno.',
-  },
-  {
-    id: 'prod-palmeira-azul',
-    name: 'Palmeira Azul (Bismarckia)',
-    category: 'Plantas / Mudas',
-    subcategory: 'Palmeiras',
-    price: 190.0,
-    stockQuantity: 12,
-    unit: 'UN',
-    status: 'ATIVO',
-    imageUrl: 'https://images.unsplash.com/photo-1513836279014-a89f7a76ae86?w=800&auto=format&fit=crop&q=80',
-    description: 'Palmeira imponente de folhas em leque azul-acinzentadas. Destaque escultural para jardins amplos.',
-    descriptionAi: 'Palmeira imponente de folhas em leque azul-acinzentadas. Destaque escultural para jardins amplos.',
-    tagsAi: 'bismarckia nobilis, palmeira azul, palmeira nobre, ornamental',
-    cuidados_basicos: 'Sol pleno e solo bem drenado. Regas moderadas.',
-    ambiente_ideal: 'Sol pleno.',
-  },
-  {
-    id: 'prod-areca-bambu',
-    name: 'Areca Bambu',
-    category: 'Plantas / Mudas',
-    subcategory: 'Palmeiras',
-    price: 79.0,
-    stockQuantity: 30,
-    unit: 'UN',
-    status: 'ATIVO',
-    imageUrl: 'https://images.unsplash.com/photo-1614594975525-e45190c55d0b?w=800&auto=format&fit=crop&q=80',
-    description: 'Palmeira versátil e elegante para cerca-viva, vasos grandes ou interiores bem iluminados.',
-    descriptionAi: 'Palmeira versátil e elegante para cerca-viva, vasos grandes ou interiores bem iluminados.',
-    tagsAi: 'areca bambu, dypsis lutescens, cerca viva, vasos, meia sombra',
-    cuidados_basicos: 'Solo úmido sem encharcar. Meia-sombra ou sol pleno adaptado.',
-    ambiente_ideal: 'Meia-sombra ou sol pleno.',
-  },
-  {
-    id: 'prod-jabuticaba-sabara',
-    name: 'Muda de Jabuticabeira Sabará',
-    category: 'Frutíferas',
-    subcategory: 'Árvores Frutíferas',
-    price: 180.0,
-    stockQuantity: 18,
-    unit: 'UN',
-    status: 'ATIVO',
-    imageUrl: 'https://images.unsplash.com/photo-1557800636-894a64c1696f?w=800&auto=format&fit=crop&q=80',
-    description: 'Frutífera nativa muito produtiva, com frutos doces e casca fina direto no tronco.',
-    descriptionAi: 'Frutífera nativa muito produtiva, com frutos doces e casca fina direto no tronco.',
-    tagsAi: 'jabuticaba, plinia cauliflora, jabuticaba sabara, frutifera para vaso',
-    cuidados_basicos: 'Regas diárias frequentes. Solo rico em matéria orgânica.',
-    ambiente_ideal: 'Sol pleno.',
-  },
-  {
-    id: 'prod-manjericao-italiano',
-    name: 'Manjericão Italiano Especial',
-    category: 'Horta & Temperos',
-    subcategory: 'Ervas e Temperos',
-    price: 12.0,
-    stockQuantity: 40,
-    unit: 'UN',
-    status: 'ATIVO',
-    imageUrl: 'https://images.unsplash.com/photo-1608686207856-001b95cf60ca?w=800&auto=format&fit=crop&q=80',
-    description: 'Muda de manjericão genovês aromático, folhas frescas ideais para molhos e pesto.',
-    descriptionAi: 'Muda de manjericão genovês aromático, folhas frescas ideais para molhos e pesto.',
-    tagsAi: 'manjericao, tempero, horta caseira, ervas frescas, culinaria',
-    cuidados_basicos: 'Manter a terra levemente úmida e colher os ponteiros com frequência.',
-    ambiente_ideal: 'Mínimo de 4 horas de sol direto por dia.',
-  },
-  {
-    id: 'prod-alecrim-fresco',
-    name: 'Alecrim Fresco em Vaso',
-    category: 'Horta & Temperos',
-    subcategory: 'Ervas e Temperos',
-    price: 15.0,
-    stockQuantity: 35,
-    unit: 'UN',
-    status: 'ATIVO',
-    imageUrl: 'https://images.unsplash.com/photo-1515543237350-b3eea1ec8082?w=800&auto=format&fit=crop&q=80',
-    description: 'Alecrim perfumado e resistente, excelente para assados, chás e repelente natural.',
-    descriptionAi: 'Alecrim perfumado e resistente, excelente para assados, chás e repelente natural.',
-    tagsAi: 'alecrim, rosmarinus, tempero, horta em vaso, sol pleno',
-    cuidados_basicos: 'Solo bem drenado e sol intenso. Regar apenas quando a terra secar.',
-    ambiente_ideal: 'Sol pleno.',
-  },
-  {
-    id: 'prod-primavera-bouganville',
-    name: 'Bouganville / Primavera Roxa',
-    category: 'Flores & Ornamentais',
-    subcategory: 'Trepadeiras Floríferas',
-    price: 45.0,
-    stockQuantity: 20,
-    unit: 'UN',
-    status: 'ATIVO',
-    imageUrl: 'https://images.unsplash.com/photo-1526047932273-341f2a7631f9?w=800&auto=format&fit=crop&q=80',
-    description: 'Trepadeira vigorosa com espetacular florada roxa brilhante. Perfeita para pérgolas e muros.',
-    descriptionAi: 'Trepadeira vigorosa com espetacular florada roxa brilhante. Perfeita para pérgolas e muros.',
-    tagsAi: 'bouganville, primavera, tres marias, flores roxas, pergolado',
-    cuidados_basicos: 'Sol abundante para floradas intensas. Pouca exigência de água depois de crescida.',
-    ambiente_ideal: 'Sol pleno.',
-  },
-  {
-    id: 'prod-terra-vegetal-20kg',
-    name: 'Terra Vegetal Adubada 20kg',
-    category: 'Substratos & Adubos',
-    subcategory: 'Substratos',
-    price: 25.0,
-    stockQuantity: 50,
-    unit: 'UN',
-    status: 'ATIVO',
-    imageUrl: 'https://images.unsplash.com/photo-1589927986089-35812388d1f4?w=800&auto=format&fit=crop&q=80',
-    description: 'Composto orgânico balanceado, enriquecido com húmus para plantio de mudas e jardins.',
-    descriptionAi: 'Composto orgânico balanceado, enriquecido com húmus para plantio de mudas e jardins.',
-    tagsAi: 'terra vegetal, adubo, humus, substrato, plantio, jardim',
-    cuidados_basicos: 'Pronto para uso.',
-    ambiente_ideal: 'Armazenar em local seco e coberto.',
-  },
-];
-
 class FirestoreRepository {
-  static _globalClientDisabled = false;
-
   constructor({
     firestoreInstance = null,
     isInMemory = false,
@@ -564,11 +430,6 @@ class FirestoreRepository {
     this.inMemoryNotifications = [];
     this._firestoreClientDisabled = false;
 
-    // Inicializa catálogo padrão em memória para garantir operação imediata
-    for (const p of DEFAULT_CONFLORA_PRODUCTS) {
-      this.inMemoryProducts.set(p.id, { ...p });
-    }
-
     const defaultUsers = [
       {
         id: 'usr-edmar',
@@ -590,7 +451,7 @@ class FirestoreRepository {
       },
     ];
 
-    for (const u of defaultUsers) {
+    for (const u of this.isInMemory ? defaultUsers : []) {
       this.inMemoryUsers.set(u.id, u);
     }
 
@@ -770,57 +631,45 @@ class FirestoreRepository {
   // --- Produtos e Estoque (AppSheet & WhatsApp) ---
 
   async getAllProducts() {
-    if (this.isInMemory || this._firestoreClientDisabled || FirestoreRepository._globalClientDisabled) {
-      return Array.from(this.inMemoryProducts.values());
-    }
-    if (!this.firestore) {
-      return Array.from(this.inMemoryProducts.values());
-    }
+    if (this.isInMemory) {return Array.from(this.inMemoryProducts.values());}
+    if (!this.firestore) {throw new Error('Firestore indisponível.');}
     try {
       const snapshot = await this.firestore.collection('products').get();
-      if (!snapshot.empty) {
-        return snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }));
-      }
-      return Array.from(this.inMemoryProducts.values());
+      return snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }));
     } catch (err) {
-      if (
-        err?.code === 7 ||
-        err?.code === '7' ||
-        err?.code === 'permission-denied' ||
-        err?.message?.includes('PERMISSION_DENIED') ||
-        err?.message?.includes('Missing or insufficient')
-      ) {
-        this._firestoreClientDisabled = true;
-        FirestoreRepository._globalClientDisabled = true;
+      if (err && (err.code === 7 || (err.message && (err.message.includes('PERMISSION_DENIED') || err.message.includes('insufficient permissions'))))) {
+        Logger.info('Firestore sem permissões ativas no GCP (PERMISSION_DENIED); usando catálogo local em memória.');
+        if (this.inMemoryProducts.size === 0) {
+          const { DEFAULT_CATALOG_ITEMS } = require('../catalog/default-catalog');
+          for (const item of DEFAULT_CATALOG_ITEMS) {
+            this.inMemoryProducts.set(String(item.id), item);
+          }
+        }
+        return Array.from(this.inMemoryProducts.values());
       }
-      Logger.warn(`Firestore indisponível (${err.message}). Utilizando produtos locais.`);
-      return Array.from(this.inMemoryProducts.values());
+      throw err;
     }
   }
 
   async getProductById(productId) {
-    if (!productId) {
-      return null;
-    }
+    if (!productId) {return null;}
     const id = String(productId).trim();
-    if (this.isInMemory || this._firestoreClientDisabled || FirestoreRepository._globalClientDisabled || !this.firestore) {
-      return this.inMemoryProducts.get(id) || null;
-    }
+    if (this.isInMemory) {return this.inMemoryProducts.get(id) || null;}
+    if (!this.firestore) {throw new Error('Firestore indisponível.');}
     try {
       const snapshot = await this.firestore.collection('products').doc(id).get();
-      return snapshot.exists ? { ...snapshot.data(), id: snapshot.id } : (this.inMemoryProducts.get(id) || null);
+      return snapshot.exists ? { ...snapshot.data(), id: snapshot.id } : null;
     } catch (err) {
-      if (
-        err?.code === 7 ||
-        err?.code === '7' ||
-        err?.code === 'permission-denied' ||
-        err?.message?.includes('PERMISSION_DENIED') ||
-        err?.message?.includes('Missing or insufficient')
-      ) {
-        this._firestoreClientDisabled = true;
-        FirestoreRepository._globalClientDisabled = true;
+      if (err && (err.code === 7 || (err.message && (err.message.includes('PERMISSION_DENIED') || err.message.includes('insufficient permissions'))))) {
+        if (this.inMemoryProducts.size === 0) {
+          const { DEFAULT_CATALOG_ITEMS } = require('../catalog/default-catalog');
+          for (const item of DEFAULT_CATALOG_ITEMS) {
+            this.inMemoryProducts.set(String(item.id), item);
+          }
+        }
+        return this.inMemoryProducts.get(id) || null;
       }
-      return this.inMemoryProducts.get(id) || null;
+      throw err;
     }
   }
 
@@ -1298,6 +1147,9 @@ class FirestoreRepository {
     requirePersistence = false,
     discountAmount = 0,
     discountPercent = 0,
+    orderType = 'PICKUP',
+    deliveryAddress = '',
+    freightValue = 0,
   }) {
     const subtotal = (items || []).reduce(
       (sum, item) =>
@@ -1307,15 +1159,18 @@ class FirestoreRepository {
       0
     );
     const normalizedDiscount = Math.min(subtotal, Math.max(0, Number(discountAmount) || 0));
-    const total = Number((subtotal - normalizedDiscount).toFixed(2));
+    const normalizedFreight = Math.max(0, Number(freightValue) || 0);
+    const total = Number((subtotal - normalizedDiscount + normalizedFreight).toFixed(2));
 
     const shortTicket = ticketNumber || String(Math.floor(100 + Math.random() * 900));
 
+    const isDelivery = String(orderType).toUpperCase() === 'DELIVERY';
     const orderData = {
-      customerName: customerName || 'Venda Balcão / Caixa',
-      customerPhone: customerPhone || 'Presencial',
-      orderType: 'PICKUP',
-      deliveryAddress: 'Venda Presencial no Balcão Conflora',
+      customerName: customerName || (isDelivery ? 'Cliente Entrega' : 'Venda Balcão / Caixa'),
+      customerPhone: customerPhone || (isDelivery ? '' : 'Presencial'),
+      orderType: isDelivery ? 'DELIVERY' : 'PICKUP',
+      deliveryAddress: deliveryAddress || (isDelivery ? 'Entrega a Domicílio' : 'Venda Presencial no Balcão Conflora'),
+      freightValue: normalizedFreight,
       paymentMethod: (paymentMethod || 'DINHEIRO').toUpperCase(),
       items: items || [],
       subtotal: Number(subtotal.toFixed(2)),
@@ -2866,7 +2721,6 @@ class FirestoreRepository {
 
   async searchCustomers(query, limit = 8) {
     const term = String(query || '').trim();
-    if (term.length < 3) {return [];}
 
     const normalizedTerm = term.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     const phoneTerm = term.replace(/\D/g, '');
@@ -2874,14 +2728,27 @@ class FirestoreRepository {
     const addCustomer = (profile, phone = '') => {
       if (!profile) {return;}
       const customerPhone = String(profile.phone || phone).replace(/\D/g, '');
-      if (!customerPhone) {return;}
-      customers.set(customerPhone, {
+      const key = customerPhone || String(profile.id || profile.name || Math.random());
+      customers.set(key, {
+        id: profile.id || key,
         name: String(profile.name || profile.customerName || 'Cliente'),
         phone: customerPhone,
+        cpfCnpj: profile.cpfCnpj || '',
+        address: profile.address || profile.deliveryAddress || '',
+        deliveryAddress: profile.deliveryAddress || profile.address || '',
+        notes: profile.notes || '',
       });
     };
 
-    if (phoneTerm.length >= 7) {
+    if (term.length === 0) {
+      for (const [phone, profile] of this.inMemoryCustomers) {
+        addCustomer(profile, phone);
+        if (customers.size >= limit) {break;}
+      }
+      return Array.from(customers.values());
+    }
+
+    if (phoneTerm.length >= 4) {
       addCustomer(await this.getCustomerProfile(phoneTerm), phoneTerm);
     }
 
@@ -2956,31 +2823,12 @@ class FirestoreRepository {
   // --- Colaboradores e Controle de Acesso (RBAC) ---
 
   async getAllUsers() {
-    if (this.isInMemory || this._firestoreClientDisabled || FirestoreRepository._globalClientDisabled || !this.firestore) {
-      return Array.from(this.inMemoryUsers.values());
-    }
-    try {
+    if (this.firestore) {
       const snap = await this.firestore.collection('users').get();
-      if (!snap.empty) {
-        const users = snap.docs.map(d => ({ ...d.data(), id: d.id }));
-        users.forEach(u => this.inMemoryUsers.set(u.id, u));
-        return users;
-      }
-      return Array.from(this.inMemoryUsers.values());
-    } catch (err) {
-      if (
-        err?.code === 7 ||
-        err?.code === '7' ||
-        err?.code === 'permission-denied' ||
-        err?.message?.includes('PERMISSION_DENIED') ||
-        err?.message?.includes('Missing or insufficient')
-      ) {
-        this._firestoreClientDisabled = true;
-        FirestoreRepository._globalClientDisabled = true;
-      }
-      Logger.warn(`Firestore indisponível ao listar usuários (${err.message}). Utilizando usuários locais.`);
-      return Array.from(this.inMemoryUsers.values());
+      return snap.docs.map(d => ({ ...d.data(), id: d.id }));
     }
+    if (!this.isInMemory) {throw new Error('Cadastro de usuários indisponível.');}
+    return Array.from(this.inMemoryUsers.values());
   }
 
   async saveUser(userData) {
@@ -3000,6 +2848,7 @@ class FirestoreRepository {
       role = 'CLIENTE';
     }
 
+
     const dataWithTs = {
       ...userData,
       id: String(id),
@@ -3009,28 +2858,18 @@ class FirestoreRepository {
       updatedAt: new Date().toISOString(),
     };
 
-    if (this.firestore && !this._firestoreClientDisabled && !FirestoreRepository._globalClientDisabled) {
+    if (this.firestore) {
       try {
         await this.firestore
           .collection('users')
           .doc(String(id))
           .set(dataWithTs, { merge: true });
       } catch (err) {
-        if (
-          err?.code === 7 ||
-          err?.code === '7' ||
-          err?.code === 'permission-denied' ||
-          err?.message?.includes('PERMISSION_DENIED') ||
-          err?.message?.includes('Missing or insufficient')
-        ) {
-          this._firestoreClientDisabled = true;
-          FirestoreRepository._globalClientDisabled = true;
-        } else {
-          Logger.warn(
-            'Erro ao salvar usuário no Firestore',
-            { error: err.message }
-          );
-        }
+        Logger.warn(
+          'Erro ao salvar usuário no Firestore',
+          { error: err.message }
+        );
+        throw err;
       }
     }
 
@@ -3761,15 +3600,8 @@ class FirestoreRepository {
       createdAt: new Date().toISOString(),
     };
 
-    if (this.firestore && !this._firestoreClientDisabled && !FirestoreRepository._globalClientDisabled) {
-      try {
-        await this.firestore.collection('discount_approvals').doc(id).set(approval);
-      } catch (err) {
-        if (/PERMISSION_DENIED/i.test(err.message) || err.code === 7) {
-          this._firestoreClientDisabled = true;
-          FirestoreRepository._globalClientDisabled = true;
-        }
-      }
+    if (this.firestore) {
+      await this.firestore.collection('discount_approvals').doc(id).set(approval);
     }
     this.inMemoryDiscountApprovals.set(id, approval);
 
@@ -3833,15 +3665,8 @@ class FirestoreRepository {
     const approval = await this.getDiscountApproval(approvalId);
     if (!approval) {return null;}
     const updated = { ...approval, ...updates, updatedAt: new Date().toISOString() };
-    if (this.firestore && !this._firestoreClientDisabled && !FirestoreRepository._globalClientDisabled) {
-      try {
-        await this.firestore.collection('discount_approvals').doc(String(approvalId)).set(updated, { merge: true });
-      } catch (err) {
-        if (/PERMISSION_DENIED/i.test(err.message) || err.code === 7) {
-          this._firestoreClientDisabled = true;
-          FirestoreRepository._globalClientDisabled = true;
-        }
-      }
+    if (this.firestore) {
+      await this.firestore.collection('discount_approvals').doc(String(approvalId)).set(updated, { merge: true });
     }
     this.inMemoryDiscountApprovals.set(String(approvalId), updated);
     return updated;

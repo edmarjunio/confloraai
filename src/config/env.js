@@ -91,9 +91,22 @@ const config = Object.freeze({
       process.env.MERCADO_PAGO_EXPECT_LIVE_MODE === 'false' ? false : null,
   },
 
+  sicredi: {
+    baseUrl: process.env.SICREDI_PIX_BASE_URL || 'https://api-pix.sicredi.com.br',
+    authUrl: process.env.SICREDI_OAUTH_URL || 'https://api-pix.sicredi.com.br/oauth/token',
+    clientId: (process.env.SICREDI_CLIENT_ID || '').trim(),
+    clientSecret: (process.env.SICREDI_CLIENT_SECRET || '').trim(),
+    certificate: process.env.SICREDI_CERT_PEM || '',
+    privateKey: process.env.SICREDI_KEY_PEM || '',
+    pixKey: process.env.SICREDI_PIX_KEY || process.env.PIX_KEY || '64999351616',
+    beneficiario: process.env.SICREDI_BENEFICIARIO || process.env.PIX_TITULAR || 'Conflora Horta e Viveiro',
+    cidade: process.env.SICREDI_CIDADE || 'Mineiros',
+    webhookSecret: (process.env.SICREDI_WEBHOOK_SECRET || '').trim(),
+  },
+
   pix: {
-    key: process.env.PIX_KEY || 'conflora@exemplo.com.br',
-    holder: process.env.PIX_TITULAR || 'Conflora Horta e Viveiro',
+    key: process.env.SICREDI_PIX_KEY || process.env.PIX_KEY || '64999351616',
+    holder: process.env.SICREDI_BENEFICIARIO || process.env.PIX_TITULAR || 'Conflora Horta e Viveiro',
   },
 
   adminSecret: process.env.ADMIN_SECRET || '',
@@ -113,9 +126,7 @@ if (config.appEnvironment === 'dev') {
   }
   if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     const credential = JSON.parse(fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8'));
-    if (!credential.project_id) {
-      throw new Error('Credencial explícita do dev exige project_id.');
-    }
+    if (!credential.project_id) {throw new Error('Credencial explícita do dev exige project_id.');}
     credentialProjects.push(credential.project_id);
   }
 }

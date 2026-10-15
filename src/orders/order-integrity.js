@@ -5,12 +5,8 @@ function validateOrderConfirmation(order, updates) {
   if (order.status === 'CANCELLED') {
     throw new Error('Pedido cancelado não pode receber baixa ou confirmação.');
   }
-  if (!updates || String(order.paymentMethod).toUpperCase() !== 'PIX') {
-    return;
-  }
-  if (PAID_ORDER_STATUSES.has(order.status) && order.paymentTransactionId) {
-    return;
-  }
+  if (!updates || String(order.paymentMethod).toUpperCase() !== 'PIX') {return;}
+  if (PAID_ORDER_STATUSES.has(order.status) && order.paymentTransactionId) {return;}
   if (
     updates.verifiedVia !== 'MERCADO_PAGO_WEBHOOK' ||
     !/^\d+$/.test(updates.paymentTransactionId || '') ||

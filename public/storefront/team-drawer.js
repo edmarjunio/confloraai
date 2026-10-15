@@ -1,7 +1,3 @@
-import { onLanguageChange } from './i18n/index.js';
-import { storeQueries } from './query/tanstackQuery.js';
-import { appStore } from './store/index.js';
-
 // Gerenciador do Menu da Equipe (Bottomsheet no Mobile e Aba Direita no PC)
 // Garante que o cliente veja apenas a loja e a equipe tenha acesso com base em cargo (CAIXA vs ADMIN).
 
@@ -20,20 +16,13 @@ export function initTeamDrawer() {
   const teamLinkCaixa = document.getElementById('teamLinkCaixa');
   const openEntryBtn = document.getElementById('teamOpenEntryBtn');
 
-  if (!drawerBtn || !overlay || !sheet) {
-    return;
-  }
+  if (!drawerBtn || !overlay || !sheet) {return;}
 
   let currentOperator = {
     name: 'Atendente Caixa',
     role: 'CAIXA',
     id: '',
   };
-
-  // Re-render UI on language switch
-  onLanguageChange(() => {
-    updateDrawerUI();
-  });
 
   // Carrega operador salvo ou busca da sessão
   async function loadCurrentOperator() {
@@ -47,13 +36,12 @@ export function initTeamDrawer() {
             role: data.user.role || 'CAIXA',
             id: data.user.id || '',
           };
-          appStore.getState().setUser(currentOperator);
           updateDrawerUI();
           return;
         }
       }
     } catch {
-      // Ignora erro e usa fallback
+      // ignore
     }
 
     // Fallback no localStorage
@@ -66,7 +54,6 @@ export function initTeamDrawer() {
         role: savedRole || 'CAIXA',
         id: savedId || '',
       };
-      appStore.getState().setUser(currentOperator);
     }
     updateDrawerUI();
   }
@@ -80,20 +67,20 @@ export function initTeamDrawer() {
     const subtitleEl = document.getElementById('teamOperatorSubtitle');
     const caixaDescEl = document.getElementById('teamCaixaScopeDesc');
 
-    if (opNameEl) {
-      opNameEl.textContent = currentOperator.name;
-    }
+    if (opNameEl) {opNameEl.textContent = currentOperator.name;}
     if (opBadgeEl) {
-      opBadgeEl.textContent = isCaixa ? 'team.role_cashier'.tr : (isAdmin ? 'team.role_admin'.tr : 'team.operator'.tr);
+      opBadgeEl.textContent = isCaixa ? 'CARGO: CAIXA' : (isAdmin ? 'CARGO: ADMIN' : 'COLABORADOR');
       opBadgeEl.className = 'team-role-badge ' + (isAdmin ? 'admin' : 'caixa');
     }
     if (subtitleEl) {
       subtitleEl.textContent = isCaixa
-        ? 'team.cashier_desc'.tr
-        : 'team.admin_full_desc'.tr;
+        ? 'Caixa Liberado · Acesso exclusivo às suas vendas de hoje'
+        : 'Administração Geral Liberada';
     }
     if (caixaDescEl) {
-      caixaDescEl.textContent = 'team.cashier_desc'.tr;
+      caixaDescEl.textContent = isCaixa
+        ? 'Acesso estrito às suas vendas e números de hoje'
+        : 'Frente de Caixa Geral e Balcão';
     }
 
     // Se for CAIXA: Esconde completamente todas as ferramentas de administração e Looker
@@ -108,7 +95,7 @@ export function initTeamDrawer() {
 
   function openDrawer() {
     overlay.classList.remove('hidden');
-    requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
       sheet.classList.add('active');
     });
   }
@@ -125,17 +112,11 @@ export function initTeamDrawer() {
     openDrawer();
   });
 
-  if (closeBtn) {
-    closeBtn.addEventListener('click', closeDrawer);
-  }
-  if (backToShopBtn) {
-    backToShopBtn.addEventListener('click', closeDrawer);
-  }
+  if (closeBtn) {closeBtn.addEventListener('click', closeDrawer);}
+  if (backToShopBtn) {backToShopBtn.addEventListener('click', closeDrawer);}
 
   overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) {
-      closeDrawer();
-    }
+    if (e.target === overlay) {closeDrawer();}
   });
 
   // Troca de operador
@@ -155,23 +136,23 @@ export function initTeamDrawer() {
   }
 
   async function populateOperatorList() {
-    if (!selectUser) {
-      return;
-    }
-    selectUser.innerHTML = `<option value="">${'common.loading'.tr}</option>`;
+    if (!selectUser) {return;}
+    selectUser.innerHTML = '<option value="">Carregando operadores...</option>';
     try {
-      // Use TanStack Query cache for team users
-      const users = await storeQueries.getTeamUsers();
-      if (Array.isArray(users) && users.length > 0) {
-        selectUser.innerHTML = users.map((u) => `
-          <option value="${u.id}" data-name="${u.name}" data-role="${u.role}" ${u.name === currentOperator.name ? 'selected' : ''}>
-            ${u.role === 'ADMIN' ? '👑' : '👤'} ${u.name} (${u.role})
-          </option>
-        `).join('');
-        return;
+      const res = await fetch('/api/admin/auth/users');
+      if (res.ok) {
+        const users = await res.json();
+        if (Array.isArray(users) && users.length > 0) {
+          selectUser.innerHTML = users.map(u => `
+            <option value="${u.id}" data-name="${u.name}" data-role="${u.role}" ${u.name === currentOperator.name ? 'selected' : ''}>
+              ${u.role === 'ADMIN' ? '👑' : '👤'} ${u.name} (${u.role})
+            </option>
+          `).join('');
+          return;
+        }
       }
     } catch {
-      // Ignora erro e usa fallback
+      // ignore
     }
 
     // Fallback padrão de operadores
@@ -185,9 +166,7 @@ export function initTeamDrawer() {
   if (confirmOpBtn && selectUser) {
     confirmOpBtn.addEventListener('click', () => {
       const opt = selectUser.selectedOptions[0];
-      if (!opt) {
-        return;
-      }
+      if (!opt) {return;}
       const name = opt.getAttribute('data-name') || opt.textContent.trim();
       const role = opt.getAttribute('data-role') || 'CAIXA';
       const id = selectUser.value;
@@ -197,7 +176,6 @@ export function initTeamDrawer() {
       localStorage.setItem('conflora_operator_role', role);
       localStorage.setItem('conflora_operator_id', id);
 
-      appStore.getState().setUser(currentOperator);
       updateDrawerUI();
       opSelectorBox.classList.add('hidden');
     });

@@ -30,9 +30,7 @@ function transactionalStore(initial) {
           update: (ref, value) => writes.push([ref.path, value, true]),
           set: (ref, value) => writes.push([ref.path, value, false]),
         });
-        if (store.failCommit) {
-          throw new Error('Commit indisponível');
-        }
+        if (store.failCommit) {throw new Error('Commit indisponível');}
         const next = new Map(documents);
         for (const [path, value, merge] of writes) {
           next.set(path, structuredClone({ ...(merge ? next.get(path) : {}), ...value }));
