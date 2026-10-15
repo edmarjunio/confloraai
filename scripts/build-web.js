@@ -17,7 +17,9 @@ async function build() {
       });
     } }],
   });
-  const shell = '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#166534"><title>Conflora</title><link rel="stylesheet" href="/react/app.css"></head><body><div id="root"></div><script type="module" src="/react/app.js"></script></body></html>';
+  const shell = '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#166534"><title>Conflora</title></head><body><div id="root"></div><script type="module" src="/react/app.js"></script></body></html>';
+  await fs.copyFile('src/web/app/styles.css', 'public/react/internal.css');
+  await fs.copyFile('src/web/storefront/compat.css', 'public/react/storefront.css');
   await fs.writeFile('public/react/index.html', shell);
   // Firebase Hosting also serves these entry points directly.
   await fs.writeFile('public/index.html', shell);

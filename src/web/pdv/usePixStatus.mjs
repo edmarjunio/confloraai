@@ -1,36 +1,55 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { request } from '../api/http.mjs';
-/** One request at a time; abort on unmount, back off after failures. */
+import { useEffect, useEffectEvent } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { request } from "../api/http.mjs";
+import { useScopedKey } from "../state/query-scope.mjs";
+import { invalidateResources } from "../state/query-client.mjs";
+
+export function paymentQueryOptions(queryKey, orderId) {
+  return {
+    queryKey,
+    queryFn: async ({ signal }) =>
+      (
+        await request(`/api/caixa/orders/${encodeURIComponent(orderId)}/pix`, {
+          signal,
+        })
+      ).order,
+    enabled: Boolean(orderId),
+    staleTime: 0,
+    retry: false,
+    refetchOnMount: "always",
+    refetchInterval: (query) =>
+      query.state.data?.paymentStatus === "PAGO"
+        ? false
+        : query.state.error
+          ? 15000
+          : 5000,
+  };
+}
+
 export function usePixStatus(initialOrder, onUpdate) {
-  const [order, setOrder] = useState(initialOrder);
-  const [error, setError] = useState('');
-  const [checking, setChecking] = useState(false);
-  const inFlight = useRef(null);
-  const mounted = useRef(true);
-  const update = useRef(onUpdate);
-  update.current = onUpdate;
-  const check = useCallback(async () => {
-    if (!initialOrder?.id || inFlight.current) return;
-    const controller = new AbortController();
-    inFlight.current = controller;
-    setChecking(true);
-    const timeout = setTimeout(() => controller.abort(), 20000);
-    try {
-      const result = await request(`/api/caixa/orders/${encodeURIComponent(initialOrder.id)}/pix`, { signal: controller.signal });
-      if (!mounted.current) return;
-      setOrder(result.order); setError(''); update.current?.(result.order);
-    } catch { if (mounted.current) setError('pix.offline'); }
-    finally { clearTimeout(timeout); inFlight.current = null; if (mounted.current) setChecking(false); }
-  }, [initialOrder?.id]);
+  const client = useQueryClient();
+  const queryKey = useScopedKey("payment", [initialOrder?.id]);
+  const query = useQuery(paymentQueryOptions(queryKey, initialOrder?.id));
+  const notify = useEffectEvent((order) => onUpdate?.(order));
   useEffect(() => {
-    mounted.current = true;
-    return () => { mounted.current = false; inFlight.current?.abort(); };
-  }, []);
+    if (query.data) {
+      notify(query.data);
+    }
+  }, [query.data]);
+  const paid = query.data?.paymentStatus === "PAGO";
   useEffect(() => {
-    if (order?.paymentStatus === 'PAGO') return;
-    const timer = setTimeout(check, error ? 15000 : 5000);
-    return () => clearTimeout(timer);
-  }, [order, error, check, checking]);
-  useEffect(() => { check(); }, [check]);
-  return { order, error, checking, check };
+    if (paid) {
+      void invalidateResources(client);
+    }
+  }, [paid, client]);
+  return {
+    // A persisted snapshot never becomes proof of payment.
+    order: query.data || {
+      ...initialOrder,
+      paymentStatus: "AGUARDANDO_PAGAMENTO",
+    },
+    error: query.error ? "pix.offline" : "",
+    checking: query.isFetching,
+    check: () => query.refetch({ cancelRefetch: false }),
+  };
 }

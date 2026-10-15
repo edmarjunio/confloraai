@@ -939,6 +939,7 @@ function createApp({
       next();
     });
   }
+  require('./react-frontend').installReactFrontend(app, express);
   app.use('/api', (_req, res, next) => {
     res.setHeader('Cache-Control', 'private, no-store');
     next();

@@ -1,27 +1,30 @@
-import { useState } from 'react';
-import { useSession } from '../auth/SessionProvider.jsx';
-import { LoginForm } from '../auth/LoginForm.jsx';
-import { Modal, ErrorNotice } from '../shared/ui.jsx';
-import { languages, getLocale, setLocale } from '../i18n/runtime.mjs';
-import { basePath, tenant } from '../api/store.mjs';
-import { useAction } from '../shared/hooks.mjs';
+import { useState } from "react";
+import { loadCatalog, basePath } from "../api/store.mjs";
+import { useResource } from "../shared/hooks.mjs";
+import { StorefrontFrame } from "../storefront/StorefrontFrame.jsx";
+
 export function Shell({ children }) {
-  const [login, setLogin] = useState(false);
-  const { user, logout } = useSession();
-  const action = useAction();
-  return <>
-    <a href="#main" className="skip">{'nav.skip'.tr}</a>
-    <header className="site-header"><a className="brand" href={basePath || '/'}><img src="/store-assets/brands/conflora-logo.png" alt={''} /><strong>{'app.title'.tr}</strong></a>
-      <nav aria-label={'nav.home'.tr}><a href={basePath || '/'}>{'nav.catalog'.tr}</a><a href={`${basePath}/conta`}>{'nav.account'.tr}</a>
-        {!tenant && <a href="/pdv">{'nav.pdv'.tr}</a>}
-        {user?.role === 'ADMIN' && <a href={`${basePath}/admin`}>{'nav.admin'.tr}</a>}
-        {user ? <button onClick={() => action.run(logout)}>{'auth.logout'.tr}</button> : <button onClick={() => setLogin(true)}>{'nav.team'.tr}</button>}
-        <select aria-label={'common.language'.tr} value={getLocale()} onChange={event => setLocale(event.target.value)}>{Object.entries(languages).map(([code, name]) => <option key={code} value={code}>{name}</option>)}</select>
-      </nav>
-    </header>
-    <ErrorNotice error={action.error} />
-    <main id="main" className="page">{children}</main>
-    <footer><a href="/privacy">{'legal.privacy'.tr}</a><a href="/terms">{'legal.terms'.tr}</a><a href="/data-deletion">{'legal.deletion'.tr}</a></footer>
-    {login && <Modal title={'nav.team'.tr} onClose={() => setLogin(false)}><LoginForm team onComplete={() => setLogin(false)} /></Modal>}
-  </>;
+  const resource = useResource(loadCatalog, ["catalog"]);
+  const [query, setQuery] = useState("");
+  function search(value) {
+    location.href = (basePath || "/") + "?q=" + encodeURIComponent(value);
+  }
+  return (
+    <StorefrontFrame
+      internal
+      config={
+        resource.data?.config || {
+          identity: { name: "app.title".tr },
+          branding: { logoUrl: "/store-assets/brands/conflora-logo.png" },
+        }
+      }
+      products={resource.data?.products || []}
+      cartEnabled={Boolean(resource.data)}
+      query={query}
+      onSearch={setQuery}
+      onSubmit={search}
+    >
+      {children}
+    </StorefrontFrame>
+  );
 }

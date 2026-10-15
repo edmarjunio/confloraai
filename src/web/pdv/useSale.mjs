@@ -1,43 +1,105 @@
-import { useEffect, useRef, useState } from 'react';
-import { request } from '../api/http.mjs';
-import { readStorage, writeStorage } from '../shared/storage.mjs';
-import { useAction } from '../shared/hooks.mjs';
+import { useEffect } from "react";
+import { useStore } from "zustand";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { request, errorKey } from "../api/http.mjs";
+import { useAction } from "../shared/hooks.mjs";
+import { getSaleStore } from "../state/sale-store.mjs";
+import { useScopedKey } from "../state/query-scope.mjs";
+
 export function useSale(operatorId) {
-  const key = `pdv-attempt:${operatorId}`;
-  const [state, setState] = useState(() => readStorage(key, {}));
+  const store = getSaleStore(operatorId);
+  const draft = useStore(store, (state) => state.draft);
+  const { begin, patch, reset } = store.getState();
+  const client = useQueryClient();
   const action = useAction();
-  const requestId = useRef(state.requestId || crypto.randomUUID());
-  function persist(next) { writeStorage(key, next); setState(next); }
+  const orderKey = useScopedKey("sale-order", [draft.orderId]);
+  const attemptKey = useScopedKey("sale-attempt", [draft.requestId]);
+  const approvalKey = useScopedKey("sale-approval", [draft.approvalId]);
+  const order = useQuery({
+    queryKey: orderKey,
+    queryFn: ({ signal }) =>
+      request(`/api/caixa/orders/${encodeURIComponent(draft.orderId)}`, {
+        signal,
+      }),
+    enabled: Boolean(draft.orderId),
+  });
+  const attempt = useQuery({
+    queryKey: attemptKey,
+    queryFn: ({ signal }) =>
+      request(`/api/caixa/pix-attempt/${encodeURIComponent(draft.requestId)}`, {
+        signal,
+      }),
+    enabled: Boolean(
+      draft.requestId &&
+      !draft.orderId &&
+      !draft.approvalId &&
+      !draft.rejected &&
+      !action.busy,
+    ),
+    retry: false,
+  });
+  const approval = useQuery({
+    queryKey: approvalKey,
+    queryFn: ({ signal }) =>
+      request(
+        `/api/caixa/discount-approvals/${encodeURIComponent(draft.approvalId)}`,
+        { signal },
+      ),
+    enabled: Boolean(draft.approvalId),
+    retry: false,
+    refetchInterval: (query) =>
+      ["APPROVED", "REJECTED"].includes(query.state.data?.status)
+        ? false
+        : 5000,
+  });
+  useEffect(() => {
+    if (attempt.data?.order) {
+      patch({ orderId: attempt.data.order.id });
+    }
+  }, [attempt.data, patch]);
+  useEffect(() => {
+    if (approval.data?.status === "APPROVED" && approval.data.order) {
+      patch({ orderId: approval.data.order.id, approvalId: "" });
+    }
+    if (approval.data?.status === "REJECTED") {
+      patch({ approvalId: "", rejected: true, requestId: "" });
+    }
+  }, [approval.data, patch]);
   async function submit(payload) {
     await action.run(async () => {
-      persist({ ...state, requestId: requestId.current, payload });
-      const result = await request('/api/caixa/orders', { method: 'POST', headers: { 'Idempotency-Key': requestId.current }, body: payload });
-      persist({ requestId: requestId.current, order: result.order || null, approvalId: result.approval?.id || '' });
+      const requestId = begin(payload);
+      const result = await request("/api/caixa/orders", {
+        method: "POST",
+        headers: { "Idempotency-Key": requestId },
+        body: payload,
+      });
+      if (result.order) {
+        client.setQueryData(
+          [...orderKey.slice(0, -1), result.order.id],
+          result.order,
+        );
+      }
+      patch({
+        orderId: result.order?.id || "",
+        approvalId: result.approval?.id || "",
+      });
     });
   }
-  useEffect(() => {
-    if (!state.requestId || state.order || state.approvalId) return;
-    const controller = new AbortController();
-    request(`/api/caixa/pix-attempt/${encodeURIComponent(state.requestId)}`, { signal: controller.signal })
-      .then(result => { if (!controller.signal.aborted) persist({ ...state, order: result.order }); })
-      .catch(error => { if (!controller.signal.aborted && error.status !== 404) action.setError('error.unavailable'); });
-    return () => controller.abort();
-  }, [state.requestId, state.order?.id, state.approvalId]);
-  useEffect(() => {
-    if (!state.approvalId) return;
-    const controller = new AbortController();
-    let timer;
-    async function poll() {
-      try {
-        const result = await request(`/api/caixa/discount-approvals/${encodeURIComponent(state.approvalId)}`, { signal: controller.signal });
-        if (controller.signal.aborted) return;
-        if (result.status === 'APPROVED') { persist({ ...state, order: result.order, approvalId: '' }); return; }
-        if (result.status === 'REJECTED') { persist({ ...state, approvalId: '', rejected: true }); return; }
-      } catch { if (!controller.signal.aborted) action.setError('error.unavailable'); }
-      if (!controller.signal.aborted) timer = setTimeout(poll, 5000);
-    }
-    poll();
-    return () => { controller.abort(); clearTimeout(timer); };
-  }, [state.approvalId]);
-  return { ...state, ...action, submit, update: order => persist({ ...state, order }), reset() { requestId.current = crypto.randomUUID(); persist({}); } };
+  const failure =
+    order.error ||
+    approval.error ||
+    (attempt.error?.status !== 404 ? attempt.error : null);
+  return {
+    ...draft,
+    ...action,
+    order: order.data,
+    submit,
+    reset,
+    busy:
+      action.busy ||
+      Boolean(draft.orderId && !order.data) ||
+      attempt.isFetching,
+    error: action.error || (failure ? errorKey(failure) : ""),
+    update: (value) => client.setQueryData(orderKey, value),
+  };
 }
