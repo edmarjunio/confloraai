@@ -1,4 +1,6 @@
 import { $, element, notify } from "./ui.js";
+import { tr, onLanguageChange } from "./i18n/index.js";
+import { queryClient } from "./query/tanstackQuery.js";
 
 export function createProductEntry(state, onSaved) {
   const dialog = $("#productEntryDialog");
@@ -6,8 +8,16 @@ export function createProductEntry(state, onSaved) {
   let currentTab = "product"; // "product" | "stock"
   let editingProduct = null;
 
+  onLanguageChange(() => {
+    if (dialog && dialog.hasAttribute("open")) {
+      render();
+    }
+  });
+
   function render() {
-    if (!dialog || !content) {return;}
+    if (!dialog || !content) {
+      return;
+    }
     content.replaceChildren();
 
     // Tabs
@@ -15,7 +25,9 @@ export function createProductEntry(state, onSaved) {
       element("button", {
         type: "button",
         class: `pe-tab-btn ${currentTab === "product" ? "active" : ""}`,
-        text: editingProduct ? "✏️ Editar Produto" : "+ Novo Produto",
+        text: editingProduct
+          ? tr("product_entry.edit_title", { name: editingProduct.name })
+          : `+ ${"product_entry.new_title".tr}`,
         onclick: () => {
           currentTab = "product";
           render();
@@ -24,7 +36,7 @@ export function createProductEntry(state, onSaved) {
       element("button", {
         type: "button",
         class: `pe-tab-btn ${currentTab === "stock" ? "active" : ""}`,
-        text: "⚡ Entrada Rápida de Estoque",
+        text: `⚡ ${"catalog.quick_stock".tr}`,
         onclick: () => {
           currentTab = "stock";
           render();
@@ -65,12 +77,12 @@ export function createProductEntry(state, onSaved) {
       type: "text",
       name: "name",
       required: "",
-      placeholder: "Ex: Ração Golden 15kg, Vaso Cerâmica, Camiseta Polo...",
+      placeholder: "product_entry.name".tr,
       value: editingProduct?.name || "",
     });
     form.append(
       element("label", { class: "pe-label" }, [
-        element("span", { text: "Nome do Produto *" }),
+        element("span", { text: `${"product_entry.name".tr} *` }),
         nameInput,
       ]),
     );
@@ -80,228 +92,231 @@ export function createProductEntry(state, onSaved) {
       type: "text",
       name: "category",
       list: "categorySuggestions",
-      placeholder: "Selecione ou digite nova categoria",
+      placeholder: "product_entry.category".tr,
       value: editingProduct?.categoryName || editingProduct?.category || "",
     });
     const subcatInput = element("input", {
       type: "text",
       name: "subcategory",
-      placeholder: "Subcategoria (opcional)",
+      placeholder: "product_entry.subcategory".tr,
       value: editingProduct?.subcategoryName || editingProduct?.subcategory || "",
     });
 
     form.append(
       element("div", { class: "pe-row" }, [
         element("label", { class: "pe-label" }, [
-          element("span", { text: "Categoria *" }),
+          element("span", { text: `${"product_entry.category".tr} *` }),
           catInput,
         ]),
         element("label", { class: "pe-label" }, [
-          element("span", { text: "Subcategoria" }),
+          element("span", { text: "product_entry.subcategory".tr }),
           subcatInput,
         ]),
       ]),
     );
 
-    // Price, Stock, Unit row
-    const priceVal = editingProduct
-      ? (editingProduct.price?.amountMinor ? editingProduct.price.amountMinor / 100 : (editingProduct.price || 0))
-      : "";
+    // Pricing Row (Venda e Custo)
+    const priceVal = editingProduct?.price?.amountMinor !== undefined
+      ? (editingProduct.price.amountMinor / 100).toFixed(2)
+      : (Number(editingProduct?.price || 0)).toFixed(2);
+
     const priceInput = element("input", {
       type: "number",
       name: "price",
       step: "0.01",
-      min: "0",
+      min: "0.01",
       required: "",
-      placeholder: "0,00",
-      value: String(priceVal),
+      placeholder: "0.00",
+      value: priceVal > 0 ? priceVal : "",
     });
-    const stockVal = editingProduct?.stock?.quantity ?? editingProduct?.stockQuantity ?? 0;
-    const stockInput = element("input", {
+
+    const costInput = element("input", {
       type: "number",
-      name: "stockQuantity",
+      name: "cost",
+      step: "0.01",
       min: "0",
-      placeholder: "0",
-      value: String(stockVal),
+      placeholder: "0.00",
+      value: editingProduct?.cost || editingProduct?.preco_custo || "",
     });
-    const unitSelect = element("select", { name: "unit" }, [
-      element("option", { value: "UN", text: "UN (Unidade)" }),
-      element("option", { value: "KG", text: "KG (Quilo)" }),
-      element("option", { value: "L", text: "L (Litro)" }),
-      element("option", { value: "PCT", text: "PCT (Pacote)" }),
-      element("option", { value: "CX", text: "CX (Caixa)" }),
-      element("option", { value: "M", text: "M (Metro)" }),
-      element("option", { value: "FD", text: "FD (Fardo)" }),
-    ]);
-    if (editingProduct?.saleUnit?.code || editingProduct?.unit) {
-      unitSelect.value = editingProduct.saleUnit?.code || editingProduct.unit;
-    }
 
     form.append(
-      element("div", { class: "pe-row pe-row-3" }, [
+      element("div", { class: "pe-row" }, [
         element("label", { class: "pe-label" }, [
-          element("span", { text: "Preço de Venda (R$) *" }),
+          element("span", { text: `${"product_entry.price".tr} *` }),
           priceInput,
         ]),
         element("label", { class: "pe-label" }, [
-          element("span", { text: "Estoque Inicial" }),
+          element("span", { text: "product_entry.cost".tr }),
+          costInput,
+        ]),
+      ]),
+    );
+
+    // Stock and Unit Row
+    const stockInput = element("input", {
+      type: "number",
+      name: "stock",
+      min: "0",
+      step: "1",
+      placeholder: "0",
+      value: editingProduct?.stock?.quantity ?? (editingProduct?.estoque ?? "10"),
+    });
+
+    const unitSelect = element("select", { name: "unit" }, [
+      element("option", { value: "UN", text: "UN - Unidade" }),
+      element("option", { value: "VASO", text: "VASO - Vaso / Pote" }),
+      element("option", { value: "KG", text: "KG - Quilo" }),
+      element("option", { value: "MUDA", text: "MUDA - Muda" }),
+      element("option", { value: "PACOTE", text: "PCT - Pacote" }),
+      element("option", { value: "SACO", text: "SACO - Saco" }),
+      element("option", { value: "BANDEJA", text: "BDJ - Bandeja" }),
+    ]);
+    if (editingProduct?.saleUnit?.code) {
+      unitSelect.value = editingProduct.saleUnit.code;
+    }
+
+    form.append(
+      element("div", { class: "pe-row" }, [
+        element("label", { class: "pe-label" }, [
+          element("span", { text: "product_entry.stock".tr }),
           stockInput,
         ]),
         element("label", { class: "pe-label" }, [
-          element("span", { text: "Unidade" }),
+          element("span", { text: "product_entry.unit".tr }),
           unitSelect,
         ]),
       ]),
     );
 
-    // Status selector
-    const statusSelect = element("select", { name: "status" }, [
-      element("option", { value: "ATIVO", text: "🟢 ATIVO (Visível e liberado para venda)" }),
-      element("option", { value: "INATIVO", text: "🔴 INATIVO (Oculto / Bloqueado para venda)" }),
-    ]);
-    if (editingProduct?.status) {
-      statusSelect.value = editingProduct.status;
-    }
-    form.append(
-      element("label", { class: "pe-label" }, [
-        element("span", { text: "Status do Produto" }),
-        statusSelect,
-      ]),
-    );
-
-    // Image URL with live preview
+    // Image URL
     const imageInput = element("input", {
       type: "url",
       name: "imageUrl",
-      placeholder: "https://... (URL da foto do produto)",
+      placeholder: "https://...",
       value: editingProduct?.imageUrl || "",
     });
-    const previewImg = element("img", {
-      class: "pe-preview-img",
-      src: editingProduct?.imageUrl || "/store-assets/placeholder.svg",
-      alt: "Prévia da foto",
-    });
-    imageInput.addEventListener("input", () => {
-      previewImg.src = imageInput.value.trim() || "/store-assets/placeholder.svg";
-    });
-
     form.append(
       element("label", { class: "pe-label" }, [
-        element("span", { text: "Foto do Produto (URL)" }),
-        element("div", { class: "pe-img-row" }, [imageInput, previewImg]),
+        element("span", { text: "product_entry.image_url".tr }),
+        imageInput,
       ]),
     );
 
     // Description
-    const descTextarea = element("textarea", {
+    const descInput = element("textarea", {
       name: "description",
-      rows: "2",
-      placeholder: "Breve descrição ou características do item...",
-      value: editingProduct?.description || "",
+      rows: "3",
+      placeholder: "product_entry.description".tr,
+      text: editingProduct?.description || editingProduct?.descriptionAi || "",
     });
     form.append(
       element("label", { class: "pe-label" }, [
-        element("span", { text: "Descrição" }),
-        descTextarea,
+        element("span", { text: "product_entry.description".tr }),
+        descInput,
       ]),
     );
 
-    // Tags
-    const tagsVal = Array.isArray(editingProduct?.tags)
-      ? editingProduct.tags.join(", ")
-      : "";
-    const tagsInput = element("input", {
+    // Care tips and ideal env
+    const careInput = element("input", {
       type: "text",
-      name: "tags",
-      placeholder: "palavras-chave separadas por vírgula (ex: premium, promoção)",
-      value: tagsVal,
+      name: "cuidados_basicos",
+      placeholder: "product.care_tips".tr,
+      value: editingProduct?.cuidados_basicos || "",
+    });
+    const envInput = element("input", {
+      type: "text",
+      name: "ambiente_ideal",
+      placeholder: "product.ideal_env".tr,
+      value: editingProduct?.ambiente_ideal || "",
     });
     form.append(
-      element("label", { class: "pe-label" }, [
-        element("span", { text: "Tags de busca" }),
-        tagsInput,
+      element("div", { class: "pe-row" }, [
+        element("label", { class: "pe-label" }, [
+          element("span", { text: "product.care_tips".tr }),
+          careInput,
+        ]),
+        element("label", { class: "pe-label" }, [
+          element("span", { text: "product.ideal_env".tr }),
+          envInput,
+        ]),
       ]),
     );
 
-    // Actions
+    // Submit and Cancel buttons
     const submitBtn = element("button", {
       type: "submit",
       class: "primary pe-submit-btn",
-      text: editingProduct ? "💾 Salvar Alterações" : "✅ Cadastrar Produto",
+      text: editingProduct ? "common.save".tr : "product_entry.save".tr,
+    });
+    const cancelBtn = element("button", {
+      type: "button",
+      class: "quiet",
+      text: "common.cancel".tr,
+      onclick: () => dialog.close(),
     });
 
-    const buttonsRow = element("div", { class: "pe-actions-row" }, [submitBtn]);
-
-    if (editingProduct) {
-      const toggleStatusBtn = element("button", {
-        type: "button",
-        class: "quiet pe-toggle-btn",
-        text:
-          editingProduct.status === "INATIVO"
-            ? "🟢 Reativar Produto"
-            : "🔴 Desativar Produto",
-        onclick: async () => {
-          try {
-            toggleStatusBtn.disabled = true;
-            const target =
-              editingProduct.status === "INATIVO" ? "ATIVO" : "INATIVO";
-            await state.api(`/products/${editingProduct.id}/status`, {
-              method: "PUT",
-              body: { status: target },
-            });
-            notify(`Produto alterado para ${target}!`);
-            dialog.close();
-            if (onSaved) {await onSaved();}
-          } catch (err) {
-            notify("Erro: " + err.message);
-          } finally {
-            toggleStatusBtn.disabled = false;
-          }
-        },
-      });
-      buttonsRow.append(toggleStatusBtn);
-    }
-
-    form.append(buttonsRow);
+    form.append(
+      element("div", { class: "pe-actions" }, [cancelBtn, submitBtn]),
+    );
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
+      const name = nameInput.value.trim();
+      const category = catInput.value.trim();
+      const subcategory = subcatInput.value.trim();
+      const price = parseFloat(priceInput.value) || 0;
+      const cost = parseFloat(costInput.value) || 0;
+      const stock = parseInt(stockInput.value, 10) || 0;
+      const unit = unitSelect.value || "UN";
+      const imageUrl = imageInput.value.trim();
+      const description = descInput.value.trim();
+      const cuidados = careInput.value.trim();
+      const ambiente = envInput.value.trim();
+
+      if (!name || !category || price <= 0) {
+        notify("common.required_fields".tr);
+        return;
+      }
+
       submitBtn.disabled = true;
-      submitBtn.textContent = "Salvando...";
+      submitBtn.textContent = "product_entry.saving".tr;
+
+      const payload = {
+        id: editingProduct?.id || `prod_${Date.now()}`,
+        name,
+        category,
+        categoryName: category,
+        subcategory,
+        subcategoryName: subcategory,
+        price,
+        cost,
+        stock: { quantity: stock, tracked: true },
+        unit,
+        imageUrl,
+        description,
+        cuidados_basicos: cuidados,
+        ambiente_ideal: ambiente,
+      };
 
       try {
-        const payload = {
-          id: editingProduct?.id || undefined,
-          name: nameInput.value.trim(),
-          category: catInput.value.trim() || "Geral",
-          subcategory: subcatInput.value.trim(),
-          price: parseFloat(priceInput.value) || 0,
-          stockQuantity: parseFloat(stockInput.value) || 0,
-          unit: unitSelect.value,
-          status: statusSelect.value,
-          imageUrl: imageInput.value.trim(),
-          description: descTextarea.value.trim(),
-          tags: tagsInput.value
-            .split(",")
-            .map((t) => t.trim())
-            .filter(Boolean),
-        };
-
-        await state.api("/products", {
+        await state.api("/admin/products", {
           method: "POST",
           body: payload,
         });
 
-        notify("Produto salvo com sucesso no catálogo!");
+        // Invalidate TanStack Query catalog cache
+        queryClient.invalidateQueries({ queryKey: ["catalog"] });
+
+        notify("product_entry.success".tr);
         dialog.close();
-        if (onSaved) {await onSaved();}
+        if (onSaved) {
+          await onSaved();
+        }
       } catch (err) {
-        notify("Erro ao salvar produto: " + err.message);
+        notify(`${"common.error".tr}: ${err.message}`);
       } finally {
         submitBtn.disabled = false;
-        submitBtn.textContent = editingProduct
-          ? "💾 Salvar Alterações"
-          : "✅ Cadastrar Produto";
+        submitBtn.textContent = editingProduct ? "common.save".tr : "product_entry.save".tr;
       }
     });
 
@@ -311,42 +326,33 @@ export function createProductEntry(state, onSaved) {
   function renderQuickStockForm() {
     const form = element("form", { class: "pe-form" });
 
-    const prodSelect = element("select", {
-      name: "productId",
-      required: "",
-      class: "pe-select",
-    });
-
-    prodSelect.append(
-      element("option", { value: "", text: "-- Selecione um produto --" }),
-    );
-
-    for (const p of state.products) {
-      const stock = p.stock?.quantity ?? p.stockQuantity ?? 0;
-      const unit = p.saleUnit?.code || p.unit || "UN";
-      const statusNote = p.status === "INATIVO" ? " [INATIVO]" : "";
-      prodSelect.append(
+    // Select Product
+    const prodSelect = element("select", { name: "productId", required: "" }, [
+      element("option", { value: "", text: "Selecione o produto..." }),
+      ...state.products.map((p) =>
         element("option", {
           value: p.id,
-          text: `${p.name} (Atual: ${stock} ${unit})${statusNote}`,
+          text: `${p.name} (Atual: ${p.stock?.quantity ?? 0} ${p.saleUnit?.code || "UN"})`,
+          selected: editingProduct?.id === p.id,
         }),
-      );
-    }
+      ),
+    ]);
 
     form.append(
       element("label", { class: "pe-label" }, [
-        element("span", { text: "Produto para entrada *" }),
+        element("span", { text: `${"product_entry.name".tr} *` }),
         prodSelect,
       ]),
     );
 
+    // Quantity Input
     const qtyInput = element("input", {
       type: "number",
       name: "quantityAdded",
       min: "1",
       step: "1",
       required: "",
-      placeholder: "Ex: 10, 50, 100",
+      placeholder: "10",
       value: "10",
     });
 
@@ -366,7 +372,7 @@ export function createProductEntry(state, onSaved) {
 
     form.append(
       element("label", { class: "pe-label" }, [
-        element("span", { text: "Quantidade a Adicionar ao Estoque *" }),
+        element("span", { text: `${"catalog.quick_stock".tr} *` }),
         qtyInput,
         presets,
       ]),
@@ -375,7 +381,7 @@ export function createProductEntry(state, onSaved) {
     const submitBtn = element("button", {
       type: "submit",
       class: "primary pe-submit-btn",
-      text: "⚡ Confirmar Entrada de Estoque",
+      text: `⚡ ${"catalog.quick_stock".tr}`,
     });
 
     form.append(submitBtn);
@@ -383,17 +389,17 @@ export function createProductEntry(state, onSaved) {
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       if (!prodSelect.value) {
-        notify("Selecione um produto.");
+        notify("common.required_fields".tr);
         return;
       }
       const qty = parseFloat(qtyInput.value) || 0;
       if (qty <= 0) {
-        notify("Informe uma quantidade válida.");
+        notify("common.required_fields".tr);
         return;
       }
 
       submitBtn.disabled = true;
-      submitBtn.textContent = "Atualizando estoque...";
+      submitBtn.textContent = "common.loading".tr;
 
       try {
         await state.api("/stock/quick-entry", {
@@ -404,14 +410,17 @@ export function createProductEntry(state, onSaved) {
           },
         });
 
-        notify(`Entrada de +${qty} unidades realizada com sucesso!`);
+        queryClient.invalidateQueries({ queryKey: ["catalog"] });
+        notify(`+${qty} ${"catalog.in_stock".tr}`);
         dialog.close();
-        if (onSaved) {await onSaved();}
+        if (onSaved) {
+          await onSaved();
+        }
       } catch (err) {
-        notify("Erro ao dar entrada no estoque: " + err.message);
+        notify(`${"common.error".tr}: ${err.message}`);
       } finally {
         submitBtn.disabled = false;
-        submitBtn.textContent = "⚡ Confirmar Entrada de Estoque";
+        submitBtn.textContent = `⚡ ${"catalog.quick_stock".tr}`;
       }
     });
 
@@ -429,10 +438,5 @@ export function createProductEntry(state, onSaved) {
     }
   }
 
-  // Bind trigger buttons if they exist
-  const headerBtn = $("#openProductEntry");
-  if (headerBtn) {
-    headerBtn.addEventListener("click", () => open(null));
-  }
   return { open, render };
 }

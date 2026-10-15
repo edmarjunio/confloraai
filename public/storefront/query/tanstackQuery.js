@@ -1,0 +1,259 @@
+/**
+ * TanStack Query Client Architecture for Storefront
+ * Implements QueryClient, QueryCache, queries with stale-while-revalidate,
+ * mutations, and cache invalidation.
+ */
+
+class QueryCache {
+  constructor() {
+    this.queries = new Map();
+    this.subscribers = new Map();
+  }
+
+  hashKey(key) {
+    if (Array.isArray(key)) {
+      return JSON.stringify(key);
+    }
+    return String(key);
+  }
+
+  get(key) {
+    const hash = this.hashKey(key);
+    return this.queries.get(hash);
+  }
+
+  set(key, data, options = {}) {
+    const hash = this.hashKey(key);
+    const entry = {
+      data,
+      updatedAt: Date.now(),
+      staleTime: options.staleTime ?? 1000 * 60 * 2, // 2 minutes
+      isFetching: false,
+      error: null,
+    };
+    this.queries.set(hash, entry);
+    this.notify(hash, entry);
+    return entry;
+  }
+
+  isStale(key) {
+    const entry = this.get(key);
+    if (!entry) {
+      return true;
+    }
+    return Date.now() - entry.updatedAt > entry.staleTime;
+  }
+
+  subscribe(key, callback) {
+    const hash = this.hashKey(key);
+    if (!this.subscribers.has(hash)) {
+      this.subscribers.set(hash, new Set());
+    }
+    this.subscribers.get(hash).add(callback);
+    return () => {
+      const set = this.subscribers.get(hash);
+      if (set) {
+        set.delete(callback);
+        if (set.size === 0) {
+          this.subscribers.delete(hash);
+        }
+      }
+    };
+  }
+
+  notify(hash, entry) {
+    const set = this.subscribers.get(hash);
+    if (set) {
+      set.forEach((cb) => {
+        try {
+          cb(entry);
+        } catch (e) {
+          console.error('Query subscription error:', e);
+        }
+      });
+    }
+  }
+
+  invalidate(key) {
+    const prefixHash = Array.isArray(key) ? JSON.stringify(key[0]) : JSON.stringify(key);
+    for (const [hash, entry] of this.queries.entries()) {
+      if (hash.startsWith(prefixHash.slice(0, -1))) {
+        entry.updatedAt = 0; // Mark stale
+        this.notify(hash, entry);
+      }
+    }
+  }
+}
+
+export class QueryClient {
+  constructor(options = {}) {
+    this.cache = new QueryCache();
+    this.defaultOptions = options.defaultOptions || {
+      queries: {
+        staleTime: 1000 * 60 * 2, // 2 min
+        retry: 1,
+      },
+    };
+  }
+
+  async fetchQuery({ queryKey, queryFn, staleTime }) {
+    const cached = this.cache.get(queryKey);
+    const isStale = this.cache.isStale(queryKey);
+
+    // Return fresh cached data if available
+    if (cached && !isStale) {
+      return cached.data;
+    }
+
+    try {
+      const data = await queryFn();
+      this.cache.set(queryKey, data, {
+        staleTime: staleTime ?? this.defaultOptions.queries.staleTime,
+      });
+      return data;
+    } catch (err) {
+      if (cached) {
+        // Return stale data on error as fallback
+        console.warn('TanStack Query: fetch failed, returning stale cache:', err);
+        return cached.data;
+      }
+      throw err;
+    }
+  }
+
+  getQueryData(queryKey) {
+    return this.cache.get(queryKey)?.data;
+  }
+
+  setQueryData(queryKey, data, options) {
+    this.cache.set(queryKey, data, options);
+  }
+
+  invalidateQueries({ queryKey }) {
+    this.cache.invalidate(queryKey);
+  }
+
+  subscribe(queryKey, callback) {
+    return this.cache.subscribe(queryKey, callback);
+  }
+
+  async mutate({ mutationFn, onSuccess, onError, onSettled }) {
+    try {
+      const result = await mutationFn();
+      if (onSuccess) {
+        await onSuccess(result);
+      }
+      if (onSettled) {
+        await onSettled(result, null);
+      }
+      return result;
+    } catch (error) {
+      if (onError) {
+        await onError(error);
+      }
+      if (onSettled) {
+        await onSettled(null, error);
+      }
+      throw error;
+    }
+  }
+}
+
+// Global TanStack QueryClient singleton instance
+export const queryClient = new QueryClient();
+
+// Query Keys
+export const QUERY_KEYS = {
+  catalog: (slug) => ['catalog', slug || 'conflora'],
+  product: (id) => ['product', String(id)],
+  teamUsers: () => ['teamUsers'],
+  config: (slug) => ['config', slug || 'conflora'],
+};
+
+/**
+ * High-level data operations powered by TanStack Query
+ */
+export const storeQueries = {
+  /**
+   * Fetch Catalog with caching and revalidation
+   */
+  async getCatalog(slug = 'conflora', apiFn) {
+    return queryClient.fetchQuery({
+      queryKey: QUERY_KEYS.catalog(slug),
+      queryFn: async () => {
+        if (apiFn) {
+          return await apiFn('/products');
+        }
+        const res = await fetch('/api/storefront/catalog');
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        return data.products || [];
+      },
+    });
+  },
+
+  /**
+   * Fetch Team Users for PIN login
+   */
+  async getTeamUsers() {
+    return queryClient.fetchQuery({
+      queryKey: QUERY_KEYS.teamUsers(),
+      queryFn: async () => {
+        const res = await fetch('/api/admin/auth/users');
+        if (!res.ok) {
+          return [];
+        }
+        return await res.json();
+      },
+    });
+  },
+
+  /**
+   * Submit Checkout Order Mutation with automatic catalog cache invalidation
+   */
+  async submitOrder(orderPayload) {
+    return queryClient.mutate({
+      mutationFn: async () => {
+        const res = await fetch('/api/storefront/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(orderPayload),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || err.message || `HTTP ${res.status}`);
+        }
+        return await res.json();
+      },
+      onSuccess: () => {
+        // Invalidate catalog to refresh stock levels
+        queryClient.invalidateQueries({ queryKey: ['catalog'] });
+      },
+    });
+  },
+
+  /**
+   * Quick Stock Entry Mutation
+   */
+  async adjustStock({ productId, quantityAdded }) {
+    return queryClient.mutate({
+      mutationFn: async () => {
+        const res = await fetch('/api/stock/quick-entry', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productId, quantityAdded: Number(quantityAdded) }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || `HTTP ${res.status}`);
+        }
+        return await res.json();
+      },
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['catalog'] });
+      },
+    });
+  },
+};

@@ -1,1 +1,0 @@
-import{e,h as m}from"./chunk-TQ5OMUUJ.js";import{a as s,d as r,f as p}from"./chunk-5N5T5LUE.js";import{a as l,c as t,l as n}from"./chunk-KGC35FSO.js";function f({children:c}){let i=r(e,[]);return(0,a.jsx)(u.Provider,{value:i,children:c})}var o,a,u,v,x=l(()=>{o=t(s());m();p();a=t(n()),u=(0,o.createContext)(null);v=()=>(0,o.useContext)(u)});export{f as a,v as b,x as c};

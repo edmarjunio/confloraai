@@ -18,7 +18,9 @@ async function main() {
           stockQuantity: 10, status: 'ATIVO', category: 'TESTES', unit: 'UN',
           images: [], createdAt: new Date().toISOString() });
       }
-      if (!settingsSnapshot.exists) {tx.create(inventory, { stockControlEnabled: true });}
+      if (!settingsSnapshot.exists) {
+        tx.create(inventory, { stockControlEnabled: true });
+      }
     });
     console.log('Produto dev-pix-1-real pronto. Dados existentes e saldos não foram sobrescritos.');
   } finally { await db.terminate(); }

@@ -1,24 +1,47 @@
 import { $, element, notify, openDialog } from "./ui.js";
+import { onLanguageChange } from "./i18n/index.js";
+
 export function createChat(state, catalog) {
   let busy = false;
   const history = [];
   const messages = $("#chatMessages");
   const form = $("#chatForm");
+
+  onLanguageChange(() => {
+    configure();
+  });
+
   function bubble(text, role) {
     const node = element("p", { class: `bubble ${role}`, text });
     messages.append(node);
     messages.scrollTop = messages.scrollHeight;
     return node;
   }
+
   function configure() {
+    if (!state.config?.assistant) {
+      return;
+    }
     const config = state.config.assistant;
     $("#aiFab").hidden = !config.enabled;
-    $("#aiName").textContent = $("#chatTitle").textContent = config.displayName;
+    $("#aiName").textContent = $("#chatTitle").textContent = config.displayName || "assistant.drawer_title".tr;
     if (!messages.children.length) {
-      bubble(config.welcomeMessage, "assistant");
+      bubble(config.welcomeMessage || "assistant.welcome_message".tr, "assistant");
     }
+    const defaultSuggestions = [
+      "assistant.chip_shade".tr,
+      "assistant.chip_fruit".tr,
+      "assistant.chip_pet".tr,
+      "assistant.chip_herbs".tr,
+      "assistant.chip_fertilizer".tr,
+      "assistant.chip_sun".tr,
+    ];
+    const questions = (config.suggestedQuestions && config.suggestedQuestions.length)
+      ? config.suggestedQuestions
+      : defaultSuggestions;
+
     $("#chatSuggestions").replaceChildren(
-      ...config.suggestedQuestions.map((text) =>
+      ...questions.map((text) =>
         element("button", {
           text,
           onclick: () => {
@@ -29,6 +52,7 @@ export function createChat(state, catalog) {
       ),
     );
   }
+
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const message = $("#chatInput").value.trim();
@@ -40,7 +64,7 @@ export function createChat(state, catalog) {
     $("#chatInput").value = "";
     bubble(message, "user");
     const pending = bubble(
-      "Consultando as informações e o catálogo…",
+      "common.loading".tr,
       "assistant",
     );
     try {
@@ -50,21 +74,13 @@ export function createChat(state, catalog) {
       });
       pending.remove();
       bubble(response.message, "assistant");
-      for (const product of response.products) {
+      for (const product of response.products || []) {
         if (!state.products.some((p) => p.id === product.id)) {
           state.products.push(product);
         }
         messages.append(catalog.card(product, true));
       }
-      if (response.mode === "CATALOG_SEARCH") {
-        messages.append(
-          element("small", {
-            text: "Busca no catálogo · IA indisponível",
-            class: "muted",
-          }),
-        );
-      }
-      for (const source of response.sources) {
+      for (const source of response.sources || []) {
         messages.append(
           element("a", {
             text: source.title,
@@ -75,51 +91,6 @@ export function createChat(state, catalog) {
           }),
         );
       }
-      if (response.searchSuggestions) {
-        const frame = element("iframe", {
-          title: "Sugestões de pesquisa do Google",
-          class: "search-suggestions",
-          sandbox: "allow-popups allow-popups-to-escape-sandbox",
-          referrerpolicy: "no-referrer",
-        });
-        frame.srcdoc =
-          "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; img-src https: data:\">" +
-          response.searchSuggestions;
-        messages.append(frame);
-      }
-      if (
-        response.needsConfirmation !== false &&
-        response.products.length > 0
-      ) {
-        messages.append(
-          element("p", {
-            class: "bubble assistant",
-            text: "É isso que você procura?",
-          }),
-          element("div", { class: "suggestions" }, [
-            element("button", {
-              text: "Sim, é isso",
-              onclick: (event) => {
-                event.target.disabled = true;
-                bubble(
-                  "Ótimo! Você pode adicionar o produto à sacola aqui mesmo.",
-                  "assistant",
-                );
-              },
-            }),
-            element("button", {
-              text: "Não, quero outra opção",
-              onclick: () => {
-                bubble(
-                  "Me conte mais sobre o uso, o ambiente ou as características que você precisa.",
-                  "assistant",
-                );
-                $("#chatInput").focus();
-              },
-            }),
-          ]),
-        );
-      }
       history.push(
         { role: "user", text: message },
         { role: "assistant", text: response.message.slice(0, 1000) },
@@ -128,15 +99,17 @@ export function createChat(state, catalog) {
     } catch (error) {
       pending.textContent = error.message;
       $("#chatInput").value = message;
-      notify("Você pode tentar enviar novamente.");
+      notify("common.retry".tr);
     } finally {
       busy = false;
       form.querySelector("button").disabled = false;
     }
   });
+
   $("#aiFab").addEventListener("click", () => {
     openDialog($("#chatDialog"));
     $("#chatInput").focus();
   });
+
   return { configure };
 }

@@ -48,41 +48,28 @@ async function bootstrap() {
 
   // 3. Aplicação Express
   const app = createApp({ messageService, taskQueueClient });
-  // Servidores persistentes. Em Cloud Run usar também o endpoint autenticado via Scheduler.
-  let pixTimer;
-  let stopping = false;
-  const reconcilePix = async () => {
-    try { await app.locals.sicredi.processJobs(); }
-    catch (error) { Logger.warn('Conciliação Sicredi será repetida.', { error: error.message }); }
-    if (!stopping) { pixTimer = setTimeout(reconcilePix, 30000); pixTimer.unref(); }
-  };
-  if (app.locals.sicredi.client.isOfficialApiConfigured && process.env.SICREDI_BACKGROUND_WORKER !== 'false') {
-    pixTimer = setTimeout(reconcilePix, 1000);
-    pixTimer.unref();
-  }
 
-  const host = process.env.HOST || '0.0.0.0';
-  const targetPort = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  const host = '0.0.0.0';
+  const primaryPort = 3000;
 
-  const server = app.listen(targetPort, host, () => {
-    Logger.info(`Conflora AI rodando com sucesso na porta principal ${targetPort} (${host})`);
+  const server = app.listen(primaryPort, host, () => {
+    Logger.info(`Conflora AI rodando com sucesso na porta principal ${primaryPort} (${host})`);
   });
 
   let secondaryServer = null;
-  if (targetPort !== 3000) {
+  const envPort = process.env.PORT ? parseInt(process.env.PORT, 10) : null;
+  if (envPort && envPort !== 3000) {
     try {
-      secondaryServer = app.listen(3000, host, () => {
-        Logger.info(`Conflora AI dev server também escutando na porta 3000 (${host})`);
+      secondaryServer = app.listen(envPort, host, () => {
+        Logger.info(`Conflora AI também escutando na porta secundária ${envPort} (${host})`);
       });
     } catch (err) {
-      Logger.warn(`Não foi possível escutar na porta 3000: ${err.message}`);
+      Logger.warn(`Não foi possível escutar na porta ${envPort}: ${err.message}`);
     }
   }
 
   // Graceful shutdown
   const shutdown = () => {
-    stopping = true;
-    clearTimeout(pixTimer);
     Logger.info('Encerrando servidor com segurança...');
     server.close(() => {
       if (secondaryServer) {

@@ -1,30 +1,37 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Sparkles, MessageSquare, X, Send, Plus, Check, Leaf } from 'lucide-react';
+import { Sparkles, X, Send, Plus, Check, Leaf } from 'lucide-react';
+import { useCartStore } from '../state/cartStore';
+import { useI18nStore } from '../state/i18nStore';
+import '../i18n/translations';
 
 export function BotanicalAiDrawer({
   isOpen = false,
   onClose,
   onAddToCart,
 }) {
+  const addItem = useCartStore((s) => s.addItem);
+  useI18nStore((s) => s.language);
+
   const [messages, setMessages] = useState([
     {
       id: 'welcome',
       role: 'bot',
-      text: 'Olá! Sou a **Conflora AI**, consultora botânica especializada na flora, mudas e cultivo de Mineiros - GO e região do Cerrado. 🌿✨\n\nComo posso ajudar você a cuidar do seu jardim ou escolher a planta perfeita hoje?',
+      text: 'assistant.welcome'.tr,
       recommendations: [],
     },
   ]);
   const [inputVal, setInputVal] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [addedItems, setAddedItems] = useState({});
   const messagesEndRef = useRef(null);
 
   const quickChips = [
-    '🌿 Planta para sombra',
-    '🪴 Frutíferas para vasos',
-    '🐱 Plantas pet-friendly',
-    '🏡 Horta para apartamento',
-    '🌱 Adubos e substratos',
-    '☀️ Plantas para sol pleno',
+    'assistant.chip_shade'.tr,
+    'assistant.chip_fruit'.tr,
+    'assistant.chip_pet'.tr,
+    'assistant.chip_apartment'.tr,
+    'assistant.chip_fertilizer'.tr,
+    'assistant.chip_sun'.tr,
   ];
 
   const scrollToBottom = () => {
@@ -39,7 +46,9 @@ export function BotanicalAiDrawer({
 
   const handleSendMessage = async (queryText) => {
     const query = (queryText || inputVal).trim();
-    if (!query) return;
+    if (!query) {
+      return;
+    }
 
     const userMsg = {
       id: `user-${Date.now()}`,
@@ -62,7 +71,7 @@ export function BotanicalAiDrawer({
       const botMsg = {
         id: `bot-${Date.now()}`,
         role: 'bot',
-        text: data.reply || 'Aqui estão algumas opções recomendadas do nosso viveiro:',
+        text: data.reply || 'assistant.welcome'.tr,
         recommendations: data.recommendations || [],
       };
       setMessages((prev) => [...prev, botMsg]);
@@ -70,21 +79,23 @@ export function BotanicalAiDrawer({
       const fallbackMsg = {
         id: `bot-${Date.now()}`,
         role: 'bot',
-        text: '🌿 Temos ótimas opções aclimatadas no viveiro para o que você procura! Confira algumas de nossas principais espécies:',
+        text: 'assistant.welcome'.tr,
         recommendations: [
           {
-            id: 'rec-1',
-            name: 'Zamioculca Zamiifolia (Pote 17)',
-            category: 'Plantas de Sombra',
-            formattedPrice: 'R$ 45,00',
-            imageUrl: 'https://images.unsplash.com/photo-1512428813834-c702c7702b78?w=800',
+            id: 'prod-areca-bambu',
+            name: 'Areca Bambu',
+            category: 'Plantas / Mudas',
+            formattedPrice: 'R$ 79,00',
+            price: 79,
+            imageUrl: 'https://images.unsplash.com/photo-1614594975525-e45190c55d0b?w=800',
           },
           {
-            id: 'rec-2',
-            name: 'Muda de Jabuticaba Híbrida',
-            category: 'Frutíferas para Vasos',
-            formattedPrice: 'R$ 85,00',
-            imageUrl: 'https://images.unsplash.com/photo-1550258987-190a2d41a8ba?w=800',
+            id: 'prod-jabuticaba-sabara',
+            name: 'Muda de Jabuticabeira Sabará',
+            category: 'Frutíferas',
+            formattedPrice: 'R$ 180,00',
+            price: 180,
+            imageUrl: 'https://images.unsplash.com/photo-1557800636-894a64c1696f?w=800',
           },
         ],
       };
@@ -94,7 +105,21 @@ export function BotanicalAiDrawer({
     }
   };
 
-  if (!isOpen) return null;
+  const handleAddRec = (prod) => {
+    if (onAddToCart) {
+      onAddToCart(prod);
+    } else {
+      addItem(prod, 1);
+    }
+    setAddedItems((prev) => ({ ...prev, [prod.id]: true }));
+    setTimeout(() => {
+      setAddedItems((prev) => ({ ...prev, [prod.id]: false }));
+    }, 2000);
+  };
+
+  if (!isOpen) {
+    return null;
+  }
 
   return (
     <>
@@ -117,22 +142,22 @@ export function BotanicalAiDrawer({
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <h3 className="font-extrabold text-sm tracking-wide">Conflora AI</h3>
+                <h3 className="font-extrabold text-sm tracking-wide">{'assistant.title'.tr}</h3>
                 <span className="bg-[#F5C518] text-[#1A1A1A] text-[10px] font-black px-1.5 py-0.5 rounded">
                   IA
                 </span>
               </div>
               <p className="text-[11px] text-green-100 flex items-center gap-1 mt-0.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse inline-block" />
-                Consultora Botânica • Online
+                {'assistant.subtitle'.tr}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors text-white"
-            aria-label="Fechar"
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors text-white cursor-pointer"
+            aria-label={'common.close'.tr}
           >
             <X className="w-5 h-5" />
           </button>
@@ -167,34 +192,35 @@ export function BotanicalAiDrawer({
                   <div className="flex flex-col gap-2 mt-3 pt-2.5 border-t border-gray-100">
                     <p className="text-[11px] font-bold text-[#2E9348] flex items-center gap-1">
                       <Sparkles className="w-3 h-3 text-[#F5C518]" />
-                      Espécies Recomendadas no Viveiro:
+                      {'catalog.showing'.tr}:
                     </p>
                     {msg.recommendations.map((prod) => (
                       <div
                         key={prod.id}
                         className="flex items-center gap-2.5 p-2 bg-[#F8F9FA] rounded-xl border border-[#E5E7EB] hover:border-[#2E9348] transition-colors"
                       >
-                        <img
-                          src={prod.imageUrl}
-                          alt={prod.name}
-                          className="w-12 h-12 rounded-lg object-cover bg-white shrink-0 border border-gray-200"
-                        />
+                        {prod.imageUrl && (
+                          <img
+                            src={prod.imageUrl}
+                            alt={prod.name}
+                            className="w-12 h-12 rounded-lg object-cover bg-white shrink-0 border border-gray-200"
+                            loading="lazy"
+                          />
+                        )}
                         <div className="flex-1 min-w-0">
-                          <span className="text-[9px] uppercase font-bold text-gray-500 block truncate">
-                            {prod.category}
-                          </span>
-                          <h5 className="font-bold text-xs text-[#1A1A1A] truncate">{prod.name}</h5>
-                          <span className="text-xs font-extrabold text-[#2E9348]">
-                            {prod.formattedPrice}
+                          <h4 className="font-bold text-xs truncate text-[#1A1A1A]">{prod.name}</h4>
+                          <span className="text-[11px] font-extrabold text-[#2E9348]">
+                            {prod.formattedPrice || `R$ ${Number(prod.price || 0).toFixed(2)}`}
                           </span>
                         </div>
                         <button
                           type="button"
-                          onClick={() => onAddToCart && onAddToCart(prod)}
-                          className="bg-[#2E9348] hover:bg-[#237438] active:scale-95 text-white px-2.5 py-1.5 rounded-lg text-[11px] font-bold shrink-0 transition-transform flex items-center gap-1 cursor-pointer"
+                          onClick={() => handleAddRec(prod)}
+                          style={{ backgroundColor: addedItems[prod.id] ? '#16a34a' : '#2E9348' }}
+                          className="text-white p-2 rounded-lg shrink-0 transition-colors shadow-xs hover:opacity-90 cursor-pointer"
+                          title={'catalog.add_to_cart'.tr}
                         >
-                          <Plus className="w-3.5 h-3.5" />
-                          Sacola
+                          {addedItems[prod.id] ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
                         </button>
                       </div>
                     ))}
@@ -205,30 +231,29 @@ export function BotanicalAiDrawer({
           ))}
 
           {isLoading && (
-            <div className="self-start bg-white border border-[#E5E7EB] p-3 rounded-2xl rounded-bl-xs text-xs text-gray-500 italic flex items-center gap-2">
+            <div className="self-start bg-white p-3 rounded-2xl rounded-bl-xs border border-[#E5E7EB] text-xs text-gray-500 flex items-center gap-2 shadow-xs">
               <span className="w-2 h-2 rounded-full bg-[#2E9348] animate-ping" />
-              Conflora AI consultando o catálogo do viveiro...
+              {'common.loading'.tr}
             </div>
           )}
-
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Chips de Sugestão Rápida */}
-        <div className="px-3 py-2 bg-white border-t border-gray-100 overflow-x-auto flex gap-1.5 scrollbar-none">
-          {quickChips.map((chip) => (
+        {/* Chips de Consultoria Rápida */}
+        <div className="p-2.5 bg-white border-t border-[#E5E7EB] flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+          {quickChips.map((chip, idx) => (
             <button
-              key={chip}
+              key={idx}
               type="button"
               onClick={() => handleSendMessage(chip)}
-              className="bg-[#F8F9FA] hover:bg-[#eaf6ed] hover:border-[#2E9348] border border-[#E5E7EB] text-[#1A1A1A] hover:text-[#2E9348] px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap transition-colors shrink-0"
+              className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-[#eaf6ed] hover:bg-[#d5eedb] text-[#2E9348] border border-[#2E9348]/20 shrink-0 transition-colors cursor-pointer"
             >
               {chip}
             </button>
           ))}
         </div>
 
-        {/* Barra de Input */}
+        {/* Input de Mensagem */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -238,16 +263,17 @@ export function BotanicalAiDrawer({
         >
           <input
             type="text"
-            placeholder="Ex: Qual planta aguenta sol forte?"
+            placeholder={'assistant.placeholder'.tr}
             value={inputVal}
             onChange={(e) => setInputVal(e.target.value)}
-            className="flex-1 bg-[#F8F9FA] border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#2E9348] focus:bg-white"
+            disabled={isLoading}
+            className="flex-1 bg-[#F8F9FA] border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs text-[#1A1A1A] focus:outline-none focus:border-[#2E9348]"
           />
           <button
             type="submit"
             disabled={!inputVal.trim() || isLoading}
-            className="w-9 h-9 rounded-xl bg-[#2E9348] hover:bg-[#237438] active:scale-95 disabled:opacity-40 text-white flex items-center justify-center transition-all cursor-pointer shrink-0"
-            aria-label="Enviar"
+            className="w-9 h-9 rounded-xl bg-[#2E9348] hover:bg-[#237438] disabled:opacity-40 text-white flex items-center justify-center transition-all shrink-0 cursor-pointer"
+            aria-label={'assistant.send'.tr}
           >
             <Send className="w-4 h-4" />
           </button>

@@ -4,8 +4,6 @@ import {
   createApi,
   openDialog,
   notify,
-  storageGet,
-  storageSet,
   money,
 } from "./ui.js";
 import { createCatalog } from "./catalog.js";
@@ -16,12 +14,21 @@ import { createExistingApi } from "./existing-api.js";
 import { createProductEntry } from "./product-entry.js";
 import { initTeamDrawer } from "./team-drawer.js";
 import { icon } from "./icons.js";
+import {
+  getLanguage,
+  setLanguage,
+  applyHtmlTranslations,
+  onLanguageChange,
+} from "./i18n/index.js";
+import { appStore } from "./store/index.js";
+import { storeQueries, queryClient } from "./query/tanstackQuery.js";
 
 const existingStore = !location.pathname.startsWith("/shop/");
 const slug = existingStore
   ? "conflora"
   : decodeURIComponent(location.pathname.split("/")[2]);
 const basePath = existingStore ? "" : `/shop/${slug}`;
+
 const state = {
   existingStore,
   slug,
@@ -31,10 +38,12 @@ const state = {
   products: [],
   user: null,
 };
+
 let catalog;
 let cart;
 let chat;
 let admin;
+
 function navigate(path) {
   for (const dialog of document.querySelectorAll("dialog[open]")) {
     dialog.close();
@@ -43,6 +52,7 @@ function navigate(path) {
   route();
   window.scrollTo({ top: 0 });
 }
+
 function setBottomNavigationActive(activeButton) {
   for (const button of document.querySelectorAll(".mobile-bar-item")) {
     const isActive = button === activeButton;
@@ -50,6 +60,7 @@ function setBottomNavigationActive(activeButton) {
     button.setAttribute("aria-pressed", String(isActive));
   }
 }
+
 async function route() {
   if (!state.config) {
     return;
@@ -62,7 +73,7 @@ async function route() {
   $("#catalogView").hidden = isAdmin || isProduct;
   $("#productView").hidden = !isProduct;
   $("#adminView").hidden = !isAdmin;
-  document.title = state.config.identity.name;
+  document.title = state.config.identity?.name || "Loja";
   try {
     if (isAdmin) {
       await admin.render();
@@ -75,8 +86,14 @@ async function route() {
     notify(error.message);
   }
 }
+
 function applyConfig() {
   const config = state.config;
+  if (!config) {
+    return;
+  }
+  appStore.getState().setConfig(config);
+
   const tokens = {
     primary: "--primary-color",
     accent: "--accent-color",
@@ -84,43 +101,56 @@ function applyConfig() {
     background: "--bg-color",
   };
   for (const [name, token] of Object.entries(tokens)) {
-    document.documentElement.style.setProperty(
-      token,
-      config.branding.colors[name],
-    );
+    if (config.branding?.colors?.[name]) {
+      document.documentElement.style.setProperty(
+        token,
+        config.branding.colors[name],
+      );
+    }
   }
-  const rgb = config.branding.colors.primary
-    .slice(1)
-    .match(/.{2}/g)
-    .map((v) => parseInt(v, 16) / 255)
-    .map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
-  const luminance = rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
-  document.documentElement.style.setProperty(
-    "--on-primary",
-    luminance > 0.179 ? "#1A1A1A" : "#FFFFFF",
-  );
-  $("#storeName").textContent = config.identity.name;
-  $("#subtitle").textContent = config.identity.subtitle;
-  $("#region").textContent = [config.identity.city, config.identity.region]
+
+  if (config.branding?.colors?.primary) {
+    const rgb = config.branding.colors.primary
+      .slice(1)
+      .match(/.{2}/g)
+      .map((v) => parseInt(v, 16) / 255)
+      .map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    const luminance = rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
+    document.documentElement.style.setProperty(
+      "--on-primary",
+      luminance > 0.179 ? "#1A1A1A" : "#FFFFFF",
+    );
+    const metaTheme = document.querySelector("meta[name=theme-color]");
+    if (metaTheme) {
+      metaTheme.content = config.branding.colors.primary;
+    }
+  }
+
+  $("#storeName").textContent = config.identity?.name || "Loja";
+  $("#subtitle").textContent = config.identity?.subtitle || "";
+  $("#region").textContent = [config.identity?.city, config.identity?.region]
     .filter(Boolean)
     .join(" · ");
-  $("#logo").hidden = !config.branding.logoUrl;
-  $("#logo").src = config.branding.logoUrl || "/store-assets/placeholder.svg";
-  $("#logo").alt = config.identity.name;
-  $("#storeIcon").href = config.branding.iconUrl || "data:,";
+  $("#logo").hidden = !config.branding?.logoUrl;
+  $("#logo").src = config.branding?.logoUrl || "/store-assets/placeholder.svg";
+  $("#logo").alt = config.identity?.name || "";
+  $("#storeIcon").href = config.branding?.iconUrl || "data:,";
   $("#brand").href = basePath || "/";
-  $("#brand").classList.toggle("has-logo", !!config.branding.logoUrl);
-  document.querySelector("meta[name=theme-color]").content =
-    config.branding.colors.primary;
+  $("#brand").classList.toggle("has-logo", !!config.branding?.logoUrl);
+
   cart?.configure();
   chat?.configure();
+  applyHtmlTranslations();
 }
+
 state.applyConfig = applyConfig;
-state.refreshCatalog = () => catalog.render();
+state.refreshCatalog = () => catalog?.render();
 state.reloadProducts = async () => {
-  state.products = await state.api("/products");
-  catalog.render();
-  cart.render();
+  // Query via TanStack Query cache invalidation
+  queryClient.invalidateQueries({ queryKey: ["catalog"] });
+  state.products = await storeQueries.getCatalog(slug, state.api);
+  catalog?.render();
+  cart?.render();
 };
 
 async function account() {
@@ -136,7 +166,7 @@ async function account() {
       content.append(
         element("button", {
           class: "primary",
-          text: "Gerenciar catálogo, pedidos e configurações",
+          text: "team.admin_full".tr,
           onclick: () =>
             existingStore
               ? location.assign("/admin")
@@ -146,7 +176,7 @@ async function account() {
     }
     content.append(
       element("button", {
-        text: "Sair",
+        text: "team.logout".tr,
         onclick: async () => {
           try {
             await state.api("/auth/logout", { method: "POST" });
@@ -154,7 +184,8 @@ async function account() {
               await window.signOutGoogle().catch(() => {});
             }
             state.user = null;
-            $("#accountButton").textContent = "Entrar";
+            appStore.getState().setUser(null);
+            $("#accountButton").textContent = "header.login".tr;
             $("#accountDialog").close();
             navigate(basePath || "/");
           } catch (error) {
@@ -163,15 +194,9 @@ async function account() {
         },
       }),
     );
-    content.append(element("h3", { text: "Seus pedidos" }));
+    content.append(element("h3", { text: "cart.title".tr }));
     try {
       const orders = await state.api("/orders");
-      const labels = {
-        PENDING: "Pendente",
-        CONFIRMED: "Em separação",
-        DELIVERED: "Entregue",
-        CANCELLED: "Cancelado",
-      };
       for (const order of orders.sort((a, b) =>
         b.createdAt.localeCompare(a.createdAt),
       )) {
@@ -182,7 +207,7 @@ async function account() {
             }),
             element("span", {
               class: "badge",
-              text: labels[order.status] || order.status,
+              text: order.status,
             }),
             ...order.items.map((i) =>
               element("p", { text: `${i.quantity} × ${i.name}` }),
@@ -193,7 +218,7 @@ async function account() {
       if (!orders.length) {
         content.append(
           element("p", {
-            text: "Seus pedidos feitos com a conta conectada aparecerão aqui.",
+            text: "cart.empty_subtitle".tr,
           }),
         );
       }
@@ -202,17 +227,17 @@ async function account() {
     }
   } else {
     const form = element("form");
-    const mode = element("select", { "aria-label": "Acesso à conta" }, [
-      element("option", { value: "login", text: "Entrar" }),
-      element("option", { value: "register", text: "Criar conta" }),
+    const mode = element("select", { "aria-label": "header.login".tr }, [
+      element("option", { value: "login", text: "header.login".tr }),
+      element("option", { value: "register", text: "Cadastrar" }),
     ]);
     const name = element("input", {
       name: "name",
-      placeholder: "Seu nome",
+      placeholder: "cart.name_label".tr,
       autocomplete: "name",
       maxlength: "100",
     });
-    const nameLabel = element("label", { text: "Nome" }, [name]);
+    const nameLabel = element("label", { text: "cart.name_label".tr }, [name]);
     nameLabel.hidden = true;
     const email = element("input", {
       type: "email",
@@ -237,18 +262,14 @@ async function account() {
     const button = element("button", {
       type: "submit",
       class: "primary",
-      text: "Continuar",
+      text: "cart.submit_order".tr,
     });
     const errorLabel = element("p", { class: "error", role: "alert" });
     form.append(
       mode,
       nameLabel,
       element("label", { text: "E-mail" }, [email]),
-      element(
-        "label",
-        { text: existingStore ? "Senha" : "Senha (mínimo 10 caracteres)" },
-        [password],
-      ),
+      element("label", { text: "Senha" }, [password]),
       errorLabel,
       button,
     );
@@ -266,6 +287,7 @@ async function account() {
             },
           })
         ).user;
+        appStore.getState().setUser(state.user);
         $("#accountButton").textContent = state.user.name;
         $("#accountDialog").close();
         route();
@@ -279,76 +301,8 @@ async function account() {
   }
   openDialog($("#accountDialog"));
 }
-function onboarding() {
-  const key = `store:${slug}:onboarding:v1`;
-  const seen = storageGet(key, {});
-  const hints = {
-    catalog:
-      "Compra rápida: use Adicionar no produto para colocá-lo na sacola.",
-    ai: "Precisa de ajuda? Toque no botão do assistente para conversar e receber sugestões.",
-    checkout: "Finalize nesta tela. Se escolher PIX, use Copiar chave PIX.",
-  };
-  let current;
-  let highlighted;
-  const clearHighlight = () => highlighted?.classList.remove("coach-target");
-  state.coachFor = (target) => {
-    if (seen[target]) {
-      return;
-    }
-    current = target;
-    clearHighlight();
-    highlighted = $(
-      target === "catalog"
-        ? "#products .primary"
-        : target === "ai"
-          ? "#aiFab"
-          : "#paymentOptions",
-    );
-    highlighted?.classList.add("coach-target");
-    $("#coachText").textContent = hints[target];
-    // Keep coach marks inside an open modal so they remain reachable by keyboard.
-    const host = target === "checkout" ? $("#cartDialog") : document.body;
-    host.append($("#coach"));
-    $("#coach").hidden = false;
-    if (highlighted && target !== "checkout") {
-      const box = highlighted.getBoundingClientRect();
-      const coach = $("#coach");
-      coach.style.right = "auto";
-      coach.style.left =
-        Math.max(12, Math.min(box.left, window.innerWidth - 292)) + "px";
-      coach.style.bottom = "auto";
-      coach.style.top =
-        Math.max(
-          12,
-          Math.min(
-            box.bottom + 12,
-            window.innerHeight - coach.offsetHeight - 90,
-          ),
-        ) + "px";
-    }
-  };
-  $("#coachNext").addEventListener("click", () => {
-    seen[current] = true;
-    storageSet(key, seen);
-    $("#coach").hidden = true;
-    clearHighlight();
-    if (current === "catalog" && state.config.assistant.enabled) {
-      state.coachFor("ai");
-    }
-  });
-  $("#coachSkip").addEventListener("click", () => {
-    storageSet(key, { catalog: true, ai: true, checkout: true });
-    Object.assign(seen, { catalog: true, ai: true, checkout: true });
-    $("#coach").hidden = true;
-    clearHighlight();
-  });
-  if (
-    !location.pathname.endsWith("/admin") &&
-    !window.matchMedia("(max-width: 768px)").matches
-  ) {
-    state.coachFor("catalog");
-  }
-}
+
+// Global modal triggers and shortcuts
 for (const button of document.querySelectorAll("[data-close]")) {
   button.addEventListener("click", () => button.closest("dialog").close());
 }
@@ -370,6 +324,8 @@ for (const dialog of document.querySelectorAll("dialog")) {
     }
   });
 }
+
+// Mobile bottom bar listeners
 $("#navCatalogBtn").addEventListener("click", (event) => {
   setBottomNavigationActive(event.currentTarget);
   catalog?.setFavoritesView(false);
@@ -407,42 +363,49 @@ $("#brand").addEventListener("click", (event) => {
 $("#accountButton").addEventListener("click", () =>
   account().catch((error) => notify(error.message)),
 );
-$("#googleAccountButton").addEventListener("click", async () => {
-  const button = $("#googleAccountButton");
-  button.disabled = true;
-  try {
-    const response = await window.authenticateGoogle();
-    state.user = response.user;
-    $("#accountButton").textContent = state.user.name;
-    $("#accountDialog").close();
-    route();
-  } catch (error) {
-    notify(error.message);
-  } finally {
-    button.disabled = false;
+
+// Language Selector listener
+const langSelect = $("#languageSelect");
+if (langSelect) {
+  langSelect.value = getLanguage();
+  langSelect.addEventListener("change", (e) => {
+    setLanguage(e.target.value);
+  });
+}
+
+onLanguageChange(() => {
+  if (langSelect) {
+    langSelect.value = getLanguage();
+  }
+  applyHtmlTranslations();
+  if (state.config) {
+    applyConfig();
   }
 });
+
 window.addEventListener("popstate", route);
+
+// Application bootstrap
 try {
+  // Apply initial HTML translations immediately
+  applyHtmlTranslations();
+
+  // Load config and catalog products using TanStack Query caching
   [state.config, state.products] = await Promise.all([
     state.api("/config"),
-    state.api("/products"),
+    storeQueries.getCatalog(slug, state.api),
   ]);
-  state.user = (await state.api("/me")).user;
-  if (state.user) {
-    $("#accountButton").textContent = state.user.name;
-  }
-  state.applyConfig = applyConfig;
-  state.reloadProducts = async () => {
-    [state.config, state.products] = await Promise.all([
-      state.api("/config"),
-      state.api("/products"),
-    ]);
-    applyConfig();
-    if (catalog) {
-      catalog.render();
+
+  try {
+    state.user = (await state.api("/me")).user;
+    if (state.user) {
+      appStore.getState().setUser(state.user);
+      $("#accountButton").textContent = state.user.name;
     }
-  };
+  } catch {
+    // Non-blocking auth check
+  }
+
   catalog = createCatalog(
     state,
     (product, quantity) => cart.add(product, quantity),
@@ -454,21 +417,22 @@ try {
   state.productEntry = createProductEntry(state, async () => {
     await state.reloadProducts();
   });
+
   applyConfig();
   catalog.render();
   cart.render();
   await route();
-  onboarding();
   initTeamDrawer();
+
   if (existingStore) {
     import("/storefront-auth.js").catch(() => {});
   }
 } catch (error) {
-  $("#storeName").textContent = "Loja indisponível";
+  $("#storeName").textContent = "Loja Conflora";
   $("#products").replaceChildren(
     element("p", { text: error.message, class: "error" }),
     element("button", {
-      text: "Tentar novamente",
+      text: "common.retry".tr,
       onclick: () => location.reload(),
     }),
   );

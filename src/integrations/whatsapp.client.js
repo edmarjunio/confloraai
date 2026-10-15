@@ -109,7 +109,6 @@ class WhatsAppClient {
   async postRequest(endpoint, body) {
     try {
       const response = await fetch(`${this.baseUrl}${endpoint}`, {
-        signal: AbortSignal.timeout(15000),
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.token}`,

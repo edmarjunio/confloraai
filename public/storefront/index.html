@@ -1,1 +1,422 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#166534"><title>Conflora</title></head><body><div id="root"></div><script type="module" src="/react/app.js"></script></body></html>
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <script>
+      (function() {
+        try {
+          var _fetch = typeof window !== 'undefined' ? window.fetch : null;
+          var _current = _fetch ? _fetch.bind(window) : null;
+          var desc = {
+            get: function() { return _current; },
+            set: function(fn) { _current = fn; },
+            configurable: true,
+            enumerable: true
+          };
+          try {
+            Object.defineProperty(window, 'fetch', desc);
+          } catch (_) {}
+          try {
+            if (typeof Window !== 'undefined' && Window.prototype) {
+              Object.defineProperty(Window.prototype, 'fetch', desc);
+            }
+          } catch (_) {}
+          try {
+            if (typeof window !== 'undefined' && window.__proto__) {
+              Object.defineProperty(window.__proto__, 'fetch', desc);
+            }
+          } catch (_) {}
+        } catch (_) {}
+      })();
+    </script>
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#2E9348" />
+    <title>Loja</title>
+    <link rel="stylesheet" href="/store-assets/v5/store.css" />
+    <link id="storeIcon" rel="icon" href="data:," />
+  </head>
+  <body>
+    <a class="skip" href="#main" data-i18n="nav.skip_to_products">Ir para os produtos</a>
+    <header class="header">
+      <a id="brand" class="brand" href="#"
+        ><img id="logo" alt="" hidden /><span
+          ><strong id="storeName" data-i18n="header.loading_store">Carregando loja…</strong><small id="subtitle"></small></span
+      ></a>
+      <label class="search"
+        ><span data-icon="search" aria-hidden="true"></span>
+        <input
+          id="search"
+          type="search"
+          placeholder="O que você procura?"
+          data-i18n-placeholder="header.search_placeholder"
+          aria-label="Buscar produtos"
+          data-i18n-aria="header.search_aria"
+        />
+        <button type="button" id="searchBtn" class="search-btn" data-i18n="header.search_btn">Buscar</button>
+      </label>
+
+      <div class="header-actions">
+        <!-- SELETOR DE IDIOMAS (PT, EN, ES, FR) -->
+        <div class="lang-selector-wrapper">
+          <select id="languageSelect" class="lang-select" aria-label="Idioma / Language">
+            <option value="pt">🇧🇷 PT</option>
+            <option value="en">🇺🇸 EN</option>
+            <option value="es">🇪🇸 ES</option>
+            <option value="fr">🇫🇷 FR</option>
+          </select>
+        </div>
+
+        <span id="region"></span>
+        <button id="teamDrawerBtn" class="team-hamburger-btn" type="button" title="Menu da Equipe" data-i18n-title="header.team_menu" aria-label="Menu da Equipe" data-i18n-aria="header.team_menu" aria-haspopup="dialog">
+          <span class="team-hamburger-icon">☰</span>
+          <span class="team-hamburger-label" data-i18n="header.team_menu">Equipe</span>
+        </button>
+        <button id="accountButton" class="quiet" hidden data-i18n="header.login">Entrar</button>
+        <button id="cartButton" aria-haspopup="dialog">
+          <span data-icon="cart" aria-hidden="true"></span>
+          <span class="cart-label" data-i18n="header.cart">Sacola</span> <span id="cartCount">0</span>
+        </button>
+      </div>
+    </header>
+
+    <main id="main" class="main">
+      <section id="catalogView">
+        <div class="section-title">
+          <h1 id="catalogTitle" data-i18n="catalog.title">Explore o catálogo</h1>
+          <div class="catalog-tools">
+            <span id="resultCount"></span>
+            <label class="catalog-sort"
+              ><span data-i18n="catalog.sort_label">Ordenar</span>
+              <select id="sortOrder" aria-label="Ordenar produtos" data-i18n-aria="catalog.sort_label">
+                <option value="az" data-i18n="catalog.sort_az">A a Z</option>
+                <option value="za" data-i18n="catalog.sort_za">Z a A</option>
+                <option value="price-asc" data-i18n="catalog.sort_price_asc">Menor preço</option>
+                <option value="price-desc" data-i18n="catalog.sort_price_desc">Maior preço</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <div
+          id="categoryFilterControl"
+          class="catalog-category-filter"
+          role="group"
+          aria-label="Filtrar por categoria"
+          data-i18n-aria="catalog.filter_by_category"
+          hidden
+        ></div>
+        <div id="products" class="products"></div>
+        <button id="loadMore" class="quiet" hidden data-i18n="catalog.load_more">
+          Mostrar mais produtos
+        </button>
+      </section>
+      <section id="productView" hidden></section>
+      <section id="adminView" hidden></section>
+    </main>
+
+    <button id="mobileCart" class="mobile-cart" aria-haspopup="dialog">
+      <span
+        ><span data-i18n="mobile.view_cart">Ver sacola</span> ·
+        <span id="mobileCount">0</span> <span data-i18n="mobile.cart_items">itens</span></span
+      ><strong id="mobileTotal">R$ 0,00</strong>
+    </button>
+
+    <nav id="mobileBottomBar" class="mobile-bottom-bar" aria-label="Navegação mobile">
+      <button type="button" class="mobile-bar-item active" id="navCatalogBtn" aria-label="Catálogo" data-i18n-aria="mobile.nav_catalog" aria-pressed="true">
+        <svg class="bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        <span data-i18n="mobile.nav_catalog">Catálogo</span>
+      </button>
+      <button type="button" class="mobile-bar-item" id="navCategoriesBtn" aria-label="Categorias" data-i18n-aria="mobile.nav_categories" aria-pressed="false">
+        <svg class="bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16M4 12h16M4 19h16"/><circle cx="8" cy="5" r="2" fill="currentColor"/><circle cx="15" cy="12" r="2" fill="currentColor"/><circle cx="10" cy="19" r="2" fill="currentColor"/></svg>
+        <span data-i18n="mobile.nav_categories">Categorias</span>
+      </button>
+      <button type="button" class="mobile-bar-item" id="navAiBtn" aria-label="Ajuda IA" data-i18n-aria="mobile.nav_ai" aria-pressed="false">
+        <svg class="bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+        <span data-i18n="mobile.nav_ai">Ajuda IA</span>
+      </button>
+      <button type="button" class="mobile-bar-item" id="navFavoritesBtn" aria-label="Salvos" data-i18n-aria="mobile.nav_favorites" aria-pressed="false">
+        <svg class="bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z"/></svg>
+        <span data-i18n="mobile.nav_favorites">Salvos</span>
+      </button>
+    </nav>
+
+    <button id="aiFab" class="ai-fab" aria-haspopup="dialog" hidden>
+      <span data-icon="sparkle" aria-hidden="true"></span>
+      <span id="aiName" class="sr-only">Assistente</span>
+      <span class="fab-caption" data-i18n="assistant.fab_caption">Converse com a IA</span>
+    </button>
+
+    <dialog
+      id="cartDialog"
+      class="drawer cart-drawer"
+      aria-labelledby="cartTitle"
+    >
+      <div class="dialog-header">
+        <h2 id="cartTitle" data-i18n="cart.title">Sua sacola</h2>
+        <button data-close aria-label="Fechar sacola" data-i18n-aria="cart.close_aria">×</button>
+      </div>
+      <section id="checkoutCustomer" aria-labelledby="checkoutCustomerTitle">
+        <h3 id="checkoutCustomerTitle">
+          <span data-icon="user" aria-hidden="true"></span><span data-i18n="cart.customer_title">Dados para esta compra</span>
+        </h3>
+        <p data-i18n="cart.customer_subtitle">Você pode editar os dados deste pedido sem alterar seu cadastro.</p>
+        <label
+          ><span data-i18n="cart.name_label">Nome</span><input
+            form="checkoutForm"
+            name="name"
+            autocomplete="name"
+            required
+            placeholder="Ex.: Ana Silva"
+            data-i18n-placeholder="cart.name_placeholder"
+            maxlength="100" /></label
+        ><label
+          ><span data-i18n="cart.phone_label">WhatsApp / Telefone</span><input
+            form="checkoutForm"
+            name="phone"
+            type="tel"
+            autocomplete="tel"
+            required
+            placeholder="(64) 99999-0000"
+            data-i18n-placeholder="cart.phone_placeholder"
+            maxlength="25"
+        /></label>
+      </section>
+      <div id="cartItems"></div>
+      <div class="total">
+        <span data-i18n="cart.subtotal">Total dos produtos</span><strong id="cartTotal"></strong>
+      </div>
+      <form id="checkoutForm">
+        <fieldset>
+          <legend>
+            <span data-icon="truck" aria-hidden="true"></span><span data-i18n="cart.fulfillment_title">Entrega ou retirada</span>
+          </legend>
+          <div id="fulfillmentOptions" class="choices"></div>
+        </fieldset>
+        <div id="deliveryFields" hidden>
+          <label id="serviceAreaLabel"
+            ><span data-i18n="cart.delivery_area_label">Região</span><select name="serviceArea"></select></label
+          ><label
+            ><span data-i18n="cart.delivery_address_label">Endereço completo</span><textarea
+              name="address"
+              autocomplete="street-address"
+              placeholder="Ex.: Rua das Flores, 123, Centro"
+              data-i18n-placeholder="cart.delivery_address_placeholder"
+              maxlength="500"
+            ></textarea>
+          </label>
+        </div>
+        <p id="pickupAddress" class="muted"></p>
+        <fieldset>
+          <legend>
+            <span data-icon="card" aria-hidden="true"></span><span data-i18n="cart.payment_title">Forma de pagamento</span>
+          </legend>
+          <div id="paymentOptions" class="choices"></div>
+        </fieldset>
+        <div id="pixBox" class="pix" hidden>
+          <strong data-i18n="cart.pix_option">Pagamento seguro via Pix</strong>
+          <small data-i18n="cart.pix_info">O QR Code e o código Copia e Cola serão exibidos imediatamente.</small>
+        </div>
+        <label id="cashLabel" hidden
+          ><span data-i18n="cart.cash_tendered_label">Precisa de troco para quanto?</span><input
+            name="cash"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="Ex.: 100,00"
+            data-i18n-placeholder="cart.cash_tendered_placeholder"
+        /></label>
+        <div class="total">
+          <span data-i18n="cart.total">Total com entrega</span><strong id="checkoutTotal"></strong>
+        </div>
+        <p id="checkoutError" class="error" role="alert"></p>
+        <button class="primary" type="submit" id="submitOrder">
+          <span data-icon="arrow" aria-hidden="true"></span><span data-i18n="cart.submit_order">Finalizar pedido</span>
+        </button>
+      </form>
+      <section id="receipt" hidden></section>
+    </dialog>
+
+    <dialog
+      id="chatDialog"
+      class="drawer chat-drawer"
+      aria-labelledby="chatTitle"
+    >
+      <div class="dialog-header">
+        <span
+          class="assistant-avatar"
+          data-icon="leaf"
+          aria-hidden="true"
+        ></span>
+        <div class="assistant-heading">
+          <h2 id="chatTitle" data-i18n="assistant.drawer_title">Assistente</h2>
+          <small data-i18n="assistant.drawer_subtitle">Vamos encontrar a melhor opção</small>
+        </div>
+        <button data-close aria-label="Fechar conversa" data-i18n-aria="common.close">×</button>
+      </div>
+      <div
+        id="chatMessages"
+        class="messages"
+        role="log"
+        aria-live="polite"
+      ></div>
+      <div id="chatSuggestions" class="suggestions"></div>
+      <form id="chatForm" class="composer">
+        <label class="sr-only" for="chatInput" data-i18n="assistant.input_placeholder">Sua mensagem</label>
+        <input
+          id="chatInput"
+          maxlength="500"
+          required
+          placeholder="Conte o que você procura…"
+          data-i18n-placeholder="assistant.input_placeholder"
+        />
+        <button class="primary" aria-label="Enviar mensagem" data-i18n-aria="assistant.send_btn">
+          <span data-icon="send"></span>
+        </button>
+      </form>
+      <small class="chat-note" data-i18n="assistant.disclaimer"
+        >Confira as especificações antes de comprar. A IA pode errar.</small
+      >
+    </dialog>
+
+    <dialog
+      id="accountDialog"
+      class="account-dialog"
+      aria-labelledby="accountTitle"
+    >
+      <div class="dialog-header">
+        <h2 id="accountTitle" data-i18n="header.login">Sua conta</h2>
+        <button data-close aria-label="Fechar conta" data-i18n-aria="common.close">×</button>
+      </div>
+      <div id="accountContent"></div>
+      <div id="googleAccount" hidden>
+        <p class="muted" data-google-status>Ou entre com sua conta Google.</p>
+        <button
+          type="button"
+          id="googleAccountButton"
+          data-google-login
+          disabled
+        >
+          Entrar com Google
+        </button>
+        <a href="/admin" class="staff-link">Acesso da equipe</a>
+      </div>
+    </dialog>
+
+    <dialog
+      id="productEntryDialog"
+      class="drawer product-entry-drawer"
+      aria-labelledby="productEntryTitle"
+    >
+      <div class="dialog-header">
+        <h2 id="productEntryTitle" data-i18n="product_entry.title">Entrada e Gestão de Produtos</h2>
+        <button data-close aria-label="Fechar formulário" data-i18n-aria="common.close">×</button>
+      </div>
+      <div id="productEntryContent" class="product-entry-content"></div>
+    </dialog>
+
+    <aside id="coach" class="coach" hidden>
+      <p id="coachText"></p>
+      <button id="coachNext">Entendi</button
+      ><button id="coachSkip" class="quiet">Pular dicas</button>
+    </aside>
+    <div id="toast" class="toast" role="status" hidden></div>
+
+    <!-- ÁREA DA EQUIPE / CAIXA -->
+    <div id="teamDrawerOverlay" class="team-drawer-overlay hidden">
+      <div id="teamDrawerSheet" class="team-drawer-sheet" role="dialog" aria-labelledby="teamDrawerTitle">
+        <div class="team-drawer-handle" aria-hidden="true"></div>
+        <div class="team-drawer-header">
+          <div class="team-drawer-brand">
+            <span class="team-badge-icon">🌿</span>
+            <div>
+              <h3 id="teamDrawerTitle" data-i18n="team.drawer_title">Área da Equipe Conflora</h3>
+              <span id="teamOperatorSubtitle" class="team-drawer-sub" data-i18n="team.operator">Identifique seu cargo</span>
+            </div>
+          </div>
+          <button id="closeTeamDrawerBtn" class="team-drawer-close" aria-label="Fechar menu" data-i18n-aria="common.close">✕</button>
+        </div>
+
+        <div class="team-drawer-body">
+          <!-- CARD DO OPERADOR ATIVO -->
+          <div class="team-operator-card">
+            <div class="team-op-left">
+              <span class="team-op-avatar">👤</span>
+              <div>
+                <strong id="teamOpName">Atendente Caixa</strong>
+                <span id="teamOpRoleBadge" class="team-role-badge caixa" data-i18n="team.role_cashier">CARGO: CAIXA</span>
+              </div>
+            </div>
+            <button id="teamSwitchOpBtn" class="team-switch-btn" type="button" data-i18n="team.switch_operator">Trocar</button>
+          </div>
+
+          <!-- SELETOR RÁPIDO DE OPERADOR -->
+          <div id="teamOpSelectorBox" class="team-op-selector-box hidden">
+            <label for="teamSelectUser" class="team-field-label" data-i18n="team.switch_operator">Selecione seu perfil:</label>
+            <select id="teamSelectUser" class="team-select-input"></select>
+            <div class="team-selector-actions">
+              <button id="teamConfirmOpBtn" class="team-btn-confirm" type="button" data-i18n="common.save">Confirmar Operador</button>
+              <button id="teamCancelOpBtn" class="team-btn-cancel" type="button" data-i18n="common.cancel">Cancelar</button>
+            </div>
+          </div>
+
+          <!-- AÇÕES DO MENU ESPECÍFICAS POR CARGO -->
+          <div class="team-menu-actions">
+            <!-- LINK PARA CAIXA: ACESSO ESTRITO ÀS VENDAS DE HOJE DO CAIXA DELE -->
+            <a id="teamLinkCaixa" href="/caixa" class="team-nav-card featured-caixa">
+              <div class="team-nav-icon">⚡</div>
+              <div class="team-nav-text">
+                <strong data-i18n="team.cashier_title">Caixa / PDV (Hoje)</strong>
+                <small id="teamCaixaScopeDesc" data-i18n="team.cashier_desc">Acesso estrito às suas vendas e números de hoje</small>
+              </div>
+              <span class="team-nav-arrow">➔</span>
+            </a>
+
+            <!-- FUNCIONALIDADES EXCLUSIVAS DO ADMIN (ESCONDIDAS PARA CARGO CAIXA) -->
+            <div id="teamAdminSection" class="team-admin-section">
+              <div class="team-section-divider">
+                <span data-i18n="team.admin_full">Ferramentas de Gerência (Admin)</span>
+              </div>
+
+              <a href="/admin-gerencial" class="team-nav-card">
+                <div class="team-nav-icon">📊</div>
+                <div class="team-nav-text">
+                  <strong data-i18n="team.manager_panel">Painel Gerencial (Looker Studio)</strong>
+                  <small data-i18n="team.manager_desc">Faturamento diário, ticket médio e gráficos</small>
+                </div>
+                <span class="team-nav-arrow">➔</span>
+              </a>
+
+              <button id="teamOpenEntryBtn" type="button" class="team-nav-card">
+                <div class="team-nav-icon">📦</div>
+                <div class="team-nav-text">
+                  <strong data-i18n="team.stock_entry">Entrada de Produtos & Estoque</strong>
+                  <small data-i18n="team.stock_entry_desc">Cadastrar novos itens ou repor estoque</small>
+                </div>
+                <span class="team-nav-arrow">➔</span>
+              </button>
+
+              <a href="/admin" class="team-nav-card">
+                <div class="team-nav-icon">⚙️</div>
+                <div class="team-nav-text">
+                  <strong data-i18n="team.admin_full">Painel Admin Completo</strong>
+                  <small data-i18n="team.admin_full_desc">Equipe, importação de planilhas e configurações</small>
+                </div>
+                <span class="team-nav-arrow">➔</span>
+              </a>
+            </div>
+
+            <!-- AVISO DE ACESSO DO CLIENTE -->
+            <div class="team-customer-notice">
+              <span data-i18n="team.customer_notice">🛒 Você é um cliente da loja?</span>
+              <button id="teamBackToShopBtn" type="button" class="team-btn-back-shop" data-i18n="team.back_to_shop">Continuar Comprando</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/store-assets/v5/app.js"></script>
+  </body>
+</html>

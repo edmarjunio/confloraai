@@ -26,8 +26,8 @@ test('ADMIN NOTIFICATIONS: Notifica todos os usuários com papel ADMIN quando um
 
   const sampleOrder = {
     id: 'ord-test-999',
-    customerName: 'Edmar Junio B Carrijo',
-    customerPhone: '5564999351616',
+    customerName: 'Maria Silva',
+    customerPhone: '5564999990000',
     total: 150.0,
     paymentMethod: 'PIX',
     source: 'WEB_CATALOG',
@@ -55,7 +55,7 @@ test('ADMIN NOTIFICATIONS: Notifica todos os usuários com papel ADMIN quando um
 
   assert.ok(edmarSaleNotif.title.includes('Nova Venda Finalizada'));
   assert.ok(edmarSaleNotif.message.includes('150,00'));
-  assert.ok(edmarSaleNotif.message.includes('Edmar Junio B Carrijo'));
+  assert.ok(edmarSaleNotif.message.includes('Maria Silva'));
 });
 
 test('ADMIN NOTIFICATIONS: POST /api/orders dispara notificação para todos os administradores', async () => {
@@ -175,12 +175,6 @@ test('ADMIN NOTIFICATIONS: OrderService.confirmOrder dispara notificação para 
 });
 
 test('CAIXA DISCOUNTS: desconto acima de 5% aguarda Admin e só vira pedido após aceite', async (t) => {
-  const previousProvider = process.env.PDV_PIX_PROVIDER;
-  process.env.PDV_PIX_PROVIDER = 'MERCADO_PAGO'; // Cobertura do provedor legado explícito.
-  t.after(() => {
-    if (previousProvider === undefined) { delete process.env.PDV_PIX_PROVIDER; }
-    else { process.env.PDV_PIX_PROVIDER = previousProvider; }
-  });
   const repo = new FirestoreRepository({ isInMemory: true });
   const config = require('../src/config/env');
   const previousServiceUrl = config.tasks.serviceUrl;
@@ -282,13 +276,13 @@ test('CAIXA DISCOUNTS: desconto acima de 5% aguarda Admin e só vira pedido apó
 
 test('CAIXA CUSTOMERS: busca e cadastro rápido exigem perfil de colaborador', async () => {
   const repo = new FirestoreRepository({ isInMemory: true });
-  await repo.saveCustomerProfile('5564999351616', { name: 'Edmar Junio B Carrijo' });
+  await repo.saveCustomerProfile('5564999887766', { name: 'Maria Silva' });
   const app = createApp({ messageService: { firestoreRepo: repo } });
   const server = app.listen(0);
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
 
   try {
-    const unauthorized = await fetch(`${baseUrl}/api/caixa/customers?q=Edmar`);
+    const unauthorized = await fetch(`${baseUrl}/api/caixa/customers?q=Maria`);
     assert.equal(unauthorized.status, 401);
     const loginResponse = await fetch(`${baseUrl}/api/admin/auth/login`, {
       method: 'POST',
@@ -296,9 +290,9 @@ test('CAIXA CUSTOMERS: busca e cadastro rápido exigem perfil de colaborador', a
       body: JSON.stringify({ userId: 'usr-caixa1', pin: '0000' }),
     });
     const cookie = loginResponse.headers.get('set-cookie')?.split(';')[0];
-    const searchResponse = await fetch(`${baseUrl}/api/caixa/customers?q=Edmar`, { headers: { cookie } });
+    const searchResponse = await fetch(`${baseUrl}/api/caixa/customers?q=Maria`, { headers: { cookie } });
     assert.equal(searchResponse.status, 200);
-    assert.deepEqual(await searchResponse.json(), [{ name: 'Edmar Junio B Carrijo', phone: '5564999351616' }]);
+    assert.deepEqual(await searchResponse.json(), [{ name: 'Maria Silva', phone: '5564999887766' }]);
 
     const createResponse = await fetch(`${baseUrl}/api/caixa/customers`, {
       method: 'POST',

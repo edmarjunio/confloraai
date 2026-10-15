@@ -1,17 +1,31 @@
 import React, { useState, useMemo } from 'react';
 import { Trash2, Plus, Minus, Copy, Check, ShoppingBag, ShieldCheck, Tag } from 'lucide-react';
+import { useCartStore } from '../state/cartStore';
+import { useI18nStore } from '../state/i18nStore';
+import '../i18n/translations';
 
 /**
  * CartContent: Express Checkout em 1 Tela (Sem múltiplos passos)
  * Compartilhado identicamente entre o Sidebar Fixo Desktop e o Bottom Sheet Mobile.
+ * Todos os textos utilizam 'name'.tr com suporte a Português, Inglês, Espanhol e Francês.
  */
 export function CartContent({
-  items = [],
-  onUpdateQuantity,
-  onClearCart,
-  onCheckout,
+  items: propsItems,
+  onUpdateQuantity: propsOnUpdateQuantity,
+  onClearCart: propsOnClearCart,
+  onCheckout: propsOnCheckout,
   ownerPhone = '5564999351616',
 }) {
+  // Conexão com Zustand
+  const storeItems = useCartStore((s) => s.items);
+  const storeUpdateQuantity = useCartStore((s) => s.updateQuantity);
+  const storeClearCart = useCartStore((s) => s.clearCart);
+  useI18nStore((s) => s.language); // Assinatura reativa para troca de idiomas
+
+  const items = propsItems !== undefined ? propsItems : storeItems;
+  const onUpdateQuantity = propsOnUpdateQuantity || storeUpdateQuantity;
+  const onClearCart = propsOnClearCart || storeClearCart;
+
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [deliveryType, setDeliveryType] = useState('DELIVERY'); // 'DELIVERY' | 'PICKUP'
@@ -26,7 +40,9 @@ export function CartContent({
   // Máscara dinâmica de WhatsApp com DDD
   const handlePhoneChange = (e) => {
     let val = e.target.value.replace(/\D/g, '');
-    if (val.length > 11) val = val.substring(0, 11);
+    if (val.length > 11) {
+      val = val.substring(0, 11);
+    }
     if (val.length <= 2) {
       setCustomerPhone(val.length ? `(${val}` : '');
     } else if (val.length <= 6) {
@@ -44,7 +60,9 @@ export function CartContent({
   }, [items]);
 
   const discountAmount = useMemo(() => {
-    if (!appliedCoupon) return 0;
+    if (!appliedCoupon) {
+      return 0;
+    }
     if (appliedCoupon.type === 'PERCENT') {
       return (subtotal * appliedCoupon.value) / 100;
     }
@@ -56,48 +74,55 @@ export function CartContent({
   }, [subtotal, discountAmount]);
 
   const changeDue = useMemo(() => {
-    if (paymentMethod !== 'DINHEIRO') return 0;
+    if (paymentMethod !== 'DINHEIRO') {
+      return 0;
+    }
     const tendered = parseFloat(cashTendered.replace(',', '.')) || 0;
-    return tendered >= finalTotal ? tendered - finalTotal : 0;
+    return Math.max(0, tendered - finalTotal);
   }, [paymentMethod, cashTendered, finalTotal]);
 
   const isTenderedInsufficient = useMemo(() => {
-    if (paymentMethod !== 'DINHEIRO') return false;
+    if (paymentMethod !== 'DINHEIRO') {
+      return false;
+    }
     const tendered = parseFloat(cashTendered.replace(',', '.')) || 0;
     return tendered > 0 && tendered < finalTotal;
   }, [paymentMethod, cashTendered, finalTotal]);
 
-  // Aplicação de Cupom Homologado
   const handleApplyCoupon = (e) => {
-    e?.preventDefault();
+    e.preventDefault();
     setCouponError('');
-    const clean = couponCode.trim().toUpperCase();
-    if (!clean) return;
+    const code = couponCode.trim().toUpperCase();
 
-    if (clean === 'CONFLORA10' || clean === 'BEMVINDO') {
-      setAppliedCoupon({ code: clean, type: 'PERCENT', value: 10, label: '10% de desconto' });
+    if (!code) {
+      return;
+    }
+
+    if (code === 'CONFLORA10' || code === 'PRIMEIRACOMPRA') {
+      setAppliedCoupon({ code, type: 'PERCENT', value: 10, label: '10% OFF' });
       setCouponCode('');
-    } else if (clean === 'VERDE5') {
-      setAppliedCoupon({ code: clean, type: 'FIXED', value: 5.0, label: 'R$ 5,00 OFF' });
+    } else if (code === 'VIVEIRO15') {
+      setAppliedCoupon({ code, type: 'FIXED', value: 15, label: 'R$ 15,00 OFF' });
       setCouponCode('');
     } else {
       setCouponError('Cupom inválido ou expirado.');
     }
   };
 
-  // Copiar chave PIX
   const handleCopyPix = () => {
-    navigator.clipboard.writeText('64999351616').then(() => {
-      setPixCopied(true);
-      setTimeout(() => setPixCopied(false), 2000);
-    });
+    navigator.clipboard.writeText('64999351616');
+    setPixCopied(true);
+    setTimeout(() => setPixCopied(false), 2500);
   };
 
   const handleSubmit = (e) => {
-    e?.preventDefault();
-    if (items.length === 0) return;
-    if (onCheckout) {
-      onCheckout({
+    e.preventDefault();
+    if (items.length === 0) {
+      return;
+    }
+
+    if (propsOnCheckout) {
+      propsOnCheckout({
         customerName,
         customerPhone,
         deliveryType,
@@ -111,6 +136,11 @@ export function CartContent({
         total: finalTotal,
         items,
       });
+    } else {
+      // Disparo padrão via WhatsApp
+      const lines = items.map((i) => `• ${i.quantity}x ${i.name} (R$ ${Number(i.price).toFixed(2)})`);
+      const msg = `Olá! Gostaria de confirmar meu pedido:\n\n${lines.join('\n')}\n\n*Total: R$ ${finalTotal.toFixed(2)}*\nNome: ${customerName}\nWhatsApp: ${customerPhone}\nForma: ${paymentMethod}\nRecebimento: ${deliveryType === 'DELIVERY' ? `Entrega em ${deliveryAddress}` : 'Retirada no Viveiro'}`;
+      window.open(`https://wa.me/${ownerPhone}?text=${encodeURIComponent(msg)}`, '_blank');
     }
   };
 
@@ -121,8 +151,8 @@ export function CartContent({
         {items.length === 0 ? (
           <div className="text-center py-8 text-[#64748b] text-sm">
             <ShoppingBag className="w-10 h-10 mx-auto text-gray-300 mb-2" />
-            <p>Sua sacola está vazia.</p>
-            <p className="text-xs text-gray-400 mt-1">Clique em <strong>+</strong> nos produtos para adicionar em 1 clique!</p>
+            <p>{'cart.empty_title'.tr}</p>
+            <p className="text-xs text-gray-400 mt-1">{'cart.empty_subtitle'.tr}</p>
           </div>
         ) : (
           items.map((item) => (
@@ -147,7 +177,7 @@ export function CartContent({
                 </div>
               </div>
 
-              {/* Controle de Quantidade Estilo iFood */}
+              {/* Controle de Quantidade */}
               <div className="flex items-center bg-white rounded-lg border border-[#E5E7EB] overflow-hidden shrink-0 shadow-xs">
                 <button
                   type="button"
@@ -182,30 +212,30 @@ export function CartContent({
               <div className="flex items-center justify-between text-xs text-[#2E9348] font-bold">
                 <span className="flex items-center gap-1.5">
                   <Tag className="w-3.5 h-3.5" />
-                  Cupom <strong>{appliedCoupon.code}</strong> ({appliedCoupon.label})
+                  {'cart.discount'.tr}: <strong>{appliedCoupon.code}</strong> ({appliedCoupon.label})
                 </span>
                 <button
                   type="button"
                   onClick={() => setAppliedCoupon(null)}
                   className="text-red-500 hover:underline text-[11px]"
                 >
-                  Remover
+                  {'common.remove'.tr}
                 </button>
               </div>
             ) : (
               <form onSubmit={handleApplyCoupon} className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="CUPOM (ex: CONFLORA10)"
+                  placeholder={'cart.coupon_placeholder'.tr}
                   value={couponCode}
                   onChange={(e) => setCouponCode(e.target.value)}
                   className="flex-1 bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs font-bold uppercase placeholder:normal-case placeholder:font-normal focus:outline-none focus:border-[#2E9348]"
                 />
                 <button
                   type="submit"
-                  className="bg-[#1A1A1A] hover:bg-black text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors"
+                  className="bg-[#1A1A1A] hover:bg-black text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
                 >
-                  Aplicar
+                  {'cart.apply_coupon'.tr}
                 </button>
               </form>
             )}
@@ -215,17 +245,17 @@ export function CartContent({
           {/* Resumo Financeiro */}
           <div className="border-t border-[#E5E7EB] pt-2.5 flex flex-col gap-1 text-xs">
             <div className="flex justify-between text-[#64748b]">
-              <span>Subtotal:</span>
+              <span>{'cart.subtotal'.tr}:</span>
               <span>R$ {subtotal.toFixed(2).replace('.', ',')}</span>
             </div>
             {discountAmount > 0 && (
               <div className="flex justify-between text-[#2E9348] font-bold">
-                <span>Desconto Cupom:</span>
+                <span>{'cart.discount'.tr}:</span>
                 <span>- R$ {discountAmount.toFixed(2).replace('.', ',')}</span>
               </div>
             )}
             <div className="flex justify-between text-sm font-extrabold text-[#1A1A1A] pt-1 border-t border-[#E5E7EB]">
-              <span>Total da Compra:</span>
+              <span>{'cart.total'.tr}:</span>
               <span className="text-[#2E9348] text-base">
                 R$ {finalTotal.toFixed(2).replace('.', ',')}
               </span>
@@ -236,7 +266,7 @@ export function CartContent({
           <div className="flex flex-col gap-2.5 pt-1 border-t border-[#E5E7EB]">
             {/* Nome e WhatsApp */}
             <div>
-              <label className="block text-[11px] font-bold text-gray-700 mb-1">Seu Nome:</label>
+              <label className="block text-[11px] font-bold text-gray-700 mb-1">{'cart.customer_name'.tr}:</label>
               <input
                 type="text"
                 placeholder="Ex: Edmar Júnio"
@@ -248,7 +278,7 @@ export function CartContent({
             </div>
 
             <div>
-              <label className="block text-[11px] font-bold text-gray-700 mb-1">WhatsApp com DDD:</label>
+              <label className="block text-[11px] font-bold text-gray-700 mb-1">{'cart.customer_phone'.tr}:</label>
               <input
                 type="tel"
                 placeholder="(64) 99935-1616"
@@ -261,29 +291,29 @@ export function CartContent({
 
             {/* Seletor de Entrega */}
             <div>
-              <label className="block text-[11px] font-bold text-gray-700 mb-1">Como deseja receber?</label>
+              <label className="block text-[11px] font-bold text-gray-700 mb-1">{'cart.fulfillment'.tr}:</label>
               <div className="grid grid-cols-2 gap-1.5">
                 <button
                   type="button"
                   onClick={() => setDeliveryType('DELIVERY')}
-                  className={`py-2 px-2 text-xs rounded-lg font-semibold border transition-all text-center ${
+                  className={`py-2 px-2 text-xs rounded-lg font-semibold border transition-all text-center cursor-pointer ${
                     deliveryType === 'DELIVERY'
                       ? 'bg-[#eaf6ed] border-[#2E9348] text-[#2E9348] font-bold shadow-xs'
                       : 'bg-white border-[#E5E7EB] text-gray-600 hover:bg-gray-50'
                   }`}
                 >
-                  🛵 Entrega em Mineiros
+                  🛵 {'cart.delivery'.tr}
                 </button>
                 <button
                   type="button"
                   onClick={() => setDeliveryType('PICKUP')}
-                  className={`py-2 px-2 text-xs rounded-lg font-semibold border transition-all text-center ${
+                  className={`py-2 px-2 text-xs rounded-lg font-semibold border transition-all text-center cursor-pointer ${
                     deliveryType === 'PICKUP'
                       ? 'bg-[#eaf6ed] border-[#2E9348] text-[#2E9348] font-bold shadow-xs'
                       : 'bg-white border-[#E5E7EB] text-gray-600 hover:bg-gray-50'
                   }`}
                 >
-                  🏬 Retirada no Viveiro
+                  🏬 {'cart.pickup'.tr}
                 </button>
               </div>
             </div>
@@ -291,7 +321,7 @@ export function CartContent({
             {deliveryType === 'DELIVERY' && (
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                  Endereço em Mineiros - GO:
+                  {'cart.delivery_address'.tr}:
                 </label>
                 <input
                   type="text"
@@ -305,14 +335,14 @@ export function CartContent({
 
             {/* Formas de Pagamento */}
             <div>
-              <label className="block text-[11px] font-bold text-gray-700 mb-1">Forma de Pagamento:</label>
+              <label className="block text-[11px] font-bold text-gray-700 mb-1">{'cart.payment_method'.tr}:</label>
               <div className="grid grid-cols-3 gap-1.5">
                 {['PIX', 'CARTAO', 'DINHEIRO'].map((method) => (
                   <button
                     key={method}
                     type="button"
                     onClick={() => setPaymentMethod(method)}
-                    className={`py-2 text-xs rounded-lg font-semibold border transition-all text-center ${
+                    className={`py-2 text-xs rounded-lg font-semibold border transition-all text-center cursor-pointer ${
                       paymentMethod === method
                         ? 'bg-[#eaf6ed] border-[#2E9348] text-[#2E9348] font-bold shadow-xs'
                         : 'bg-white border-[#E5E7EB] text-gray-600 hover:bg-gray-50'
@@ -328,18 +358,18 @@ export function CartContent({
             {paymentMethod === 'PIX' && (
               <div className="bg-[#eaf6ed] border border-[#2E9348]/30 rounded-xl p-3 text-xs">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="font-bold text-[#2E9348]">🔑 Pagamento via PIX</span>
+                  <span className="font-bold text-[#2E9348]">🔑 {'cart.pix'.tr}</span>
                   <span className="text-[10px] bg-[#F5C518] text-[#1A1A1A] font-extrabold px-1.5 py-0.5 rounded">
                     Instantâneo
                   </span>
                 </div>
-                <p className="text-[11px] text-gray-600 mb-2">Chave Oficial da Conflora Horta e Viveiro:</p>
+                <p className="text-[11px] text-gray-600 mb-2">{'cart.pix_info'.tr}</p>
                 <div className="flex items-center justify-between bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 font-mono text-xs font-bold text-[#1A1A1A]">
                   <span>64999351616</span>
                   <button
                     type="button"
                     onClick={handleCopyPix}
-                    className="flex items-center gap-1 text-[11px] text-[#2E9348] hover:text-[#237438] font-sans font-bold"
+                    className="flex items-center gap-1 text-[11px] text-[#2E9348] hover:text-[#237438] font-sans font-bold cursor-pointer"
                   >
                     {pixCopied ? (
                       <>
@@ -361,7 +391,7 @@ export function CartContent({
             {paymentMethod === 'DINHEIRO' && (
               <div className="bg-[#fef9c3] border border-[#F5C518] rounded-xl p-3 text-xs">
                 <label className="block text-[11px] font-bold text-[#78350f] mb-1">
-                  💵 Dinheiro em mãos (para cálculo de troco):
+                  💵 {'cart.cash_tendered'.tr}:
                 </label>
                 <div className="flex items-center bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5">
                   <span className="text-gray-500 font-bold mr-1">R$</span>
@@ -383,7 +413,7 @@ export function CartContent({
                       key={val}
                       type="button"
                       onClick={() => setCashTendered(val.toString())}
-                      className="bg-white hover:bg-amber-100 border border-amber-200 text-[#78350f] px-2 py-0.5 rounded text-[10px] font-bold transition-colors"
+                      className="bg-white hover:bg-amber-100 border border-amber-200 text-[#78350f] px-2 py-0.5 rounded text-[10px] font-bold transition-colors cursor-pointer"
                     >
                       R$ {val}
                     </button>
@@ -398,7 +428,7 @@ export function CartContent({
                 )}
                 {changeDue > 0 && (
                   <div className="bg-white rounded-lg p-2 mt-2 border border-green-200 flex justify-between items-center text-xs">
-                    <span className="font-semibold text-gray-700">Troco a levar:</span>
+                    <span className="font-semibold text-gray-700">{'cart.change_due'.tr}:</span>
                     <strong className="text-[#2E9348] text-sm">
                       R$ {changeDue.toFixed(2).replace('.', ',')}
                     </strong>
@@ -415,7 +445,7 @@ export function CartContent({
               className="w-full mt-2 bg-[#2E9348] hover:bg-[#237438] active:scale-[0.99] text-white font-extrabold py-3 px-4 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               <ShieldCheck className="w-4 h-4 text-[#F5C518]" />
-              Finalizar Pedido
+              {'cart.finish_order'.tr}
             </button>
           </div>
         </>

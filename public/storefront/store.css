@@ -266,6 +266,36 @@ input[type="radio"] {
 .header-actions > span {
   max-width: 100px;
 }
+.lang-selector-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.lang-select {
+  appearance: none;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  padding: 6px 26px 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%234b5563' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+.lang-select:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+.lang-select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(46, 147, 72, 0.2);
+}
 #accountButton {
   display: inline-flex;
   align-items: center;

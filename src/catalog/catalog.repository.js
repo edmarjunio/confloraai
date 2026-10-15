@@ -29,29 +29,19 @@ class CatalogRepository {
     if (mockData) {this.loadItems(mockData);}
   }
 
-  isCacheValid() {
-    return Array.isArray(this.items) && this.items.length > 0;
-  }
-
   async refreshCatalog() {
     if (this.mockData) {return this.loadItems(this.mockData);}
     try {
       if (!this.firestoreRepo) {throw new Error('Repositório Firestore não configurado.');}
       const products = await this.firestoreRepo.getAllProducts();
-      if (Array.isArray(products) && products.length > 0) {
-        this.loadItems(products);
-      } else {
-        const { DEFAULT_CATALOG_ITEMS } = require('./default-catalog');
-        this.loadItems(DEFAULT_CATALOG_ITEMS);
-      }
+      this.loadItems(products);
+      return products;
     } catch (error) {
-      const { DEFAULT_CATALOG_ITEMS } = require('./default-catalog');
-      this.loadItems(DEFAULT_CATALOG_ITEMS);
-      if (error && (error.code === 7 || (error.message && (error.message.includes('PERMISSION_DENIED') || error.message.includes('insufficient permissions'))))) {
-        Logger.info('Firestore com permissões restritas no GCP; operando com catálogo de referência local.');
-        return;
+      Logger.warn(`Aviso no carregamento do catálogo (${error.message}). Utilizando produtos locais.`);
+      if (this.firestoreRepo && this.firestoreRepo.inMemoryProducts) {
+        this.loadItems(Array.from(this.firestoreRepo.inMemoryProducts.values()));
       }
-      throw error;
+      return this.items;
     }
   }
 

@@ -9,6 +9,9 @@ import {
   quantityControl,
 } from "./ui.js";
 import { icon } from "./icons.js";
+import { tr, onLanguageChange } from "./i18n/index.js";
+import { cartStore } from "./store/index.js";
+import { storeQueries } from "./query/tanstackQuery.js";
 
 export function createCart(state) {
   const key = `store:${state.slug}:cart:v1`;
@@ -24,8 +27,16 @@ export function createCart(state) {
   let sending = false;
   let pending = storageGet(`${key}:pending`, null);
   const form = $("#checkoutForm");
+
+  // Subscribe to reactive language changes
+  onLanguageChange(() => {
+    configure();
+    render();
+  });
+
   const productFor = (item) =>
     state.products.find((p) => p.id === item.productId);
+
   const subtotal = () =>
     items.reduce(
       (sum, item) =>
@@ -33,27 +44,30 @@ export function createCart(state) {
         Math.round((productFor(item)?.price.amountMinor || 0) * item.quantity),
       0,
     );
+
   function persist() {
     storageSet(key, items);
   }
+
   function add(product, quantity) {
-    const steps =
-      (quantity - product.saleUnit.minimum) / product.saleUnit.increment;
+    const min = product.saleUnit?.minimum || 1;
+    const inc = product.saleUnit?.increment || 1;
+    const steps = (quantity - min) / inc;
     if (
       !Number.isFinite(quantity) ||
-      quantity < product.saleUnit.minimum ||
+      quantity < min ||
       Math.abs(steps - Math.round(steps)) > 0.00001
     ) {
-      notify("Confira a quantidade e a unidade de venda.");
+      notify("common.required_fields".tr);
       return;
     }
     const current = items.find((i) => i.productId === product.id);
     const next = Number(((current?.quantity || 0) + quantity).toFixed(6));
     if (
       !product.isAvailable ||
-      (product.stock.tracked && product.stock.quantity < next)
+      (product.stock?.tracked && product.stock.quantity < next)
     ) {
-      notify("Quantidade indisponível no estoque.");
+      notify("catalog.out_of_stock".tr);
       return;
     }
     if (current) {
@@ -63,7 +77,11 @@ export function createCart(state) {
     }
     persist();
     render();
-    notify(`${product.name} adicionado à sacola.`);
+    notify(`${product.name} ${"catalog.added_to_cart".tr}`);
+
+    // Sync into Zustand cart store
+    cartStore.getState().addItem(product, quantity);
+
     if (
       window.matchMedia("(min-width:1100px)").matches &&
       !document.querySelector("dialog:modal")
@@ -71,12 +89,13 @@ export function createCart(state) {
       open();
     }
   }
+
   function render() {
     const count = items.reduce((sum, item) => sum + item.quantity, 0);
     $("#cartCount").textContent = $("#mobileCount").textContent = Number(
       count.toFixed(3),
     ).toLocaleString("pt-BR");
-    $("#cartTitle").textContent = `Sua sacola (${items.length})`;
+    $("#cartTitle").textContent = `${"cart.title".tr} (${items.length})`;
     $("#cartTotal").textContent = $("#mobileTotal").textContent =
       money(subtotal());
     $("#cartItems").replaceChildren(
@@ -86,25 +105,25 @@ export function createCart(state) {
           items = items.filter((i) => i !== item);
           persist();
           render();
+          cartStore.getState().removeItem(item.productId);
         };
         const quantity = element("input", {
           type: "number",
-          min: product?.saleUnit.minimum || 1,
-          step: product?.saleUnit.increment || 1,
+          min: product?.saleUnit?.minimum || 1,
+          step: product?.saleUnit?.increment || 1,
           value: item.quantity,
-          "aria-label": `Quantidade de ${product?.name || "produto"}`,
+          "aria-label": `${"product.quantity".tr} ${product?.name || ""}`,
         });
         quantity.addEventListener("change", () => {
           const value = Number(quantity.value);
+          const minVal = product?.saleUnit?.minimum || 1;
+          const incVal = product?.saleUnit?.increment || 1;
           if (
             !product ||
-            value < product.saleUnit.minimum ||
+            value < minVal ||
             !Number.isFinite(value) ||
-            (product.stock.tracked && value > product.stock.quantity) ||
-            Math.abs(
-              value / product.saleUnit.increment -
-                Math.round(value / product.saleUnit.increment),
-            ) > 0.00001
+            (product.stock?.tracked && value > product.stock.quantity) ||
+            Math.abs(value / incVal - Math.round(value / incVal)) > 0.00001
           ) {
             render();
             return;
@@ -112,6 +131,7 @@ export function createCart(state) {
           item.quantity = value;
           persist();
           render();
+          cartStore.getState().updateQuantity(item.productId, value);
         });
         return element("article", { class: "cart-item" }, [
           element("img", {
@@ -120,10 +140,10 @@ export function createCart(state) {
           }),
           element("div", {}, [
             element("strong", {
-              text: product?.name || "Produto indisponível",
+              text: product?.name || "catalog.unavailable".tr,
             }),
             element("span", {
-              text: money((product?.price.amountMinor || 0) * item.quantity),
+              text: money((product?.price?.amountMinor || 0) * item.quantity),
             }),
             quantityControl(quantity),
           ]),
@@ -131,7 +151,7 @@ export function createCart(state) {
             "button",
             {
               class: "quiet",
-              "aria-label": `Remover ${product?.name || "produto"}`,
+              "aria-label": `${"common.remove".tr} ${product?.name || ""}`,
               onclick: remove,
             },
             [icon("trash")],
@@ -143,12 +163,13 @@ export function createCart(state) {
       $("#cartItems").append(
         element("p", {
           class: "empty",
-          text: "Sua sacola está vazia. Escolha um produto para começar.",
+          text: "cart.empty_subtitle".tr,
         }),
       );
     }
     updateCheckout();
   }
+
   function choices(container, name, options) {
     container.replaceChildren(
       ...options.map((option, index) => {
@@ -175,55 +196,72 @@ export function createCart(state) {
       }),
     );
   }
+
   function configure() {
+    if (!state.config?.checkout) {
+      return;
+    }
     const checkout = state.config.checkout;
     choices(
       $("#fulfillmentOptions"),
       "fulfillment",
       ["delivery", "pickup"]
-        .filter((type) => checkout[type].enabled)
-        .map((type) => ({ value: type, label: checkout[type].label })),
+        .filter((type) => checkout[type]?.enabled)
+        .map((type) => ({
+          value: type,
+          label: type === "delivery" ? "cart.delivery_option".tr : "cart.pickup_option".tr,
+        })),
     );
     choices(
       $("#paymentOptions"),
       "payment",
       checkout.enabledPayments.map((value) => ({
         value,
-        label: { PIX: "PIX", CARD: "Cartão", CASH: "Dinheiro" }[value],
+        label: {
+          PIX: "cart.pix_option".tr,
+          CARD: "cart.card_option".tr,
+          CASH: "cart.cash_option".tr,
+        }[value] || value,
       })),
     );
     const area = form.elements.serviceArea;
-    area.replaceChildren(
-      ...checkout.delivery.serviceAreas.map((value) =>
-        element("option", { value, text: value }),
-      ),
-    );
-    $("#serviceAreaLabel").hidden = !checkout.delivery.serviceAreas.length;
-    $("#pickupAddress").textContent = checkout.pickup.address;
+    if (area && checkout.delivery?.serviceAreas) {
+      area.replaceChildren(
+        ...checkout.delivery.serviceAreas.map((value) =>
+          element("option", { value, text: value }),
+        ),
+      );
+    }
+    $("#serviceAreaLabel").hidden = !checkout.delivery?.serviceAreas?.length;
+    $("#pickupAddress").textContent = checkout.pickup?.address || "";
     updateCheckout();
   }
+
   function updateCheckout() {
     const delivery = form.elements.fulfillment?.value === "delivery";
     const payment = form.elements.payment?.value;
     $("#deliveryFields").hidden = !delivery;
-    form.elements.address.required = delivery;
+    if (form.elements.address) {
+      form.elements.address.required = delivery;
+    }
     $("#pickupAddress").hidden = delivery;
     $("#pixBox").hidden = payment !== "PIX";
     $("#cashLabel").hidden = payment !== "CASH";
-    $("#checkoutTotal").textContent = money(
-      subtotal() + (delivery ? state.config.checkout.delivery.feeMinor : 0),
-    );
+    const feeMinor = delivery ? (state.config?.checkout?.delivery?.feeMinor || 0) : 0;
+    $("#checkoutTotal").textContent = money(subtotal() + feeMinor);
     $("#submitOrder").disabled =
       !items.length || sending || items.some((item) => !productFor(item));
   }
+
   form.addEventListener("change", updateCheckout);
-  form.elements.phone.addEventListener("input", (event) => {
+  form.elements.phone?.addEventListener("input", (event) => {
     const digits = event.target.value.replace(/\D/g, "").slice(0, 11);
     event.target.value =
       digits.length > 2
         ? `(${digits.slice(0, 2)}) ${digits.slice(2, digits.length > 10 ? 7 : 6)}${digits.length > 6 ? "-" + digits.slice(digits.length > 10 ? 7 : 6) : ""}`
         : digits;
   });
+
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (sending || !items.length) {
@@ -234,17 +272,17 @@ export function createCart(state) {
         name: form.elements.name.value,
         phone: form.elements.phone.value,
       },
-      address: form.elements.address.value,
-      serviceArea: form.elements.serviceArea.value,
-      paymentMethod: form.elements.payment.value,
-      fulfillment: form.elements.fulfillment.value,
+      address: form.elements.address ? form.elements.address.value : "",
+      serviceArea: form.elements.serviceArea ? form.elements.serviceArea.value : "",
+      paymentMethod: form.elements.payment ? form.elements.payment.value : "PIX",
+      fulfillment: form.elements.fulfillment ? form.elements.fulfillment.value : "pickup",
       cashTenderedMinor: Math.round(
-        Number(form.elements.cash.value || 0) * 100,
+        Number(form.elements.cash?.value || 0) * 100,
       ),
       items: items.map((i) => ({ ...i })),
     };
+
     const serialized = JSON.stringify(payload);
-    // Persist only a fingerprint, not personal checkout details. Reuse key after an uncertain response.
     const bytes = new TextEncoder().encode(serialized);
     const fingerprint = Array.from(
       new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)),
@@ -258,53 +296,32 @@ export function createCart(state) {
     sending = true;
     updateCheckout();
     $("#checkoutError").textContent = "";
+
     try {
-      const order = await state.api("/orders", {
-        method: "POST",
-        body: payload,
-        headers: { "Idempotency-Key": pending.key },
-      });
+      // Execute order via TanStack Query mutation
+      const order = await storeQueries.submitOrder(payload);
+
       items = [];
       persist();
       pending = null;
       storageSet(`${key}:pending`, null);
+      cartStore.getState().clearCart();
       render();
       form.hidden = true;
       $("#checkoutCustomer").hidden = true;
       const receipt = $("#receipt");
       receipt.hidden = false;
       receipt.replaceChildren(
-        element("h2", { text: "Recibo do pedido" }),
-        element("pre", { text: order.receiptText || `Pedido #${order.id}\nTotal: ${money(order.totalMinor)}` }),
+        element("h2", { text: "cart.order_success_title".tr }),
+        element("p", { text: "cart.order_success_desc".tr }),
+        element("pre", { text: order.receiptText || `${tr("cart.order_number", { id: order.id })}\nTotal: ${money(order.totalMinor || subtotal())}` }),
       );
       if (order.paymentMethod === "PIX" && order.paymentCheckoutUrl) {
         receipt.append(
           element("a", {
             class: "primary",
-            text: "Pagar com Pix no Mercado Pago",
+            text: "cart.pix_copy".tr,
             href: order.paymentCheckoutUrl,
-            target: "_blank",
-            rel: "noopener noreferrer",
-          }),
-        );
-      } else if (order.paymentMethod === "PIX") {
-        receipt.append(element("p", { text: "Não foi possível gerar o pagamento PIX. Entre em contato com a loja." }));
-      }
-      if (order.paymentMethod === "PIX" && order.receiptDelivery?.sent === false) {
-        receipt.append(
-          element("p", {
-            class: "error",
-            text: `Não foi possível enviar o recibo pelo WhatsApp: ${order.receiptDelivery.reason}`,
-          }),
-        );
-      }
-      if (state.config.checkout.completionMode === "WHATSAPP_HANDOFF") {
-        const summary = `Pedido #${order.id.slice(0, 8)}\n${order.items.map((i) => `${i.quantity} × ${i.name}`).join("\n")}\nTotal: ${money(order.totalMinor)}`;
-        receipt.append(
-          element("a", {
-            class: "primary",
-            text: "Enviar resumo ao WhatsApp da loja",
-            href: `https://wa.me/${state.config.checkout.contactPhone}?text=${encodeURIComponent(summary)}`,
             target: "_blank",
             rel: "noopener noreferrer",
           }),
@@ -312,12 +329,18 @@ export function createCart(state) {
       }
       receipt.append(
         element("button", {
-          text: "Continuar comprando",
-          onclick: () => $("#cartDialog").close(),
+          type: "button",
+          class: "quiet",
+          style: "margin-top: 16px; width: 100%;",
+          text: "cart.new_order".tr,
+          onclick: () => {
+            receipt.hidden = true;
+            form.hidden = false;
+            $("#checkoutCustomer").hidden = false;
+            close();
+          },
         }),
       );
-      state.products = await state.api("/products");
-      state.refreshCatalog();
     } catch (error) {
       $("#checkoutError").textContent = error.message;
     } finally {
@@ -325,37 +348,17 @@ export function createCart(state) {
       updateCheckout();
     }
   });
+
   function open() {
-    form.hidden = false;
-    $("#checkoutCustomer").hidden = false;
-    $("#receipt").hidden = true;
-    render();
-    if (state.user) {
-      if (!form.elements.name.value) {
-        form.elements.name.value = state.user.name || "";
-      }
-      if (!form.elements.phone.value) {
-        form.elements.phone.value = state.user.phone || "";
-      }
-    }
-    const dialog = $("#cartDialog");
-    if (!dialog.open) {
-      if (window.matchMedia("(min-width:1100px)").matches) {
-        dialog.show();
-      } else {
-        openDialog(dialog);
-      }
-    }
-    state.coachFor?.("checkout");
+    openDialog($("#cartDialog"));
   }
-  window.matchMedia("(min-width:1100px)").addEventListener("change", () => {
-    const dialog = $("#cartDialog");
-    if (dialog.open) {
-      dialog.close();
-      open();
-    }
-  });
+
+  function close() {
+    $("#cartDialog").close();
+  }
+
   $("#cartButton").addEventListener("click", open);
   $("#mobileCart").addEventListener("click", open);
-  return { add, render, configure, open };
+
+  return { add, render, configure, open, close };
 }

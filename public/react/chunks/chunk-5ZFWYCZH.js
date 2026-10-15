@@ -1,1 +1,0 @@
-import{a as n,c,e as u,n as a}from"./chunk-LE2FTSQN.js";function b(t,o=i){let r=e.default.useSyncExternalStore(t.subscribe,e.default.useCallback(()=>o(t.getState()),[t,o]),e.default.useCallback(()=>o(t.getInitialState()),[t,o]));return e.default.useDebugValue(r),r}var e,i,s=n(()=>{e=c(a(),1),i=t=>t});var m=n(()=>{u();s()});export{b as a,m as b};
