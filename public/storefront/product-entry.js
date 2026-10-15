@@ -1,4 +1,4 @@
-import { $, element, notify, money } from "./ui.js";
+import { $, element, notify } from "./ui.js";
 
 export function createProductEntry(state, onSaved) {
   const dialog = $("#productEntryDialog");
@@ -7,7 +7,7 @@ export function createProductEntry(state, onSaved) {
   let editingProduct = null;
 
   function render() {
-    if (!dialog || !content) return;
+    if (!dialog || !content) {return;}
     content.replaceChildren();
 
     // Tabs
@@ -251,7 +251,7 @@ export function createProductEntry(state, onSaved) {
             });
             notify(`Produto alterado para ${target}!`);
             dialog.close();
-            if (onSaved) await onSaved();
+            if (onSaved) {await onSaved();}
           } catch (err) {
             notify("Erro: " + err.message);
           } finally {
@@ -294,7 +294,7 @@ export function createProductEntry(state, onSaved) {
 
         notify("Produto salvo com sucesso no catálogo!");
         dialog.close();
-        if (onSaved) await onSaved();
+        if (onSaved) {await onSaved();}
       } catch (err) {
         notify("Erro ao salvar produto: " + err.message);
       } finally {
@@ -406,7 +406,7 @@ export function createProductEntry(state, onSaved) {
 
         notify(`Entrada de +${qty} unidades realizada com sucesso!`);
         dialog.close();
-        if (onSaved) await onSaved();
+        if (onSaved) {await onSaved();}
       } catch (err) {
         notify("Erro ao dar entrada no estoque: " + err.message);
       } finally {

@@ -9,9 +9,9 @@ async function main() {
   }
   const client = new MercadoPagoClient({ accessToken: config.mercadoPago.accessToken,
     webhookSecret: config.mercadoPago.webhookSecret });
-  if (!client.checkoutConfigured) throw new Error('Preencha os dois segredos Mercado Pago no ambiente dev.');
+  if (!client.checkoutConfigured) {throw new Error('Preencha os dois segredos Mercado Pago no ambiente dev.');}
   const response = await fetch(new URL('/health', config.tasks.serviceUrl), { signal: AbortSignal.timeout(15000) });
-  if (!response.ok) throw new Error(`Dev indisponível: HTTP ${response.status}.`);
+  if (!response.ok) {throw new Error(`Dev indisponível: HTTP ${response.status}.`);}
   const health = await response.json();
   if (health.environment !== 'dev' || health.projectId !== 'confloraai-dev' || health.expectedLiveMode !== true) {
     throw new Error('A URL consultada não corresponde ao dev com Pix real.');
@@ -25,7 +25,7 @@ async function main() {
   const db = new Firestore({ projectId: 'confloraai-dev', ...(config.gcp.keyFilename ? { keyFilename: config.gcp.keyFilename } : {}) });
   try {
     const snapshot = await db.collection('orders').doc(orderId).get();
-    if (!snapshot.exists) throw new Error('Pedido não encontrado no Firestore dev.');
+    if (!snapshot.exists) {throw new Error('Pedido não encontrado no Firestore dev.');}
     const order = { ...snapshot.data(), id: snapshot.id };
     const payment = await client.getPayment(paymentId);
     if (!isApprovedPixPayment(payment, order, { expectedLiveMode: true })) {

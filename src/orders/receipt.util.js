@@ -29,8 +29,10 @@ function formatOrderReceipt(order) {
     order.paymentCheckoutUrl
       ? `Pagar com PIX no Mercado Pago: ${order.paymentCheckoutUrl}`
       : "",
-    order.paymentStatus === "APPROVED"
+    ["APPROVED", "PAGO"].includes(order.paymentStatus)
       ? "Pagamento confirmado."
+      : order.paymentProvider === "SICREDI"
+        ? "Aguardando confirmação bancária pelo Sicredi."
       : order.paymentMethod === "PIX"
         ? "Depois de pagar, envie o comprovante pelo WhatsApp; o pedido só será confirmado quando o Mercado Pago aprovar."
         : "",

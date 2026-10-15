@@ -405,7 +405,7 @@ export function createCatalog(state, add, navigate) {
       class: "quiet",
       text: "✏️ Editar Cadastro do Produto",
       onclick: () => {
-        if (state.productEntry) state.productEntry.open(product);
+        if (state.productEntry) {state.productEntry.open(product);}
       },
     });
 

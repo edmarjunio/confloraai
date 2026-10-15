@@ -1,0 +1,40 @@
+module.exports = [
+  {
+    files: ["src/web/**/*.{jsx,mjs}"],
+    plugins: { "react-hooks": require("eslint-plugin-react-hooks") },
+    languageOptions: {
+      ecmaVersion: "latest",
+      sourceType: "module",
+      parserOptions: { ecmaFeatures: { jsx: true } },
+      globals: Object.fromEntries(
+        [
+          "document",
+          "location",
+          "localStorage",
+          "navigator",
+          "crypto",
+          "FormData",
+          "Blob",
+          "fetch",
+          "AbortController",
+          "AbortSignal",
+          "setTimeout",
+          "clearTimeout",
+          "console",
+          "URL",
+          "window",
+          "structuredClone",
+        ].map((name) => [name, "readonly"]),
+      ),
+    },
+    rules: {
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "error",
+      "no-undef": "error",
+      "no-var": "error",
+      "prefer-const": "error",
+      eqeqeq: ["error", "always"],
+      curly: ["error", "all"],
+    },
+  },
+];

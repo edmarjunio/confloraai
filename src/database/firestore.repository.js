@@ -1364,9 +1364,9 @@ class FirestoreRepository {
 
       if (ord.status === 'AWAITING_CASHIER') {
         pendingCashier.push(ord);
-      } else if (ord.status === 'AWAITING_PIX') {
+      } else if (['AWAITING_PIX', 'AGUARDANDO_PAGAMENTO'].includes(ord.status)) {
         pendingPix.push(ord);
-      } else if ((ord.status === 'CONFIRMED' || ord.status === 'PAID_CONFIRMED' || ord.status === 'DELIVERED') && isToday) {
+      } else if ((ord.status === 'PAGO' || ord.status === 'CONFIRMED' || ord.status === 'PAID_CONFIRMED' || ord.status === 'DELIVERED') && isToday) {
         completedToday.push(ord);
         const val = Number(ord.total || 0);
         totalRevenue += val;
@@ -1425,7 +1425,7 @@ class FirestoreRepository {
         const ordDate = ord.createdAt.slice(0, 10);
         if (ordDate !== targetDate) {continue;}
 
-        const isCompleted = ['CONFIRMED', 'PAID_CONFIRMED', 'DELIVERED', 'COMPLETED'].includes(String(ord.status || '').toUpperCase());
+        const isCompleted = ['PAGO', 'CONFIRMED', 'PAID_CONFIRMED', 'DELIVERED', 'COMPLETED'].includes(String(ord.status || '').toUpperCase());
         if (!isCompleted) {continue;}
 
         targetOrders.push(ord);
