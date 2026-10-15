@@ -21,6 +21,7 @@ const { SignatureValidator } = require('../security/signature.validator');
 const { SystemStatusService } = require('../services/system-status.service');
 const { renderHomeHtml, renderAdminHtml, renderCaixaHtml, renderAdminGerencialHtml } = require('./views');
 const { MercadoPagoClient, isApprovedPixPayment } = require('../integrations/mercado-pago.client');
+const { SicrediPixClient } = require('../integrations/sicredi-pix.client');
 const { formatOrderReceipt } = require('../orders/receipt.util');
 
 const FETCH_SHIM_SCRIPT = `<script>
@@ -925,6 +926,8 @@ function createApp({
       webhookSecret: config.mercadoPago.webhookSecret,
     });
   messageService.mercadoPagoClient = payments;
+  const sicrediPixClient = new SicrediPixClient();
+  messageService.sicrediPixClient = sicrediPixClient;
   const app = express();
   if (config.appEnvironment === 'dev') {
     app.use((_req, res, next) => {
@@ -1846,17 +1849,33 @@ function createApp({
         };
       });
       const payMethod = (paymentMethod || 'DINHEIRO').toUpperCase();
-      if (!['PIX', 'CARTAO', 'DINHEIRO'].includes(payMethod)) {
-        return res.status(400).json({ error: 'Forma de pagamento inválida.' });
+      const validMethods = ['PIX', 'DEBITO', 'CREDITO', 'CARTAO', 'DINHEIRO', 'FIADO'];
+      if (!validMethods.includes(payMethod)) {
+        return res.status(400).json({ error: 'Forma de pagamento inválida. Aceito: ' + validMethods.join(', ') });
       }
+
       const isPix = payMethod === 'PIX';
-      const status = isPix ? 'AWAITING_PIX' : 'AWAITING_CASHIER';
+      const isFiado = payMethod === 'FIADO';
+      const status = isPix ? 'AWAITING_PIX' : 'CONFIRMED';
       const subtotal = Number(normalizedItems.reduce((sum, item) => sum + item.price * item.quantity, 0).toFixed(2));
       const discountAmount = Number((subtotal * requestedDiscountPercent / 100).toFixed(2));
       const normalizedFreight = Math.max(0, Number(freightValue) || 0);
       const total = Number((subtotal - discountAmount + normalizedFreight).toFixed(2));
       const resolvedCustomerName = customerName || (customerPhone ? `Cliente ${String(customerPhone).slice(-4)}` : 'Cliente Balcão');
       const resolvedOperatorName = operatorName || req.user?.name || 'Colaborador';
+      const sellerName = String(req.body.sellerName || req.body.createdBy?.name || resolvedOperatorName).trim();
+      const cashierName = String(req.body.cashierName || req.body.receivedBy?.name || req.user?.name || resolvedOperatorName).trim();
+
+      const createdBy = {
+        id: req.body.sellerId || req.user?.id || 'seller-id',
+        name: sellerName,
+        role: 'VENDEDOR',
+      };
+      const receivedBy = {
+        id: isPix && sellerName === cashierName ? createdBy.id : (req.user?.id || 'cashier-id'),
+        name: isPix && sellerName === cashierName ? sellerName : cashierName,
+        role: isPix ? 'PIX_SICREDI' : 'CAIXA',
+      };
 
       if (requestedDiscountPercent > 5) {
         const approval = await messageService.firestoreRepo.createDiscountApproval({
@@ -1865,10 +1884,10 @@ function createApp({
           items: normalizedItems,
           paymentMethod: payMethod,
           notes: notes || '',
-          operatorName: resolvedOperatorName,
+          operatorName: cashierName,
           operatorId: req.user?.id || '',
           requestedBy: req.user?.id || '',
-          requestedByName: req.user?.name || resolvedOperatorName,
+          requestedByName: req.user?.name || sellerName,
           subtotal,
           discountAmount,
           discountPercent: requestedDiscountPercent,
@@ -1876,19 +1895,23 @@ function createApp({
         });
         return res.status(202).json({ success: true, approvalRequired: true, approval });
       }
+
       const ticketNumber = String(Math.floor(100 + Math.random() * 900));
       const orderId = randomUUID();
-      let mercadoPagoPreference = null;
+      let sicrediCharge = null;
+
       if (isPix) {
-        if (!payments.checkoutConfigured) {
-          return res.status(503).json({
-            error: 'Pagamento PIX indisponível. Configure as credenciais e o segredo de webhook do Mercado Pago.',
+        try {
+          sicrediCharge = await sicrediPixClient.createCharge({
+            amount: total,
+            customerName: resolvedCustomerName,
+            customerCpfCnpj: req.body.customerCpf || '',
+            ticketNumber,
+            description: `Conflora Pedido #${ticketNumber}`,
           });
+        } catch (sicrediErr) {
+          Logger.warn('Erro ao gerar cobrança Pix Sicredi, gerando via EMV local', { error: sicrediErr.message });
         }
-        mercadoPagoPreference = await payments.createPixCheckout({
-          order: { id: orderId, total, ticketNumber },
-          notificationUrl: mercadoPagoNotificationUrl(),
-        });
       }
 
       const order = await messageService.firestoreRepo.createManualOrder({
@@ -1897,13 +1920,17 @@ function createApp({
         items: normalizedItems,
         paymentMethod: payMethod,
         notes,
-        operatorName: resolvedOperatorName,
+        operatorName: cashierName,
         operatorId: req.user?.id || '',
+        sellerName,
+        cashierName,
+        createdBy,
+        receivedBy,
         ticketNumber,
         orderId,
-        pixCode: '',
-        mercadoPagoPreferenceId: mercadoPagoPreference?.id || '',
-        paymentCheckoutUrl: mercadoPagoPreference?.checkoutUrl || '',
+        pixCode: sicrediCharge?.pixCopiaECola || '',
+        pixCopiaECola: sicrediCharge?.pixCopiaECola || '',
+        pixData: sicrediCharge,
         status,
         discountAmount,
         discountPercent: requestedDiscountPercent,
@@ -1911,18 +1938,69 @@ function createApp({
         orderType: orderType || 'PICKUP',
         deliveryAddress: deliveryAddress || '',
         freightValue: normalizedFreight,
+        total,
+        subtotal,
       });
 
-      const receiptText = formatOrderReceipt(order);
-      let receiptDelivery = { sent: false, reason: 'Envio não solicitado.' };
-      if (isPix) {
+      // Se foi FIADO: grava registro de débito na conta do cliente
+      if (isFiado) {
+        const cleanPhoneKey = String(customerPhone || '').replace(/\D/g, '');
+        const custKey = cleanPhoneKey || req.body.customerId || resolvedCustomerName;
+        await messageService.firestoreRepo.recordCustomerDebt({
+          customerKey: custKey,
+          customerName: resolvedCustomerName,
+          customerPhone: customerPhone || '',
+          orderId,
+          ticketNumber,
+          amount: total,
+          operatorName: cashierName,
+          sellerName,
+          notes: notes || 'Venda a prazo / fiado no balcão',
+        }).catch((err) => Logger.warn('Erro ao registrar débito de fiado', { error: err.message }));
+      }
+
+      // Se pagamento confirmado no caixa (não é PIX pendente), baixa o estoque dos itens
+      if (!isPix) {
+        try {
+          await messageService.firestoreRepo.confirmOrderPayment(order.id, {
+            verifiedVia: 'CAIXA_BALCAO',
+            paymentMethod: payMethod,
+            paymentAmount: total,
+            status: 'CONFIRMED',
+            operatorName: cashierName,
+          });
+        } catch (stockErr) {
+          Logger.warn('Aviso ao confirmar pagamento e estoque no caixa', { error: stockErr.message });
+        }
+      }
+
+      // Formata recibo com espelho do painel direito, Pix e identificação vendedor/caixa
+      const receiptText = formatOrderReceipt({
+        ...order,
+        subtotal,
+        discountAmount,
+        discountPercent: requestedDiscountPercent,
+        freightValue: normalizedFreight,
+        total,
+        createdBy,
+        receivedBy,
+        sellerName,
+        cashierName,
+        pixCopiaECola: sicrediCharge?.pixCopiaECola || '',
+        pixData: sicrediCharge,
+      });
+
+      // Se cliente tem número de WhatsApp cadastrado ou informado agora, envia o recibo
+      let receiptDelivery = { sent: false, reason: 'Número de WhatsApp não informado pelo cliente.' };
+      const cleanCustomerPhone = String(customerPhone || '').replace(/\D/g, '');
+      if (cleanCustomerPhone.length >= 8) {
         receiptDelivery = await sendCustomerOrderReceipt(
           messageService.whatsappClient,
-          customerPhone,
+          cleanCustomerPhone,
           receiptText,
         );
         if (!receiptDelivery.sent) {
-          Logger.warn('Pedido PIX criado; não foi possível enviar o recibo ao cliente.', {
+          Logger.warn('Não foi possível entregar recibo via WhatsApp', {
             orderId: order.id,
             reason: receiptDelivery.reason,
           });
@@ -1933,14 +2011,220 @@ function createApp({
         success: true,
         order: {
           ...order,
+          createdBy,
+          receivedBy,
           receiptText,
-          paymentCheckoutUrl: mercadoPagoPreference?.checkoutUrl || '',
+          pixCopiaECola: sicrediCharge?.pixCopiaECola || '',
+          qrCodeBase64: sicrediCharge?.qrCodeBase64 || '',
+          pixData: sicrediCharge,
           receiptDelivery,
         },
         receiptDelivery,
       });
     } catch (err) {
       Logger.error('Erro ao lançar pedido no PDV', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // --- Webhook Sicredi Pix Oficial ---
+  app.post(['/api/webhooks/sicredi-pix', '/webhooks/sicredi-pix'], async (req, res) => {
+    try {
+      Logger.info('[Sicredi Pix Webhook] Notificação recebida:', req.body);
+      const pixEntries = Array.isArray(req.body?.pix)
+        ? req.body.pix
+        : (req.body?.txid ? [req.body] : []);
+
+      if (pixEntries.length === 0) {
+        return res.sendStatus(200);
+      }
+
+      for (const entry of pixEntries) {
+        const txid = String(entry.txid || req.body?.txid || '');
+        if (!txid) continue;
+
+        const allOrders = await messageService.firestoreRepo.getAllOrders(100);
+        const order = allOrders.find((o) =>
+          o.pixData?.txid === txid ||
+          o.paymentTransactionId === txid ||
+          o.txid === txid ||
+          (entry.solicitacaoPagador && o.ticketNumber && entry.solicitacaoPagador.includes(o.ticketNumber))
+        );
+
+        if (order && !['CONFIRMED', 'PAID_CONFIRMED', 'DELIVERED'].includes(order.status)) {
+          const sellerName = order.createdBy?.name || order.sellerName || order.operatorName || 'Equipe Conflora';
+          await messageService.firestoreRepo.confirmOrderPayment(
+            order.id,
+            {
+              verifiedVia: 'SICREDI_PIX_WEBHOOK',
+              paymentTransactionId: entry.endToEndId || txid,
+              paymentAmount: Number(entry.valor || order.total),
+              status: 'CONFIRMED',
+            }
+          );
+
+          // 1. Mensagem de confirmação ao cliente via WhatsApp
+          const cleanPhone = String(order.customerPhone || '').replace(/\D/g, '');
+          if (cleanPhone.length >= 8) {
+            const customerMsg = (
+              `🌱 *PAGAMENTO CONFIRMADO - CONFLORA HORTA E VIVEIRO* 🌱\n\n` +
+              `Olá, *${order.customerName || 'Cliente'}*!\n` +
+              `Seu pagamento via PIX no valor de *R$ ${Number(order.total).toFixed(2).replace('.', ',')}* para o Pedido *#${order.ticketNumber || order.id}* foi confirmado com sucesso na nossa conta Sicredi!\n\n` +
+              `📦 Seus produtos já estão sendo separados com todo carinho.\n` +
+              `👤 Venda realizada por: *${sellerName}*\n\n` +
+              `Agradecemos a sua preferência! 🌿`
+            );
+            await messageService.whatsappClient.sendTextMessage(cleanPhone, customerMsg).catch(() => {});
+          }
+
+          // 2. Notificação para o WhatsApp da Horta
+          const ownerPhone = String(process.env.OWNER_WHATSAPP_NUMBER || config.whatsapp?.ownerNumber || '64999351616').replace(/\D/g, '');
+          if (ownerPhone) {
+            const hortaMsg = (
+              `🔔 *PIX CONFIRMADO NA CONTA SICREDI!* 🔔\n\n` +
+              `📦 *Pedido:* #${order.ticketNumber || order.id}\n` +
+              `👤 *Cliente:* ${order.customerName || 'Cliente Balcão'} (${order.customerPhone || 'Sem telefone'})\n` +
+              `💰 *Valor Pago:* R$ ${Number(order.total).toFixed(2).replace('.', ',')}\n` +
+              `🛒 *Vendedor (Venda atribuída):* ${sellerName}\n` +
+              `✅ *Status:* PAGO E FINALIZADO AUTOMATICAMENTE\n` +
+              `📦 Estoque atualizado no sistema!`
+            );
+            await messageService.whatsappClient.sendTextMessage(ownerPhone, hortaMsg).catch(() => {});
+          }
+        }
+      }
+
+      return res.sendStatus(200);
+    } catch (err) {
+      Logger.error('Erro ao processar webhook Sicredi Pix', err);
+      return res.sendStatus(500);
+    }
+  });
+
+  // Confirmação ou Verificação de Pix Sicredi no Caixa
+  app.post('/api/caixa/orders/:id/confirm-sicredi-pix', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const order = await messageService.firestoreRepo.getOrderById(id);
+      if (!order) {
+        return res.status(404).json({ error: 'Pedido não encontrado.' });
+      }
+
+      const sellerName = order.createdBy?.name || order.sellerName || order.operatorName || 'Equipe Conflora';
+      const confirmedOrder = await messageService.firestoreRepo.confirmOrderPayment(
+        order.id,
+        {
+          verifiedVia: 'SICREDI_CAIXA_CONFIRMACAO',
+          paymentTransactionId: req.body.txid || order.pixData?.txid || `sicredi-${Date.now()}`,
+          paymentAmount: Number(order.total),
+          status: 'CONFIRMED',
+        }
+      );
+
+      const cleanPhone = String(order.customerPhone || '').replace(/\D/g, '');
+      if (cleanPhone.length >= 8) {
+        const customerMsg = (
+          `🌱 *PAGAMENTO CONFIRMADO - CONFLORA HORTA E VIVEIRO* 🌱\n\n` +
+          `Olá, *${order.customerName || 'Cliente'}*!\n` +
+          `Seu pagamento via PIX no valor de *R$ ${Number(order.total).toFixed(2).replace('.', ',')}* para o Pedido *#${order.ticketNumber || order.id}* foi confirmado com sucesso na nossa conta Sicredi!\n\n` +
+          `📦 Seus produtos já estão sendo separados com todo carinho.\n` +
+          `👤 Venda realizada por: *${sellerName}*\n\n` +
+          `Agradecemos a sua preferência! 🌿`
+        );
+        await messageService.whatsappClient.sendTextMessage(cleanPhone, customerMsg).catch(() => {});
+      }
+
+      const ownerPhone = String(process.env.OWNER_WHATSAPP_NUMBER || config.whatsapp?.ownerNumber || '64999351616').replace(/\D/g, '');
+      if (ownerPhone) {
+        const hortaMsg = (
+          `🔔 *PIX CONFIRMADO NA CONTA SICREDI!* 🔔\n\n` +
+          `📦 *Pedido:* #${order.ticketNumber || order.id}\n` +
+          `👤 *Cliente:* ${order.customerName || 'Cliente Balcão'}\n` +
+          `💰 *Valor:* R$ ${Number(order.total).toFixed(2).replace('.', ',')}\n` +
+          `🛒 *Vendedor:* ${sellerName}\n` +
+          `✅ *Status:* PAGO E FINALIZADO AUTOMATICAMENTE\n` +
+          `📦 Estoque atualizado!`
+        );
+        await messageService.whatsappClient.sendTextMessage(ownerPhone, hortaMsg).catch(() => {});
+      }
+
+      res.status(200).json({ success: true, order: confirmedOrder });
+    } catch (err) {
+      Logger.error('Erro ao confirmar Pix Sicredi no caixa', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Consulta de Dívidas / Fiado do Cliente
+  app.get('/api/caixa/customers/:key/debts', async (req, res) => {
+    try {
+      const data = await messageService.firestoreRepo.getCustomerDebts(req.params.key);
+      res.status(200).json({ success: true, ...data });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Recebimento de Dívida / Quitação de Fiado no Caixa
+  app.post('/api/caixa/debts/settle', async (req, res) => {
+    try {
+      const {
+        customerKey,
+        customerName,
+        customerPhone,
+        amount,
+        paymentMethod = 'DINHEIRO',
+        operatorName,
+        notes,
+      } = req.body;
+
+      const val = Number(amount);
+      if (!Number.isFinite(val) || val <= 0) {
+        return res.status(400).json({ error: 'Informe um valor válido para quitação.' });
+      }
+
+      const cashierName = operatorName || req.user?.name || 'Caixa';
+      const result = await messageService.firestoreRepo.settleCustomerDebt({
+        customerKey,
+        customerName,
+        customerPhone,
+        amount: val,
+        paymentMethod,
+        operatorName: cashierName,
+        notes,
+      });
+
+      const receiptLines = [
+        `🌿 *CONFLORA HORTA E VIVEIRO* 🌿`,
+        `🧾 *RECIBO DE QUITAÇÃO DE FIADO*`,
+        `📅 ${new Date().toLocaleString('pt-BR')}`,
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+        `👤 *Cliente:* ${customerName || 'Cliente'}`,
+        customerPhone ? `📱 *WhatsApp:* ${customerPhone}` : null,
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+        `💵 *Valor Pago:* R$ ${val.toFixed(2).replace('.', ',')}`,
+        `💳 *Forma de Pagamento:* ${paymentMethod.toUpperCase()}`,
+        `🏦 *Recebido no Caixa por:* ${cashierName}`,
+        `📊 *Saldo Devedor Restante:* R$ ${result.newBalance.toFixed(2).replace('.', ',')}`,
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+        `Obrigado! Conflora Horta e Viveiro 🌱`,
+      ].filter(Boolean).join('\n');
+
+      let receiptSent = false;
+      const cleanPhone = String(customerPhone || '').replace(/\D/g, '');
+      if (cleanPhone.length >= 8) {
+        await messageService.whatsappClient.sendTextMessage(cleanPhone, receiptLines).catch(() => {});
+        receiptSent = true;
+      }
+
+      res.status(200).json({
+        success: true,
+        ...result,
+        receiptText: receiptLines,
+        receiptSent,
+      });
+    } catch (err) {
+      Logger.error('Erro ao registrar quitação de fiado no caixa', err);
       res.status(500).json({ error: err.message });
     }
   });

@@ -1790,17 +1790,6 @@ function renderHomeHtml() {
     </div>
   </div>
 
-  <!-- 6. BANNER DE CUPOM DE DESCONTO NO TOPO -->
-  <div class="promo-banner" id="promoBanner">
-    <div class="promo-banner-content">
-      <span class="promo-badge" data-i18n="promo.badge">🎉 PROMOÇÃO</span>
-      <span class="promo-text" data-i18n="promo.text">Use o cupom <strong>CONFLORA10</strong> para 10% OFF no seu primeiro pedido!</span>
-    </div>
-    <button type="button" class="promo-apply-btn" onclick="applyPromoCouponDirect('CONFLORA10')" data-i18n="promo.applyButton">
-      Usar Cupom
-    </button>
-  </div>
-
   <div class="app-container">
     <header class="brand-header">
       <div class="brand-title">

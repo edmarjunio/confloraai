@@ -8,34 +8,97 @@ function money(value) {
 }
 
 function formatOrderReceipt(order) {
-  const orderNumber = order.ticketNumber || String(order.id || "").slice(-8);
+  const orderNumber = order.ticketNumber || String(order.id || "").slice(-6).toUpperCase();
+  const dateStr = order.createdAt 
+    ? new Date(order.createdAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+    : new Date().toLocaleString('pt-BR');
+
+  const customerName = order.customerName || order.customer?.name || "Cliente Balcão";
+  const customerPhone = order.customerPhone || order.customer?.phone || "";
+
   const items = (order.items || []).map((item) => {
-    const quantity = Number(item.quantity) || 0;
+    const quantity = Number(item.quantity) || 1;
     const unitPrice = Number(item.price) || Number(item.unitPrice) || 0;
+    const unit = item.unit || "UN";
     const subtotal = Number(item.subtotalMinor) / 100 ||
       Number(item.subtotal) ||
       unitPrice * quantity;
-    return `${quantity} × ${item.name || "Produto"} — ${money(subtotal)}`;
+    return `▫️ *${quantity}${unit === 'KG' ? 'kg' : 'x'}* ${item.name || "Produto"}\n   ${money(unitPrice)} un. = *${money(subtotal)}*`;
   });
+
+  const subtotal = Number(order.subtotal) || (order.items || []).reduce((acc, it) => acc + (Number(it.price || 0) * Number(it.quantity || 1)), 0);
+  const discountAmount = Number(order.discountAmount || 0);
+  const discountPercent = Number(order.discountPercent || 0);
+  const freightValue = Number(order.freightValue || 0);
+  const total = Number(order.total) || Math.max(0, subtotal - discountAmount + freightValue);
+
+  const rawPaymentMethod = String(order.paymentMethod || "PIX").toUpperCase();
+  let paymentLabel = rawPaymentMethod;
+  if (rawPaymentMethod === 'PIX') paymentLabel = 'PIX (Conta Sicredi)';
+  else if (rawPaymentMethod === 'DEBITO') paymentLabel = 'Cartão de Débito';
+  else if (rawPaymentMethod === 'CREDITO') paymentLabel = 'Cartão de Crédito';
+  else if (rawPaymentMethod === 'CARTAO') paymentLabel = 'Cartão';
+  else if (rawPaymentMethod === 'DINHEIRO') paymentLabel = 'Dinheiro';
+  else if (rawPaymentMethod === 'FIADO') paymentLabel = 'Fiado (Conta de Cliente)';
+
+  const sellerName = order.createdBy?.name || order.sellerName || order.operatorName || "Equipe Conflora";
+  const cashierName = order.receivedBy?.name || order.cashierName || (rawPaymentMethod === 'PIX' ? sellerName : order.operatorName || "Caixa");
+
+  const auditLines = [];
+  if (sellerName === cashierName || rawPaymentMethod === 'PIX') {
+    auditLines.push(`👤 *Pedido feito por:* ${sellerName}`);
+    auditLines.push(`✅ *Recebido por:* ${cashierName}${rawPaymentMethod === 'PIX' ? ' (Sicredi Pix Automático)' : ''}`);
+  } else {
+    auditLines.push(`👤 *Pedido feito por:* ${sellerName} (Venda creditada para ele)`);
+    auditLines.push(`🏦 *Recebido por:* ${cashierName} (Operador de Caixa que recebeu)`);
+  }
+
   const lines = [
-    `Pedido #${orderNumber}`,
-    `Cliente: ${order.customerName || order.customer?.name || "Cliente"}`,
-    "",
-    "Itens:",
+    `🌿 *CONFLORA HORTA E VIVEIRO* 🌿`,
+    `🧾 *COMPROVANTE DE PEDIDO #${orderNumber}*`,
+    `📅 ${dateStr}`,
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+    `👤 *Cliente:* ${customerName}`,
+    customerPhone ? `📱 *WhatsApp:* ${customerPhone}` : null,
+    order.orderType === 'DELIVERY'
+      ? `🛵 *Entrega:* ${order.deliveryAddress || 'Endereço informado'}`
+      : `🏬 *Retirada:* Balcão / Viveiro Conflora`,
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+    `🛒 *ITENS DO PEDIDO:*`,
     ...items,
-    "",
-    `Total: ${money(order.total)}`,
-    `Pagamento: ${order.paymentMethod || "PIX"}`,
-    order.paymentCheckoutUrl
-      ? `Pagar com PIX no Mercado Pago: ${order.paymentCheckoutUrl}`
-      : "",
-    order.paymentStatus === "APPROVED"
-      ? "Pagamento confirmado."
-      : order.paymentMethod === "PIX"
-        ? "Depois de pagar, envie o comprovante pelo WhatsApp; o pedido só será confirmado quando o Mercado Pago aprovar."
-        : "",
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+    `💵 *Subtotal:* ${money(subtotal)}`,
+    discountAmount > 0 ? `🏷️ *Desconto (${discountPercent}%):* - ${money(discountAmount)}` : null,
+    freightValue > 0 ? `🛵 *Taxa de Entrega:* + ${money(freightValue)}` : null,
+    `💰 *TOTAL FINAL:* ${money(total)}`,
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+    `💳 *Forma de Pagamento:* ${paymentLabel}`,
   ];
-  return lines.filter((line) => line !== "").join("\n");
+
+  const copiaECola = order.pixCopiaECola || order.pixData?.copiaECola || order.pixCode;
+  if (rawPaymentMethod === 'PIX' && copiaECola) {
+    lines.push(
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `💠 *PAGAMENTO VIA PIX SICREDI*`,
+      `Titular: Conflora Horta e Viveiro`,
+      `Instituição: Banco Cooperativo Sicredi S.A.`,
+      `Valor exato: *${money(total)}* (Sem alteração de valor)`,
+      ``,
+      `🔑 *PIX COPIA E COLA:*`,
+      `${copiaECola}`,
+      ``,
+      `⚡ *Aviso:* Pedido é marcado como pago e baixado no estoque automaticamente assim que o Sicredi acusar o recebimento!`
+    );
+  }
+
+  lines.push(
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+    ...auditLines,
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+    `Obrigado pela preferência! Conflora Horta e Viveiro 🌱`
+  );
+
+  return lines.filter(Boolean).join('\n');
 }
 
-module.exports = { formatOrderReceipt };
+module.exports = { formatOrderReceipt, money };

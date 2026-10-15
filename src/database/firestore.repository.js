@@ -2737,6 +2737,7 @@ class FirestoreRepository {
         address: profile.address || profile.deliveryAddress || '',
         deliveryAddress: profile.deliveryAddress || profile.address || '',
         notes: profile.notes || '',
+        debtBalance: Number(profile.debtBalance || 0),
       });
     };
 
@@ -2818,6 +2819,130 @@ class FirestoreRepository {
       ...existing,
       ...dataWithTs,
     });
+  }
+
+  // --- Gestão de Fiado & Quitação de Dívidas ---
+  async recordCustomerDebt({ customerKey, customerName, customerPhone, orderId, ticketNumber, amount, operatorName, sellerName, notes }) {
+    const val = Number(amount || 0);
+    const now = new Date().toISOString();
+    const debtId = `debt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const debtEntry = {
+      id: debtId,
+      customerKey: String(customerKey || customerPhone || 'cliente'),
+      customerName: customerName || 'Cliente',
+      customerPhone: customerPhone || '',
+      orderId: orderId || '',
+      ticketNumber: ticketNumber || '',
+      amount: val,
+      type: 'DEBITO_FIADO',
+      operatorName: operatorName || 'Caixa',
+      sellerName: sellerName || operatorName || 'Vendedor',
+      notes: notes || 'Compra fiada no balcão',
+      createdAt: now,
+    };
+
+    if (this.firestore && !this._firestoreClientDisabled) {
+      try {
+        await this.firestore.collection('customer_debts').doc(debtId).set(debtEntry);
+        const custRef = this.firestore.collection('customers').doc(String(customerKey || customerPhone));
+        const custSnap = await custRef.get();
+        const currentBalance = custSnap.exists ? Number(custSnap.data().debtBalance || 0) : 0;
+        await custRef.set({ debtBalance: currentBalance + val, updatedAt: now }, { merge: true });
+      } catch (err) {
+        Logger.warn('Erro ao salvar lançamento de dívida no Firestore', { error: err.message });
+      }
+    }
+
+    this.inMemoryCustomerDebts = this.inMemoryCustomerDebts || [];
+    this.inMemoryCustomerDebts.push(debtEntry);
+
+    const cust = this.inMemoryCustomers.get(customerKey) || this.inMemoryCustomers.get(customerPhone) || {};
+    const currentBalance = Number(cust.debtBalance || 0);
+    const updatedCust = { ...cust, debtBalance: currentBalance + val, updatedAt: now };
+    if (customerKey) this.inMemoryCustomers.set(customerKey, updatedCust);
+    if (customerPhone) this.inMemoryCustomers.set(customerPhone, updatedCust);
+
+    return debtEntry;
+  }
+
+  async settleCustomerDebt({ customerKey, customerName, customerPhone, amount, paymentMethod = 'DINHEIRO', operatorName, notes }) {
+    const val = Number(amount || 0);
+    const now = new Date().toISOString();
+    const settlementId = `settle-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const settlementEntry = {
+      id: settlementId,
+      customerKey: String(customerKey || customerPhone || 'cliente'),
+      customerName: customerName || 'Cliente',
+      customerPhone: customerPhone || '',
+      amount: val,
+      paymentMethod: paymentMethod.toUpperCase(),
+      type: 'QUITACAO_FIADO',
+      operatorName: operatorName || 'Caixa',
+      notes: notes || 'Recebimento de dívida fiado no caixa',
+      createdAt: now,
+    };
+
+    let newBalance = 0;
+    if (this.firestore && !this._firestoreClientDisabled) {
+      try {
+        await this.firestore.collection('debt_settlements').doc(settlementId).set(settlementEntry);
+        const custRef = this.firestore.collection('customers').doc(String(customerKey || customerPhone));
+        const custSnap = await custRef.get();
+        const currentBalance = custSnap.exists ? Number(custSnap.data().debtBalance || 0) : 0;
+        newBalance = Math.max(0, currentBalance - val);
+        await custRef.set({ debtBalance: newBalance, updatedAt: now }, { merge: true });
+      } catch (err) {
+        Logger.warn('Erro ao salvar quitação de dívida no Firestore', { error: err.message });
+      }
+    }
+
+    this.inMemoryDebtSettlements = this.inMemoryDebtSettlements || [];
+    this.inMemoryDebtSettlements.push(settlementEntry);
+
+    const cust = this.inMemoryCustomers.get(customerKey) || this.inMemoryCustomers.get(customerPhone) || {};
+    const currentBalance = Number(cust.debtBalance || 0);
+    newBalance = Math.max(0, currentBalance - val);
+    const updatedCust = { ...cust, debtBalance: newBalance, updatedAt: now };
+    if (customerKey) this.inMemoryCustomers.set(customerKey, updatedCust);
+    if (customerPhone) this.inMemoryCustomers.set(customerPhone, updatedCust);
+
+    return {
+      success: true,
+      settlementId,
+      amount: val,
+      newBalance,
+      settlement: settlementEntry,
+    };
+  }
+
+  async getCustomerDebts(customerKey) {
+    const key = String(customerKey || '').trim();
+    let balance = 0;
+    let transactions = [];
+
+    if (this.firestore && !this._firestoreClientDisabled) {
+      try {
+        const custDoc = await this.firestore.collection('customers').doc(key).get();
+        if (custDoc.exists) {
+          balance = Number(custDoc.data().debtBalance || 0);
+        }
+        const debtsSnap = await this.firestore.collection('customer_debts').where('customerKey', '==', key).get();
+        const debts = debtsSnap.docs.map(d => ({ ...d.data(), id: d.id }));
+        const settlesSnap = await this.firestore.collection('debt_settlements').where('customerKey', '==', key).get();
+        const settles = settlesSnap.docs.map(d => ({ ...d.data(), id: d.id }));
+        transactions = [...debts, ...settles].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+        return { customerKey: key, balance, transactions };
+      } catch (err) {
+        Logger.warn('Erro ao buscar dívidas do cliente no Firestore', { error: err.message });
+      }
+    }
+
+    const cust = this.inMemoryCustomers.get(key);
+    balance = Number(cust?.debtBalance || 0);
+    const debts = (this.inMemoryCustomerDebts || []).filter(d => d.customerKey === key);
+    const settles = (this.inMemoryDebtSettlements || []).filter(s => s.customerKey === key);
+    transactions = [...debts, ...settles].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    return { customerKey: key, balance, transactions };
   }
 
   // --- Colaboradores e Controle de Acesso (RBAC) ---

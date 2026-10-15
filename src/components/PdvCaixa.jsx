@@ -652,9 +652,7 @@ export default function PdvCaixa() {
           {!isCollapsed && (
             <div className="px-3.5 py-2 bg-slate-50/90 border-t border-slate-100 flex items-center justify-between gap-2 text-[11px]">
               <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-                <button
-                  onClick={() => setActiveModal('discount')}
-              {/* Toggle Balcão / Entrega */}
+                {/* Toggle Balcão / Entrega */}
               <button
                 onClick={() => {
                   const next = orderType === 'PICKUP' ? 'DELIVERY' : 'PICKUP';

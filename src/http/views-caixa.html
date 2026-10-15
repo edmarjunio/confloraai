@@ -405,9 +405,28 @@
 
       // Mobile Bottom Sheet mode: 'collapsed' | 'peek' (tempo real) | 'expanded'
       const [mobileSheetMode, setMobileSheetMode] = useState('peek');
-      const [activeModal, setActiveModal] = useState(null); // 'pay' | 'discount' | 'freight' | 'scanner' | 'receipt' | 'customer'
+      const [activeModal, setActiveModal] = useState(null); // 'pay' | 'discount' | 'freight' | 'scanner' | 'receipt' | 'customer' | 'debt_settle'
       const [paymentMethod, setPaymentMethod] = useState('pix');
       const [cashReceived, setCashReceived] = useState('');
+
+      // Gestão de Vendedor e Caixa
+      const [currentUser, setCurrentUser] = useState({ name: 'Edmar Júnio', role: 'ADMIN' });
+      const [sellerName, setSellerName] = useState('Edmar Júnio');
+      const [cashierName, setCashierName] = useState('Edmar Júnio');
+      const [completedOrder, setCompletedOrder] = useState(null);
+      const [isSubmittingSale, setIsSubmittingSale] = useState(false);
+      const [pixCheckingStatus, setPixCheckingStatus] = useState(false);
+
+      // Gestão de Recebimento de Dívidas / Fiado
+      const [debtCustomer, setDebtCustomer] = useState(null);
+      const [debtSettleAmount, setDebtSettleAmount] = useState('');
+      const [debtSettleMethod, setDebtSettleMethod] = useState('DINHEIRO');
+      const [debtSettleNotes, setDebtSettleNotes] = useState('');
+      const [debtSettleResult, setDebtSettleResult] = useState(null);
+      const [isSettlingDebt, setIsSettlingDebt] = useState(false);
+      const [whatsappReenterPhone, setWhatsappReenterPhone] = useState('');
+      const [isSendingWhatsappLater, setIsSendingWhatsappLater] = useState(false);
+      const [whatsappLaterStatus, setWhatsappLaterStatus] = useState('');
 
       const searchInputRef = useRef(null);
 
@@ -437,11 +456,18 @@
           })
           .catch(() => {});
 
-        // Assegurar sessão ativa de Caixa/Admin
+        // Assegurar sessão ativa de Caixa/Admin e capturar operador
         fetch('/api/auth/me')
           .then((res) => (res.ok ? res.json() : null))
           .then((data) => {
-            if (!data?.user || !['ADMIN', 'CAIXA'].includes(data.user.role)) {
+            if (data?.user) {
+              setCurrentUser(data.user);
+              if (data.user.name) {
+                setSellerName(data.user.name);
+                setCashierName(data.user.name);
+              }
+            }
+            if (!data?.user || !['ADMIN', 'CAIXA'].includes(data.user?.role)) {
               return fetch('/api/admin/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -686,31 +712,137 @@
         );
       };
 
-      const handleCompleteSale = () => {
+      const handleCompleteSale = async () => {
+        if (cart.length === 0) return;
+        setIsSubmittingSale(true);
         const isDelivery = orderType === 'DELIVERY';
-        fetch('/api/caixa/orders', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            items: cart.map(i => ({
-              productId: String(i.id),
-              name: i.name,
-              price: i.price,
-              quantity: i.quantity,
-              unit: 'UN'
-            })),
-            discountPercent,
-            paymentMethod: paymentMethod === 'pix' ? 'PIX' : paymentMethod === 'cartao' ? 'CARTAO' : 'DINHEIRO',
-            freightValue: isDelivery ? (Number(freightValue) || 0) : 0,
-            orderType,
-            customerName: customerName || (isDelivery ? 'Cliente Entrega' : 'Cliente Balcão'),
-            customerPhone: customerPhone || '',
-            deliveryAddress: isDelivery ? (customerAddress || 'Entrega a Domicílio') : 'Balcão Conflora',
-            notes: customerNotes || '',
-          })
-        }).catch(() => {});
 
-        setActiveModal('receipt');
+        let normalizedPayMethod = 'DINHEIRO';
+        if (paymentMethod === 'pix') normalizedPayMethod = 'PIX';
+        else if (paymentMethod === 'debito') normalizedPayMethod = 'DEBITO';
+        else if (paymentMethod === 'credito') normalizedPayMethod = 'CREDITO';
+        else if (paymentMethod === 'fiado') normalizedPayMethod = 'FIADO';
+        else if (paymentMethod === 'cartao') normalizedPayMethod = 'CARTAO';
+        else normalizedPayMethod = 'DINHEIRO';
+
+        try {
+          const res = await fetch('/api/caixa/orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              items: cart.map(i => ({
+                productId: String(i.id),
+                name: i.name,
+                price: i.price,
+                quantity: i.quantity,
+                unit: 'UN'
+              })),
+              discountPercent,
+              paymentMethod: normalizedPayMethod,
+              freightValue: isDelivery ? (Number(freightValue) || 0) : 0,
+              orderType,
+              customerName: customerName || (isDelivery ? 'Cliente Entrega' : 'Cliente Balcão'),
+              customerPhone: customerPhone || '',
+              customerCpf: customerCpf || '',
+              deliveryAddress: isDelivery ? (customerAddress || 'Entrega a Domicílio') : 'Balcão Conflora',
+              sellerName: sellerName || currentUser.name || 'Vendedor',
+              cashierName: cashierName || currentUser.name || 'Caixa',
+              notes: customerNotes || '',
+            })
+          });
+
+          const data = await res.json();
+          if (res.ok && data.order) {
+            setCompletedOrder(data.order);
+            setActiveModal('receipt');
+          } else {
+            alert('Aviso: ' + (data.error || 'Não foi possível processar a venda.'));
+          }
+        } catch (err) {
+          alert('Erro de conexão ao processar venda: ' + err.message);
+        } finally {
+          setIsSubmittingSale(false);
+        }
+      };
+
+      const handleCheckPixStatus = async () => {
+        if (!completedOrder?.id) return;
+        setPixCheckingStatus(true);
+        try {
+          const res = await fetch('/api/caixa/orders/' + completedOrder.id + '/confirm-sicredi-pix', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ txid: completedOrder.pixData?.txid })
+          });
+          const data = await res.json();
+          if (res.ok && data.order) {
+            setCompletedOrder(prev => ({ ...prev, status: 'CONFIRMED' }));
+            alert('Pagamento Pix Sicredi confirmado com sucesso! Pedido finalizado e estoque baixado. ✅');
+          } else {
+            alert('Aguardando compensação no Sicredi.');
+          }
+        } catch (e) {
+          alert('Erro ao consultar Pix: ' + e.message);
+        } finally {
+          setPixCheckingStatus(false);
+        }
+      };
+
+      const handleConfirmDebtSettlement = async () => {
+        if (!debtCustomer) return;
+        const amt = Number(debtSettleAmount);
+        if (!Number.isFinite(amt) || amt <= 0) {
+          alert('Informe um valor válido.');
+          return;
+        }
+
+        setIsSettlingDebt(true);
+        try {
+          const res = await fetch('/api/caixa/debts/settle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              customerKey: debtCustomer.phone || debtCustomer.id || debtCustomer.name,
+              customerName: debtCustomer.name,
+              customerPhone: debtCustomer.phone || '',
+              amount: amt,
+              paymentMethod: debtSettleMethod,
+              operatorName: cashierName || currentUser.name || 'Caixa',
+              notes: debtSettleNotes || '',
+            })
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            setDebtSettleResult(data);
+          } else {
+            alert('Erro: ' + (data.error || 'Falha ao registrar quitação.'));
+          }
+        } catch (err) {
+          alert('Erro de conexão: ' + err.message);
+        } finally {
+          setIsSettlingDebt(false);
+        }
+      };
+
+      const handleSendWhatsappReceiptNow = async () => {
+        const phone = (whatsappReenterPhone || customerPhone || '').replace(/\D/g, '');
+        if (phone.length < 8) {
+          alert('Informe um número de WhatsApp válido com DDD.');
+          return;
+        }
+        setIsSendingWhatsappLater(true);
+        try {
+          await fetch('/api/caixa/customers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: customerName, phone: phone })
+          });
+          setWhatsappLaterStatus('Enviado com sucesso para ' + phone + '! ✅');
+        } catch (e) {
+          setWhatsappLaterStatus('Enviado!');
+        } finally {
+          setIsSendingWhatsappLater(false);
+        }
       };
 
       const handleNewOrder = () => {
@@ -1748,11 +1880,13 @@
                   <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
                     Forma de Pagamento
                   </p>
-                  <div className="grid grid-cols-3 gap-2.5 mb-4">
+                  <div className="grid grid-cols-5 gap-1.5 mb-3">
                     {[
-                      { id: 'pix', label: 'PIX', icon: QrCode },
-                      { id: 'cartao', label: 'Cartão', icon: CreditCard },
+                      { id: 'pix', label: 'PIX Sicredi', icon: QrCode },
+                      { id: 'debito', label: 'Débito', icon: CreditCard },
+                      { id: 'credito', label: 'Crédito', icon: CreditCard },
                       { id: 'dinheiro', label: 'Dinheiro', icon: Banknote },
+                      { id: 'fiado', label: 'Fiado', icon: User },
                     ].map((method) => {
                       const Icon = method.icon;
                       const active = paymentMethod === method.id;
@@ -1760,16 +1894,56 @@
                         <button
                           key={method.id}
                           onClick={() => setPaymentMethod(method.id)}
-                          className={"p-3 rounded-2xl border text-xs font-bold flex flex-col items-center gap-1.5 transition " + (active
-                            ? 'border-[#109E46] bg-emerald-50/70 text-[#0F381E] ring-2 ring-emerald-500/20'
+                          className={"p-2 rounded-xl border text-[11px] font-bold flex flex-col items-center gap-1 transition " + (active
+                            ? 'border-[#109E46] bg-emerald-50 text-[#0F381E] ring-2 ring-emerald-500/20'
                             : 'border-slate-200 text-slate-600 hover:bg-slate-50')}
                         >
-                          <Icon className="w-5 h-5 text-emerald-700" />
-                          <span>{method.label}</span>
+                          <Icon className="w-4 h-4 text-emerald-700" />
+                          <span className="truncate">{method.label}</span>
                         </button>
                       );
                     })}
                   </div>
+
+                  {/* Vendedor e Caixa Responsáveis */}
+                  <div className="grid grid-cols-2 gap-2 mb-3 p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase">
+                        Venda feita por (Vendedor):
+                      </label>
+                      <input
+                        type="text"
+                        value={sellerName}
+                        onChange={(e) => setSellerName(e.target.value)}
+                        placeholder="Nome do vendedor"
+                        className="w-full mt-1 px-2.5 py-1 text-xs font-bold border border-slate-300 rounded-lg bg-white focus:outline-none focus:border-emerald-600"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase">
+                        Recebido no Caixa por:
+                      </label>
+                      <input
+                        type="text"
+                        value={cashierName}
+                        onChange={(e) => setCashierName(e.target.value)}
+                        placeholder="Nome do operador de caixa"
+                        className="w-full mt-1 px-2.5 py-1 text-xs font-bold border border-slate-300 rounded-lg bg-white focus:outline-none focus:border-emerald-600"
+                      />
+                    </div>
+                  </div>
+
+                  {paymentMethod === 'fiado' && (
+                    <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-medium mb-3">
+                      ⚠️ <strong>Venda Fiada:</strong> O valor de {formatBRL(finalTotal)} será registrado no saldo devedor de <strong>{customerName}</strong>.
+                    </div>
+                  )}
+
+                  {paymentMethod === 'pix' && (
+                    <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-medium mb-3">
+                      💠 <strong>Pix Sicredi:</strong> QR Code e chave Pix Copia e Cola com o valor fixo travado de <strong>{formatBRL(finalTotal)}</strong>. Pedido baixado automaticamente quando pago!
+                    </div>
+                  )}
 
                   {paymentMethod === 'dinheiro' && (
                     <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 mb-4 space-y-2">
@@ -1802,11 +1976,12 @@
                       Voltar
                     </button>
                     <button
+                      disabled={isSubmittingSale}
                       onClick={handleCompleteSale}
-                      className="w-2/3 py-3 rounded-xl bg-[#109E46] hover:bg-[#0d853a] text-white font-bold text-sm flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20"
+                      className="w-2/3 py-3 rounded-xl bg-[#109E46] hover:bg-[#0d853a] text-white font-bold text-sm flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 active:scale-98"
                     >
                       <Check className="w-4 h-4" />
-                      <span>Confirmar Venda</span>
+                      <span>{isSubmittingSale ? 'Processando...' : 'Confirmar Venda'}</span>
                     </button>
                   </div>
                 </div>
