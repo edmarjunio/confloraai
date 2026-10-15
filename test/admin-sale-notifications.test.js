@@ -183,7 +183,7 @@ test('CAIXA DISCOUNTS: desconto acima de 5% aguarda Admin e só vira pedido apó
   const createDirectOrder = repo.createDirectOrder.bind(repo);
   repo.createDirectOrder = (data) => createDirectOrder(data);
   await repo.saveProduct({ id: 'discount-plant', name: 'Muda de Teste', price: 100, status: 'ATIVO' });
-  const app = createApp({ messageService: { firestoreRepo: repo }, mercadoPagoClient: {
+  const app = createApp({ messageService: { firestoreRepo: repo }, sicrediClient: { createCharge: async ({ txid, amount }) => ({ txid, amount, pixCopiaECola: 'test-code', qrCodeBase64: 'data:image/png;base64,aGVsbG8=' }) }, mercadoPagoClient: {
     checkoutConfigured: true,
     createPixCheckout: async () => ({ id: 'test-preference', checkoutUrl: 'https://conflora.example/pay' }),
   } });
@@ -205,6 +205,7 @@ test('CAIXA DISCOUNTS: desconto acima de 5% aguarda Admin e só vira pedido apó
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        requestId: require('node:crypto').randomUUID(),
         items: [{ productId: 'discount-plant', quantity: 1 }],
         paymentMethod: 'DINHEIRO',
       }),
@@ -216,6 +217,7 @@ test('CAIXA DISCOUNTS: desconto acima de 5% aguarda Admin e só vira pedido apó
       method: 'POST',
       headers: { 'Content-Type': 'application/json', cookie: cashierCookie },
       body: JSON.stringify({
+        requestId: require('node:crypto').randomUUID(),
         items: [{ productId: 'discount-plant', price: 1, quantity: 1 }],
         paymentMethod: 'PIX',
         customerName: 'Cliente Teste',
@@ -249,6 +251,7 @@ test('CAIXA DISCOUNTS: desconto acima de 5% aguarda Admin e só vira pedido apó
       method: 'POST',
       headers: { 'Content-Type': 'application/json', cookie: cashierCookie },
       body: JSON.stringify({
+        requestId: require('node:crypto').randomUUID(),
         items: [{ productId: 'discount-plant', quantity: 1 }],
         paymentMethod: 'DINHEIRO',
         discountPercent: 12,
@@ -292,7 +295,10 @@ test('CAIXA CUSTOMERS: busca e cadastro rápido exigem perfil de colaborador', a
     const cookie = loginResponse.headers.get('set-cookie')?.split(';')[0];
     const searchResponse = await fetch(`${baseUrl}/api/caixa/customers?q=Maria`, { headers: { cookie } });
     assert.equal(searchResponse.status, 200);
-    assert.deepEqual(await searchResponse.json(), [{ name: 'Maria Silva', phone: '5564999887766' }]);
+    const matches = await searchResponse.json();
+    assert.equal(matches[0].id, '5564999887766');
+    assert.equal(matches[0].name, 'Maria Silva');
+    assert.equal(matches[0].phone, '5564999887766');
 
     const createResponse = await fetch(`${baseUrl}/api/caixa/customers`, {
       method: 'POST',
@@ -300,7 +306,7 @@ test('CAIXA CUSTOMERS: busca e cadastro rápido exigem perfil de colaborador', a
       body: JSON.stringify({ name: 'João Souza', phone: '(64) 99911-2233' }),
     });
     assert.equal(createResponse.status, 201);
-    assert.equal((await repo.getCustomerProfile('64999112233')).name, 'João Souza');
+    assert.equal((await repo.getCustomerProfile('5564999112233')).name, 'João Souza');
   } finally {
     server.close();
   }

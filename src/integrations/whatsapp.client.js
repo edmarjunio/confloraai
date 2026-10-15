@@ -55,6 +55,34 @@ class WhatsAppClient {
     return this.postRequest('/messages', payload);
   }
 
+  async sendImageBuffer(to, buffer, caption = '') {
+    if (!this.token || !config.whatsapp.phoneNumberId) { throw new Error('WhatsApp não configurado.'); }
+    const form = new FormData();
+    form.set('messaging_product', 'whatsapp');
+    form.set('file', new Blob([buffer], { type: 'image/png' }), 'pix.png');
+    const response = await fetch(`${this.baseUrl}/media`, {
+      method: 'POST', headers: { Authorization: `Bearer ${this.token}` }, body: form, signal: AbortSignal.timeout(15000),
+    });
+    if (!response.ok) { throw new Error(`Falha ao enviar QR Code ao WhatsApp (HTTP ${response.status}).`); }
+    const media = await response.json();
+    if (!media.id) { throw new Error('WhatsApp não retornou a imagem.'); }
+    if (process.env.WHATSAPP_PDV_QR_TEMPLATE) {
+      return this.sendTemplate(to, process.env.WHATSAPP_PDV_QR_TEMPLATE, config.whatsapp.templates.language || 'pt_BR', [
+        { type: 'header', parameters: [{ type: 'image', image: { id: media.id } }] },
+        { type: 'body', parameters: [{ type: 'text', text: caption }] },
+      ]);
+    }
+    return this.postRequest('/messages', { messaging_product: 'whatsapp', to, type: 'image', image: { id: media.id, caption } });
+  }
+
+  async sendPdvText(to, text) {
+    const template = process.env.WHATSAPP_PDV_TEXT_TEMPLATE || config.whatsapp.templates.customerOrder;
+    if (!template) { return this.sendTextMessage(to, text); }
+    return this.sendTemplate(to, template, config.whatsapp.templates.language || 'pt_BR', [
+      { type: 'body', parameters: [{ type: 'text', text: text.replace(/\s+/g, ' ').trim() }] },
+    ]);
+  }
+
   /**
    * Envia mensagem de modelo (template) pré-aprovado pela Meta.
    * @param {string} to
@@ -115,6 +143,7 @@ class WhatsAppClient {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(15000),
       });
 
       const data = await response.json();
