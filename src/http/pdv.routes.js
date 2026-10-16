@@ -70,6 +70,26 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone }) {
   };
   app.use('/api/caixa', requireStaff);
 
+  app.get('/api/caixa/favorites', route(async (req, res) => {
+    const user = await store.read('users', String(req.user.id));
+    res.json({ favoriteProductIds: Array.isArray(user?.favoriteProductIds) ? user.favoriteProductIds : [] });
+  }));
+
+  app.put('/api/caixa/favorites', route(async (req, res) => {
+    const ids = Array.isArray(req.body?.favoriteProductIds) ? req.body.favoriteProductIds : [];
+    if (ids.length > 2000) { throw new Error('Limite de favoritos excedido.'); }
+    const favoriteProductIds = [...new Set(ids.map((id) => String(id || '').trim()).filter(Boolean))];
+    const userId = String(req.user.id);
+    const saved = await store.transaction(async (tx) => {
+      const user = await tx.get('users', userId);
+      if (!user) { throw new Error('Usuário autenticado não encontrado.'); }
+      const updated = { ...user, favoriteProductIds, updatedAt: new Date().toISOString() };
+      tx.set('users', userId, updated);
+      return updated.favoriteProductIds;
+    });
+    res.json({ success: true, favoriteProductIds: saved });
+  }));
+
   app.post('/api/caixa/customers', route(async (req, res) => {
     const name = String(req.body.name || '').trim().slice(0, 100);
     if (!name) { throw new Error('Informe o nome do cliente.'); }

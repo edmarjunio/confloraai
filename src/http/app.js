@@ -5,6 +5,7 @@ const { buildDriveDirectImageUrl } = require('../catalog/catalog.repository');
 const { rankProductSales } = require('../catalog/product-sales');
 const { getCashierProductDetails } = require('../catalog/cashier-product-details');
 const { getProductImageFallback } = require('../catalog/product-image-fallbacks');
+const { resolveHdProductImage } = require('../catalog/image-resolver');
 let expressModule = null;
 function getExpress() {
   if (!expressModule) {
@@ -42,6 +43,23 @@ function getProductImageCandidates(product = {}) {
     product.IMAGEM,
     product.DRIVE_PATH,
   ].map((image) => buildDriveDirectImageUrl('', image) || image).filter(Boolean))];
+}
+
+function isRenderableProductImageUrl(value) {
+  return typeof value === 'string' && /^(https?:\/\/|\/api\/images\/|\/store-assets\/)/i.test(value.trim());
+}
+
+function getCashierProductImageCandidates(product = {}) {
+  const registeredImages = [
+    product.imageUrl,
+    product.imageurl,
+    ...(Array.isArray(product.images) ? product.images : []),
+  ]
+    .map((image) => typeof image === 'string' ? image : image?.url || image?.imageUrl || image?.src || '')
+    .map((image) => buildDriveDirectImageUrl('', image) || image)
+    .filter(isRenderableProductImageUrl);
+
+  return [...new Set(registeredImages)];
 }
 
 const config = require('../config/env');
@@ -1060,13 +1078,7 @@ function createApp({
     res.setHeader('Cache-Control', 'no-store');
     return res.sendFile(require('node:path').resolve(__dirname, '../../public/storefront/index.html'));
   });
-  app.get('/catalogo-classico', (_req, res) => {
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-    res.status(200).send(renderHomeHtml());
-  });
+  app.get('/catalogo-classico', (_req, res) => res.redirect(308, '/'));
 
   // Painel de Administração, Frente de Caixa & Estoque
   app.get('/admin', async (_req, res, next) => {
@@ -1400,7 +1412,11 @@ function createApp({
     try {
       const { id } = req.params;
       const photo = await messageService.firestoreRepo.getProductPhoto(id);
-      if (photo && photo.data) {
+      // SVGs saved by older import flows are branded placeholders, not product photos.
+      const photoPrefix = photo?.data ? Buffer.from(photo.data, 'base64').subarray(0, 120).toString('utf8').trim() : '';
+      const isSvgPlaceholder = String(photo?.contentType || '').toLowerCase().includes('svg')
+        || /^(<\?xml[^>]*>\s*)?<svg\b/i.test(photoPrefix);
+      if (photo?.data && !isSvgPlaceholder) {
         const mimeType = photo.contentType || 'image/jpeg';
         res.setHeader('Content-Type', mimeType);
         res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
@@ -1417,18 +1433,18 @@ function createApp({
       }
 
       // Se não encontrou foto diretamente, tenta buscar o produto correspondente
-      const cleanProdId = id.replace(/^img_/, '');
+      const cleanProdId = String(photo?.productId || id.replace(/^img_/, ''));
       const prod = await messageService.firestoreRepo.getProductById(cleanProdId);
       if (prod && prod.imageUrl && prod.imageUrl.startsWith('http') && !prod.imageUrl.includes('/api/images/')) {
         return res.redirect(prod.imageUrl);
       }
 
       // Fallback em SVG da Conflora
-      const { createConfloraSvgFallback } = require('../catalog/product-photo.service');
-      const fallbackBase64 = createConfloraSvgFallback(prod?.name || 'Conflora', prod?.category || 'Viveiro');
-      res.setHeader('Content-Type', 'image/svg+xml');
-      res.setHeader('Cache-Control', 'public, max-age=3600');
-      return res.status(200).send(Buffer.from(fallbackBase64, 'base64'));
+      const fallbackUrl = prod
+        ? resolveHdProductImage(prod.name || prod.descricao || '', prod.category || prod.categoria || '', prod.subcategory || prod.subcategoria || '')
+        : getProductImageFallback('DEFAULT');
+      res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+      return res.redirect(302, fallbackUrl);
     } catch (err) {
       Logger.error('Erro ao servir imagem do Firestore', err);
       res.status(500).send('Erro ao carregar imagem');
@@ -1651,6 +1667,33 @@ function createApp({
     }
   });
 
+  app.get('/api/customer/favorites', async (req, res) => {
+    try {
+      if (!req.user) {return res.status(401).json({ error: 'Entre na sua conta.' });}
+      const favoriteProductIds = await messageService.firestoreRepo.getUserFavorites(req.user.id);
+      res.json({ favoriteProductIds });
+    } catch (err) {
+      Logger.error('Erro ao buscar favoritos do cliente', err);
+      res.status(500).json({ error: 'Não foi possível carregar seus produtos curtidos.' });
+    }
+  });
+
+  app.put('/api/customer/favorites', async (req, res) => {
+    try {
+      if (!req.user) {return res.status(401).json({ error: 'Entre na sua conta.' });}
+      const ids = req.body?.favoriteProductIds;
+      if (!Array.isArray(ids) || ids.length > 2000) {
+        return res.status(400).json({ error: 'Lista de produtos curtidos inválida.' });
+      }
+      const validIds = ids.map((id) => String(id || '').trim()).filter((id) => /^[a-zA-Z0-9_-]{1,160}$/.test(id));
+      const favoriteProductIds = await messageService.firestoreRepo.setUserFavorites(req.user.id, validIds);
+      res.json({ success: true, favoriteProductIds });
+    } catch (err) {
+      Logger.error('Erro ao salvar favoritos do cliente', err);
+      res.status(500).json({ error: 'Não foi possível salvar seus produtos curtidos.' });
+    }
+  });
+
   // Admin: Get all orders (Web & WhatsApp)
   app.get('/api/admin/orders', async (_req, res) => {
     try {
@@ -1795,7 +1838,7 @@ function createApp({
       const active = products
         .filter((p) => String(p.status || p.STATUS || '').trim().toUpperCase() === 'ATIVO')
         .map((p) => {
-          const imageCandidates = getProductImageCandidates(p);
+          const imageCandidates = getCashierProductImageCandidates(p);
           const imageUrl = imageCandidates[0] || '';
 
           return {
@@ -1807,10 +1850,16 @@ function createApp({
             unit: p.unit || p.unidade || 'UN',
             category: p.category || p.categoria || '',
             subcategory: p.subcategory || p.subcategoria || '',
+            canonicalName: p.canonicalName || p.canonical_name || '',
+            variation: p.variation || p.variacao || '',
             imageUrl,
             images: imageCandidates,
             imagePathCache: p.imagePathCache || '',
-            imageFallbackUrl: getProductImageFallback(p.category || p.categoria || ''),
+            imageFallbackUrl: resolveHdProductImage(
+              p.name || p.descricao || p.DESCRIÇÃO || '',
+              p.category || p.categoria || p.CATEGORIA || '',
+              p.subcategory || p.subcategoria || p.SUBCATEGORIA || '',
+            ),
             descriptionAi: p.descriptionAi || p.descricao_ia || '',
             tagsAi: p.tagsAi || p.tags_ia || '',
             details: getCashierProductDetails(p),

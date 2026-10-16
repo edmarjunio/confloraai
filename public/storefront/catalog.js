@@ -30,6 +30,21 @@ function normalizeProductText(value) {
     .trim();
 }
 
+function productPrice(product) {
+  const minor = Math.max(0, Math.round(Number(product.price?.amountMinor || 0)));
+  const major = new Intl.NumberFormat("pt-BR").format(Math.floor(minor / 100));
+  const cents = String(minor % 100).padStart(2, "0");
+  const unit = (product.saleUnit?.code || "UN") === "UN"
+    ? ""
+    : ` / ${product.saleUnit?.label || product.saleUnit?.code}`;
+  return element("strong", { class: "cf-product-price" }, [
+    element("span", { class: "cf-price-currency", text: "R$" }),
+    element("span", { class: "cf-price-major", text: major }),
+    element("span", { class: "cf-price-cents", text: `,${cents}` }),
+    ...(unit ? [element("span", { class: "cf-price-unit", text: unit })] : []),
+  ]);
+}
+
 function getProductHighlights(product) {
   const specificationText = Object.values(product.specifications || {})
     .flatMap((specification) => [specification?.label, specification?.value])
@@ -58,11 +73,59 @@ function getProductHighlights(product) {
 
 export function createCatalog(state, add, navigate) {
   let pageSize = 24;
+  let renderedItems = [];
+  let loadingNextPage = false;
   let selectedCategory = "";
   let showingFavorites = false;
-  const favoriteKey = `store:${state.slug}:favorites`;
-  const saved = storageGet(favoriteKey, []);
-  const favorites = new Set(Array.isArray(saved) ? saved : []);
+  const favoriteKey = () => `store:${state.slug}:user:${state.user?.id || "guest"}:favorites`;
+  const favorites = new Set();
+  let favoriteRevision = 0;
+  let favoriteSaveQueue = Promise.resolve();
+  const loadMoreButton = $("#loadMore");
+  const pageObserver = typeof IntersectionObserver === "function"
+    ? new IntersectionObserver((entries) => {
+        if (!entries.some((entry) => entry.isIntersecting) || loadingNextPage) return;
+        if (renderedItems.length <= pageSize) return;
+        loadingNextPage = true;
+        pageSize += 24;
+        render();
+        loadingNextPage = false;
+      }, { rootMargin: "700px 0px" })
+    : null;
+
+  function persistFavorites() {
+    favoriteRevision += 1;
+    storageSet(favoriteKey(), [...favorites]);
+    if (state.user && state.existingStore) {
+      const snapshot = [...favorites];
+      favoriteSaveQueue = favoriteSaveQueue
+        .then(() => state.api("/favorites", {
+          method: "PUT",
+          body: { favoriteProductIds: snapshot },
+        }))
+        .catch((error) => console.warn("Não foi possível sincronizar os favoritos.", error));
+    }
+  }
+
+  async function refreshFavorites() {
+    const revisionAtStart = favoriteRevision;
+    const saved = storageGet(favoriteKey(), []);
+    favorites.clear();
+    for (const id of Array.isArray(saved) ? saved : []) favorites.add(id);
+    if (state.user && state.existingStore) {
+      try {
+        const result = await state.api("/favorites");
+        if (favoriteRevision === revisionAtStart) {
+          favorites.clear();
+          for (const id of result.favoriteProductIds || []) favorites.add(id);
+          storageSet(favoriteKey(), [...favorites]);
+        }
+      } catch (error) {
+        console.warn("Não foi possível carregar favoritos da conta.", error);
+      }
+    }
+    render();
+  }
 
   function favorite(product) {
     const button = element(
@@ -75,12 +138,17 @@ export function createCatalog(state, add, navigate) {
       [icon("heart")],
     );
     button.addEventListener("click", () => {
+      if (!state.user) {
+        const accountDialog = $("#accountDialog");
+        if (accountDialog && !accountDialog.open) accountDialog.showModal();
+        return;
+      }
       if (favorites.has(product.id)) {
         favorites.delete(product.id);
       } else {
         favorites.add(product.id);
       }
-      storageSet(favoriteKey, [...favorites]);
+      persistFavorites();
       button.setAttribute("aria-pressed", String(favorites.has(product.id)));
       if (showingFavorites) {
         render();
@@ -89,11 +157,135 @@ export function createCatalog(state, add, navigate) {
     return button;
   }
 
+  function openProductInformation(product) {
+    const normalizeName = (value) => normalizeProductText(value);
+    const relatedProducts = state.products.filter((candidate) => {
+      if (candidate.id === product.id) return true;
+      if (product.canonicalName && candidate.canonicalName) {
+        return normalizeName(candidate.canonicalName) === normalizeName(product.canonicalName);
+      }
+      return normalizeName(candidate.name) === normalizeName(product.name);
+    });
+    let dialog = document.querySelector("#productInfoDialog");
+    if (!dialog) {
+      dialog = element("dialog", { id: "productInfoDialog", class: "product-info-dialog" });
+      document.body.append(dialog);
+    }
+    const closeButton = element("button", {
+      type: "button",
+      class: "product-info-close",
+      "aria-label": "Fechar informações",
+      title: "Fechar",
+      onclick: () => dialog.close(),
+    }, [icon("x")]);
+    const title = element("h2", { text: product.name, title: product.name });
+    const description = product.description || product.descriptionAi || product.descricao_ia;
+    const illumination = product.illumination || product.light || product.iluminacao || product.lighting || product.dicas_iluminacao;
+    const environment = product.environment || product.ambiente_ideal || product.ambienteIdeal || product.habitat;
+    const care = product.careInstructions || product.care || product.cuidados_basicos || product.cuidadosBasicos;
+    const storage = product.storageTips || product.dicas_armazenamento || product.dicasArmazenamento;
+    const likes = product.preferences || product.o_que_gosta || product.oQueGosta || product.gosta_de || product.gostaDe
+      || [illumination, environment].filter(Boolean).join(" ");
+    const avoid = product.dislikes || product.o_que_evitar || product.oQueEvitar || product.nao_gosta || product.naoGosta
+      || (care?.match(/[^.!?]*(?:evite|evitar|nunca|não deixe|nao deixe)[^.!?]*[.!?]?/i)?.[0] || "");
+    const specificationEntries = Object.entries(product.specifications || {}).filter(([, value]) => value?.value || typeof value === "string");
+    const informationFields = [
+      ["O que gosta", likes, "leaf", "green"],
+      ["Iluminação", illumination, "sun", "yellow"],
+      ["Onde deixar", environment, "mapPin", "blue"],
+      ["Como cuidar", care, "drop", "green"],
+      ["O que evitar", avoid, "shield", "orange"],
+      ["Conservação", storage, "box", "blue"],
+    ].filter(([, value]) => value);
+    const content = [
+      element("header", { class: "product-info-header" }, [
+        element("div", { class: "product-info-heading" }, [
+          categoryTag(categoryLabel(product) || "Produto", "product-info-category"),
+          title,
+          element("div", { class: "product-info-price-row" }, [
+            element("strong", { class: "product-info-price", text: money(product.price.amountMinor) }),
+            element("span", { class: "product-info-unit", text: product.saleUnit?.label ? `por ${product.saleUnit.label}` : "preço atual" }),
+          ]),
+        ]),
+        closeButton,
+      ]),
+      element("div", { class: "product-info-body" }, [
+        ...(description ? [element("section", { class: "product-info-intro" }, [
+          element("span", { class: "product-info-eyebrow", text: "ESCOLHA COM CONFIANÇA" }),
+          element("p", { text: description }),
+        ])] : []),
+        ...(informationFields.length ? [element("div", { class: "product-info-facts" }, informationFields.map(([label, value, iconName, tone]) => element("section", { class: `product-info-fact ${tone}` }, [
+          element("span", { class: "product-info-fact-icon", "aria-hidden": "true" }, [icon(iconName)]),
+          element("div", {}, [
+            element("h3", { text: label }),
+            element("p", { text: value }),
+          ]),
+        ])))] : []),
+        ...(specificationEntries.length ? [element("details", { class: "product-info-specifications" }, [
+          element("summary", { text: "Ver especificações" }),
+          element("dl", {}, specificationEntries.flatMap(([label, value]) => [
+            element("dt", { text: value.label || label }),
+            element("dd", { text: `${value.value || value}${value.unit ? ` ${value.unit}` : ""}` }),
+          ])),
+        ])] : []),
+      ]),
+    ];
+    if (relatedProducts.length > 1) {
+      content[1].append(element("section", { class: "product-info-variants" }, [
+        element("h3", { text: "Outras opções disponíveis" }),
+        ...relatedProducts.filter((variant) => variant.id !== product.id).map((variant) => element("div", { class: "product-info-variant" }, [
+          element("span", { text: variant.variation || variant.name }),
+          element("strong", { text: money(variant.price.amountMinor) }),
+        ])),
+      ]));
+    }
+    if (!description && !informationFields.length && !specificationEntries.length) {
+      content[1].prepend(element("p", { class: "product-info-empty", text: "Fale com nossa equipe para confirmar as recomendações específicas desta variedade." }));
+    }
+    const addButton = element("button", { type: "button", class: "cf-button product-info-add", onclick: () => {
+      add(product, product.saleUnit?.minimum || 1);
+      dialog.close();
+    } }, [icon("cart"), element("span", { text: "Adicionar à sacola" })]);
+    content.push(element("footer", { class: "product-info-footer" }, [addButton]));
+    dialog.replaceChildren(...content);
+    dialog.onclick = (event) => {
+      if (event.target === dialog) dialog.close();
+    };
+    dialog.showModal();
+  }
+
+  function productInformationButton(product) {
+    return element("button", {
+      type: "button",
+      class: "cf-product-info-button product-information-button",
+      "aria-label": `Informações de ${product.name}`,
+      title: `Informações de ${product.name}`,
+      onclick: (event) => {
+        event.stopPropagation();
+        openProductInformation(product);
+      },
+    }, [icon("info")]);
+  }
+
+  function categoryTag(category, className = "") {
+    return element("render-category-tag", {
+      category,
+      icon: categoryIcon(category),
+      class: className,
+    });
+  }
+
   const categoryLabel = (product) => {
     const names = product.categories
       ?.map((id) => state.config?.categories?.find((c) => c.id === id)?.name)
       .filter(Boolean);
-    return names?.length ? names.join(" · ") : (product.categoryName || product.category || "");
+    return names?.length ? names.join(" · ") : (product.categoryName || product.category || product.categoria || "");
+  };
+  const categoryIcon = (name) => {
+    const configuredIcon = state.config?.categories?.find((category) =>
+      normalizeProductText(category.name) === normalizeProductText(name),
+    )?.icon;
+    return configuredIcon || window.ConfloraProductUi?.categoryIcon(name) || "🌿";
   };
 
   function categoryOptions(products) {
@@ -104,13 +296,13 @@ export function createCatalog(state, add, navigate) {
       if (ids.length) {
         for (const id of ids) {
           const category = configured.find((item) => item.id === id);
-          const name = category?.name || product.categoryName || product.category;
+          const name = category?.name || product.categoryName || product.category || product.categoria;
           if (name && category?.isActive !== false) {
             categories.set(id, { id, name });
           }
         }
       } else {
-        const name = product.categoryName || product.category;
+        const name = product.categoryName || product.category || product.categoria;
         const id = name ? `name:${normalizeProductText(name)}` : "";
         if (id && !categories.has(id)) {
           categories.set(id, { id, name });
@@ -122,22 +314,18 @@ export function createCatalog(state, add, navigate) {
     );
   }
 
-  function card(product, compact = false) {
-    const photo = element("img", {
+  function renderCard(product, { compact = false } = {}) {
+    const photo = element("render-image", {
       src: product.imageUrl || "/store-assets/placeholder.svg",
+      "image-candidates": JSON.stringify(product.images || []),
+      "fallback-src": "/store-assets/placeholder.svg",
       alt: product.imageIsIllustrative
         ? `Imagem ilustrativa de ${product.name}`
         : product.name,
+      class: "product-card-image",
       loading: "lazy",
       decoding: "async",
     });
-    photo.addEventListener(
-      "error",
-      () => {
-        photo.src = "/store-assets/placeholder.svg";
-      },
-      { once: true },
-    );
     const open = () =>
       navigate(
         `${state.basePath ?? `/shop/${state.slug}`}/products/${encodeURIComponent(product.id)}`,
@@ -165,16 +353,7 @@ export function createCatalog(state, add, navigate) {
       button.prepend(icon("cart"));
     }
 
-    const editBtn = element("button", {
-      type: "button",
-      class: "card-quick-edit",
-      title: "Editar produto",
-      text: "✏️",
-      onclick: (event) => {
-        event.stopPropagation();
-        state.productEntry?.open(product);
-      },
-    });
+    const category = categoryLabel(product);
 
     return element(
       "cf-card",
@@ -186,20 +365,17 @@ export function createCatalog(state, add, navigate) {
             text: `${highlight.icon} ${highlight.label}`,
           })))]
           : []),
-        ...(!compact ? [favorite(product), editBtn] : []),
         ...(isInactive
           ? [element("div", { class: "badge-inactive", text: "⚠️ INATIVO - Indisponível" })]
           : []),
-        element("button", { class: "product-photo", "aria-label": `Ver ${product.name}`, onclick: open }, [photo]),
+        element("button", { class: "product-photo", "aria-label": `Ver ${product.name}`, onclick: open }, [
+          photo,
+          ...(!compact && category ? [categoryTag(category, "product-category-tag")] : []),
+        ]),
+        ...(!compact ? [element("div", { class: "cf-product-actions product-card-actions" }, [favorite(product), productInformationButton(product)])] : []),
         element("div", { class: "product-content" }, [
           element("button", { class: "product-name", text: product.name, title: product.name, onclick: open }),
-          element("small", {
-            class: "muted",
-            text: categoryLabel(product) || product.tags?.slice(0, 2).join(" · "),
-          }),
-          element("strong", {
-            text: `${money(product.price.amountMinor)}${(product.saleUnit?.code || "UN") === "UN" ? "" : " / " + (product.saleUnit?.label || product.saleUnit?.code)}`,
-          }),
+          productPrice(product),
           button,
         ]),
       ],
@@ -208,41 +384,53 @@ export function createCatalog(state, add, navigate) {
 
   function render() {
     const rawQuery = $("#search").value.trim();
-    let baseList = state.products.filter(
+    const activeProducts = state.products.filter(
       (product) => product.status !== "INATIVO" && product.isAvailable !== false,
     );
+    let baseList = activeProducts;
     if (showingFavorites) {
       baseList = baseList.filter((product) => favorites.has(product.id));
     }
-    const categories = categoryOptions(baseList);
-    $("#categoryFilterControl").hidden = categories.length === 0;
+    const categories = categoryOptions(activeProducts);
+    $("#categoryFilterControl").hidden = false;
     if (!categories.some((category) => category.id === selectedCategory)) {
       selectedCategory = "";
     }
     $("#categoryFilterControl").replaceChildren(
       element("button", {
         type: "button",
-        class: `category-chip${selectedCategory ? "" : " is-active"}`,
-        text: "Todas",
-        "aria-pressed": String(!selectedCategory),
+        class: `category-chip${showingFavorites ? " is-active" : ""}`,
+        "aria-pressed": String(showingFavorites),
         onclick: () => {
+          showingFavorites = !showingFavorites;
           selectedCategory = "";
           pageSize = 24;
           render();
         },
-      }),
+      }, [icon("heart"), element("span", { text: "Curtidos" })]),
+      element("button", {
+        type: "button",
+        class: `category-chip${!showingFavorites && !selectedCategory ? " is-active" : ""}`,
+        "aria-pressed": String(!showingFavorites && !selectedCategory),
+        onclick: () => {
+          showingFavorites = false;
+          selectedCategory = "";
+          pageSize = 24;
+          render();
+        },
+      }, [element("span", { text: "🌿", "aria-hidden": "true" }), element("span", { text: "Todas" })]),
       ...categories.map((category) =>
         element("button", {
           type: "button",
-          class: `category-chip${selectedCategory === category.id ? " is-active" : ""}`,
-          text: category.name,
-          "aria-pressed": String(selectedCategory === category.id),
+          class: `category-chip${!showingFavorites && selectedCategory === category.id ? " is-active" : ""}`,
+          "aria-pressed": String(!showingFavorites && selectedCategory === category.id),
           onclick: () => {
+            showingFavorites = false;
             selectedCategory = category.id;
             pageSize = 24;
             render();
           },
-        }),
+        }, [element("span", { text: categoryIcon(category.name), "aria-hidden": "true" }), element("span", { text: category.name })]),
       ),
     );
     if (selectedCategory) {
@@ -251,7 +439,7 @@ export function createCatalog(state, add, navigate) {
         if (ids.includes(selectedCategory)) {
           return true;
         }
-        const fallbackName = product.categoryName || product.category;
+        const fallbackName = product.categoryName || product.category || product.categoria;
         return (
           !ids.length &&
           selectedCategory === `name:${normalizeProductText(fallbackName)}`
@@ -282,9 +470,8 @@ export function createCatalog(state, add, navigate) {
       });
     }
 
-    $("#products").replaceChildren(
-      ...list.slice(0, pageSize).map((p) => card(p)),
-    );
+    renderedItems = list;
+    $("#products").replaceChildren(...list.slice(0, pageSize).map((product) => renderCard(product)));
     if (!list.length) {
       $("#products").append(
         element("p", {
@@ -299,7 +486,12 @@ export function createCatalog(state, add, navigate) {
     $("#catalogTitle").textContent = showingFavorites
       ? "Seus produtos salvos"
       : "Explore o catálogo";
-    $("#loadMore").hidden = list.length <= pageSize;
+    loadMoreButton.hidden = list.length <= pageSize;
+    if (pageObserver && !loadMoreButton.hidden) {
+      pageObserver.observe(loadMoreButton);
+    } else {
+      pageObserver?.unobserve(loadMoreButton);
+    }
   }
 
   function setFavoritesView(show) {
@@ -353,20 +545,15 @@ export function createCatalog(state, add, navigate) {
       (image, index, all) =>
         all.findIndex((i) => i.url === image.url) === index,
     );
-    const mainPhoto = element("img", {
+    const mainPhoto = element("render-image", {
       class: "detail-photo",
       src: images[0].url,
+      "image-candidates": JSON.stringify(images.slice(1)),
+      "fallback-src": "/store-assets/placeholder.svg",
       alt: product.imageIsIllustrative
         ? `Imagem ilustrativa de ${product.name}`
         : images[0].alt,
     });
-    mainPhoto.addEventListener(
-      "error",
-      () => {
-        mainPhoto.src = "/store-assets/placeholder.svg";
-      },
-      { once: true },
-    );
     const quantity = element("input", {
       type: "number",
       value: product.saleUnit?.minimum || 1,
@@ -425,11 +612,18 @@ export function createCatalog(state, add, navigate) {
                 {
                   "aria-label": `Foto ${index + 1}`,
                   onclick: () => {
-                    mainPhoto.src = image.url;
-                    mainPhoto.alt = image.alt;
+                    mainPhoto.setAttribute("src", image.url);
+                    mainPhoto.setAttribute("alt", image.alt);
+                    mainPhoto.setAttribute("image-candidates", JSON.stringify(images.filter((candidate) => candidate.url !== image.url)));
                   },
                 },
-                [element("img", { src: image.url, alt: "", loading: "lazy" })],
+                [element("render-image", {
+                  src: image.url,
+                  "image-candidates": JSON.stringify(images.filter((candidate) => candidate.url !== image.url)),
+                  "fallback-src": "/store-assets/placeholder.svg",
+                  alt: "",
+                  loading: "lazy",
+                })],
               ),
             ),
           ),
@@ -574,10 +768,11 @@ export function createCatalog(state, add, navigate) {
     pageSize = 24;
     render();
   });
-  $("#loadMore").addEventListener("click", () => {
+  loadMoreButton.addEventListener("click", () => {
     pageSize += 24;
     render();
   });
 
-  return { render, details, card, setFavoritesView };
+  refreshFavorites().catch(() => {});
+  return { render, details, card, setFavoritesView, refreshFavorites };
 }

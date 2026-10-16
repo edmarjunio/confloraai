@@ -2910,6 +2910,37 @@ class FirestoreRepository {
     return dataWithTs;
   }
 
+  async getUserFavorites(userId) {
+    const id = String(userId || "");
+    if (!id) return [];
+    if (this.firestore) {
+      const snapshot = await this.firestore.collection("users").doc(id).get();
+      const favorites = snapshot.data()?.favoriteProductIds;
+      return Array.isArray(favorites) ? favorites : [];
+    }
+    const favorites = this.inMemoryUsers.get(id)?.favoriteProductIds;
+    return Array.isArray(favorites) ? favorites : [];
+  }
+
+  async setUserFavorites(userId, productIds) {
+    const id = String(userId || "");
+    const favoriteProductIds = [...new Set(productIds.map(String))].slice(0, 2000);
+    const updatedAt = new Date().toISOString();
+    if (this.firestore) {
+      const reference = this.firestore.collection("users").doc(id);
+      await this.firestore.runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(reference);
+        if (!snapshot.exists) throw new Error("Usuário autenticado não encontrado.");
+        transaction.set(reference, { favoriteProductIds, updatedAt }, { merge: true });
+      });
+      return favoriteProductIds;
+    }
+    const user = this.inMemoryUsers.get(id);
+    if (!user) throw new Error("Usuário autenticado não encontrado.");
+    this.inMemoryUsers.set(id, { ...user, favoriteProductIds, updatedAt });
+    return favoriteProductIds;
+  }
+
   async registerUser({
     name,
     email,

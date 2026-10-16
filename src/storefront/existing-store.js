@@ -465,7 +465,7 @@ async function normalizeExistingCheckout(req, repository) {
   );
   ensure(
     typeof input.customer?.phone === "string" &&
-      /^\d{10,13}$/.test(input.customer.phone.replace(/\D/g, "")),
+      /^\d{10,11}$/.test(input.customer.phone.replace(/\D/g, "")),
     "Informe um telefone com DDD.",
   );
   ensure(
@@ -489,7 +489,7 @@ async function normalizeExistingCheckout(req, repository) {
   ensure(
     input.fulfillment !== "delivery" ||
       (storeConfig.checkout.delivery.serviceAreas.includes(input.serviceArea) &&
-        String(input.address || "").trim().length >= 5),
+        String(input.address || "").trim().length >= 8),
     "Informe um endereço na região atendida pela loja.",
   );
   const settings = await repository.getInventorySettings();
@@ -538,6 +538,24 @@ async function normalizeExistingCheckout(req, repository) {
     (sum, item) => sum + item.price * item.quantity,
     0,
   );
+  const deliveryFeeMinor =
+    input.fulfillment === "delivery"
+      ? storeConfig.checkout.delivery.feeMinor
+      : 0;
+  const cashTenderedMinor = Number(input.cashTenderedMinor || 0);
+  const orderTotalMinor =
+    items.reduce(
+      (sum, item) => sum + Math.round(item.price * 100 * item.quantity),
+      0,
+    ) + deliveryFeeMinor;
+  ensure(
+    Number.isSafeInteger(cashTenderedMinor) && cashTenderedMinor >= 0,
+    "Valor informado para troco inválido.",
+  );
+  ensure(
+    input.paymentMethod !== "CASH" || cashTenderedMinor >= orderTotalMinor,
+    "Informe o valor recebido para calcular o troco.",
+  );
   req.body = {
     customerName: String(input.customer?.name || "").trim(),
     customerPhone: String(input.customer?.phone || "").replace(/\D/g, ""),
@@ -546,7 +564,7 @@ async function normalizeExistingCheckout(req, repository) {
     paymentMethod: { PIX: "PIX", CARD: "CARTAO", CASH: "DINHEIRO" }[
       input.paymentMethod
     ],
-    cashTendered: Number(input.cashTenderedMinor || 0) / 100,
+    cashTendered: cashTenderedMinor / 100,
     items,
     subtotal:
       total +
@@ -554,7 +572,7 @@ async function normalizeExistingCheckout(req, repository) {
         ? storeConfig.checkout.delivery.feeMinor / 100
         : 0),
     discount: 0,
-    changeDue: Math.max(0, Number(input.cashTenderedMinor || 0) / 100 - total),
+    changeDue: Math.max(0, cashTenderedMinor / 100 - orderTotalMinor / 100),
   };
 }
 async function readStoreSettings(repository) {

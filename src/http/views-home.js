@@ -33,15 +33,22 @@ function renderInitialProductCards(items) {
   return items.slice(0, 24).map(p => {
     const price = Number(p.valor_num || p.price || 0);
     const byKg = (p.unit || p.unidade || '').toUpperCase() === 'KG' || /\bkg\b/i.test(p.descricao || p.name || '');
-    const img = (p.images && p.images[0]) || p.imageUrl || p.imageurl || p.imageFallbackUrl || 'https://images.unsplash.com/photo-1512428813834-c702c7702b78?w=800';
+    const images = [
+      ...(Array.isArray(p.images) ? p.images : []),
+      p.imageUrl, p.imageurl, p.imageFallbackUrl,
+    ].map((image) => typeof image === 'string' ? image : image?.url || image?.imageUrl || image?.src || image?.downloadURL || '')
+      .filter((image, index, all) => image && all.indexOf(image) === index);
+    const img = images[0] || '/store-assets/placeholder.svg';
+    const rawCategory = p.categoria || p.category || '';
+    const category = String(rawCategory).split('/')[0].trim();
     return `
       <cf-card class="cf-card--product prod-card" padding="none" data-prod-id="${p.id}">
         <div class="card-img-wrapper" onclick="openGallery('${p.id}')">
-          <img class="prod-img" src="${img}" alt="${p.descricao || p.name}" loading="lazy" decoding="async" />
+          <render-image class="prod-img" src="${escapeHtmlAttribute(img)}" image-candidates="${escapeHtmlAttribute(JSON.stringify(images.slice(1)))}" fallback-src="/store-assets/placeholder.svg" alt="${escapeHtmlAttribute(p.descricao || p.name)}" loading="lazy" decoding="async"></render-image>
+          ${category ? `<span class="category-photo-badge">${escapeHtmlAttribute(category)}</span>` : ''}
           ${byKg ? '<span class="unit-tag-badge">⚖️ POR KG</span>' : ''}
         </div>
         <div class="card-body">
-          <span class="card-category">${p.subcategoria || p.subcategory || p.categoria || p.category || 'Conflora'}</span>
           <div class="card-title" title="${escapeHtmlAttribute(p.descricao || p.name)}" onclick="openGallery('${p.id}')">${p.descricao || p.name}</div>
           <div class="card-footer">
             <div>
@@ -81,6 +88,7 @@ function renderHomeHtml() {
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,800;0,900;1,800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/store-assets/site-header.css">
   <link rel="stylesheet" href="/store-assets/design-system.css">
+  <script src="/store-assets/render-image.js"></script>
 
   <style>
     @font-face {
@@ -304,6 +312,12 @@ function renderHomeHtml() {
       transition: transform 0.15s;
     }
     .cart-pill-btn:hover { transform: scale(1.03); }
+    .catalog-cashier-btn {
+      background: #109e46;
+      color: #fff;
+      text-decoration: none;
+    }
+    .catalog-cashier-btn:hover { background: #0d853a; }
 
     /* LAYOUT PRINCIPAL DO CATÁLOGO */
     .app-main {
@@ -499,6 +513,23 @@ function renderHomeHtml() {
       padding: 2px 6px;
       border-radius: 10px;
       backdrop-filter: blur(2px);
+    }
+    .category-photo-badge {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      z-index: 2;
+      max-width: calc(100% - 56px);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      background: #f97316;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 999px;
+      box-shadow: 0 1px 4px rgb(15 23 42 / 25%);
     }
     .unit-tag-badge {
       position: absolute;
@@ -1747,10 +1778,14 @@ function renderHomeHtml() {
         <img src="/store-assets/brands/conflora-logo.png" alt="" />
         <span><strong data-i18n="header.brandTitle">Conflora Horta e Viveiro</strong><small data-i18n="header.brandSubtitle">Horta e Viveiro • Mineiros - GO</small></span>
       </a>
-      <div>
+      <div style="display:flex; align-items:center; justify-content:flex-end; gap:8px;">
         <button class="cart-pill-btn" onclick="scrollToCart()">
           🛒 <span id="cartCountHeader">0 itens</span>
         </button>
+        <a id="catalogCashierButton" href="/caixa" class="cart-pill-btn catalog-cashier-btn" style="display:none;" aria-label="Ir para o caixa">
+          <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10h18v10H3z"/><path d="M5 10V6h14v4"/><path d="M8 14h.01M12 14h.01M16 14h.01"/><path d="M8 20v-3h8v3"/></svg>
+          <span>IR PARA CAIXA</span>
+        </a>
       </div>
     </header>
 
@@ -2258,6 +2293,12 @@ function renderHomeHtml() {
      * 6. Initial mandatory A-Z sort in all listings.
      * =========================================================================
      */
+
+    function escapeHtml(value) {
+      return String(value || '').replace(/[&<>"']/g, (character) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      })[character]);
+    }
 
     const OWNER_WHATSAPP_PHONE = '5564999351616';
 
@@ -2993,18 +3034,24 @@ function renderHomeHtml() {
       card.setAttribute('padding', 'none');
       card.dataset.prodId = p.id;
       const price = Number(p.valor_num || p.price || 0);
-      const images = (p.images && p.images.length > 0) ? p.images : [getProductImage(p)];
+      const images = [
+        ...(Array.isArray(p.images) ? p.images : []),
+        p.imageUrl, p.imageurl, p.imagePathCache, getProductImage(p),
+      ].map((image) => typeof image === 'string' ? image : image?.url || image?.imageUrl || image?.src || image?.downloadURL || '')
+        .filter((image, index, all) => image && all.indexOf(image) === index);
+      const rawCategory = p.categoria || p.category || '';
+      const category = String(rawCategory).split('/')[0].trim();
       const stock = p.stockQuantity ?? p.estoque ?? 30;
       const byKg = isSoldByKg(p);
 
       card.innerHTML = \`
         <div class="card-img-wrapper" onclick="openGallery('\${p.id}')">
-          <img class="prod-img" src="\${images[0]}" alt="\${p.descricao || p.name}" loading="lazy" decoding="async" onerror="this.onerror=null; this.src='\${p.imageFallbackUrl || REAL_HD_FALLBACKS['DEFAULT']}';" />
+          <render-image class="prod-img" src="\${escapeHtml(images[0] || '/store-assets/placeholder.svg')}" image-candidates="\${escapeHtml(JSON.stringify(images.slice(1)))}" fallback-src="\${escapeHtml(p.imageFallbackUrl || REAL_HD_FALLBACKS['DEFAULT'] || '/store-assets/placeholder.svg')}" alt="\${escapeHtml(p.descricao || p.name)}" loading="lazy" decoding="async"></render-image>
+          \${category ? '<span class="category-photo-badge">' + escapeHtml(category) + '</span>' : ''}
           \${images.length > 1 ? ('<span class="photo-count-badge">📷 ' + images.length + ' fotos</span>') : ''}
           \${byKg ? '<span class="unit-tag-badge">⚖️ POR KG</span>' : ''}
         </div>
         <div class="card-body">
-          <span class="card-category">\${p.subcategoria || p.subcategory || p.categoria || p.category || 'Conflora'}</span>
           <div class="card-title" title="\${escapeHtml(p.descricao || p.name)}" onclick="openGallery('\${p.id}')">\${p.descricao || p.name}</div>
           <div class="card-footer">
             <div>
@@ -4187,6 +4234,7 @@ function renderHomeHtml() {
       const badge = document.getElementById('userHeaderBadge');
       const adminStatusBtn = document.getElementById('adminStatusBtn');
       const caixaAccessBtn = document.getElementById('caixaAccessBtn');
+      const catalogCashierButton = document.getElementById('catalogCashierButton');
       const teamPanelBtn = document.getElementById('teamPanelBtn');
 
       if (authBtn) authBtn.style.display = 'none';
@@ -4202,6 +4250,9 @@ function renderHomeHtml() {
       }
       if (caixaAccessBtn) {
         caixaAccessBtn.style.display = user.role === 'CAIXA' ? 'inline-flex' : 'none';
+      }
+      if (catalogCashierButton) {
+        catalogCashierButton.style.display = ['ADMIN', 'CAIXA', 'VENDEDOR'].includes(user.role) ? 'inline-flex' : 'none';
       }
       if (teamPanelBtn) {
         teamPanelBtn.style.display = user.role === 'CAIXA' ? 'none' : 'inline-flex';
@@ -4330,11 +4381,13 @@ function renderHomeHtml() {
         const pill = document.getElementById('userHeaderPill');
         const adminStatusBtn = document.getElementById('adminStatusBtn');
         const caixaAccessBtn = document.getElementById('caixaAccessBtn');
+        const catalogCashierButton = document.getElementById('catalogCashierButton');
         const teamPanelBtn = document.getElementById('teamPanelBtn');
         if (authBtn) authBtn.style.display = 'inline-flex';
         if (pill) pill.style.display = 'none';
         if (adminStatusBtn) adminStatusBtn.style.display = 'none';
         if (caixaAccessBtn) caixaAccessBtn.style.display = 'none';
+        if (catalogCashierButton) catalogCashierButton.style.display = 'none';
         if (teamPanelBtn) teamPanelBtn.style.display = 'inline-flex';
         closeCustomerPortalModal();
       }

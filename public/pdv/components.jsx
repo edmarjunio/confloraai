@@ -45,18 +45,19 @@ window.PdvComponents = (() => {
   }
   function ProductInformation({ product, onClose }) {
     const details = Array.isArray(product.details) ? product.details : [];
+    const variants = Array.isArray(product.variants) ? product.variants : [product];
     const imageUrl = product.image || product.imageUrl || '/store-assets/placeholder.svg';
 
-    return <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    return <div className="cf-product-information-overlay fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section role="dialog" aria-modal="true" aria-label={`Informações de ${product.name}`} className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-3xl border border-slate-100 bg-white p-5 shadow-2xl sm:p-6">
         <header className="mb-4 flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
-            <img
+            <render-image
               src={imageUrl}
-              data-image-index="0"
+              image-candidates={JSON.stringify(product.imageCandidates || [])}
+              fallback-src={product.imageFallbackUrl || '/store-assets/placeholder.svg'}
               alt=""
               className="h-16 w-16 shrink-0 rounded-2xl border border-slate-100 bg-slate-50 object-cover"
-              onError={(event) => handleProductImageError(event, product)}
             />
             <div className="min-w-0">
               <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">{product.categoryName || product.category || 'Produto'}</p>
@@ -66,6 +67,15 @@ window.PdvComponents = (() => {
           <button type="button" onClick={onClose} aria-label="Fechar informações" className="rounded-full p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800">✕</button>
         </header>
         <div className="space-y-3">
+          <section className="rounded-2xl border border-emerald-100 bg-[#F4F6F5] p-3.5">
+            <h3 className="text-xs font-extrabold uppercase tracking-wide text-emerald-800">Variações e valores</h3>
+            <ul className="mt-2 divide-y divide-slate-200">
+              {variants.map((variant) => <li key={variant.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                <span className="min-w-0 truncate font-semibold text-slate-700" title={variant.name}>{variant.variation || variant.name}</span>
+                <strong className="shrink-0 text-emerald-800">{money(variant.price)}</strong>
+              </li>)}
+            </ul>
+          </section>
           {details.map((detail) => <section key={detail.label} className="rounded-2xl border border-emerald-100 bg-[#F4F6F5] p-3.5">
             <h3 className="text-xs font-extrabold uppercase tracking-wide text-emerald-800">{detail.label}</h3>
             <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-slate-700">{detail.value}</p>
@@ -275,7 +285,7 @@ window.PdvComponents = (() => {
     return <div className="min-h-screen bg-[#F4F6F5] font-sans text-slate-800">
       <header className="conflora-site-header !flex-col !items-stretch border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
         <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-col items-start gap-2"><SiteBrand /><button type="button" onClick={onBack} className="rounded-lg px-2 py-1 text-xs font-bold text-emerald-800 hover:bg-emerald-50">← Voltar ao caixa</button></div>
+          <div className="flex flex-col items-start gap-2"><SiteBrand /><button type="button" onClick={onBack} className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#E7B914] bg-[#F4C430] px-4 py-2 text-xs font-extrabold text-[#0F381E] shadow-sm transition hover:bg-[#E7B914] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E7B914] focus-visible:ring-offset-2">← Voltar ao caixa</button></div>
           <div className="flex items-center gap-2"><h1 className="mr-2 text-lg font-black text-[#0F381E]">{title}</h1>{view === 'report' && user.role !== 'VENDEDOR' && <button className={button} onClick={onDebt}>Receber dívida</button>}<button className={button} disabled={refreshing} onClick={() => refresh()} aria-label="Atualizar">{refreshing ? 'Atualizando…' : '↻ Atualizar'}</button></div>
         </div>
         </header>

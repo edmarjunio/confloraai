@@ -25,6 +25,7 @@ export function createCart(state) {
       )
     : [];
   let sending = false;
+  let confirmationAccepted = false;
   let pending = storageGet(`${key}:pending`, null);
   const form = $("#checkoutForm");
 
@@ -82,12 +83,6 @@ export function createCart(state) {
     // Sync into Zustand cart store
     cartStore.getState().addItem(product, quantity);
 
-    if (
-      window.matchMedia("(min-width:1100px)").matches &&
-      !document.querySelector("dialog:modal")
-    ) {
-      open();
-    }
   }
 
   function render() {
@@ -95,6 +90,7 @@ export function createCart(state) {
     $("#cartCount").textContent = $("#mobileCount").textContent = Number(
       count.toFixed(3),
     ).toLocaleString("pt-BR");
+    $("#cartFabCount").textContent = Number(count.toFixed(3)).toLocaleString("pt-BR");
     $("#cartTitle").textContent = `${"cart.title".tr} (${items.length})`;
     $("#cartTotal").textContent = $("#mobileTotal").textContent =
       money(subtotal());
@@ -134,9 +130,12 @@ export function createCart(state) {
           cartStore.getState().updateQuantity(item.productId, value);
         });
         return element("article", { class: "cart-item" }, [
-          element("img", {
+          element("render-image", {
             src: product?.imageUrl || "/store-assets/placeholder.svg",
+            "image-candidates": JSON.stringify(product?.images || []),
+            "fallback-src": "/store-assets/placeholder.svg",
             alt: "",
+            class: "cart-item-image",
           }),
           element("div", {}, [
             element("strong", {
@@ -244,10 +243,22 @@ export function createCart(state) {
     $("#deliveryFields").hidden = !delivery;
     if (form.elements.address) {
       form.elements.address.required = delivery;
+      form.elements.address.minLength = delivery ? 8 : 0;
+    }
+    if (form.elements.serviceArea) {
+      form.elements.serviceArea.required = delivery && Boolean(state.config?.checkout?.delivery?.serviceAreas?.length);
     }
     $("#pickupAddress").hidden = delivery;
     $("#pixBox").hidden = payment !== "PIX";
     $("#cashLabel").hidden = payment !== "CASH";
+    if (form.elements.cash) {
+      form.elements.cash.required = payment === "CASH";
+      form.elements.cash.min = (subtotal() + (delivery ? state.config?.checkout?.delivery?.feeMinor || 0 : 0)) / 100;
+    }
+    if (form.elements.cash) {
+      form.elements.cash.required = payment === "CASH";
+      form.elements.cash.min = (subtotal() + (delivery ? state.config?.checkout?.delivery?.feeMinor || 0 : 0)) / 100;
+    }
     const feeMinor = delivery ? (state.config?.checkout?.delivery?.feeMinor || 0) : 0;
     $("#checkoutTotal").textContent = money(subtotal() + feeMinor);
     $("#submitOrder").disabled =
@@ -263,11 +274,84 @@ export function createCart(state) {
         : digits;
   });
 
+  function showOrderReview() {
+    const delivery = form.elements.fulfillment?.value === "delivery";
+    const paymentMethod = form.elements.payment?.value || "PIX";
+    const address = form.elements.address?.value.trim() || "";
+    const serviceArea = form.elements.serviceArea?.value || "";
+    const fee = delivery ? state.config?.checkout?.delivery?.feeMinor || 0 : 0;
+    const total = subtotal() + fee;
+    const rows = [
+      element("div", { class: "order-review-section" }, [
+        element("strong", { text: "Cliente" }),
+        element("p", { text: form.elements.name.value.trim() }),
+        element("p", { text: form.elements.phone.value.trim() }),
+      ]),
+      element("div", { class: "order-review-section" }, [
+        element("strong", { text: delivery ? "Entrega" : "Retirada / balcão" }),
+        ...(delivery
+          ? [
+              ...(serviceArea ? [element("p", { text: serviceArea })] : []),
+              element("p", { text: address }),
+              ...(fee ? [element("p", { text: "Taxa de entrega: " + money(fee) })] : []),
+            ]
+          : [element("p", { text: state.config?.checkout?.pickup?.address || "Retirada na loja" })]),
+      ]),
+      element("div", { class: "order-review-section" }, [
+        element("strong", { text: "Pagamento" }),
+        element("p", { text: paymentMethod === "CASH"
+          ? "Dinheiro · troco para " + money(Math.round(Number(form.elements.cash.value || 0) * 100))
+          : ({ PIX: "Pix", CARD: "Cartão" }[paymentMethod] || paymentMethod) }),
+      ]),
+      element("div", { class: "order-review-items" }, [
+        ...items.map((item) => {
+          const product = productFor(item);
+          return element("div", { class: "order-review-item" }, [
+            element("span", { text: item.quantity + " × " + (product?.name || "Produto") }),
+            element("strong", { text: money(Math.round((product?.price.amountMinor || 0) * item.quantity)) }),
+          ]);
+        }),
+        element("div", { class: "order-review-total" }, [
+          element("strong", { text: "Total do pedido" }),
+          element("strong", { text: money(total) }),
+        ]),
+      ]),
+    ];
+    $("#orderReviewContent").replaceChildren(...rows);
+    $("#orderReviewError").textContent = "";
+  }
+
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (sending || !items.length) {
       return;
     }
+    if (!confirmationAccepted) {
+      const phoneDigits = form.elements.phone.value.replace(/\D/g, "");
+      const delivery = form.elements.fulfillment?.value === "delivery";
+      const address = form.elements.address?.value.trim() || "";
+      const cash = Math.round(Number(form.elements.cash?.value || 0) * 100);
+      const payment = form.elements.payment?.value;
+      const total = subtotal() + (delivery ? state.config?.checkout?.delivery?.feeMinor || 0 : 0);
+      if (!form.elements.name.value.trim() || phoneDigits.length < 10 || phoneDigits.length > 11) {
+        $("#checkoutError").textContent = "Informe o nome e um número de WhatsApp válido com DDD.";
+        return;
+      }
+      if (delivery && address.length < 8) {
+        $("#checkoutError").textContent = "Informe o endereço completo para a entrega.";
+        form.elements.address?.focus();
+        return;
+      }
+      if (payment === "CASH" && cash < total) {
+        $("#checkoutError").textContent = "Informe para quanto precisa de troco. O valor deve ser igual ou maior que o total.";
+        form.elements.cash?.focus();
+        return;
+      }
+      showOrderReview();
+      openDialog($("#orderConfirmDialog"));
+      return;
+    }
+    confirmationAccepted = false;
     const payload = {
       customer: {
         name: form.elements.name.value,
@@ -350,8 +434,21 @@ export function createCart(state) {
     }
   });
 
+  $("#orderReviewConfirm").addEventListener("click", () => {
+    if (!form.reportValidity()) {
+      $("#orderConfirmDialog").close();
+      return;
+    }
+    confirmationAccepted = true;
+    $("#orderConfirmDialog").close();
+    form.requestSubmit();
+  });
+  $("#orderReviewBack").addEventListener("click", () => $("#orderConfirmDialog").close());
+  $("#orderReviewClose").addEventListener("click", () => $("#orderConfirmDialog").close());
+
   function open() {
-    openDialog($("#cartDialog"));
+    const dialog = $("#cartDialog");
+    if (!dialog.open) dialog.show();
   }
 
   function close() {
@@ -360,6 +457,8 @@ export function createCart(state) {
 
   $("#cartButton").addEventListener("click", open);
   $("#mobileCart").addEventListener("click", open);
+  $("#cartFab").addEventListener("click", open);
+  $("#cartCloseButton").addEventListener("click", close);
 
   return { add, render, configure, open, close };
 }

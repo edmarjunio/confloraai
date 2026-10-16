@@ -39,6 +39,13 @@ const state = {
   user: null,
 };
 
+const cashierShortcut = $("#cashierShortcut");
+function updateCashierShortcut() {
+  const allowedRoles = ["ADMIN", "CAIXA", "VENDEDOR"];
+  cashierShortcut.hidden = !allowedRoles.includes(String(state.user?.role || "").toUpperCase());
+}
+cashierShortcut.addEventListener("click", () => location.assign("/caixa"));
+
 let catalog;
 let cart;
 let chat;
@@ -185,6 +192,8 @@ async function account() {
             }
             state.user = null;
             appStore.getState().setUser(null);
+            catalog?.refreshFavorites();
+            updateCashierShortcut();
             $("#accountButton").textContent = "header.login".tr;
             $("#accountDialog").close();
             navigate(basePath || "/");
@@ -289,6 +298,8 @@ async function account() {
         ).user;
         appStore.getState().setUser(state.user);
         $("#accountButton").textContent = state.user.name;
+        catalog?.refreshFavorites();
+        updateCashierShortcut();
         $("#accountDialog").close();
         route();
       } catch (error) {
@@ -405,6 +416,7 @@ try {
   } catch {
     // Non-blocking auth check
   }
+  updateCashierShortcut();
 
   catalog = createCatalog(
     state,

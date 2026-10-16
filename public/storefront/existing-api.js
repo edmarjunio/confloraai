@@ -49,6 +49,9 @@ export function createExistingApi() {
     if (route === "/me") {
       return request("/api/auth/me");
     }
+    if (route === "/favorites") {
+      return request("/api/customer/favorites", options);
+    }
     if (route.startsWith("/auth/")) {
       return request("/api" + route, options);
     }

@@ -21,7 +21,7 @@ class PdvRepository {
     }
     if (!repo.isInMemory || repo.firestore) { throw new Error('Firestore indisponível. Operação não registrada.'); }
     const operation = this.queue.then(async () => {
-      const collections = { orders: repo.inMemoryOrders, products: repo.inMemoryProducts, customers: repo.inMemoryCustomers, discount_approvals: repo.inMemoryDiscountApprovals };
+      const collections = { orders: repo.inMemoryOrders, products: repo.inMemoryProducts, customers: repo.inMemoryCustomers, users: repo.inMemoryUsers, discount_approvals: repo.inMemoryDiscountApprovals };
       const writes = [];
       const mapFor = (collection) => {
         if (collections[collection]) { return collections[collection]; }

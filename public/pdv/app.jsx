@@ -28,6 +28,7 @@ const { useState, useEffect, useRef, useMemo } = React;
     );
     const Check = (p) => <IconBase {...p}><polyline points="20 6 9 17 4 12"/></IconBase>;
     const Info = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></IconBase>;
+    const Heart = ({ fill = "none", ...p }) => <IconBase {...p} fill={fill}><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/></IconBase>;
     const LogOut = (p) => <IconBase {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></IconBase>;
     const ChevronDown = (p) => <IconBase {...p}><path d="m6 9 6 6 6-6"/></IconBase>;
     const Percent = (p) => (
@@ -156,14 +157,39 @@ const { useState, useEffect, useRef, useMemo } = React;
       });
     };
 
-    const primaryActionButtonClass = 'inline-flex items-center justify-center gap-2 rounded-xl bg-[#109E46] font-bold text-white shadow-sm transition hover:bg-[#0d853a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none';
+    const primaryActionButtonClass = 'cf-button cf-pdv-command-button inline-flex items-center justify-center gap-2 rounded-xl bg-[#109E46] font-bold text-white shadow-sm transition hover:bg-[#0d853a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none';
     const shortcutButtonClass = `${primaryActionButtonClass} px-3 py-2 text-xs`;
+
+    function readStorefrontProductImages() {
+      try {
+        const raw = localStorage.getItem('conflora_catalog_cache_v2') || localStorage.getItem('conflora_catalog_cache');
+        const cachedProducts = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(cachedProducts)) return new Map();
+
+        return new Map(cachedProducts.map((product) => {
+          const productId = String(product?.id ?? product?.product_id ?? '').trim();
+          const images = [
+            ...(Array.isArray(product?.images) ? product.images : []),
+            product?.imageUrl,
+            product?.imageurl,
+          ]
+            .map((image) => typeof image === 'string' ? image : image?.url || image?.imageUrl || image?.src || image?.downloadURL || '')
+            .filter((image) => /^(https?:\/\/|\/api\/images\/|\/store-assets\/)/i.test(String(image).trim()));
+          return [productId, [...new Set(images)]];
+        }).filter(([productId, images]) => productId && images.length));
+      } catch (_) {
+        return new Map();
+      }
+    }
 
     function App() {
       // Device Simulator: 'responsive' | 'mobile-preview'
       const deviceView = 'responsive';
 
       const [products, setProducts] = useState([]);
+      const [favoriteProductIds, setFavoriteProductIds] = useState([]);
+      const favoriteProductIdsRef = useRef(new Set());
+      const favoriteSaveQueueRef = useRef(Promise.resolve());
       const [infoProduct, setInfoProduct] = useState(null);
       const categoryTabs = useMemo(() => {
         const activeProducts = products.filter((product) =>
@@ -245,23 +271,60 @@ const { useState, useEffect, useRef, useMemo } = React;
       }, []);
       useEffect(() => {
         if (!currentUser) return;
+        let cancelled = false;
+        fetch('/api/caixa/favorites')
+          .then(async (response) => {
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Não foi possível carregar os favoritos.');
+            return Array.isArray(data.favoriteProductIds) ? data.favoriteProductIds.map(String) : [];
+          })
+          .then((ids) => {
+            if (cancelled) return;
+            favoriteProductIdsRef.current = new Set(ids);
+            setFavoriteProductIds(ids);
+          })
+          .catch((error) => console.error('Falha ao carregar favoritos do usuário:', error));
+        return () => { cancelled = true; };
+      }, [currentUser?.id]);
+      useEffect(() => {
+        const favorites = new Set(favoriteProductIds.map(String));
+        setProducts((previous) => {
+          let changed = false;
+          const next = previous.map((product) => {
+            const isShortcut = favorites.has(String(product.id));
+            if (product.isShortcut === isShortcut) return product;
+            changed = true;
+            return { ...product, isShortcut };
+          });
+          return changed ? next : previous;
+        });
+      }, [favoriteProductIds]);
+      useEffect(() => {
+        if (!currentUser) return;
         fetch('/api/caixa/products').then((res) => { if (!res.ok) throw new Error('Não foi possível carregar produtos.'); return res.json(); }).then((rows) => {
+          const storefrontImagesById = readStorefrontProductImages();
           setProducts(rows.map((item) => {
+            const productId = String(item.id ?? item.productId ?? item.sku ?? '').trim();
             const images = (Array.isArray(item.images) ? item.images : [])
-              .map((entry) => (typeof entry === 'string' ? entry : entry?.url || entry?.imageUrl || ''))
+              .map((entry) => (typeof entry === 'string' ? entry : entry?.url || entry?.imageUrl || entry?.src || entry?.downloadURL || ''))
               .filter(Boolean);
-            const imageCandidates = [...new Set([...images, item.imageUrl, item.imagePathCache].filter(Boolean))];
+            const cachedImages = storefrontImagesById.get(productId) || [];
+            const imageCandidates = [...new Set([...cachedImages, ...images, item.imageUrl, item.imagePathCache]
+              .filter((image) => /^(https?:\/\/|\/api\/images\/|\/store-assets\/)/i.test(String(image || '').trim())))];
             const image = imageCandidates[0] || item.imageFallbackUrl || '/store-assets/placeholder.svg';
             return {
               ...item,
+              id: productId,
               sku: String(item.sku || item.id || ''),
+              canonicalName: String(item.canonicalName || item.canonical_name || '').trim(),
+              variation: String(item.variation || item.variacao || '').trim(),
               category: String(item.category || '').trim(),
-              categoryName: [item.category || 'Geral', item.subcategory].filter(Boolean).join(' · '),
+              categoryName: String(item.category || 'Geral').trim(),
               imageFallbackUrl: item.imageFallbackUrl || '',
               description: item.descriptionAi || item.descricao_ia || '',
               searchTags: item.tagsAi || item.tags_ia || '',
               stock: item.stock + ' ' + item.unit,
-              isShortcut: false,
+              isShortcut: favoriteProductIdsRef.current.has(String(item.id)),
               imageCandidates,
               image,
             };
@@ -524,26 +587,29 @@ const { useState, useEffect, useRef, useMemo } = React;
 
       const addToCart = (product, customQty = null) => {
         const qtyToAdd = customQty !== null ? customQty : Math.max(1, Number(defaultMultiplier) || 1);
+        const productId = String(product?.id ?? product?.productId ?? product?.sku ?? '').trim();
+        if (!productId) return;
         setCart((prev) => {
-          const existing = prev.find((item) => item.id === product.id);
+          const existing = prev.find((item) => String(item?.id ?? item?.productId ?? item?.sku ?? '').trim() === productId);
           if (existing) {
             return prev.map((item) =>
-              item.id === product.id
+              String(item?.id ?? item?.productId ?? item?.sku ?? '').trim() === productId
                 ? { ...item, quantity: item.quantity + qtyToAdd }
                 : item
             );
           }
-          return [...prev, { ...product, quantity: qtyToAdd }];
+          return [...prev, { ...product, id: productId, quantity: qtyToAdd }];
         });
         // Reset multiplier back to 1 after adding
         setDefaultMultiplier(1);
       };
 
       const updateCartQuantity = (productId, delta) => {
+        const normalizedProductId = String(productId ?? '').trim();
         setCart((prev) =>
           prev
             .map((item) =>
-              item.id === productId
+              String(item?.id ?? item?.productId ?? item?.sku ?? '').trim() === normalizedProductId
                 ? { ...item, quantity: Math.max(0, item.quantity + delta) }
                 : item
             )
@@ -552,14 +618,31 @@ const { useState, useEffect, useRef, useMemo } = React;
       };
 
       const removeFromCart = (productId) => {
-        setCart((prev) => prev.filter((item) => item.id !== productId));
+        const normalizedProductId = String(productId ?? '').trim();
+        setCart((prev) => prev.filter((item) => String(item?.id ?? item?.productId ?? item?.sku ?? '').trim() !== normalizedProductId));
       };
 
       const toggleShortcut = (productId, e) => {
         e.stopPropagation();
+        const id = String(productId);
+        const nextFavorites = new Set(favoriteProductIdsRef.current);
+        if (nextFavorites.has(id)) nextFavorites.delete(id);
+        else nextFavorites.add(id);
+        favoriteProductIdsRef.current = nextFavorites;
+        const favoriteIds = [...nextFavorites];
+        setFavoriteProductIds(favoriteIds);
         setProducts((prev) =>
-          prev.map((p) => (p.id === productId ? { ...p, isShortcut: !p.isShortcut } : p))
+          prev.map((p) => (String(p.id) === id ? { ...p, isShortcut: nextFavorites.has(id) } : p))
         );
+        favoriteSaveQueueRef.current = favoriteSaveQueueRef.current.catch(() => {}).then(async () => {
+          const response = await fetch('/api/caixa/favorites', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ favoriteProductIds: favoriteIds }),
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || 'Não foi possível salvar este favorito.');
+        }).catch((error) => alert(error.message));
       };
 
       const handleCompleteSale = async () => {
@@ -866,9 +949,10 @@ const { useState, useEffect, useRef, useMemo } = React;
             <div className="flex items-center bg-slate-200/70 p-0.5 rounded-xl text-xs font-bold">
               <button
                 onClick={() => setOrderType('PICKUP')}
-                className={"flex-1 py-1 px-2 rounded-lg flex items-center justify-center gap-1.5 transition " + (orderType === 'PICKUP'
-                  ? 'bg-white text-emerald-900 shadow-2xs'
-                  : 'text-slate-500 hover:text-slate-800')}
+                aria-pressed={orderType === 'PICKUP'}
+                className={"flex-1 py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition border " + (orderType === 'PICKUP'
+                  ? 'bg-[#109E46] border-[#109E46] text-white shadow-md ring-2 ring-emerald-600 ring-offset-1'
+                  : 'border-slate-200 bg-white text-slate-600 hover:bg-emerald-50')}
               >
                 <span>🏪 Balcão</span>
               </button>
@@ -879,9 +963,10 @@ const { useState, useEffect, useRef, useMemo } = React;
                     openCustomerModal();
                   }
                 }}
-                className={"flex-1 py-1 px-2 rounded-lg flex items-center justify-center gap-1.5 transition " + (orderType === 'DELIVERY'
-                  ? 'bg-[#109E46] text-white shadow-2xs'
-                  : 'text-slate-500 hover:text-slate-800')}
+                aria-pressed={orderType === 'DELIVERY'}
+                className={"flex-1 py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition border " + (orderType === 'DELIVERY'
+                  ? 'bg-[#109E46] border-[#109E46] text-white shadow-md ring-2 ring-emerald-600 ring-offset-1'
+                  : 'border-slate-200 bg-white text-slate-600 hover:bg-emerald-50')}
               >
                 <span>🛵 Entrega</span>
               </button>
@@ -931,12 +1016,12 @@ const { useState, useEffect, useRef, useMemo } = React;
                   className="py-3 px-2 flex items-center justify-between gap-3 group hover:bg-slate-50/80 rounded-xl transition-colors"
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <img
+                    <render-image
                       src={item.image}
-                      data-image-index="0"
+                      image-candidates={JSON.stringify(item.imageCandidates || [])}
+                      fallback-src={item.imageFallbackUrl || '/store-assets/placeholder.svg'}
                       alt={item.name}
                       className="w-11 h-11 rounded-xl object-cover border border-slate-200 bg-slate-50 shrink-0"
-                      onError={(e) => PdvComponents.handleProductImageError(e, item)}
                     />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
@@ -1152,7 +1237,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                 </div>
               </div>
 
-              <nav className="mx-auto mt-3 flex min-w-0 w-full max-w-[1600px] flex-wrap items-center gap-2 border-t border-slate-100 pt-3" aria-label="Ações do caixa por atalho">
+              <nav className="mx-auto mt-3 grid w-full max-w-[1600px] grid-cols-3 gap-2 border-t border-slate-100 pt-3 sm:gap-3 lg:mx-0 lg:w-2/3" aria-label="Ações do caixa por atalho">
                 <button type="button" className={shortcutButtonClass} disabled={cart.length === 0} onClick={() => setActiveModal('pay')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F1</kbd><span>Pagar</span></button>
                 <button type="button" className={shortcutButtonClass} onClick={() => setCashierPage('orders')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F2</kbd><span>Comandas</span></button>
                 <button type="button" className={shortcutButtonClass} onClick={() => setCashierPage('report')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F3</kbd><span>Relatório</span></button>
@@ -1225,7 +1310,8 @@ const { useState, useEffect, useRef, useMemo } = React;
                     : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5')}
                 >
                   {filteredProducts.slice(0, visibleCount).map((product) => {
-                    const inCart = cart.find((i) => i.id === product.id);
+                    const productId = String(product?.id ?? product?.productId ?? product?.sku ?? '').trim();
+                    const inCart = cart.find((item) => String(item?.id ?? item?.productId ?? item?.sku ?? '').trim() === productId);
                     return (
                       <cf-card
                         key={product.id}
@@ -1233,56 +1319,73 @@ const { useState, useEffect, useRef, useMemo } = React;
                         interactive=""
                         padding="sm"
                         data-selected={inCart ? 'true' : undefined}
-                        className={"cf-pdv-product-card group relative flex items-center gap-2 " + (inCart ? 'is-selected' : '')}
+                        style={{ position: 'relative' }}
+                        className={"cf-pdv-product-card group relative flex items-center gap-2 pt-5 " + (inCart ? 'is-selected' : '')}
                       >
-                        {/* Quantity Badge if already in cart */}
                         {inCart && (
-                          <span className="absolute -top-1.5 -right-1.5 bg-[#109E46] text-white text-[10px] font-extrabold w-5 h-5 rounded-full flex items-center justify-center shadow-xs">
+                          <span aria-label={`${inCart.quantity} no carrinho`} className="cf-pdv-quantity-badge">
                             {inCart.quantity}
                           </span>
                         )}
+                        <div
+                          className="cf-pdv-product-overlay"
+                          style={{ position: 'absolute', top: 4, left: 10, right: 10, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                        >
+                          <span title={product.category || 'Sem categoria'} className="cf-product-category-tag cf-pdv-category-label">
+                            {product.category || 'Sem categoria'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const normalizeName = (value) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+                              const variants = products.filter((candidate) => {
+                                if (candidate.id === product.id) return true;
+                                if (product.canonicalName && candidate.canonicalName) return normalizeName(candidate.canonicalName) === normalizeName(product.canonicalName);
+                                return normalizeName(candidate.name) === normalizeName(product.name) && candidate.category === product.category;
+                              });
+                              setInfoProduct({ ...product, variants });
+                            }}
+                            aria-label={`Informações de ${product.name}`}
+                            title={`Informações de ${product.name}`}
+                            className="cf-product-info-button cf-pdv-info-action"
+                          >INFO</button>
+                        </div>
 
                         {/* Smaller Compact Product Thumbnail */}
-                        <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-lg overflow-hidden bg-slate-50 border border-slate-100 shrink-0 flex items-center justify-center">
-                          <img
-                            src={product.image}
-                            data-image-index="0"
-                            alt={product.name}
-                            loading="lazy"
-                            decoding="async"
-                            fetchPriority="low"
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                            onError={(e) => PdvComponents.handleProductImageError(e, product)}
-                          />
+                        <div className="relative h-12 w-12 shrink-0 sm:h-14 sm:w-14">
+                          <div className="absolute inset-0 flex items-center justify-center overflow-hidden rounded-lg border border-slate-100 bg-slate-50">
+                            <render-image
+                              src={product.image}
+                              image-candidates={JSON.stringify(product.imageCandidates || [])}
+                              fallback-src={product.imageFallbackUrl || '/store-assets/placeholder.svg'}
+                              alt={product.name}
+                              loading="lazy"
+                              decoding="async"
+                              className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                          </div>
                         </div>
 
                         {/* Compact Info & Price on Right */}
-                        <div className="flex flex-col justify-between flex-1 min-w-0">
+                        <div className="flex min-h-[52px] min-w-0 flex-1 flex-col justify-between px-2 pt-3">
                           <div className="flex items-start justify-between gap-1">
-                            <h3 title={product.name} className="text-xs font-bold text-slate-800 leading-tight line-clamp-2">
+                            <h3 title={product.name} className="min-w-0 break-words text-xs font-bold leading-tight text-slate-800">
                               {product.name}
                             </h3>
                             <div className="flex shrink-0 items-center gap-1">
                               <button
                                 type="button"
-                                onClick={(e) => { e.stopPropagation(); setInfoProduct(product); }}
-                                aria-label={`Informações de ${product.name}`}
-                                title={`Informações de ${product.name}`}
-                                className="rounded-full p-0.5 text-slate-400 transition hover:bg-emerald-50 hover:text-emerald-700"
-                              >
-                                <Info className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
                                 onClick={(e) => toggleShortcut(product.id, e)}
                                 title="Fixar/Desafixar dos Meus Atalhos"
                                 aria-label={`${product.isShortcut ? 'Remover dos' : 'Adicionar aos'} favoritos: ${product.name}`}
-                                className={"p-0.5 rounded-full transition " + (product.isShortcut
-                                  ? 'text-amber-400 hover:text-amber-500'
-                                  : 'text-slate-200 hover:text-slate-400')}
+                                className={"rounded-full p-0.5 transition " + (product.isShortcut
+                                  ? 'text-red-500 hover:text-red-600'
+                                  : 'text-slate-300 hover:text-red-400')}
                               >
-                                <Star
-                                  className="w-3 h-3"
+                                <Heart
+                                  className="h-4 w-4"
                                   fill={product.isShortcut ? 'currentColor' : 'none'}
                                 />
                               </button>
@@ -1732,7 +1835,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                       className={primaryActionButtonClass + ' w-2/3 px-4 py-3 text-sm active:scale-98'}
                     >
                       <Check className="w-4 h-4" />
-                      <span>{isSubmittingSale ? 'Processando...' : currentUser.role === 'VENDEDOR' && paymentMethod !== 'pix' ? 'Enviar comanda ao caixa' : paymentMethod === 'pix' ? 'Gerar Pix Sicredi' : 'Confirmar Venda'}</span>
+                      <span>{isSubmittingSale ? 'Processando...' : currentUser.role === 'VENDEDOR' && paymentMethod !== 'pix' ? 'Enviar comanda ao caixa' : paymentMethod === 'pix' ? 'Gerar Pix Sicredi' : customerId ? 'Finalizar venda' : customerName && customerName !== 'Cliente Balcão' ? 'Adicionar cliente e finalizar venda' : 'Finalizar venda'}</span>
                     </button>
                   </div>
                 </div>

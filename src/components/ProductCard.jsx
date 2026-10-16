@@ -26,6 +26,7 @@ export function ProductCard({ product, primaryColor = '#2E9348' }) {
     style: 'currency',
     currency: 'BRL',
   }).format(product.price?.amountMinor ? product.price.amountMinor / 100 : Number(product.price || 0));
+  const priceParts = priceFormatted.replace(/\u00a0/g, ' ').match(/^(R\$\s*)([\d.]+),([\d]{2})$/);
 
   const isOutOfStock = product.stock?.tracked && (product.stock?.quantity ?? 0) <= 0;
   const isInactive = product.status === 'INATIVO';
@@ -87,7 +88,9 @@ export function ProductCard({ product, primaryColor = '#2E9348' }) {
         <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
           <div>
             <span className="text-xs text-gray-400 block font-medium">{'catalog.from'.tr}</span>
-            <strong className="text-lg font-bold text-gray-900">{priceFormatted}</strong>
+            <strong className="cf-product-price">
+              {priceParts ? <><span className="cf-price-currency">{priceParts[1]}</span><span className="cf-price-major">{priceParts[2]}</span><span className="cf-price-cents">,{priceParts[3]}</span></> : priceFormatted}
+            </strong>
           </div>
 
           {isAvailable ? (
