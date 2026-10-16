@@ -24,7 +24,8 @@ async function main() {
   const result = await new SicrediPixClient().registerWebhook(callbackUrl);
   console.log('Webhook Sicredi registrado para a chave Pix configurada.');
   console.log(`URL registrada: ${new URL(callbackUrl).origin}${secret.length >= 32 ? '/webhooks/sicredi-pix/[segredo oculto]' : '/webhooks/sicredi-pix'}`);
-  if (result?.webhookURL && result.webhookURL !== callbackUrl) {
+  const registeredUrl = result?.webhookUrl || result?.webhookURL;
+  if (registeredUrl && registeredUrl !== callbackUrl) {
     console.warn('O Sicredi retornou uma URL diferente da solicitada; confira o cadastro no portal Sicredi.');
   }
 }

@@ -182,7 +182,7 @@ test('CAIXA DISCOUNTS: desconto acima de 5% aguarda Admin e só vira pedido apó
   t.after(() => { config.tasks.serviceUrl = previousServiceUrl; });
   const createDirectOrder = repo.createDirectOrder.bind(repo);
   repo.createDirectOrder = (data) => createDirectOrder(data);
-  await repo.saveProduct({ id: 'discount-plant', name: 'Muda de Teste', price: 100, status: 'ATIVO' });
+  await repo.saveProduct({ id: 'discount-plant', name: 'Muda de Teste', price: 100, stockQuantity: 10, status: 'ATIVO' });
   const app = createApp({ messageService: { firestoreRepo: repo }, sicrediClient: { createCharge: async ({ txid, amount }) => ({ txid, amount, pixCopiaECola: 'test-code', qrCodeBase64: 'data:image/png;base64,aGVsbG8=' }) }, mercadoPagoClient: {
     checkoutConfigured: true,
     createPixCheckout: async () => ({ id: 'test-preference', checkoutUrl: 'https://conflora.example/pay' }),

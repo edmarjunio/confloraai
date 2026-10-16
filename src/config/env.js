@@ -92,7 +92,7 @@ const config = Object.freeze({
   },
 
   sicredi: {
-    baseUrl: process.env.SICREDI_PIX_BASE_URL || 'https://api-pix.sicredi.com.br',
+    baseUrl: process.env.SICREDI_PIX_BASE_URL || 'https://api-pix.sicredi.com.br/api/v2',
     authUrl: process.env.SICREDI_OAUTH_URL || 'https://api-pix.sicredi.com.br/oauth/token',
     clientId: (process.env.SICREDI_CLIENT_ID || '').trim(),
     clientSecret: (process.env.SICREDI_CLIENT_SECRET || '').trim(),

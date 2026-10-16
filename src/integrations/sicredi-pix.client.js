@@ -107,7 +107,7 @@ class SicrediPixClient {
     let parsedUrl;
     try { parsedUrl = new URL(webhookUrl); } catch { throw new Error('Informe uma URL pública válida para o webhook Sicredi.'); }
     if (parsedUrl.protocol !== 'https:' || !this.pixKey) { throw new Error('O webhook Sicredi exige URL HTTPS e chave Pix Sicredi configurada.'); }
-    return this.call('PUT', '/webhook/' + encodeURIComponent(this.pixKey), { webhookURL: parsedUrl.toString() });
+    return this.call('PUT', '/webhook/' + encodeURIComponent(this.pixKey), { webhookUrl: parsedUrl.toString() });
   }
 }
 module.exports = { SicrediPixClient, requestJson, normalizePem };

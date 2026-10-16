@@ -1,5 +1,6 @@
 const { createHash } = require('node:crypto');
 const { formatOrderReceipt, money } = require('./receipt.util');
+const { remainingStock } = require('./order-integrity');
 
 const CASH_METHODS = new Set(['DINHEIRO', 'DEBITO', 'CREDITO', 'FIADO']);
 function actor(user) {
@@ -69,6 +70,12 @@ class PdvService {
       if (!product || product.status === 'INATIVO' || product.isAvailable === false || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(price) || price < 0) { throw new Error('Produto ou quantidade inválida.'); }
       return { productId: String(product.id), name: product.name || product.descricao, quantity, price, unit: product.unit || product.unidade || 'UN', subtotalMinor: Math.round(price * quantity * 100) };
     });
+    const inventory = await this.repository.repository.getInventorySettings();
+    if (inventory.stockControlEnabled) {
+      const quantities = new Map();
+      for (const item of items) { quantities.set(item.productId, (quantities.get(item.productId) || 0) + item.quantity); }
+      for (const [productId, quantity] of quantities) { remainingStock(products.get(productId), quantity); }
+    }
     const discountPercent = Number(input.discountPercent || 0);
     if (!Number.isFinite(discountPercent) || discountPercent < 0 || discountPercent > 100) { throw new Error('Desconto inválido.'); }
     const freightValue = input.orderType === 'DELIVERY' ? Number(input.freightValue || 0) : 0;

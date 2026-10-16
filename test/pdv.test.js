@@ -22,18 +22,19 @@ function setup() {
   base.inMemoryCustomers.set('customer', { id: 'customer', name: 'Cliente', phone: '5564999991234', debtBalance: 0 });
   const repository = new PdvRepository(base);
   const sent = [];
+  const chargeCalls = [];
   const whatsapp = {
     sendTextMessage: async (phone, text) => { sent.push({ phone, text }); return { messages: [{ id: 'wamid.text' }] }; },
-    sendImageBuffer: async (phone) => { sent.push({ phone, image: true }); return { messages: [{ id: 'wamid.image' }] }; },
+    sendImageBuffer: async (phone, buffer, caption) => { sent.push({ phone, image: true, imageBase64: buffer.toString('base64'), caption }); return { messages: [{ id: 'wamid.image' }] }; },
   };
   const pix = {
     pixKey: 'pix-key',
-    createCharge: async ({ amount, txid }) => ({ txid, amount, pixCopiaECola: 'pix-code', qrCodeBase64: 'data:image/png;base64,aGVsbG8=', provider: 'SICREDI' }),
+    createCharge: async ({ amount, txid }) => { chargeCalls.push({ amount, txid }); return { txid, amount, pixCopiaECola: 'pix-code', qrCodeBase64: 'data:image/png;base64,aGVsbG8=', provider: 'SICREDI' }; },
     checkReceivedPayment: async (endToEndId) => ({ isPaid: true, raw: { txid: 'replace', endToEndId, chave: 'pix-key', valor: '20.00', devolucoes: [] } }),
   };
   const service = new PdvService({ repository, whatsapp, pix, ownerPhone: '5564999994321' });
   const input = { requestId: randomUUID(), items: [{ productId: 'plant', quantity: 2 }], paymentMethod: 'DINHEIRO' };
-  return { base, repository, service, sent, input, pix, whatsapp };
+  return { base, repository, service, sent, input, pix, whatsapp, chargeCalls };
 }
 
 test('seller creates a pending order; cashier receives once and attribution survives', async () => {
@@ -59,7 +60,14 @@ test('Pix receipt includes image; bank verification finalizes exactly once under
   const s = setup();
   const order = await s.service.create({ ...s.input, paymentMethod: 'PIX', customerId: 'customer' }, seller);
   assert.equal(s.sent.length, 2);
+  assert.match(s.sent[0].text, /Valor exato: \*R\$\s20,00\* \(Sem alteração de valor\)/);
+  assert.match(s.sent[0].text, /PIX COPIA E COLA/);
+  assert.match(s.sent[0].text, /pix-code/);
   assert.ok(s.sent[1].image);
+  assert.equal(s.sent[1].imageBase64, 'aGVsbG8=');
+  assert.match(s.sent[1].caption, /R\$\s20,00/);
+  assert.match(order.qrCodeBase64, /^data:image\/png;base64,/);
+  assert.equal(order.pixCopiaECola, 'pix-code');
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
   s.pix.checkReceivedPayment = async (endToEndId) => ({ isPaid: true, raw: { txid: order.pixData.txid, endToEndId, chave: 'pix-key', valor: '20.00', devolucoes: [] } });
   await Promise.all(Array.from({ length: 4 }, () => s.service.handlePix(order.pixData.txid, 'E' + '1'.repeat(31))));
@@ -105,8 +113,9 @@ test('order retries reuse ID; insufficient stock leaves debt and inventory uncha
   assert.equal(retry.id, order.id);
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
   await assert.rejects(s.service.create({ ...s.input, items: [{ productId: 'plant', quantity: 1 }] }, cashier), /outra venda/);
-  const pending = await s.service.create({ ...s.input, requestId: randomUUID(), paymentMethod: 'FIADO', customerId: 'customer', items: [{ productId: 'plant', quantity: 100 }] }, seller);
-  await assert.rejects(s.repository.receive(pending.id, actor(cashier)), /Estoque insuficiente/);
+  const chargeCountBeforeInsufficientOrder = s.chargeCalls.length;
+  await assert.rejects(s.service.create({ ...s.input, requestId: randomUUID(), paymentMethod: 'PIX', customerId: 'customer', items: [{ productId: 'plant', quantity: 100 }] }, seller), /Estoque insuficiente/);
+  assert.equal(s.chargeCalls.length, chargeCountBeforeInsufficientOrder);
   assert.equal(s.base.inMemoryCustomers.get('customer').debtBalance, 0);
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
 });
@@ -138,6 +147,10 @@ test('Sicredi creates a fixed-amount charge; payment is verified by end-to-end I
   assert.equal(client.generateTxId().length, 32);
   assert.equal(requests[1].options.method, 'PUT');
   assert.deepEqual(JSON.parse(requests[1].options.body).valor, { original: '20.00', modalidadeAlteracao: 0 });
+  assert.match(charge.qrCodeBase64, /^data:image\/png;base64,/);
+  assert.ok(Buffer.from(charge.qrCodeBase64.split(',')[1], 'base64').length > 0);
+  assert.match(requests[0].options.headers.Authorization, /^Basic /);
+  assert.match(requests[0].options.body, /scope=cob\.read\+cob\.write\+pix\.read\+webhook\.read\+webhook\.write/);
   await client.checkReceivedPayment('E' + '1'.repeat(31));
   assert.ok(requests[2].url.includes('/api/v2/pix/'));
   assert.ok(requests[2].url.endsWith('/api/v2/pix/E' + '1'.repeat(31)));
@@ -168,7 +181,7 @@ test('Sicredi webhook registration accepts HTTPS only and uses the configured Pi
   await client.registerWebhook('https://conflora.example/webhooks/sicredi-pix/secret');
   assert.ok(requests[1].url.endsWith('/api/v2/webhook/pix'));
   assert.equal(requests[1].options.method, 'PUT');
-  assert.deepEqual(JSON.parse(requests[1].options.body), { webhookURL: 'https://conflora.example/webhooks/sicredi-pix/secret' });
+  assert.deepEqual(JSON.parse(requests[1].options.body), { webhookUrl: 'https://conflora.example/webhooks/sicredi-pix/secret' });
   await assert.rejects(client.registerWebhook('http://conflora.example/webhook'), /HTTPS/);
 });
 
@@ -247,6 +260,96 @@ test('Sicredi callback secret route authenticates before it accepts bank events'
   assert.equal(valid.status, 200);
   const invalid = await fetch(`${base}/webhooks/sicredi-pix/${'b'.repeat(48)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload });
   assert.equal(invalid.status, 401);
+});
+
+test('HTTP sale flow sends fixed Pix receipt and QR, confirms by Sicredi webhook once, and preserves seller/cashier attribution', async (t) => {
+  const originalSecret = process.env.SICREDI_WEBHOOK_SECRET;
+  process.env.SICREDI_WEBHOOK_SECRET = 'c'.repeat(48);
+  t.after(() => {
+    if (originalSecret === undefined) delete process.env.SICREDI_WEBHOOK_SECRET;
+    else process.env.SICREDI_WEBHOOK_SECRET = originalSecret;
+  });
+  const s = setup();
+  await s.base.saveUser(seller);
+  await s.base.saveUser(cashier);
+  const app = createApp({ messageService: { firestoreRepo: s.base, whatsappClient: s.whatsapp }, sicrediClient: s.pix });
+  const server = app.listen(0); t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const post = (path, body, cookie = '') => fetch(base + path, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...(cookie ? { cookie } : {}) }, body: JSON.stringify(body),
+  });
+  const login = async (user) => {
+    const response = await post('/api/admin/auth/login', { userId: user.id, pin: user.pin });
+    assert.equal(response.status, 200);
+    return response.headers.get('set-cookie').split(';')[0];
+  };
+  const sellerCookie = await login(seller);
+  const cashierCookie = await login(cashier);
+  const pixResponse = await post('/api/caixa/orders', {
+    requestId: randomUUID(), items: [{ productId: 'plant', quantity: 2 }], paymentMethod: 'PIX',
+    customerId: 'customer', customerPhone: '5564999991234',
+  }, sellerCookie);
+  assert.equal(pixResponse.status, 200);
+  const pixBody = await pixResponse.json();
+  const pixOrder = pixBody.order;
+  assert.equal(pixOrder.status, 'AWAITING_PIX');
+  assert.equal(pixOrder.paymentStatus, 'PENDING');
+  assert.equal(pixBody.receiptDelivery.sent, true);
+  assert.match(pixOrder.receiptText, /Valor exato: \*R\$\s20,00\* \(Sem alteração de valor\)/);
+  assert.match(pixOrder.receiptText, /pix-code/);
+  assert.match(pixOrder.qrCodeBase64, /^data:image\/png;base64,/);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
+
+  const endToEndId = 'E' + '2'.repeat(31);
+  s.pix.checkReceivedPayment = async () => ({ isPaid: true, raw: {
+    txid: pixOrder.pixData.txid, endToEndId, chave: 'pix-key', valor: '20.00', devolucoes: [],
+  } });
+  const webhookPath = `/webhooks/sicredi-pix/${process.env.SICREDI_WEBHOOK_SECRET}`;
+  const webhookBody = { pix: [{ txid: pixOrder.pixData.txid, endToEndId }] };
+  const webhookResults = await Promise.all([
+    post(webhookPath, webhookBody), post(webhookPath, webhookBody),
+  ]);
+  assert.deepEqual(webhookResults.map((response) => response.status), [200, 200]);
+  const paidPix = await app.locals.pdv.store.read('orders', pixOrder.id);
+  assert.equal(paidPix.status, 'CONFIRMED');
+  assert.equal(paidPix.paymentStatus, 'APPROVED');
+  assert.equal(paidPix.verifiedVia, 'SICREDI_PIX_WEBHOOK');
+  assert.equal(paidPix.paymentTransactionId, endToEndId);
+  assert.equal(paidPix.createdBy.id, seller.id);
+  assert.equal(paidPix.receivedBy.id, seller.id);
+  assert.ok(paidPix.paidAt);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
+  assert.equal((await app.locals.pdv.store.read('stock_movements', `${pixOrder.id}-plant`)).quantityDeducted, 2);
+  assert.equal((await app.locals.pdv.store.read('pdv_pix_events', `${pixOrder.pixData.txid}-${endToEndId}`)).status, 'DONE');
+  assert.equal(s.sent.filter((message) => message.text?.includes('PIX CONFIRMADO')).length, 2);
+
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+  const sellerBoardResponse = await fetch(`${base}/api/caixa/orders?from=${today}&to=${today}`, { headers: { cookie: sellerCookie } });
+  const sellerBoard = await sellerBoardResponse.json();
+  assert.ok(sellerBoard.paid.some((order) => order.id === pixOrder.id));
+  assert.equal(sellerBoard.metrics.sales, 20);
+  const cashierBoardResponse = await fetch(`${base}/api/caixa/orders?from=${today}&to=${today}`, { headers: { cookie: cashierCookie } });
+  const cashierBoard = await cashierBoardResponse.json();
+  assert.equal(cashierBoard.closing.totalReceived, 0);
+
+  const cashOrderResponse = await post('/api/caixa/orders', {
+    requestId: randomUUID(), items: [{ productId: 'plant', quantity: 1 }], paymentMethod: 'DEBITO',
+    customerId: 'customer', customerPhone: '5564999991234',
+  }, sellerCookie);
+  assert.equal(cashOrderResponse.status, 200);
+  const cashOrder = (await cashOrderResponse.json()).order;
+  assert.equal(cashOrder.status, 'AWAITING_CASHIER');
+  const receive = () => post(`/api/caixa/orders/${cashOrder.id}/confirm`, {}, cashierCookie);
+  const received = await receive();
+  assert.equal(received.status, 200);
+  const confirmed = await received.json();
+  assert.equal(confirmed.order.createdBy.id, seller.id);
+  assert.equal(confirmed.order.receivedBy.id, cashier.id);
+  assert.equal(confirmed.order.paymentStatus, 'APPROVED');
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 17);
+  const duplicateReceive = await receive();
+  assert.equal((await duplicateReceive.json()).order.alreadyConfirmed, true);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 17);
 });
 
 test('Cashier board filters history, separates pending stages, and calculates closing totals', async (t) => {

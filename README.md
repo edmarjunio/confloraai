@@ -1,439 +1,134 @@
-# Conflora AI 2.1
+# Conflora Horta e Viveiro
 
-Agente de atendimento e vendas da Conflora para WhatsApp, usando:
+Aplicação atual da Conflora para catálogo público, pedidos, frente de caixa, administração e atendimento com Gemini/WhatsApp. O catálogo, produtos, estoque, pedidos, usuários e configurações operacionais usam Firestore; as fotos de produtos usam Firebase Storage.
 
-- WhatsApp Cloud API (Meta)
-- Gemini via Vertex AI
-- Firestore para catálogo, estoque, memória, pedidos e deduplicação
-- Firebase Storage para fotos de produtos
-- Cloud Tasks para processamento assíncrono, follow-up e encaminhamento de comprovantes
-- Cloud Run para produção
+## Áreas do site
 
-## Arquitetura
+| Endereço | Uso |
+| --- | --- |
+| `/` | Catálogo público, busca, informações de produto, sacola, login Google e checkout |
+| `/caixa` e `/pdv` | Frente de caixa, venda por vendedor/caixa, comandas, PIX Sicredi, fiado e relatórios |
+| `/admin` | Produtos, estoque, equipe, vendas, conexões e configurações |
+| `/admin/gerencial` | Painel administrativo gerencial |
+| `/health` | Diagnóstico básico do serviço e do ambiente |
+| `/webhook` | Recebimento de mensagens da WhatsApp Cloud API/Meta |
 
-Para entender as superfícies da loja, caixa e administração, a fundação visual reutilizável e as próximas etapas de manutenção, consulte [Arquitetura de Frontend e UI](docs/ARQUITETURA-FRONTEND-E-UI.md).
+## Como cada venda funciona
 
-```text
-WhatsApp / Meta
-      |
-      v
-POST /webhook
-      |
-      | verifica assinatura X-Hub-Signature-256
-      | enfileira e responde 200 rapidamente
-      v
-Cloud Tasks
-      |
-      v
-/tasks/processar-mensagem
-      |
-      +--> Firestore: histórico / deduplicação / pedidos
-      +--> Firestore: catálogo, categorias e preços
-      +--> Firebase Storage: fotos de produtos
-      +--> Gemini: conversa e decisões
-      +--> WhatsApp Cloud API: resposta ao cliente
+### Catálogo público
 
-Pedido confirmado
-      |
-      +--> Cloud Tasks --> notificação da venda para o responsável
-      +--> PIX --> cliente envia foto/PDF --> encaminhamento do comprovante
+O servidor confere produtos, preços e quantidades. O checkout PIX público atual usa **Mercado Pago**: cria um pagamento pendente, recebe a notificação assinada em `/webhooks/mercadopago`, consulta o pagamento no provedor e só então confirma o pedido e baixa o estoque. O Sicredi ainda não substitui o provedor do checkout público.
 
-Pedido aguardando confirmação
-      |
-      +--> Cloud Tasks +1h --> follow-up único, se o cliente não respondeu
-```
+### Frente de caixa
 
-## Estrutura
+1. **VENDEDOR** cria a venda. PIX gera uma cobrança Sicredi; dinheiro, cartão e fiado ficam como comanda para o caixa. A venda permanece atribuída ao vendedor que a abriu.
+2. **CAIXA/ADMIN** pode receber dinheiro, débito, crédito ou fiado. A confirmação, o registro do pagamento e a baixa do estoque ocorrem juntos em uma transação do Firestore. Pix não pode ser confirmado manualmente.
+3. Para **PIX Sicredi**, o servidor recalcula o total, envia uma cobrança dinâmica com `modalidadeAlteracao: 0` e mostra o QR Code e o Pix Copia e Cola. O recibo com o código é enviado por WhatsApp e o QR vai como imagem quando há telefone e as credenciais/modelos de WhatsApp estão configurados.
+4. O webhook Sicredi serve como aviso. O servidor consulta `GET /pix/{endToEndId}` e confere transação, `txid`, chave recebedora, valor exato e ausência de devolução. Só após essas validações marca o pedido como pago, finaliza e baixa o estoque.
+5. Repetições do mesmo webhook ou da confirmação não repetem a baixa. Notificações de pagamento são enviadas após o registro transacional. Vendas e recebimentos aparecem conforme o papel e a autoria no relatório de caixa.
+
+O código do pedido e a chave de idempotência impedem que uma repetição da mesma solicitação crie outra cobrança. Se o navegador perder a resposta, consulte a venda/comanda antes de iniciar uma nova. **Não há reserva de estoque para vendas PIX pendentes**: a quantidade é conferida ao criar e revalidada na confirmação. Vendas simultâneas sobre o mesmo saldo podem deixar um pagamento já recebido pendente para conciliação; faça primeiro o teste real controlado com um produto de saldo suficiente.
+
+O fluxo de aprovação de desconto do PDV cria a cobrança Sicredi após a aprovação. O checkout público e o pedido manual PIX iniciado pela tela de administração usam Mercado Pago atualmente; vincular Sicredi ao PDV não altera esses dois percursos.
+
+## Componentes principais
 
 ```text
-src/
-  ai/                 # Gemini e ferramentas do agente
-  catalog/            # acesso e pesquisa do catálogo no Firestore
-  config/             # configuração centralizada
-  database/           # persistência Firestore
-  http/               # Express, webhook e rotas
-  integrations/       # WhatsApp e Cloud Tasks
-  orders/             # regras de pedido e confirmação
-  security/           # validação de assinatura Meta
-  services/           # orquestração do atendimento
-  shared/             # utilitários e logger
-scripts/
-  setup-local.ps1
-  bootstrap-gcp.sh
-  create-secrets.sh
-  deploy.sh
-test/
+src/http/                         Rotas, páginas e autenticação
+src/orders/pdv.service.js          Venda/PIX do caixa, recibo e notificações
+src/orders/pdv.repository.js       Transação de pagamento, pedido e estoque
+src/orders/order-integrity.js      Validações de estoque e confirmação
+src/integrations/sicredi-pix.client.js  OAuth mTLS, cobrança e consulta Sicredi
+src/integrations/mercado-pago.client.js Checkout público atual
+src/database/firestore.repository.js    Firestore, estoque e pedidos da loja
+src/catalog/                       Catálogo e fotos do Firebase Storage
+public/pdv/                         Interface web da frente de caixa
+test/                               Testes HTTP, regras e transações simuladas
+docs/PDV-SICREDI.md                 Detalhes do caixa e da integração Sicredi
+docs/PIX-TESTE-E-INTEGRIDADE.md     Fluxo PIX público e limitações
 ```
 
-## Princípios aplicados
+## Rodar e conferir localmente
 
-- responsabilidade única por módulo;
-- nomes que expressam intenção;
-- funções pequenas e focadas;
-- configuração fora do código;
-- ausência de tokens/chaves no repositório;
-- validação de configuração no startup;
-- catálogo e preço revalidados no backend;
-- deduplicação de mensagens e comprovantes;
-- webhook com validação criptográfica;
-- webhook rápido: processamento real em Cloud Tasks;
-- logs estruturados sem expor segredos;
-- endpoint `/chat` somente em desenvolvimento;
-- testes das regras críticas de confirmação;
-- `package-lock.json` deve ser versionado após `npm install`.
-
-# 1. Instalação local no Windows
-
-Abra o PowerShell no projeto:
+Requisitos: Node.js 20 ou superior e acesso às credenciais do projeto de desenvolvimento. Não aponte testes para o Firestore de produção.
 
 ```powershell
 cd C:\Users\Junin\confloraai
-```
-
-Confirme:
-
-```powershell
-node --version
-npm --version
-```
-
-Use Node 20 ou mais recente.
-
-Instale as dependências:
-
-```powershell
-npm install
-```
-
-Isso também cria/atualiza `package-lock.json`. Versione esse arquivo.
-
-Crie seu arquivo de desenvolvimento:
-
-```powershell
+npm ci
 Copy-Item .env.example .env
 ```
 
-Preencha inicialmente apenas:
+Preencha no `.env` as configurações do projeto de desenvolvimento. Para acessar Firestore/Storage/Gemini localmente, autentique a conta Google apropriada com Application Default Credentials:
+
+```powershell
+gcloud auth application-default login
+```
+
+Depois rode a aplicação e os testes:
+
+```powershell
+npm run dev
+npm run check:full
+npm run test:pix
+npm run test:dev
+```
+
+`test:pix` simula os provedores, webhooks, pagamentos repetidos e concorrência; não cria cobrança nem movimenta dinheiro. `check:sicredi` apenas confere se as configurações estão preenchidas. Com credenciais válidas, `npm run check:sicredi -- --connect` valida OAuth/mTLS e **não cria cobrança**.
+
+## Login com Google
+
+O fluxo do site já usa Firebase Authentication para obter a identidade Google e o servidor valida o ID token. O papel `CLIENTE`, `VENDEDOR`, `CAIXA` ou `ADMIN` vem do cadastro interno, não é concedido pela conta Google.
+
+1. No Firebase Console do projeto correto, crie/confira o app Web e habilite **Authentication → Sign-in method → Google**.
+2. Em **Authentication → Settings → Authorized domains**, inclua o domínio publicado. Para desenvolvimento, autorize `localhost` manualmente se ainda não estiver listado.
+3. Preencha `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`, `FIREBASE_PROJECT_ID`, `FIREBASE_STORAGE_BUCKET` e `FIREBASE_APP_ID` com os valores do app Web do mesmo projeto que o servidor valida.
+4. Teste no domínio publicado: login, logout, acesso do cliente à própria conta e bloqueio de cliente nas telas `/admin` e `/caixa`. Para liberar equipe, cadastre/atribua o papel no cadastro interno; login Google não dá acesso administrativo por si só.
+
+Não use credencial privada de conta de serviço no navegador. O backend deve usar a identidade de runtime do Google Cloud ou Application Default Credentials.
+
+## Vincular a API Pix do Sicredi
+
+O código está preparado para a **API Pix Sicredi** no PDV. A conexão real depende de adesão, credenciais e certificado emitidos para a Conflora; não foi feita cobrança real neste trabalho.
+
+1. Solicite à cooperativa a adesão à API Pix e a habilitação de cobrança imediata. Confirme a chave Pix da conta recebedora e guarde o ID de adesão.
+2. No Portal do Desenvolvedor Sicredi, abra o chamado de acesso à API Pix com o ID de adesão. Para integração própria, registre um CSR, aguarde a assinatura, baixe o certificado e a chave privada e gere Client ID/Client Secret sobre o certificado.
+3. Solicite primeiro as credenciais/host de **homologação**. A URL de homologação não é pública e é informada pelo Sicredi; não invente a URL nem use a de produção para simular pagamento.
+4. Configure as variáveis abaixo no `.env` de homologação ou nos segredos protegidos do Cloud Run. No Cloud Run, crie os segredos no Secret Manager, conceda acesso à conta de runtime `conflora-api-sa` e mapeie cada segredo para a variável de ambiente com o mesmo nome. Nunca envie certificados, chave privada ou Client Secret pelo chat/Git.
 
 ```dotenv
-NODE_ENV=development
-PORT=8080
-GCP_PROJECT_ID=conflora-ai
-GCP_REGION=southamerica-east1
-GEMINI_LOCATION=global
-GEMINI_MODEL=gemini-3.7-flash
+SICREDI_PIX_BASE_URL=https://api-pix.sicredi.com.br/api/v2
+SICREDI_OAUTH_URL=https://api-pix.sicredi.com.br/oauth/token
+SICREDI_CLIENT_ID=
+SICREDI_CLIENT_SECRET=
+SICREDI_CERT_PEM=
+SICREDI_KEY_PEM=
+SICREDI_PIX_KEY=
+SICREDI_WEBHOOK_SECRET=
+SERVICE_URL=https://seu-dominio-publicado
 ```
 
-Não versionar `.env`.
+`SICREDI_PIX_KEY` é a chave Pix registrada na conta Sicredi (CPF/CNPJ, e-mail, telefone ou EVP), não o Client ID. O certificado e a chave privada devem formar o par emitido para esta integração. O cliente Sicredi usa mTLS e OAuth2 Client Credentials; a credencial precisa dos escopos `cob.write`, `cob.read`, `pix.read` e `webhook.write` (e `webhook.read` se habilitado para consulta). O aplicativo envia o valor travado (`modalidadeAlteracao: 0`).
 
-# 2. Google Cloud CLI no Windows
+5. Gere um segredo aleatório exclusivo, com pelo menos 32 caracteres, para `SICREDI_WEBHOOK_SECRET`. Publique primeiro o backend com esse segredo e `SERVICE_URL` HTTPS público. O endpoint registra o evento e consulta o pagamento ao Sicredi antes de atualizar Firestore.
+6. Com o host de produção e as credenciais de produção autorizadas, execute `npm run check:sicredi -- --connect` para testar autenticação sem gerar Pix. Depois rode `npm run sicredi:webhook` para registrar a URL `/webhooks/sicredi-pix/{segredo}` na chave Pix.
+7. Confira o cadastro do webhook no Sicredi. Faça uma cobrança real pequena, de valor e estoque controlados, usando a tela `/caixa`. Confirme no pedido: recibo e QR entregues, valor do pedido idêntico ao valor pago, status `APPROVED`/`CONFIRMED`, `paymentTransactionId`, uma única movimentação de estoque e uma única baixa após reenviar o webhook.
 
-Instale o Google Cloud CLI se necessário e autentique:
+Para endurecer o recebimento do webhook, use um gateway HTTPS que valide o certificado cliente Sicredi e injete `SICREDI_WEBHOOK_GATEWAY_SECRET`; o backend só deve confiar nesse header quando ele for inserido pelo gateway após a validação mTLS. Não permita que um cliente externo envie esse mesmo header. A alternativa da URL com segredo aleatório deve ser tratada como proteção por segredo, não como validação criptográfica do certificado Sicredi.
 
-```powershell
-gcloud auth login
-gcloud config set project conflora-ai
-gcloud auth application-default login
-gcloud auth application-default set-quota-project conflora-ai
-```
+Se o WhatsApp ainda não estiver conectado, o PDV continua mostrando o QR e o Pix Copia e Cola na tela da venda; para enviar recibo/QR ao telefone, configure `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_GRAPH_VERSION`, `WHATSAPP_PDV_TEXT_TEMPLATE` e `WHATSAPP_PDV_QR_TEMPLATE` (ou o template de cliente já aprovado), além de `OWNER_WHATSAPP_NUMBER`. O número do cliente precisa ter DDD válido e os modelos Meta devem estar aprovados para mensagens fora da janela de atendimento.
 
-As Application Default Credentials são usadas localmente pelo Firestore, Firebase Storage e Vertex AI/Gemini.
+## Implantação e operação
 
-# 3. Infraestrutura Google Cloud
+- Não coloque `.env`, tokens, certificados nem arquivos de Service Account no Git.
+- Configure segredos reais em Secret Manager/Cloud Run e mantenha Firestore, Firebase Auth, Storage, `SERVICE_URL`, webhook e segredos do mesmo ambiente.
+- `scripts/deploy-dev.ps1` é específico do ambiente de validação `confloraai-dev` e atualmente valida o checkout Mercado Pago de teste/real; não é o deploy de produção do Sicredi.
+- Antes de publicar mudanças, rode `npm run check:full`, `npm run test:pix` e `npm run test:dev`. A suíte não substitui a homologação com Firestore, WhatsApp e Sicredi reais.
+- Mantenha backup e reconciliação financeira. Se o banco confirmar um recebimento e o estoque não puder ser baixado (por exemplo, estoque insuficiente), não entregue o pedido automaticamente: faça a conciliação e resolva/refunde no banco.
 
-No Cloud Shell, a partir da raiz do projeto:
+## Documentação oficial
 
-```bash
-bash scripts/bootstrap-gcp.sh
-```
-
-O script:
-
-- ativa APIs;
-- cria Firestore `(default)` se necessário;
-- cria a fila `conflora-jobs` se necessário;
-- cria a conta `conflora-api-sa@conflora-ai.iam.gserviceaccount.com`;
-- concede apenas os papéis de runtime necessários.
-
-# 4. Testes locais
-
-No PowerShell:
-
-```powershell
-npm run check
-npm test
-npm run dev
-```
-
-Em outro terminal:
-
-```powershell
-Invoke-RestMethod `
-  -Method POST `
-  -Uri "http://localhost:8080/chat" `
-  -ContentType "application/json" `
-  -Body (@{
-    telefone = "5564000000001"
-    nome = "Cliente Teste"
-    mensagem = "Quero uma palmeira"
-  } | ConvertTo-Json)
-```
-
-Continue com o mesmo telefone para testar memória:
-
-```powershell
-Invoke-RestMethod `
-  -Method POST `
-  -Uri "http://localhost:8080/chat" `
-  -ContentType "application/json" `
-  -Body (@{
-    telefone = "5564000000001"
-    nome = "Cliente Teste"
-    mensagem = "Vou plantar direto no jardim"
-  } | ConvertTo-Json)
-```
-
-Teste também algo direto:
-
-```powershell
-Invoke-RestMethod `
-  -Method POST `
-  -Uri "http://localhost:8080/chat" `
-  -ContentType "application/json" `
-  -Body (@{
-    telefone = "5564000000002"
-    nome = "Cliente Teste 2"
-    mensagem = "Quanto custa a Palmeira Azul?"
-  } | ConvertTo-Json)
-```
-
-# 5. Git
-
-Na branch `feature/conflora-v2`:
-
-```powershell
-git status
-git add .
-git status
-git diff --cached
-git commit -m "Refatora Conflora AI com arquitetura modular e segurança"
-git push -u origin feature/conflora-v2
-```
-
-Confirme que `.env`, `node_modules`, tokens ou arquivos JSON de credenciais NÃO aparecem.
-
-Depois de validar localmente:
-
-```powershell
-git checkout main
-git merge feature/conflora-v2
-git push origin main
-```
-
-# 6. WhatsApp Cloud API
-
-Para produção você precisa de:
-
-- Business Portfolio da Meta;
-- WhatsApp Business Account (WABA);
-- número comercial conectado;
-- Phone Number ID;
-- versão atual da Graph API mostrada pela Meta;
-- token de System User/permanente com as permissões necessárias;
-- App Secret do aplicativo Meta.
-
-Se o número da Conflora já é usado no **WhatsApp Business App** e você quer continuar usando o app no celular, use o fluxo oficial de **Coexistence/Embedded Signup** disponível para sua conta. Não remova nem migre o número do aplicativo antes de confirmar esse fluxo.
-
-# 7. Segredos
-
-No Cloud Shell:
-
-```bash
-bash scripts/create-secrets.sh
-```
-
-O script pede, sem exibir na tela:
-
-- token permanente da Cloud API;
-- App Secret da Meta.
-
-E cria:
-
-- `whatsapp-token`
-- `whatsapp-verify-token`
-- `meta-app-secret`
-- `conflora-task-secret`
-- `conflora-admin-secret`
-
-Nunca cole esses valores em Git, código ou README.
-
-# 8. Templates da Meta
-
-Crie/aprove estes templates em `pt_BR`:
-
-```text
-nova_venda_conflora
-comprovante_pix_imagem
-comprovante_pix_documento
-```
-
-O segundo deve usar cabeçalho de imagem; o terceiro, cabeçalho de documento.
-
-# 9. Deploy 24/7 no Cloud Run
-
-O serviço usado atualmente é:
-
-```text
-conflora-api
-```
-
-URL:
-
-```text
-https://conflora-api-1073181815328.southamerica-east1.run.app
-```
-
-No Cloud Shell, defina os valores **sem colocá-los no código**:
-
-```bash
-export PROJECT_ID="conflora-ai"
-export REGION="southamerica-east1"
-export SERVICE_URL="https://conflora-api-1073181815328.southamerica-east1.run.app"
-export WHATSAPP_GRAPH_VERSION="VERSAO_EXIBIDA_PELA_META"
-export WHATSAPP_PHONE_NUMBER_ID="SEU_PHONE_NUMBER_ID"
-export OWNER_WHATSAPP_NUMBER="55DDDNUMERO"
-export PIX_KEY="SUA_CHAVE_PIX"
-export PIX_TITULAR="SEU_TITULAR_PIX"
-```
-
-Depois:
-
-```bash
-bash scripts/deploy.sh
-```
-
-O deploy usa `--min 1`, mantendo uma instância quente do Cloud Run. Isso reduz cold starts e mantém capacidade pronta para receber webhooks, mas gera custo mesmo sem tráfego e a infraestrutura ainda pode reiniciar a instância quando necessário.
-
-# 10. Webhook da Meta
-
-Callback URL:
-
-```text
-https://conflora-api-1073181815328.southamerica-east1.run.app/webhook
-```
-
-Obtenha o verify token:
-
-```bash
-gcloud secrets versions access latest --secret=whatsapp-verify-token
-```
-
-Use esse valor somente na configuração do webhook da Meta.
-
-Assine o campo/evento de mensagens da WABA.
-
-O POST do webhook é validado com `X-Hub-Signature-256` usando o App Secret antes de aceitar mensagens.
-
-# 11. Teste real
-
-Do seu WhatsApp pessoal, envie uma mensagem para o número comercial conectado à Cloud API:
-
-```text
-Quero uma palmeira
-```
-
-Fluxo esperado:
-
-```text
-Meta -> /webhook -> Cloud Tasks -> Firestore -> Gemini -> WhatsApp
-```
-
-Use logs para depuração:
-
-```bash
-gcloud run services logs read conflora-api \
-  --region=southamerica-east1 \
-  --limit=100
-```
-
-# 12. Teste do follow-up sem esperar uma hora
-
-Temporariamente:
-
-```bash
-gcloud run services update conflora-api \
-  --region=southamerica-east1 \
-  --update-env-vars=FOLLOWUP_SECONDS=60
-```
-
-Leve um pedido até o resumo/solicitação de confirmação e não responda.
-
-Depois volte para 1 hora:
-
-```bash
-gcloud run services update conflora-api \
-  --region=southamerica-east1 \
-  --update-env-vars=FOLLOWUP_SECONDS=3600
-```
-
-# 13. Fluxo de trabalho depois da implantação
-
-Windows / VS Code:
-
-```powershell
-git checkout -b feature/minha-alteracao
-# edite
-npm run check
-npm test
-git add .
-git commit -m "Descrição objetiva"
-git push -u origin feature/minha-alteracao
-```
-
-Após merge na `main`, no Cloud Shell:
-
-```bash
-cd ~/conflora-ai
-git pull origin main
-bash scripts/deploy.sh
-```
-
-Depois que o fluxo estiver estável, o próximo passo recomendado é CI/CD para fazer o deploy automático da `main`.
-# Login Google com Firebase Authentication
-
-Configure `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`, `FIREBASE_PROJECT_ID` e
-`FIREBASE_APP_ID` no `.env` local e nas variáveis do ambiente de hospedagem,
-usando a configuração do aplicativo Web no console Firebase. Esses campos são
-configuração pública do aplicativo; nunca use a chave privada da conta de serviço.
-O projeto do aplicativo Web deve corresponder ao projeto usado para validar tokens.
-Para uploads e remoções das fotos dos produtos, configure `FIREBASE_STORAGE_BUCKET`
-com o bucket padrão do Firebase Storage; sem esse valor, é usado
-`<FIREBASE_PROJECT_ID>.firebasestorage.app`.
-
-Em Authentication, habilite o provedor Google e adicione o domínio da aplicação
-(e `localhost` para desenvolvimento) aos domínios autorizados.
-O servidor usa a conta de serviço já configurada ou Application Default Credentials.
-
-No modal de admin, clique em Entrar com Google e escolha a conta no popup.
-O servidor valida o ID token Firebase e obtém e-mail, nome e foto assinados.
-As funções ADMIN/CAIXA/CLIENTE continuam sendo determinadas pelo cadastro existente.
-O login por PIN permanece disponível. O botão Sair também encerra a sessão Firebase.
-A página inicial compartilha o mesmo fluxo Google, sem campos manuais.
-
-Referência: https://firebase.google.com/docs/auth/web/google-signin
-
-## Testes da interface
-
-```bash
-npm ci
-npm run check
-npm run lint
-npm test
-npx playwright install chromium
-npm run test:e2e
-```
-
-Os testes de navegador iniciam um servidor isolado em `127.0.0.1:8099`, com banco
-em memória. Não acessam a base de produção. `CHROMIUM_PATH` pode apontar para um
-Chromium já instalado. A cobertura e as limitações estão em
-[docs/VALIDACAO-IMPORTACAO.md](docs/VALIDACAO-IMPORTACAO.md).
+- [Guia oficial de integração da API Pix Sicredi](https://developers.sicredi.com.br/public/docs/getting-started-pix)
+- [Informações gerais, autenticação e segurança de webhooks do Sicredi](https://developers.sicredi.com.br/public/docs/general-information)
+- [Login Google para Web no Firebase](https://firebase.google.com/docs/auth/web/google-signin)
+- [Documentação interna do fluxo PDV/Sicredi](docs/PDV-SICREDI.md)
+- [Documentação interna dos fluxos Pix e limites](docs/PIX-TESTE-E-INTEGRIDADE.md)

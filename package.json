@@ -11,10 +11,11 @@
   "scripts": {
     "build": "node --check src/server.js",
     "check": "node --check src/server.js",
-    "check:full": "node --check src/server.js && node --check src/http/app.js && node --check src/services/message.service.js && node --check src/ai/agent.service.js && node --check src/catalog/catalog.repository.js && node --check src/catalog/image-compressor.js && node --check src/catalog/product-photo.service.js && node --check src/orders/order.service.js && node --check src/integrations/whatsapp.client.js && node --check src/integrations/task-queue.client.js && node --check src/router/message.router.js && node --check src/services/direct-price.service.js && node scripts/check-storefront.js --manual",
+    "check:full": "node --check src/server.js && node --check src/http/app.js && node --check src/http/pdv.routes.js && node --check src/services/message.service.js && node --check src/ai/agent.service.js && node --check src/catalog/catalog.repository.js && node --check src/catalog/image-compressor.js && node --check src/catalog/product-photo.service.js && node --check src/orders/order.service.js && node --check src/orders/pdv.service.js && node --check src/orders/pdv.repository.js && node --check src/integrations/sicredi-pix.client.js && node --check src/integrations/whatsapp.client.js && node --check src/integrations/task-queue.client.js && node --check src/router/message.router.js && node --check src/services/direct-price.service.js && node scripts/check-storefront.js --manual",
     "test": "echo 'Testes automaticos pausados no modo Agente. Use npm run test:dev'",
     "test:dev": "node --import ./scripts/test-env.js --test test/*.test.js",
-    "test:pix": "node --test test/mercado-pago.test.js test/mercado-pago-live-mode.test.js test/order-integrity.test.js",
+    "test:pix": "node --import ./scripts/test-env.js --test test/mercado-pago.test.js test/mercado-pago-live-mode.test.js test/order-integrity.test.js test/pdv.test.js",
+    "test:pdv": "node --import ./scripts/test-env.js --test test/pdv.test.js",
     "test:dev-isolation": "node --test test/dev-environment.test.js test/mercado-pago-live-mode.test.js",
     "dev:isolated": "node --env-file=.env.dev --watch src/server.js",
     "seed:dev": "node --env-file=.env.dev scripts/seed-dev.js",

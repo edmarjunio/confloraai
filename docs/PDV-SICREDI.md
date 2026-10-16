@@ -12,7 +12,7 @@ O navegador envia IDs e quantidades. Preços são recalculados no servidor; cada
 
 1. **VENDEDOR:** cria Pix ou comanda aguardando caixa. Não recebe dinheiro, cartão nem registra fiado diretamente. Tem acesso às próprias comandas e números.
 2. **CAIXA/ADMIN:** podem criar e receber vendas. A tela “Comandas e meus números” também recebe comandas de outros vendedores, preservando a autoria. Dinheiro registra valor recebido e troco. Débito e crédito são distintos.
-3. **Pix:** o pedido e seu identificador são persistidos antes de criar a cobrança imediata `PUT /cob/{txid}` no Sicredi. A cobrança usa o valor calculado no servidor e `modalidadeAlteracao: 0`; o QR Code e o Pix Copia e Cola retornados pelo Sicredi não permitem ajustar o valor. O QR é enviado como imagem junto com o recibo.
+3. **Pix:** antes de criar a cobrança, o servidor verifica o saldo atual quando o controle de estoque está ativo. O pedido e seu identificador são persistidos antes de criar a cobrança imediata `PUT /cob/{txid}` no Sicredi. A cobrança usa o valor calculado no servidor e `modalidadeAlteracao: 0`; o QR Code e o Pix Copia e Cola retornados pelo Sicredi não permitem ajustar o valor. O QR é enviado como imagem junto com o recibo.
 4. **Confirmação:** somente o webhook autenticado inicia a conciliação. O servidor consulta `GET /pix/{endToEndId}` na API Sicredi e verifica identificador do pedido, chave beneficiária, valor exato e ausência de devoluções. O botão de consulta apenas lê o status do pedido, sem confirmar manualmente.
 5. **Baixa:** recebimento, estoque, autoria, fiado e intenção de notificação são gravados juntos. Repetições não baixam estoque nem lançam dívida novamente. “CONFIRMED” mantém a compatibilidade com o catálogo; `completedAt` indica conclusão. Pix/cash/cartão usam `paymentStatus: APPROVED`; fiado usa `ON_ACCOUNT` e `paidAt: null`.
 6. **Fiado:** exige cliente cadastrado. A quitação parcial ou total é registrada separadamente, com o recebedor, sem criar nova venda ou baixar estoque novamente. A interface de quitação aceita dinheiro, débito e crédito. Valores acima do saldo são recusados atomicamente.
@@ -26,6 +26,7 @@ O identificador da operação é reutilizado no navegador em tentativas com o me
 Não foram criadas cobranças reais, enviados WhatsApps reais nem publicado o projeto nesta alteração.
 
 - Solicitar à cooperativa Sicredi a habilitação da API Pix Cobrança. No portal de desenvolvedores, cadastrar o app, enviar o CSR para assinatura e guardar em Secret Manager o certificado assinado, a chave privada e o Client ID/Secret. Configurar `SICREDI_CLIENT_ID`, `SICREDI_CLIENT_SECRET`, `SICREDI_CERT_PEM`, `SICREDI_KEY_PEM` e `SICREDI_PIX_KEY`; a chave Pix precisa pertencer à conta Sicredi e ser a mesma usada no webhook. Habilitar `cob.read`, `cob.write`, `pix.read`, `webhook.read` e `webhook.write`.
+- O registro do webhook usa `PUT /api/v2/webhook/{chave}` com o campo JSON `webhookUrl` conforme o guia de início Sicredi. O endpoint de confirmação consulta a API do próprio Sicredi antes de aceitar a notificação.
 - Definir `SERVICE_URL` como a URL HTTPS pública do serviço. Para callback com gateway mTLS, configure também `SICREDI_WEBHOOK_URL` como a URL HTTPS pública do gateway e um `SICREDI_WEBHOOK_GATEWAY_SECRET` aleatório (mínimo 32 caracteres); o gateway deve validar a cadeia completa de certificados Sicredi, remover headers externos com o mesmo nome e só então injetar esse segredo. Para callback direto, use `SICREDI_WEBHOOK_SECRET` com pelo menos 32 caracteres; o endpoint ainda exige HTTPS e a conciliação oficial do Pix. Rode `npm run check:sicredi` para conferir a presença dos campos; `npm run check:sicredi -- --connect` valida o OAuth sem criar cobrança. Depois de publicar a versão configurada, rode `npm run sicredi:webhook` para cadastrar o callback.
 - A URL registrada usa `/webhooks/sicredi-pix/{segredo}` quando há segredo de rota, ou `/webhooks/sicredi-pix` atrás do gateway. Mesmo com essas proteções, o evento só confirma venda após consulta `GET /pix/{endToEndId}` e validação do txid, chave, valor exato e ausência de devoluções.
 - Configurar `OWNER_WHATSAPP_NUMBER`, credenciais Meta e templates Utility aprovados. `WHATSAPP_PDV_TEXT_TEMPLATE` tem uma variável de corpo; `WHATSAPP_PDV_QR_TEMPLATE` tem header IMAGE e uma variável de corpo para a legenda. O texto pode usar o template existente `WHATSAPP_CUSTOMER_ORDER_TEMPLATE` como fallback. Sem templates, mensagens livres dependem da janela de atendimento da Meta; uma recusa fica registrada na fila, sem indicar envio bem-sucedido.
@@ -37,7 +38,8 @@ A baixa de estoque é exatamente uma vez por pedido. Mensagens externas têm ent
 
 ## Validação
 
-- `node --test test/pdv.test.js test/admin-sale-notifications.test.js test/order-integrity.test.js test/mercado-pago.test.js`
+- `npm run test:pdv`
+- `npm run test:pix` (inclui o PDV Sicredi, checkout Mercado Pago e integridade do estoque)
 - `npx playwright test test/browser/pdv.spec.js` (pode usar `CHROMIUM_PATH` para o navegador instalado).
 - Testes de transação usam um double que recusa leituras após escritas e simula falha de commit. Não substituem homologação no Firestore e Sicredi reais.
 
