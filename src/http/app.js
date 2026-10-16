@@ -1785,13 +1785,14 @@ function createApp({
     try {
       const products = await messageService.firestoreRepo.getAllProducts();
       const active = products
-        .filter((p) => String(p.status || p.STATUS || 'ATIVO').toUpperCase() !== 'INATIVO')
+        .filter((p) => String(p.status || p.STATUS || '').trim().toUpperCase() === 'ATIVO')
         .map((p) => {
           const imageCandidates = getProductImageCandidates(p);
           const imageUrl = imageCandidates[0] || '';
 
           return {
             id: p.id,
+            status: String(p.status || p.STATUS || '').trim().toUpperCase(),
             name: p.name || p.descricao || 'Produto',
             price: Number(p.price || p.valor_num || 0),
             stock: Number(p.stockQuantity ?? p.estoque ?? 0),

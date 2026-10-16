@@ -97,7 +97,7 @@ window.PdvComponents = (() => {
       <p>Comanda #{current.ticketNumber} · {current.customerName}</p>
       <p className="my-2 font-semibold">{current.status === 'AWAITING_PIX' ? 'Aguardando pagamento Pix' : current.status === 'AWAITING_CASHIER' ? 'Comanda enviada para a fila do caixa' : current.paymentStatus === 'ON_ACCOUNT' ? 'Saldo lançado na conta do cliente' : 'Pagamento confirmado'}</p>
       <ul className="divide-y">{current.items.map((item, index) => <li className="py-2 flex justify-between gap-3" key={index}><span>{item.quantity} {item.unit} · {item.name}</span><span>{money(item.subtotalMinor / 100)}</span></li>)}</ul>
-      <p className="mt-3">Subtotal: {money(current.subtotal)}</p><p>Desconto: {money(current.discountAmount)}</p><p>Frete: {money(current.freightValue)}</p><p className="text-xl font-bold my-3">Total: {money(current.total)}</p>
+      <p className="mt-3">Subtotal: {money(current.subtotal)}</p><p>Desconto: {money(current.discountAmount)}</p><p>Entrega: {money(current.freightValue)}</p><p className="text-xl font-bold my-3">Total: {money(current.total)}</p>
       <p>Pedido feito por: <strong>{staffLabel(current.createdBy)}</strong></p>
       {current.status === 'AWAITING_PIX' && current.pixData && <div className="my-4 text-center"><img className="mx-auto w-56" src={current.pixData.qrCodeBase64} alt="QR Code Pix Sicredi" /><label>Pix copia e cola<textarea readOnly className={field} value={current.pixData.pixCopiaECola} /></label><button className={button} onClick={() => navigator.clipboard.writeText(current.pixData.pixCopiaECola).then(() => setCopyStatus('Copiado!')).catch(() => setCopyStatus('Selecione e copie o código acima.'))}>Copiar Pix</button><p role="status">{copyStatus}</p><p className="mt-2 text-sm">Valor fixo. A confirmação aparecerá automaticamente após o aviso do Sicredi.</p></div>}
       <p className="my-4 text-sm">{!current.customerPhone ? 'Sem WhatsApp informado.' : order.receiptDelivery?.sent ? 'Recibo enviado ao WhatsApp.' : 'Recibo na fila de envio ao WhatsApp.'}</p><button onClick={onNewOrder} className={button}>Nova venda</button>
@@ -145,7 +145,7 @@ window.PdvComponents = (() => {
         <div className="divide-y border-y">{(order.items || []).map((item, index) => <div className="py-2 flex justify-between gap-3" key={`${item.productId}-${index}`}><span>{item.quantity} × {item.name}</span><strong>{money(item.subtotalMinor ? item.subtotalMinor / 100 : item.price * item.quantity)}</strong></div>)}</div>
         <p>Subtotal: {money(order.subtotal)}</p>
         {Number(order.discountAmount) > 0 && <p>Desconto: −{money(order.discountAmount)}</p>}
-        {Number(order.freightValue) > 0 && <p>Frete: {money(order.freightValue)}</p>}
+        {Number(order.freightValue) > 0 && <p>Entrega: {money(order.freightValue)}</p>}
         <p className="text-lg font-black text-emerald-900">Total: {money(order.total)}</p>
         <p>Pedido feito por: <strong>{staffLabel(order.createdBy)}</strong></p>
         <p>Registrado em: {dateTime(order.createdAt)}</p>

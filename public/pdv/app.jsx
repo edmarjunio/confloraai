@@ -161,7 +161,10 @@ const { useState, useEffect, useRef, useMemo } = React;
       const [products, setProducts] = useState([]);
       const [infoProduct, setInfoProduct] = useState(null);
       const categoryTabs = useMemo(() => {
-        const productCategories = [...new Set(products.map((product) => product.category).filter(Boolean))]
+        const activeProducts = products.filter((product) =>
+          String(product.status || product.STATUS || 'ATIVO').trim().toUpperCase() === 'ATIVO'
+        );
+        const productCategories = [...new Set(activeProducts.map((product) => product.category).filter(Boolean))]
           .sort((a, b) => a.localeCompare(b, 'pt-BR'))
           .map((category) => ({
             id: `categoria:${category}`,
@@ -177,6 +180,11 @@ const { useState, useEffect, useRef, useMemo } = React;
       // Aba inicial deve ser 'todas', enquanto a primeira aba visual é FAVORITOS.
       const [selectedCategory, setSelectedCategory] = useState('todas');
       const [searchQuery, setSearchQuery] = useState('');
+      useEffect(() => {
+        if (selectedCategory.startsWith('categoria:') && !categoryTabs.some((category) => category.id === selectedCategory)) {
+          setSelectedCategory('todas');
+        }
+      }, [categoryTabs, selectedCategory]);
       useEffect(() => setVisibleCount(60), [selectedCategory, searchQuery]);
       const [defaultMultiplier, setDefaultMultiplier] = useState(1);
 
@@ -730,7 +738,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                 </div>
               )}
 
-              {/* Quick Pills Bar: Tipo de Pedido, Cliente, Desconto, Frete & Limpar */}
+              {/* Quick Pills Bar: Tipo de Pedido, Cliente, Desconto, Entrega & Limpar */}
               {!isCollapsed && (
                 <div className="px-3.5 py-2 bg-slate-50/90 border-t border-slate-100 flex items-center justify-between gap-2 text-[11px]">
                   <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
@@ -773,7 +781,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                         className="px-2.5 py-1 rounded-full bg-white border border-emerald-200 text-emerald-700 font-bold flex items-center gap-1 shrink-0 shadow-2xs"
                       >
                         <Truck className="w-3 h-3" />
-                        <span>Frete: {formatBRL(freightValue)}</span>
+                        <span>Entrega: {formatBRL(freightValue)}</span>
                       </button>
                     )}
                   </div>
@@ -895,7 +903,7 @@ const { useState, useEffect, useRef, useMemo } = React;
           </div>
 
           {/* Cart Items List */}
-          <div className="flex-1 overflow-y-auto divide-y divide-slate-100 px-3 py-1">
+          <div className="min-h-0 flex-1 overflow-y-auto divide-y divide-slate-100 px-3 py-1">
             {cart.length === 0 ? (
               <div className="h-full min-h-[220px] flex flex-col items-center justify-center text-center p-6">
                 <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3">
@@ -1007,7 +1015,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                 className="text-emerald-700 hover:text-emerald-800 font-medium flex items-center gap-1 underline decoration-emerald-300 underline-offset-2 shrink-0"
               >
                 <Truck className="w-3 h-3" />
-                Frete
+                Entrega
               </button>
               <button
                 onClick={() => setActiveModal('freight')}
@@ -1058,11 +1066,11 @@ const { useState, useEffect, useRef, useMemo } = React;
             {activeModal === 'debt_settle' && <PdvComponents.DebtSettlement onClose={() => setActiveModal(null)} />}
             {/* Com Flora Standard Website Header adapted for POS */}
             <header className="conflora-site-header sticky top-0 z-20 !flex-col !items-stretch">
-              <div className="mx-auto flex min-w-0 w-full max-w-[1600px] flex-wrap items-center justify-between gap-3">
+              <div className="mx-auto flex min-w-0 w-full max-w-[1600px] flex-wrap items-center gap-3">
                 <PdvComponents.SiteBrand />
 
-                {/* Search Bar + Nex Quantity Multiplier Pill ("Quant: 1") */}
-                <div className="flex items-center gap-2 flex-1 max-w-xl order-3 sm:order-2 w-full sm:w-auto">
+                {/* Search fills the available space; quantity stays beside the user controls. */}
+                <div className="order-4 flex min-w-0 w-full flex-1 items-center sm:order-2 sm:w-auto">
                   <div className="relative flex-1">
                     <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
@@ -1083,10 +1091,12 @@ const { useState, useEffect, useRef, useMemo } = React;
                     )}
                   </div>
 
-                  {/* Exact Nex-inspired "Quant: 1" Pill */}
-                  <div
+                </div>
+
+                {/* Exact Nex-inspired "Quant: 1" Pill */}
+                <div
+                    className="order-2 flex shrink-0 items-center bg-white border border-slate-300 rounded-full px-2.5 py-1.5 shadow-xs sm:order-3"
                     title="Multiplicador de quantidade para o próximo item clicado"
-                    className="flex items-center bg-white border border-slate-300 rounded-full px-2.5 py-1.5 shadow-xs shrink-0"
                   >
                     <span className="text-xs font-semibold text-slate-500 mr-1">
                       Quant:
@@ -1113,11 +1123,10 @@ const { useState, useEffect, useRef, useMemo } = React;
                     >
                       <Plus className="w-3 h-3" />
                     </button>
-                  </div>
                 </div>
 
                 {/* Right Status Actions */}
-                <div className="order-2 ml-auto flex items-center gap-2 sm:order-3">
+                <div className="order-3 ml-auto flex items-center gap-2 sm:order-4">
                   <div className="max-w-36 text-right sm:max-w-52">
                     <p className="truncate text-xs font-extrabold text-slate-800">{currentUser.name || currentUser.email}</p>
                     <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">{currentUser.role}</p>
@@ -1138,7 +1147,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                 <button type="button" className={shortcutButtonClass} disabled={cart.length === 0} onClick={() => setActiveModal('pay')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F2</kbd><span>Pagar</span></button>
                 <button type="button" className={shortcutButtonClass} onClick={() => setActiveModal('discount')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F3</kbd><span>Desconto</span></button>
                 <button type="button" className={shortcutButtonClass} onClick={() => setActiveModal('queue')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F4</kbd><span>Comandas e caixa</span></button>
-                <button type="button" className={shortcutButtonClass} onClick={() => setActiveModal('freight')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F9</kbd><span>Frete</span></button>
+                <button type="button" className={shortcutButtonClass} onClick={() => setActiveModal('freight')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F9</kbd><span>Entrega</span></button>
               </nav>
 
               {/* Com Flora Category Pills Row */}
@@ -1291,7 +1300,7 @@ const { useState, useEffect, useRef, useMemo } = React;
 
               {/* RIGHT SECTION (1/3 - 4 Columns): Real-Time Cashier Receipt Panel */}
               {deviceView !== 'mobile-preview' && (
-                <aside className="hidden md:block md:col-span-4 sticky top-28 h-[calc(100vh-130px)]">
+                <aside className="hidden md:block md:col-span-4 sticky top-4 h-[calc(100vh-240px)] min-h-[360px]">
                   {renderCashierPanel()}
                 </aside>
               )}
@@ -1554,7 +1563,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                       <p>{distinctItemsCount} itens ({totalUnitsCount} un.)</p>
                       <p className="font-bold text-emerald-300">{orderType === 'DELIVERY' ? '🛵 Entrega' : '🏪 Balcão'}</p>
                       {discountPercent > 0 && <p>Desc: -{discountPercent}%</p>}
-                      {orderType === 'DELIVERY' && <p>Frete: {formatBRL(freightValue)}</p>}
+                      {orderType === 'DELIVERY' && <p>Entrega: {formatBRL(freightValue)}</p>}
                     </div>
                   </div>
 
@@ -1731,7 +1740,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                 <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-xl">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-extrabold text-slate-900">
-                      Taxa de Entrega / Frete (F9)
+                      Taxa de entrega (F9)
                     </h3>
                     <button
                       onClick={() => setActiveModal(null)}
@@ -1750,7 +1759,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                           ? 'bg-[#109E46] text-white border-[#109E46]'
                           : 'border-slate-200 text-slate-700 hover:bg-slate-50')}
                       >
-                        {val === 0 ? 'Sem frete' : ('R$ ' + val)}
+                        {val === 0 ? 'Sem entrega' : ('R$ ' + val)}
                       </button>
                     ))}
                   </div>
@@ -1771,7 +1780,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                     onClick={() => setActiveModal(null)}
                     className={primaryActionButtonClass + ' w-full px-4 py-3 text-sm'}
                   >
-                    Salvar Frete
+                    Salvar entrega
                   </button>
                 </div>
               )}
