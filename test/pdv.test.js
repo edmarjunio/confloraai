@@ -89,6 +89,102 @@ test('Pix never trusts webhook amounts, altered bank values or manual confirmati
   assert.equal((await s.repository.read('orders', order.id)).status, 'AWAITING_PIX');
 });
 
+test('online Pix is confirmed by Sicredi, deducts once, and an expired Pix releases its reservation', async () => {
+  const s = setup();
+  const txid = 'A'.repeat(32);
+  const webOrder = await s.base.createDirectOrder({
+    id: 'online-pix-order', source: 'WEB_CATALOG', paymentMethod: 'PIX',
+    paymentStatus: 'PENDING', status: 'AWAITING_PIX',
+    pixData: { txid, provider: 'SICREDI', pixCopiaECola: 'fixed-code' },
+    total: 20, items: [{ productId: 'plant', name: 'Muda', quantity: 2, price: 10 }],
+    createdBy: actor(seller), customerName: 'Cliente Online', customerPhone: '5564999991234',
+  }, { reserveInventory: true });
+  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 2);
+  s.pix.checkReceivedPayment = async (endToEndId) => ({ isPaid: true, raw: {
+    txid, endToEndId, chave: 'pix-key', valor: '20.00', devolucoes: [],
+  } });
+  const endToEndId = 'E' + '3'.repeat(31);
+  await Promise.all([s.service.handlePix(txid, endToEndId), s.service.handlePix(txid, endToEndId)]);
+  const paid = await s.base.getOrderById(webOrder.id);
+  assert.equal(paid.status, 'CONFIRMED');
+  assert.ok(paid.completedAt);
+  assert.equal(paid.receivedBy.id, seller.id);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
+  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 0);
+
+  const expired = await s.service.create({ ...s.input, requestId: randomUUID(), paymentMethod: 'PIX' }, seller);
+  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 2);
+  await assert.rejects(s.base.adjustStock({
+    productId: 'plant', operation: 'SET', quantity: 1,
+    reason: 'Contagem abaixo da reserva ativa', requestId: randomUUID(),
+  }), /reservadas por pedidos/);
+  await s.repository.transaction(async (tx) => {
+    const order = await tx.get('orders', expired.id);
+    tx.set('orders', order.id, { ...order, pixExpiresAt: new Date(Date.now() - 1000).toISOString() });
+  });
+  await s.service.expirePixOrders();
+  const cancelled = await s.repository.read('orders', expired.id);
+  assert.equal(cancelled.status, 'CANCELLED');
+  assert.equal(cancelled.paymentStatus, 'EXPIRED');
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
+  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 0);
+  const nextSale = await s.service.create({ ...s.input, requestId: randomUUID(), paymentMethod: 'DINHEIRO' }, cashier);
+  assert.equal(nextSale.status, 'CONFIRMED');
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 16);
+});
+
+test('Pix received after cancellation is reported for reconciliation without confirming or deducting stock', async () => {
+  const s = setup();
+  const txid = 'C'.repeat(32);
+  const order = await s.base.createDirectOrder({
+    id: 'late-online-pix', source: 'WEB_CATALOG', paymentMethod: 'PIX',
+    paymentStatus: 'PENDING', status: 'AWAITING_PIX',
+    pixData: { txid, provider: 'SICREDI' }, total: 20,
+    items: [{ productId: 'plant', name: 'Muda', quantity: 2, price: 10 }],
+    createdBy: actor(seller), customerName: 'Cliente Online', customerPhone: '5564999991234',
+  }, { reserveInventory: true });
+  await s.repository.transaction(async (tx) => {
+    tx.set('orders', order.id, { ...(await tx.get('orders', order.id)), pixExpiresAt: new Date(Date.now() - 1000).toISOString() });
+  });
+  s.pix.checkReceivedPayment = async (endToEndId) => ({ isPaid: true, raw: {
+    txid, endToEndId, chave: 'pix-key', valor: '20.00', devolucoes: [],
+  } });
+  const endToEndId = 'E' + '4'.repeat(31);
+  await s.service.handlePix(txid, endToEndId);
+  const cancelled = await s.base.getOrderById(order.id);
+  assert.equal(cancelled.status, 'CANCELLED');
+  assert.equal(cancelled.stockDeducted, undefined);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
+  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 0);
+  assert.equal((await s.repository.read('pdv_pix_late_payments', `${txid}-${endToEndId}`)).status, 'NEEDS_RECONCILIATION');
+  assert.ok(s.sent.some((message) => message.text?.includes('PIX RECEBIDO APÓS EXPIRAÇÃO')));
+  assert.ok(s.sent.some((message) => message.text?.includes('PAGAMENTO EM CONCILIAÇÃO')));
+});
+
+test('manual online Pix confirmation records cashier proof and deducts stock once', async () => {
+  const s = setup();
+  const txid = 'B'.repeat(32);
+  const order = await s.base.createDirectOrder({
+    id: 'manual-online-pix', source: 'WEB_CATALOG', paymentMethod: 'PIX',
+    paymentStatus: 'PENDING', status: 'AWAITING_PIX',
+    pixData: { txid, provider: 'SICREDI' }, total: 10,
+    items: [{ productId: 'plant', name: 'Muda', quantity: 1, price: 10 }],
+    createdBy: actor(seller), customerName: 'Cliente',
+  }, { reserveInventory: true });
+  const confirm = () => s.base.confirmOrderPayment(order.id, {
+    verifiedVia: 'CAIXA_PIX_MANUAL', paymentTransactionId: `MANUAL-${randomUUID()}`,
+    paymentAmount: 10, pixTxid: txid, receivedBy: actor(cashier),
+    manualProofNote: 'Comprovante conferido no caixa.',
+  });
+  const results = await Promise.all([confirm(), confirm()]);
+  assert.equal(results.filter((result) => result.alreadyConfirmed).length, 1);
+  const paid = await s.base.getOrderById(order.id);
+  assert.equal(paid.receivedBy.id, cashier.id);
+  assert.equal(paid.manualPixConfirmation.proofNote, 'Comprovante conferido no caixa.');
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 19);
+  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 0);
+});
+
 test('fiado is not paid; concurrent debt settlements cannot overdraw or change sales/stock', async () => {
   const s = setup();
   await assert.rejects(s.service.create({ ...s.input, paymentMethod: 'FIADO' }, seller), /cadastrado/);

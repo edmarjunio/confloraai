@@ -106,6 +106,32 @@ class TaskQueueClient {
       throw error;
     }
   }
+
+  async enqueuePixExpiration(orderId, delaySeconds) {
+    if (!this.client || !this.queuePath || !config.tasks.taskSecret || !config.tasks.serviceUrl) {
+      return { inProcess: true };
+    }
+    const safeOrderId = String(orderId || '').replace(/[^a-zA-Z0-9_-]/g, '');
+    if (!safeOrderId) throw new Error('Pedido inválido para agendar expiração Pix.');
+    const url = `${config.tasks.serviceUrl}/tasks/expire-pix`;
+    const scheduleTime = { seconds: Math.floor(Date.now() / 1000) + Math.max(300, Number(delaySeconds) || 3600) + 2 };
+    const httpRequest = {
+      httpMethod: 'POST',
+      url,
+      headers: { 'Content-Type': 'application/json', 'X-Conflora-Task-Secret': config.tasks.taskSecret },
+      body: Buffer.from(JSON.stringify({ orderId: safeOrderId })).toString('base64'),
+    };
+    try {
+      const name = `${this.queuePath}/tasks/pix-expiration-${safeOrderId}`;
+      const [response] = await this.client.createTask({ parent: this.queuePath, task: { name, httpRequest, scheduleTime } });
+      Logger.info(`Expiração Pix agendada para o pedido ${safeOrderId}.`);
+      return response;
+    } catch (error) {
+      if (error.code === 6 || error.code === 'ALREADY_EXISTS') return { alreadyScheduled: true };
+      Logger.error('Falha ao agendar expiração Pix no Cloud Tasks', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = {

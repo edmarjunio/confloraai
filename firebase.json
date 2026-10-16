@@ -19,6 +19,27 @@
         }
       },
       {
+        "source": "/tasks/**",
+        "run": {
+          "serviceId": "confloraai",
+          "region": "southamerica-east1"
+        }
+      },
+      {
+        "source": "/webhooks/**",
+        "run": {
+          "serviceId": "confloraai",
+          "region": "southamerica-east1"
+        }
+      },
+      {
+        "source": "/internal/**",
+        "run": {
+          "serviceId": "confloraai",
+          "region": "southamerica-east1"
+        }
+      },
+      {
         "source": "/caixa",
         "run": {
           "serviceId": "confloraai",

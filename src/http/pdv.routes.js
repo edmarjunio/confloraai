@@ -2,6 +2,7 @@ const { timingSafeEqual, randomUUID } = require('node:crypto');
 const { PdvRepository } = require('../orders/pdv.repository');
 const { PdvService, actor, requestId, normalizePhone } = require('../orders/pdv.service');
 const { formatOrderReceipt } = require('../orders/receipt.util');
+const { isPixOrderExpired } = require('../orders/pix-expiration');
 const Logger = require('../shared/logger');
 const { setInterval } = require('node:timers');
 
@@ -61,9 +62,9 @@ function paymentTotals(orders, settlements) {
   return totals;
 }
 
-function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone }) {
+function installPdvRoutes(app, { repository, pix, whatsapp, taskQueueClient = null, ownerPhone }) {
   const store = new PdvRepository(repository);
-  const service = new PdvService({ repository: store, pix, whatsapp, ownerPhone });
+  const service = new PdvService({ repository: store, pix, whatsapp, taskQueueClient, ownerPhone });
   const route = (handler) => async (req, res) => {
     try { await handler(req, res); }
     catch (error) { Logger.warn('Operação PDV não concluída', { error: error.message }); res.status(400).json({ error: error.message }); }
@@ -122,15 +123,21 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone }) {
     res.json(approval);
   }));
   app.get('/api/caixa/orders', route(async (req, res) => {
-    const orders = await store.list('orders', 'source', 'PDV');
+    const [pdvOrders, onlineOrders] = await Promise.all([
+      store.list('orders', 'source', 'PDV'),
+      store.list('orders', 'source', 'WEB_CATALOG'),
+    ]);
+    const orders = [...new Map([...pdvOrders, ...onlineOrders].map((order) => [order.id, order])).values()];
     const range = reportRange(req.query);
     const isAdmin = req.user.role === 'ADMIN';
     const canViewPersonalOrder = (order) => isAdmin || order.createdBy?.id === req.user.id || order.receivedBy?.id === req.user.id;
     const canViewOpenOrder = (order) => canViewPersonalOrder(order) || (req.user.role === 'CAIXA' && !order.completedAt && order.status !== 'CANCELLED');
     const openOrders = orders.filter((order) => !order.completedAt && order.status !== 'CANCELLED' &&
       canViewOpenOrder(order));
-    const pendingConfirmation = openOrders.filter((order) => order.status === 'AWAITING_CASHIER');
-    const pendingPayment = openOrders.filter((order) => ['CREATING_PIX', 'AWAITING_PIX'].includes(order.status));
+    const pendingConfirmation = openOrders.filter((order) => order.paymentMethod !== 'PIX'
+      && ['AWAITING_CASHIER', 'PENDING'].includes(order.status));
+    const pendingPayment = openOrders.filter((order) => order.paymentMethod === 'PIX'
+      && ['CREATING_PIX', 'AWAITING_PIX', 'PENDING'].includes(order.status));
     const history = orders.filter((order) => canViewPersonalOrder(order) && isWithinRange(order.paidAt || order.completedAt || order.createdAt, range));
     const completed = history.filter((order) => order.completedAt && order.status !== 'CANCELLED');
     const confirmed = completed.filter((order) => order.paymentStatus === 'ON_ACCOUNT');
@@ -177,20 +184,112 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone }) {
       closing,
     });
   }));
+  app.get('/api/caixa/orders/stream', (req, res) => {
+    res.status(200);
+    res.set({
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.flushHeaders?.();
+    let closed = false;
+    let isInitialSnapshot = true;
+    let fallbackTimer = null;
+    let heartbeat = null;
+    let unsubscribe = null;
+    const writeEvent = (name, payload = {}) => {
+      if (!closed) res.write(`event: ${name}\ndata: ${JSON.stringify(payload)}\n\n`);
+    };
+    const startFallback = () => {
+      if (fallbackTimer || closed) return;
+      fallbackTimer = setInterval(() => writeEvent('orders-changed', { source: 'fallback' }), 2500);
+    };
+    writeEvent('connected', { realtime: Boolean(repository.firestore && !repository._firestoreClientDisabled) });
+    heartbeat = setInterval(() => { if (!closed) res.write(': heartbeat\n\n'); }, 20000);
+    unsubscribe = store.watchPendingOrderChanges((changes) => {
+      if (isInitialSnapshot) { isInitialSnapshot = false; return; }
+      if (changes.length) writeEvent('orders-changed', { source: 'firestore' });
+    }, (error) => {
+      Logger.warn('Listener de comandas indisponível; usando atualização de contingência.', { error: error.message });
+      unsubscribe?.();
+      unsubscribe = null;
+      startFallback();
+    });
+    if (!unsubscribe) startFallback();
+    req.on('close', () => {
+      closed = true;
+      unsubscribe?.();
+      if (fallbackTimer) clearInterval(fallbackTimer);
+      if (heartbeat) clearInterval(heartbeat);
+    });
+  });
   const findOrder = async (req) => {
     const order = await store.read('orders', req.params.id);
     const canViewOrder = order && (
       req.user.role === 'ADMIN' || order.createdBy?.id === req.user.id || order.receivedBy?.id === req.user.id ||
       (req.user.role === 'CAIXA' && !order.completedAt && order.status !== 'CANCELLED')
     );
-    if (!order || order.source !== 'PDV' || !canViewOrder) { throw new Error('Comanda não encontrada para este usuário.'); }
+    if (!order || !['PDV', 'WEB_CATALOG'].includes(order.source) || !canViewOrder) { throw new Error('Comanda não encontrada para este usuário.'); }
     return order;
   };
   app.get('/api/caixa/orders/:id', route(async (req, res) => res.json(await findOrder(req))));
   app.post('/api/caixa/orders/:id/confirm', requireCashier, route(async (req, res) => {
     const existing = await findOrder(req);
     const paymentMethod = String(req.body.paymentMethod || existing.paymentMethod || '').toUpperCase();
+    if (existing.source === 'WEB_CATALOG') {
+      if (existing.completedAt) return res.json({ success: true, order: existing, alreadyConfirmed: true });
+      if (existing.status === 'CANCELLED') throw new Error('Pedido cancelado não pode ser recebido.');
+      if (existing.paymentMethod === 'PIX') {
+        if (req.body.manualPix !== true) throw new Error('Pix online é confirmado pelo Sicredi. Se o cliente mostrar o comprovante, use a confirmação manual auditada.');
+        const proofNote = String(req.body.proofNote || '').trim().slice(0, 500);
+        if (proofNote.length < 5) throw new Error('Descreva a conferência do comprovante Pix antes de confirmar.');
+        const order = await repository.confirmOrderPayment(existing.id, {
+          verifiedVia: 'CAIXA_PIX_MANUAL',
+          paymentTransactionId: `MANUAL-${randomUUID()}`,
+          paymentAmount: existing.total,
+          pixTxid: existing.pixData?.txid || '',
+          receivedBy: actor(req.user),
+          manualProofNote: proofNote,
+        });
+        await store.transaction(async (tx) => {
+          for (const kind of ['customer-paid', 'owner-paid']) {
+            const id = `${order.id}-${kind}`;
+            tx.set('pdv_outbox', id, { id, kind, orderId: order.id, status: 'PENDING', attempts: 0 });
+          }
+        });
+        await service.deliver(`${order.id}-customer-paid`);
+        await service.deliver(`${order.id}-owner-paid`);
+        return res.json({ success: true, order, receiptText: formatOrderReceipt(order), manualPix: true });
+      }
+      const allowed = ['DINHEIRO', 'CARTAO', 'CARD', 'DEBITO', 'CREDITO'];
+      if (!allowed.includes(paymentMethod)) throw new Error('Forma de recebimento não permitida para pedido online.');
+      const receivedAmount = req.body.receivedAmount === null || req.body.receivedAmount === undefined || req.body.receivedAmount === ''
+        ? null : Number(req.body.receivedAmount);
+      const order = await repository.confirmOrderPayment(existing.id, {
+        verifiedVia: 'CAIXA_MANUAL',
+        paymentMethod,
+        receivedBy: actor(req.user),
+        receivedAmount,
+      });
+      await store.transaction(async (tx) => {
+        const id = `${order.id}-final-receipt`;
+        tx.set('pdv_outbox', id, { id, kind: 'receipt', orderId: order.id, status: 'PENDING', attempts: 0 });
+      });
+      await service.deliver(`${order.id}-final-receipt`);
+      return res.json({ success: true, order, receiptText: formatOrderReceipt(order) });
+    }
     if (paymentMethod === 'PIX') {
+      if (req.body.manualPix === true) {
+        const proofNote = String(req.body.proofNote || '').trim().slice(0, 500);
+        if (proofNote.length < 5) throw new Error('Descreva a conferência do comprovante Pix antes de confirmar.');
+        const order = await store.receive(existing.id, actor(req.user), {
+          verifiedVia: 'CAIXA_PIX_MANUAL', txid: existing.pixData?.txid,
+          amountMinor: Math.round(existing.total * 100), proofNote,
+        }, null, null, { sendFinalReceipt: true });
+        await service.deliver(`${order.id}-final-receipt`);
+        return res.json({ success: true, order, receiptText: formatOrderReceipt(order), manualPix: true });
+      }
       const order = await service.requestPixAtCashier(existing.id, req.user);
       return res.status(202).json({ success: true, awaitingPayment: true, order, receiptText: formatOrderReceipt(order) });
     }
@@ -211,10 +310,9 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone }) {
     await service.deliver(`${order.id}-receipt`);
     res.json({ success: true, delivery: await store.read('pdv_outbox', `${order.id}-receipt`) });
   }));
-  app.post('/api/caixa/orders/:id/cancel', route(async (req, res) => {
+  app.post('/api/caixa/orders/:id/cancel', requireCashier, route(async (req, res) => {
     const order = await findOrder(req);
-    if (order.paymentMethod === 'PIX') { return res.status(409).json({ error: 'Cobranças Pix exigem cancelamento e conciliação no Sicredi.' }); }
-    res.json(await repository.cancelOrder(req.params.id, String(req.body.reason || '')));
+    res.json(await store.cancelOrder(req.params.id, String(req.body.reason || ''), actor(req.user)));
   }));
   app.get('/api/caixa/customers/:key/debts', requireCashier, route(async (req, res) => {
     const customer = await store.read('customers', req.params.key);
@@ -265,10 +363,31 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone }) {
   // A scheduler can call this protected endpoint when Cloud Run scales to zero.
   app.post('/internal/pdv/retry-notifications', async (req, res) => {
     if (!secureEqual(req.headers.authorization, process.env.PDV_WORKER_SECRET ? `Bearer ${process.env.PDV_WORKER_SECRET}` : '')) { return res.sendStatus(401); }
-    try { await service.retryMessages(); res.sendStatus(200); } catch { res.sendStatus(503); }
+    try { await service.retryMessages(); await service.expirePixOrders(); res.sendStatus(200); } catch { res.sendStatus(503); }
+  });
+  app.post('/internal/pdv/expire-pix', async (req, res) => {
+    if (!secureEqual(req.headers.authorization, process.env.PDV_WORKER_SECRET ? `Bearer ${process.env.PDV_WORKER_SECRET}` : '')) { return res.sendStatus(401); }
+    try { await service.expirePixOrders(); res.sendStatus(200); } catch { res.sendStatus(503); }
+  });
+  app.post('/tasks/expire-pix', async (req, res) => {
+    const taskSecret = process.env.TASK_SECRET || '';
+    if (!secureEqual(req.headers['x-conflora-task-secret'], taskSecret)) return res.sendStatus(401);
+    const orderId = String(req.body?.orderId || '');
+    if (!orderId || orderId.includes('/')) return res.sendStatus(400);
+    try {
+      const order = await store.read('orders', orderId);
+      if (!order || order.status === 'CANCELLED' || order.completedAt || order.paymentTransactionId) return res.sendStatus(200);
+      if (order.paymentMethod !== 'PIX') return res.sendStatus(200);
+      if (!isPixOrderExpired(order)) return res.sendStatus(503);
+      await service.expirePixOrder(orderId);
+      return res.sendStatus(200);
+    } catch (error) {
+      Logger.warn('Falha ao expirar pedido Pix agendado.', { orderId, error: error.message });
+      return res.sendStatus(503);
+    }
   });
   if (process.env.NODE_ENV !== 'test') {
-    const timer = setInterval(() => service.retryMessages().catch((error) => Logger.warn('Fila WhatsApp pendente', { error: error.message })), 30000);
+    const timer = setInterval(() => Promise.all([service.retryMessages(), service.expirePixOrders()]).catch((error) => Logger.warn('Fila PDV pendente', { error: error.message })), 15000);
     timer.unref();
   }
   app.locals.pdv = { service, store };
