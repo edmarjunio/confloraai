@@ -576,6 +576,7 @@ function renderAdminHtml(storeConfig) {
           <select id="uRole" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;">
             <option value="CLIENTE">CLIENTE (Perfil de Compras da Loja)</option>
             <option value="CAIXA">CAIXA (Acesso Somente ao Caixa e Vendas de Hoje)</option>
+            <option value="VENDEDOR">VENDEDOR (Comandas e Pix)</option>
             <option value="ADMIN">ADMIN (Acesso Total: Analytics, Aprovação Diff, Produtos)</option>
           </select>
         </div>
@@ -1145,6 +1146,7 @@ function renderAdminHtml(storeConfig) {
           <td>
             <select onchange="changeUserRole('\${u.id}', this.value)" style="padding:4px 8px; border-radius:6px; font-weight:700; font-size:12px; border:1px solid #cbd5e1; background:\${role === 'ADMIN' ? '#dcfce7' : (role === 'CAIXA' ? '#e0f2fe' : '#f8fafc')}; color:\${role === 'ADMIN' ? '#166534' : (role === 'CAIXA' ? '#0369a1' : '#475569')}; cursor:pointer;" \${u.id === 'usr-edmar' ? 'disabled' : ''}>
               <option value="CLIENTE" \${role === 'CLIENTE' ? 'selected' : ''}>👤 CLIENTE (Padrão)</option>
+              <option value="VENDEDOR" \${role === 'VENDEDOR' ? 'selected' : ''}>VENDEDOR (Comandas)</option>
               <option value="CAIXA" \${role === 'CAIXA' ? 'selected' : ''}>🛒 CAIXA (Balcão)</option>
               <option value="ADMIN" \${role === 'ADMIN' ? 'selected' : ''}>👑 ADMIN (Total)</option>
             </select>

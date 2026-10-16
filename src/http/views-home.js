@@ -223,63 +223,6 @@ function renderHomeHtml() {
     }
     .status-pill-btn:hover { background: #047857; color: white; }
 
-    /* 6. BANNER DE CUPOM DE DESCONTO NO TOPO */
-    .promo-banner {
-      width: 100%;
-      background: linear-gradient(90deg, #166534 0%, #15803d 50%, #14532d 100%);
-      color: white;
-      padding: 10px 16px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-      border-bottom: 2px solid #86efac;
-      flex-wrap: wrap;
-    }
-    .promo-banner-content {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-    .promo-badge {
-      background: #facc15;
-      color: #78350f;
-      font-size: 11px;
-      font-weight: 900;
-      padding: 3px 8px;
-      border-radius: 6px;
-      letter-spacing: 0.5px;
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.15);
-    }
-    .promo-text {
-      font-size: 13px;
-      font-weight: 600;
-    }
-    .promo-apply-btn {
-      background: #ffffff;
-      color: #14532d;
-      border: none;
-      padding: 6px 14px;
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: 800;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.12);
-      transition: all 0.15s;
-      white-space: nowrap;
-    }
-    .promo-apply-btn:hover {
-      background: #f0fdf4;
-      transform: scale(1.03);
-    }
-
     /* CONTAINER PRINCIPAL DA APLICAÇÃO */
     .app-container {
       width: 100%;
@@ -2347,9 +2290,6 @@ function renderHomeHtml() {
         'header.adminPortal': '⚙️ Painel da Equipe',
         'header.loginButton': '👤 Entrar',
         'header.systemStatus': '📡 Status',
-        'promo.badge': '🎉 PROMOÇÃO',
-        'promo.text': 'Use o cupom <strong>CONFLORA10</strong> para 10% OFF no seu primeiro pedido!',
-        'promo.applyButton': 'Usar Cupom',
         'category.all': '🌿 Todas',
         'sort.nameAsc': 'Ordem: A a Z',
         'sort.nameDesc': 'Ordem: Z a A',
@@ -2410,9 +2350,6 @@ function renderHomeHtml() {
         'header.adminPortal': '⚙️ Staff Portal',
         'header.loginButton': '👤 Sign In',
         'header.systemStatus': '📡 Status',
-        'promo.badge': '🎉 SPECIAL OFFER',
-        'promo.text': 'Use coupon <strong>CONFLORA10</strong> for 10% OFF your first order!',
-        'promo.applyButton': 'Use Coupon',
         'category.all': '🌿 All',
         'sort.nameAsc': 'Order: A to Z',
         'sort.nameDesc': 'Order: Z to A',
@@ -2473,9 +2410,6 @@ function renderHomeHtml() {
         'header.adminPortal': '⚙️ Panel de Equipo',
         'header.loginButton': '👤 Acceder',
         'header.systemStatus': '📡 Estado',
-        'promo.badge': '🎉 PROMOCIÓN',
-        'promo.text': '¡Usa el cupón <strong>CONFLORA10</strong> para un 10% de descuento!',
-        'promo.applyButton': 'Usar Cupón',
         'category.all': '🌿 Todas',
         'sort.nameAsc': 'Orden: A a Z',
         'sort.nameDesc': 'Orden: Z a A',
@@ -3502,13 +3436,6 @@ function renderHomeHtml() {
     }
 
     // 6. SISTEMA DE CUPOM DE DESCONTO
-    function applyPromoCouponDirect(code) {
-      const input = document.getElementById('couponInput');
-      if (input) input.value = code;
-      applyCoupon(code);
-      scrollToCart();
-    }
-
     function applyCouponFromInput() {
       const input = document.getElementById('couponInput');
       const code = (input ? input.value : '').trim().toUpperCase();

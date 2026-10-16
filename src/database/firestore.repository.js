@@ -1274,6 +1274,9 @@ class FirestoreRepository {
     if (!order) {
       throw new Error('Pedido não encontrado.');
     }
+    if (order.source === 'PDV') {
+      throw new Error('Comandas do PDV devem ser recebidas pelo fluxo autenticado do caixa ou webhook Sicredi.');
+    }
 
     const now = new Date().toISOString();
     const updateData = {
@@ -2968,7 +2971,7 @@ class FirestoreRepository {
       .toUpperCase();
 
     if (
-      !['ADMIN', 'CAIXA', 'CLIENTE'].includes(role)
+      !['ADMIN', 'CAIXA', 'VENDEDOR', 'CLIENTE'].includes(role)
     ) {
       role = 'CLIENTE';
     }
@@ -3141,12 +3144,12 @@ class FirestoreRepository {
       .toUpperCase();
 
     if (
-      !['ADMIN', 'CAIXA', 'CLIENTE'].includes(normalizedRole)
+      !['ADMIN', 'CAIXA', 'VENDEDOR', 'CLIENTE'].includes(normalizedRole)
     ) {
       return {
         success: false,
         error:
-          'Perfil inválido. Escolha ADMIN, CAIXA ou CLIENTE.',
+          'Perfil inválido. Escolha ADMIN, CAIXA, VENDEDOR ou CLIENTE.',
       };
     }
 
@@ -3223,7 +3226,7 @@ class FirestoreRepository {
       };
     }
 
-    if (!['ADMIN', 'CAIXA'].includes(user.role) || !pin ||
+    if (!['ADMIN', 'CAIXA', 'VENDEDOR'].includes(user.role) || !pin ||
       !((user.pin && String(user.pin) === String(pin)) ||
         (user.password && String(user.password) === String(pin)))) {
       return {

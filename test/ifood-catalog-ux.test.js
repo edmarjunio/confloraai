@@ -71,12 +71,12 @@ test('5. UX ESTILO IFOOD COM ADIÇÃO EM 1 CLIQUE E GRID MOBILE 2 COLUNAS', () =
   assert.ok(html.includes('handleProductAddClick'), 'Deve adicionar à sacola em 1 clique');
 });
 
-test('6. SISTEMA DE CUPOM DE DESCONTO', () => {
+test('6. SISTEMA DE CUPOM SEM A FAIXA PROMOCIONAL DE TESTE NO TOPO', () => {
   const html = renderHomeHtml();
 
-  // Banner no topo com botão 'Usar Cupom'
-  assert.ok(html.includes('id="promoBanner"'), 'Deve conter banner de cupom promocional no topo');
-  assert.ok(html.includes('applyPromoCouponDirect'), 'Deve conter função de aplicação em 1 toque do cupom');
+  // O cupom continua disponível na sacola, sem faixa promocional de teste no topo.
+  assert.ok(!html.includes('id="promoBanner"'), 'Não deve conter a faixa promocional no topo');
+  assert.ok(!html.includes('promo-banner'), 'Não deve conter estilos da faixa promocional');
 
   // Input de cupom na sacola e validação
   assert.ok(html.includes('id="couponInput"'), 'Deve conter input de cupom');

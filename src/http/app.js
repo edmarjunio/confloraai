@@ -916,6 +916,7 @@ function createApp({
   storeRepository,
   storeAssistant,
   mercadoPagoClient,
+  sicrediClient,
 }) {
   const express = getExpress();
   if (!express) { throw new Error('Express module not available'); }
@@ -926,7 +927,7 @@ function createApp({
       webhookSecret: config.mercadoPago.webhookSecret,
     });
   messageService.mercadoPagoClient = payments;
-  const sicrediPixClient = new SicrediPixClient();
+  const sicrediPixClient = sicrediClient || new SicrediPixClient();
   messageService.sicrediPixClient = sicrediPixClient;
   const app = express();
   if (config.appEnvironment === 'dev') {
@@ -1730,6 +1731,14 @@ function createApp({
     }
   });
 
+  const { installPdvRoutes } = require('./pdv.routes');
+  installPdvRoutes(app, {
+    repository: messageService.firestoreRepo, pix: sicrediPixClient,
+    whatsapp: messageService.whatsappClient,
+    ownerPhone: process.env.OWNER_WHATSAPP_NUMBER || config.whatsapp?.ownerNumber || '',
+  });
+  app.use('/pdv-assets', express.static(require('node:path').resolve(__dirname, '../../public/pdv')));
+
   // --- API DO CAIXA & PDV RÁPIDO (CELULAR & BALCÃO) ---
   app.get('/api/caixa/products', async (_req, res) => {
     try {
@@ -1753,9 +1762,6 @@ function createApp({
 
   app.get('/api/caixa/customers', async (req, res) => {
     try {
-      if (!req.user) {
-        req.user = { id: 'op-caixa', name: req.headers['x-operator-name'] || 'Operador Caixa', role: 'CAIXA' };
-      }
       const customers = await messageService.firestoreRepo.searchCustomers(req.query.q, 10);
       res.status(200).json(customers);
     } catch (err) {
@@ -1765,9 +1771,6 @@ function createApp({
 
   app.post('/api/caixa/customers', async (req, res) => {
     try {
-      if (!req.user) {
-        req.user = { id: 'op-caixa', name: req.headers['x-operator-name'] || 'Operador Caixa', role: 'CAIXA' };
-      }
       const name = String(req.body?.name || '').trim().slice(0, 100);
       const rawPhone = String(req.body?.phone || '').trim();
       const phoneDigits = rawPhone.replace(/\D/g, '');
@@ -1793,556 +1796,6 @@ function createApp({
 
       await messageService.firestoreRepo.saveCustomerProfile(customerKey, customerData);
       res.status(201).json({ success: true, customer: { id: customerKey, ...customerData } });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.use('/api/caixa', (req, res, next) => {
-    if (!req.user) {
-      req.user = { id: 'op-caixa', name: req.headers['x-operator-name'] || 'Operador Caixa', role: 'CAIXA' };
-    }
-    if (!req.user.role || !['ADMIN', 'CAIXA'].includes(req.user.role)) {
-      return res.status(403).json({ error: 'Acesso permitido somente para CAIXA ou ADMIN.' });
-    }
-    next();
-  });
-
-  app.post('/api/caixa/orders', async (req, res) => {
-    try {
-      const {
-        customerName,
-        customerPhone,
-        items,
-        paymentMethod,
-        notes,
-        operatorName,
-        discountPercent = 0,
-        orderType = 'PICKUP',
-        deliveryAddress = '',
-        freightValue = 0,
-      } = req.body;
-
-      if (!Array.isArray(items) || items.length === 0) {
-        return res.status(400).json({ error: 'Nenhum item adicionado à venda.' });
-      }
-
-      const requestedDiscountPercent = Number(discountPercent);
-      if (!Number.isFinite(requestedDiscountPercent) || requestedDiscountPercent < 0 || requestedDiscountPercent > 100) {
-        return res.status(400).json({ error: 'Percentual de desconto inválido.' });
-      }
-
-      const products = await messageService.firestoreRepo.getAllProducts();
-      const productsById = new Map(products.map((product) => [String(product.id), product]));
-      const normalizedItems = items.map((item) => {
-        const product = productsById.get(String(item.productId));
-        const quantity = Number(item.quantity);
-        if (!product || product.status === 'INATIVO' || product.isAvailable === false || !Number.isFinite(quantity) || quantity <= 0) {
-          throw new Error('Produto ou quantidade inválida na venda.');
-        }
-        return {
-          productId: String(product.id),
-          name: product.name || product.descricao || 'Produto',
-          price: Number(product.price || product.valor_num || 0),
-          quantity,
-          unit: product.unit || product.unidade || 'UN',
-        };
-      });
-      const payMethod = (paymentMethod || 'DINHEIRO').toUpperCase();
-      const validMethods = ['PIX', 'DEBITO', 'CREDITO', 'CARTAO', 'DINHEIRO', 'FIADO'];
-      if (!validMethods.includes(payMethod)) {
-        return res.status(400).json({ error: 'Forma de pagamento inválida. Aceito: ' + validMethods.join(', ') });
-      }
-
-      const isPix = payMethod === 'PIX';
-      const isFiado = payMethod === 'FIADO';
-      const status = isPix ? 'AWAITING_PIX' : 'CONFIRMED';
-      const subtotal = Number(normalizedItems.reduce((sum, item) => sum + item.price * item.quantity, 0).toFixed(2));
-      const discountAmount = Number((subtotal * requestedDiscountPercent / 100).toFixed(2));
-      const normalizedFreight = Math.max(0, Number(freightValue) || 0);
-      const total = Number((subtotal - discountAmount + normalizedFreight).toFixed(2));
-      const resolvedCustomerName = customerName || (customerPhone ? `Cliente ${String(customerPhone).slice(-4)}` : 'Cliente Balcão');
-      const resolvedOperatorName = operatorName || req.user?.name || 'Colaborador';
-      const sellerName = String(req.body.sellerName || req.body.createdBy?.name || resolvedOperatorName).trim();
-      const cashierName = String(req.body.cashierName || req.body.receivedBy?.name || req.user?.name || resolvedOperatorName).trim();
-
-      const createdBy = {
-        id: req.body.sellerId || req.user?.id || 'seller-id',
-        name: sellerName,
-        role: 'VENDEDOR',
-      };
-      const receivedBy = {
-        id: isPix && sellerName === cashierName ? createdBy.id : (req.user?.id || 'cashier-id'),
-        name: isPix && sellerName === cashierName ? sellerName : cashierName,
-        role: isPix ? 'PIX_SICREDI' : 'CAIXA',
-      };
-
-      if (requestedDiscountPercent > 5) {
-        const approval = await messageService.firestoreRepo.createDiscountApproval({
-          customerName: resolvedCustomerName,
-          customerPhone: customerPhone || '',
-          items: normalizedItems,
-          paymentMethod: payMethod,
-          notes: notes || '',
-          operatorName: cashierName,
-          operatorId: req.user?.id || '',
-          requestedBy: req.user?.id || '',
-          requestedByName: req.user?.name || sellerName,
-          subtotal,
-          discountAmount,
-          discountPercent: requestedDiscountPercent,
-          total,
-        });
-        return res.status(202).json({ success: true, approvalRequired: true, approval });
-      }
-
-      const ticketNumber = String(Math.floor(100 + Math.random() * 900));
-      const orderId = randomUUID();
-      let sicrediCharge = null;
-
-      if (isPix) {
-        try {
-          sicrediCharge = await sicrediPixClient.createCharge({
-            amount: total,
-            customerName: resolvedCustomerName,
-            customerCpfCnpj: req.body.customerCpf || '',
-            ticketNumber,
-            description: `Conflora Pedido #${ticketNumber}`,
-          });
-        } catch (sicrediErr) {
-          Logger.warn('Erro ao gerar cobrança Pix Sicredi, gerando via EMV local', { error: sicrediErr.message });
-        }
-      }
-
-      const order = await messageService.firestoreRepo.createManualOrder({
-        customerName: resolvedCustomerName || `Balcão #${ticketNumber}`,
-        customerPhone: customerPhone || '',
-        items: normalizedItems,
-        paymentMethod: payMethod,
-        notes,
-        operatorName: cashierName,
-        operatorId: req.user?.id || '',
-        sellerName,
-        cashierName,
-        createdBy,
-        receivedBy,
-        ticketNumber,
-        orderId,
-        pixCode: sicrediCharge?.pixCopiaECola || '',
-        pixCopiaECola: sicrediCharge?.pixCopiaECola || '',
-        pixData: sicrediCharge,
-        status,
-        discountAmount,
-        discountPercent: requestedDiscountPercent,
-        requirePersistence: isPix,
-        orderType: orderType || 'PICKUP',
-        deliveryAddress: deliveryAddress || '',
-        freightValue: normalizedFreight,
-        total,
-        subtotal,
-      });
-
-      // Se foi FIADO: grava registro de débito na conta do cliente
-      if (isFiado) {
-        const cleanPhoneKey = String(customerPhone || '').replace(/\D/g, '');
-        const custKey = cleanPhoneKey || req.body.customerId || resolvedCustomerName;
-        await messageService.firestoreRepo.recordCustomerDebt({
-          customerKey: custKey,
-          customerName: resolvedCustomerName,
-          customerPhone: customerPhone || '',
-          orderId,
-          ticketNumber,
-          amount: total,
-          operatorName: cashierName,
-          sellerName,
-          notes: notes || 'Venda a prazo / fiado no balcão',
-        }).catch((err) => Logger.warn('Erro ao registrar débito de fiado', { error: err.message }));
-      }
-
-      // Se pagamento confirmado no caixa (não é PIX pendente), baixa o estoque dos itens
-      if (!isPix) {
-        try {
-          await messageService.firestoreRepo.confirmOrderPayment(order.id, {
-            verifiedVia: 'CAIXA_BALCAO',
-            paymentMethod: payMethod,
-            paymentAmount: total,
-            status: 'CONFIRMED',
-            operatorName: cashierName,
-          });
-        } catch (stockErr) {
-          Logger.warn('Aviso ao confirmar pagamento e estoque no caixa', { error: stockErr.message });
-        }
-      }
-
-      // Formata recibo com espelho do painel direito, Pix e identificação vendedor/caixa
-      const receiptText = formatOrderReceipt({
-        ...order,
-        subtotal,
-        discountAmount,
-        discountPercent: requestedDiscountPercent,
-        freightValue: normalizedFreight,
-        total,
-        createdBy,
-        receivedBy,
-        sellerName,
-        cashierName,
-        pixCopiaECola: sicrediCharge?.pixCopiaECola || '',
-        pixData: sicrediCharge,
-      });
-
-      // Se cliente tem número de WhatsApp cadastrado ou informado agora, envia o recibo
-      let receiptDelivery = { sent: false, reason: 'Número de WhatsApp não informado pelo cliente.' };
-      const cleanCustomerPhone = String(customerPhone || '').replace(/\D/g, '');
-      if (cleanCustomerPhone.length >= 8) {
-        receiptDelivery = await sendCustomerOrderReceipt(
-          messageService.whatsappClient,
-          cleanCustomerPhone,
-          receiptText,
-        );
-        if (!receiptDelivery.sent) {
-          Logger.warn('Não foi possível entregar recibo via WhatsApp', {
-            orderId: order.id,
-            reason: receiptDelivery.reason,
-          });
-        }
-      }
-
-      res.status(200).json({
-        success: true,
-        order: {
-          ...order,
-          createdBy,
-          receivedBy,
-          receiptText,
-          pixCopiaECola: sicrediCharge?.pixCopiaECola || '',
-          qrCodeBase64: sicrediCharge?.qrCodeBase64 || '',
-          pixData: sicrediCharge,
-          receiptDelivery,
-        },
-        receiptDelivery,
-      });
-    } catch (err) {
-      Logger.error('Erro ao lançar pedido no PDV', err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  // --- Webhook Sicredi Pix Oficial ---
-  app.post(['/api/webhooks/sicredi-pix', '/webhooks/sicredi-pix'], async (req, res) => {
-    try {
-      Logger.info('[Sicredi Pix Webhook] Notificação recebida:', req.body);
-      const pixEntries = Array.isArray(req.body?.pix)
-        ? req.body.pix
-        : (req.body?.txid ? [req.body] : []);
-
-      if (pixEntries.length === 0) {
-        return res.sendStatus(200);
-      }
-
-      for (const entry of pixEntries) {
-        const txid = String(entry.txid || req.body?.txid || '');
-        if (!txid) continue;
-
-        const allOrders = await messageService.firestoreRepo.getAllOrders(100);
-        const order = allOrders.find((o) =>
-          o.pixData?.txid === txid ||
-          o.paymentTransactionId === txid ||
-          o.txid === txid ||
-          (entry.solicitacaoPagador && o.ticketNumber && entry.solicitacaoPagador.includes(o.ticketNumber))
-        );
-
-        if (order && !['CONFIRMED', 'PAID_CONFIRMED', 'DELIVERED'].includes(order.status)) {
-          const sellerName = order.createdBy?.name || order.sellerName || order.operatorName || 'Equipe Conflora';
-          await messageService.firestoreRepo.confirmOrderPayment(
-            order.id,
-            {
-              verifiedVia: 'SICREDI_PIX_WEBHOOK',
-              paymentTransactionId: entry.endToEndId || txid,
-              paymentAmount: Number(entry.valor || order.total),
-              status: 'CONFIRMED',
-            }
-          );
-
-          // 1. Mensagem de confirmação ao cliente via WhatsApp
-          const cleanPhone = String(order.customerPhone || '').replace(/\D/g, '');
-          if (cleanPhone.length >= 8) {
-            const customerMsg = (
-              `🌱 *PAGAMENTO CONFIRMADO - CONFLORA HORTA E VIVEIRO* 🌱\n\n` +
-              `Olá, *${order.customerName || 'Cliente'}*!\n` +
-              `Seu pagamento via PIX no valor de *R$ ${Number(order.total).toFixed(2).replace('.', ',')}* para o Pedido *#${order.ticketNumber || order.id}* foi confirmado com sucesso na nossa conta Sicredi!\n\n` +
-              `📦 Seus produtos já estão sendo separados com todo carinho.\n` +
-              `👤 Venda realizada por: *${sellerName}*\n\n` +
-              `Agradecemos a sua preferência! 🌿`
-            );
-            await messageService.whatsappClient.sendTextMessage(cleanPhone, customerMsg).catch(() => {});
-          }
-
-          // 2. Notificação para o WhatsApp da Horta
-          const ownerPhone = String(process.env.OWNER_WHATSAPP_NUMBER || config.whatsapp?.ownerNumber || '64999351616').replace(/\D/g, '');
-          if (ownerPhone) {
-            const hortaMsg = (
-              `🔔 *PIX CONFIRMADO NA CONTA SICREDI!* 🔔\n\n` +
-              `📦 *Pedido:* #${order.ticketNumber || order.id}\n` +
-              `👤 *Cliente:* ${order.customerName || 'Cliente Balcão'} (${order.customerPhone || 'Sem telefone'})\n` +
-              `💰 *Valor Pago:* R$ ${Number(order.total).toFixed(2).replace('.', ',')}\n` +
-              `🛒 *Vendedor (Venda atribuída):* ${sellerName}\n` +
-              `✅ *Status:* PAGO E FINALIZADO AUTOMATICAMENTE\n` +
-              `📦 Estoque atualizado no sistema!`
-            );
-            await messageService.whatsappClient.sendTextMessage(ownerPhone, hortaMsg).catch(() => {});
-          }
-        }
-      }
-
-      return res.sendStatus(200);
-    } catch (err) {
-      Logger.error('Erro ao processar webhook Sicredi Pix', err);
-      return res.sendStatus(500);
-    }
-  });
-
-  // Confirmação ou Verificação de Pix Sicredi no Caixa
-  app.post('/api/caixa/orders/:id/confirm-sicredi-pix', async (req, res) => {
-    try {
-      const { id } = req.params;
-      const order = await messageService.firestoreRepo.getOrderById(id);
-      if (!order) {
-        return res.status(404).json({ error: 'Pedido não encontrado.' });
-      }
-
-      const sellerName = order.createdBy?.name || order.sellerName || order.operatorName || 'Equipe Conflora';
-      const confirmedOrder = await messageService.firestoreRepo.confirmOrderPayment(
-        order.id,
-        {
-          verifiedVia: 'SICREDI_CAIXA_CONFIRMACAO',
-          paymentTransactionId: req.body.txid || order.pixData?.txid || `sicredi-${Date.now()}`,
-          paymentAmount: Number(order.total),
-          status: 'CONFIRMED',
-        }
-      );
-
-      const cleanPhone = String(order.customerPhone || '').replace(/\D/g, '');
-      if (cleanPhone.length >= 8) {
-        const customerMsg = (
-          `🌱 *PAGAMENTO CONFIRMADO - CONFLORA HORTA E VIVEIRO* 🌱\n\n` +
-          `Olá, *${order.customerName || 'Cliente'}*!\n` +
-          `Seu pagamento via PIX no valor de *R$ ${Number(order.total).toFixed(2).replace('.', ',')}* para o Pedido *#${order.ticketNumber || order.id}* foi confirmado com sucesso na nossa conta Sicredi!\n\n` +
-          `📦 Seus produtos já estão sendo separados com todo carinho.\n` +
-          `👤 Venda realizada por: *${sellerName}*\n\n` +
-          `Agradecemos a sua preferência! 🌿`
-        );
-        await messageService.whatsappClient.sendTextMessage(cleanPhone, customerMsg).catch(() => {});
-      }
-
-      const ownerPhone = String(process.env.OWNER_WHATSAPP_NUMBER || config.whatsapp?.ownerNumber || '64999351616').replace(/\D/g, '');
-      if (ownerPhone) {
-        const hortaMsg = (
-          `🔔 *PIX CONFIRMADO NA CONTA SICREDI!* 🔔\n\n` +
-          `📦 *Pedido:* #${order.ticketNumber || order.id}\n` +
-          `👤 *Cliente:* ${order.customerName || 'Cliente Balcão'}\n` +
-          `💰 *Valor:* R$ ${Number(order.total).toFixed(2).replace('.', ',')}\n` +
-          `🛒 *Vendedor:* ${sellerName}\n` +
-          `✅ *Status:* PAGO E FINALIZADO AUTOMATICAMENTE\n` +
-          `📦 Estoque atualizado!`
-        );
-        await messageService.whatsappClient.sendTextMessage(ownerPhone, hortaMsg).catch(() => {});
-      }
-
-      res.status(200).json({ success: true, order: confirmedOrder });
-    } catch (err) {
-      Logger.error('Erro ao confirmar Pix Sicredi no caixa', err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  // Consulta de Dívidas / Fiado do Cliente
-  app.get('/api/caixa/customers/:key/debts', async (req, res) => {
-    try {
-      const data = await messageService.firestoreRepo.getCustomerDebts(req.params.key);
-      res.status(200).json({ success: true, ...data });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  // Recebimento de Dívida / Quitação de Fiado no Caixa
-  app.post('/api/caixa/debts/settle', async (req, res) => {
-    try {
-      const {
-        customerKey,
-        customerName,
-        customerPhone,
-        amount,
-        paymentMethod = 'DINHEIRO',
-        operatorName,
-        notes,
-      } = req.body;
-
-      const val = Number(amount);
-      if (!Number.isFinite(val) || val <= 0) {
-        return res.status(400).json({ error: 'Informe um valor válido para quitação.' });
-      }
-
-      const cashierName = operatorName || req.user?.name || 'Caixa';
-      const result = await messageService.firestoreRepo.settleCustomerDebt({
-        customerKey,
-        customerName,
-        customerPhone,
-        amount: val,
-        paymentMethod,
-        operatorName: cashierName,
-        notes,
-      });
-
-      const receiptLines = [
-        `🌿 *CONFLORA HORTA E VIVEIRO* 🌿`,
-        `🧾 *RECIBO DE QUITAÇÃO DE FIADO*`,
-        `📅 ${new Date().toLocaleString('pt-BR')}`,
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
-        `👤 *Cliente:* ${customerName || 'Cliente'}`,
-        customerPhone ? `📱 *WhatsApp:* ${customerPhone}` : null,
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
-        `💵 *Valor Pago:* R$ ${val.toFixed(2).replace('.', ',')}`,
-        `💳 *Forma de Pagamento:* ${paymentMethod.toUpperCase()}`,
-        `🏦 *Recebido no Caixa por:* ${cashierName}`,
-        `📊 *Saldo Devedor Restante:* R$ ${result.newBalance.toFixed(2).replace('.', ',')}`,
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
-        `Obrigado! Conflora Horta e Viveiro 🌱`,
-      ].filter(Boolean).join('\n');
-
-      let receiptSent = false;
-      const cleanPhone = String(customerPhone || '').replace(/\D/g, '');
-      if (cleanPhone.length >= 8) {
-        await messageService.whatsappClient.sendTextMessage(cleanPhone, receiptLines).catch(() => {});
-        receiptSent = true;
-      }
-
-      res.status(200).json({
-        success: true,
-        ...result,
-        receiptText: receiptLines,
-        receiptSent,
-      });
-    } catch (err) {
-      Logger.error('Erro ao registrar quitação de fiado no caixa', err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.get('/api/caixa/discount-approvals/:id', async (req, res) => {
-    try {
-      const approval = await messageService.firestoreRepo.getDiscountApproval(req.params.id);
-      if (!approval) {return res.status(404).json({ error: 'Solicitação não encontrada.' });}
-      if (req.user.role !== 'ADMIN' && approval.requestedBy !== req.user.id) {
-        return res.status(403).json({ error: 'Esta aprovação pertence a outro operador.' });
-      }
-      res.status(200).json({ status: approval.status, order: approval.order || null, reason: approval.rejectionReason || '' });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.get('/api/caixa/orders', async (req, res) => {
-    try {
-      const user = req.user;
-      let role = user?.role || '';
-      const operatorName = req.query.operatorName || user?.name || '';
-      let userId = user?.id || '';
-
-      if (!role && operatorName) {
-        const users = await messageService.firestoreRepo.getAllUsers();
-        const found = users.find(u => u.name?.toLowerCase().trim() === String(operatorName).toLowerCase().trim() || u.id === req.query.userId);
-        if (found) {
-          role = found.role;
-          userId = found.id;
-        }
-      }
-
-      const data = await messageService.firestoreRepo.getCashierOrders({
-        operatorName,
-        role,
-        userId,
-      });
-      res.status(200).json(data);
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.get('/api/caixa/orders/:id', async (req, res) => {
-    try {
-      const order = await messageService.firestoreRepo.getOrderById(req.params.id);
-      if (!order) {
-        return res.status(404).json({ error: 'Pedido não encontrado.' });
-      }
-      res.status(200).json(order);
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.post('/api/caixa/orders/:id/confirm', async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { verifiedVia, receivedAmount, changeGiven } = req.body || {};
-      const existingOrder = await messageService.firestoreRepo.getOrderById(id);
-      if (!existingOrder) {
-        return res.status(404).json({ error: 'Pedido não encontrado.' });
-      }
-      if (
-        String(existingOrder.paymentMethod || '').toUpperCase() === 'PIX' &&
-        !existingOrder.paymentTransactionId
-      ) {
-        return res.status(409).json({
-          error: 'O PIX só pode ser confirmado após aprovação verificada pelo Mercado Pago.',
-        });
-      }
-      const order = await messageService.firestoreRepo.confirmOrderPayment(id, {
-        verifiedVia: verifiedVia || 'CAIXA_CONFIRMACAO',
-        receivedAmount: typeof receivedAmount === 'number' ? receivedAmount : null,
-        changeGiven: Number(changeGiven || 0),
-      });
-      res.status(200).json({ success: true, order });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.post('/api/caixa/orders/:id/cancel', async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { reason } = req.body || {};
-      const result = await messageService.firestoreRepo.cancelOrder(id, reason);
-      res.status(200).json(result);
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.post('/api/caixa/orders/:id/send-whatsapp', async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { phone } = req.body || {};
-      const order = await messageService.firestoreRepo.getOrderById(id);
-      if (!order) {
-        return res.status(404).json({ error: 'Pedido não encontrado.' });
-      }
-      const targetPhone = String(phone || order.customerPhone || '').replace(/\D/g, '');
-      if (!targetPhone) {
-        return res.status(400).json({ error: 'Telefone inválido.' });
-      }
-      if (!messageService.whatsappClient) {
-        return res.status(503).json({ error: 'WhatsApp indisponível no momento.' });
-      }
-      const delivery = await sendCustomerOrderReceipt(
-        messageService.whatsappClient,
-        targetPhone,
-        formatOrderReceipt(order),
-      );
-      if (!delivery.sent) {
-        return res.status(503).json({ error: delivery.reason });
-      }
-      res.status(200).json({ success: true, receiptSent: true });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -2733,7 +2186,7 @@ function createApp({
   app.get('/api/admin/auth/users', async (req, res) => {
     try {
       const users = await messageService.firestoreRepo.getAllUsers();
-      res.status(200).json(req.user?.role === 'ADMIN' ? users.map(safeUser) : users.filter(u => u.active !== false && ['ADMIN', 'CAIXA'].includes(u.role)).map(u => ({ id: u.id, name: u.name, role: u.role })));
+      res.status(200).json(req.user?.role === 'ADMIN' ? users.map(safeUser) : users.filter(u => u.active !== false && ['ADMIN', 'CAIXA', 'VENDEDOR'].includes(u.role)).map(u => ({ id: u.id, name: u.name, role: u.role })));
     } catch (err) {
       Logger.error('Erro ao listar usuários', err);
       res.status(500).json({ error: err.message });
@@ -2858,6 +2311,14 @@ function createApp({
           });
         }
         return res.status(200).json({ success: true, approval: reviewed });
+      }
+
+      if (approval.source === 'PDV') {
+        const order = await app.locals.pdv.service.create(approval.input, approval.createdBy, { approvedDiscount: true });
+        const reviewed = await repo.updateDiscountApproval(req.params.id, {
+          status: 'APPROVED', reviewedAt: new Date().toISOString(), reviewedBy: req.user.id, order,
+        });
+        return res.json({ success: true, approval: reviewed, order });
       }
 
       const isPix = approval.paymentMethod === 'PIX';
