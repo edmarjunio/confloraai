@@ -711,10 +711,12 @@ input[type="radio"] {
 .product-info-dialog {
   display: flex;
   flex-direction: column;
-  width: min(820px, calc(100vw - 28px));
-  max-height: none;
+  width: min(960px, calc(100vw - 28px));
+  max-height: calc(100dvh - 32px);
   padding: 22px;
-  overflow: visible;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid #dce8df;
   border-radius: 18px;
   background: #fff;
