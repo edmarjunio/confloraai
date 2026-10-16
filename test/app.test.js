@@ -464,7 +464,16 @@ test('16. Cardápio Digital & Painel Admin: Renderização e elementos essenciai
   assert.match(managementHtml, /id="topProductsQuantity"/);
   assert.match(managementHtml, /id="topProductsValue"/);
   assert.match(managementHtml, /Enviar para Júnior/);
+  assert.match(managementHtml, /id="dateTodayButton"/);
+  assert.match(managementHtml, /Selecionar outra data/);
+  assert.match(managementHtml, /aria-label="Atualizar dados"/);
+  assert.match(managementHtml, /aria-keyshortcuts="Control\+Shift\+Enter"/);
+  assert.match(managementHtml, /function handleDashboardShortcut/);
+  assert.doesNotMatch(managementHtml, /Resumo do caixa|Vendas, recebimentos e desempenho da equipe na data selecionada/);
   assert.doesNotMatch(managementHtml, /Confirmar Fechamento & Enviar PDF/);
+  for (const [, script] of managementHtml.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)) {
+    if (script.trim()) { assert.doesNotThrow(() => new Function(script)); }
+  }
 });
 
 test('17. Firestore Repository: Entrada ágil de estoque, venda balcão e importador de planilha', async () => {

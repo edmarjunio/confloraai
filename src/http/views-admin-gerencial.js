@@ -23,7 +23,7 @@ function renderAdminGerencialHtml() {
     })();
   </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Conflora — Resumo do caixa</title>
+  <title>Conflora — Fechamento diário</title>
   <link rel="stylesheet" href="/store-assets/site-header.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -99,6 +99,7 @@ function renderAdminGerencialHtml() {
     }
     .btn-action.primary:hover { background: var(--primary-hover); }
     #btnSendReport[hidden] { display: none; }
+    .btn-action:focus-visible { outline: 3px solid #b8ddc1; outline-offset: 2px; }
 
     .main-container {
       max-width: 1600px;
@@ -113,40 +114,80 @@ function renderAdminGerencialHtml() {
     /* BARRA DE CONTROLE E DATA */
     .toolbar {
       display: flex;
-      justify-content: space-between;
+      justify-content: flex-end;
       align-items: center;
       flex-wrap: wrap;
       gap: 12px;
-      background: #fff;
-      padding: 14px 18px;
-      border-radius: var(--radius);
-      border: 1px solid var(--border);
-      box-shadow: none;
-    }
-    .toolbar-left h1 {
-      font-size: 20px;
-      font-weight: 800;
-      color: var(--text);
-      letter-spacing: -0.4px;
-    }
-    .toolbar-left p {
-      font-size: 13px;
-      color: var(--muted);
-      margin-top: 2px;
+      min-width: 0;
     }
     .toolbar-right {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
     }
-    .date-input {
-      padding: 6px 10px;
-      border: 1px solid var(--border);
+    .date-filter {
+      display: inline-flex;
+      flex: 0 0 auto;
+      overflow: hidden;
       border-radius: 8px;
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text);
-      background: #fff;
+    }
+    .date-filter .btn-action {
+      min-height: 44px;
+      border-radius: 0;
+    }
+    .date-filter .date-today {
+      min-width: 82px;
+      justify-content: center;
+      border-radius: 8px 0 0 8px;
+      padding-inline: 14px;
+    }
+    .date-filter .date-calendar {
+      width: 44px;
+      justify-content: center;
+      border-left: 1px solid rgba(255,255,255,0.35);
+      border-radius: 0 8px 8px 0;
+      padding: 0;
+    }
+    .date-filter .btn-action:hover { background: var(--primary-hover); }
+    .native-date-picker {
+      position: fixed;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      border: 0;
+      opacity: 0;
+      overflow: hidden;
+      clip-path: inset(50%);
+      pointer-events: none;
+    }
+    .icon-button {
+      width: 44px;
+      min-width: 44px;
+      height: 44px;
+      padding: 0;
+      justify-content: center;
+    }
+    .button-icon {
+      display: block;
+      width: 18px;
+      height: 18px;
+      flex: 0 0 auto;
+    }
+    #btnRefresh.is-loading .button-icon { animation: spin 0.8s linear infinite; }
+    .close-day-button {
+      min-height: 44px;
+      padding-inline: 16px;
+    }
+    .shortcut-hint {
+      margin-left: 4px;
+      padding: 3px 6px;
+      border: 1px solid rgba(255,255,255,0.4);
+      border-radius: 5px;
+      color: rgba(255,255,255,0.9);
+      font: inherit;
+      font-size: 10px;
+      font-weight: 500;
+      white-space: nowrap;
     }
 
     /* CARDS DE RESUMO NO TOPO */
@@ -333,8 +374,6 @@ function renderAdminGerencialHtml() {
     }
     .metric-empty { color: var(--muted); font-size: 13px; padding: 10px; }
     .metric-loading { opacity: 0.6; pointer-events: none; }
-    .report-date-label { font-size: 12px; font-weight: 700; color: var(--muted); }
-
     /* LOADING & SKELETON */
     .loading-spinner {
       display: inline-block;
@@ -373,7 +412,6 @@ function renderAdminGerencialHtml() {
       .details-grid { grid-template-columns: minmax(0, 1fr); }
       .toolbar { align-items: stretch; }
       .toolbar-right { flex-wrap: wrap; }
-      .date-input { min-height: 42px; }
     }
     @media (max-width: 600px) {
       header { position: static; gap: 10px; }
@@ -381,12 +419,13 @@ function renderAdminGerencialHtml() {
       .header-actions .btn-action { min-height: 42px; justify-content: center; padding: 8px; font-size: 11px; }
       .header-actions #btnSendReport { grid-column: 1 / -1; }
       .main-container { width: 100%; min-width: 0; padding: 12px 10px calc(20px + env(safe-area-inset-bottom)); }
-      .toolbar { padding: 12px; gap: 10px; }
-      .toolbar-left h1 { font-size: 18px; line-height: 1.25; }
-      .toolbar-left p { font-size: 12px; line-height: 1.45; }
-      .toolbar-right { display: grid; width: 100%; min-width: 0; grid-template-columns: auto minmax(0, 1fr); gap: 8px; }
-      .toolbar-right .btn-action { grid-column: 1 / -1; min-height: 42px; justify-content: center; }
-      .toolbar-right #btnCloseCash { grid-column: 1 / -1; }
+      .toolbar { padding: 0; gap: 8px; }
+      .toolbar-right { display: grid; width: 100%; min-width: 0; grid-template-columns: minmax(0, 1fr) 44px; gap: 8px; }
+      .date-filter { width: 100%; }
+      .date-filter .date-today { flex: 1; }
+      .toolbar-right #btnRefresh { grid-column: 2; grid-row: 1; }
+      .toolbar-right #btnCloseCash { grid-column: 1 / -1; justify-content: center; }
+      .shortcut-hint { display: none; }
       .summary-grid { width: 100%; min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
       .summary-card, .details-grid, .panel-card { min-width: 0; }
       .summary-card { padding: 12px; }
@@ -428,15 +467,20 @@ function renderAdminGerencialHtml() {
 
     <!-- DATA DO FECHAMENTO -->
     <div class="toolbar">
-      <div class="toolbar-left">
-        <h1>Resumo do caixa</h1>
-        <p>Vendas, recebimentos e desempenho da equipe na data selecionada.</p>
-      </div>
       <div class="toolbar-right">
-        <label for="reportDate" class="report-date-label">Data:</label>
-        <input type="date" id="reportDate" class="date-input" onchange="loadExecutiveMetrics()" />
-        <button id="btnRefresh" class="btn-action" onclick="loadExecutiveMetrics()">Atualizar</button>
-        <button id="btnCloseCash" class="btn-action" onclick="registerCashClosing()">Registrar fechamento</button>
+        <div class="date-filter" role="group" aria-label="Data do fechamento">
+          <button type="button" id="dateTodayButton" class="btn-action primary date-today" onclick="setReportDateToday()"><span id="dateButtonLabel">HOJE</span></button>
+          <button type="button" class="btn-action primary date-calendar" onclick="openReportDatePicker()" aria-label="Selecionar outra data" title="Selecionar outra data">
+            <svg class="button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>
+          </button>
+        </div>
+        <input type="date" id="reportDate" class="native-date-picker" aria-label="Selecionar data do fechamento" onchange="handleReportDateChange()" />
+        <button type="button" id="btnRefresh" class="btn-action icon-button" onclick="loadExecutiveMetrics()" aria-label="Atualizar dados" title="Atualizar dados">
+          <svg class="button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.6 9A7 7 0 0 1 18 6.5L20 12M4 12l2 5.5A7 7 0 0 0 18.4 15"/></svg>
+        </button>
+        <button type="button" id="btnCloseCash" class="btn-action primary close-day-button" onclick="registerCashClosing()" aria-keyshortcuts="Control+Shift+Enter" title="Atalho: Ctrl + Shift + Enter">
+          <span>Registrar fechamento</span><kbd class="shortcut-hint">Ctrl + Shift + Enter</kbd>
+        </button>
       </div>
     </div>
 
@@ -546,11 +590,11 @@ function renderAdminGerencialHtml() {
   <!-- Interações do painel -->
   <script>
     document.addEventListener('DOMContentLoaded', initializeDashboard);
+    document.addEventListener('keydown', handleDashboardShortcut);
 
     async function initializeDashboard() {
-      const now = new Date();
-      const localToday = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-      document.getElementById('reportDate').value = localToday;
+      document.getElementById('reportDate').value = getBusinessToday();
+      updateDateButtonLabel();
       try {
         const response = await fetch('/api/auth/me');
         const data = await response.json();
@@ -566,6 +610,60 @@ function renderAdminGerencialHtml() {
       }
     }
 
+    function getBusinessToday() {
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit'
+      }).formatToParts(new Date());
+      const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+      return values.year + '-' + values.month + '-' + values.day;
+    }
+
+    function formatReportDate(date) {
+      const parts = String(date || '').split('-');
+      return parts.length === 3 ? parts[2] + '/' + parts[1] + '/' + parts[0] : 'HOJE';
+    }
+
+    function updateDateButtonLabel() {
+      const date = document.getElementById('reportDate').value;
+      const isToday = date === getBusinessToday();
+      const todayButton = document.getElementById('dateTodayButton');
+      document.getElementById('dateButtonLabel').textContent = isToday ? 'HOJE' : formatReportDate(date);
+      todayButton.setAttribute('aria-label', isToday ? 'Hoje. Clique para atualizar o dia atual.' : 'Data ' + formatReportDate(date) + '. Clique para voltar para hoje.');
+      todayButton.title = isToday ? 'Atualizar para hoje' : 'Voltar para hoje';
+    }
+
+    function setReportDateToday() {
+      document.getElementById('reportDate').value = getBusinessToday();
+      updateDateButtonLabel();
+      loadExecutiveMetrics();
+    }
+
+    function handleReportDateChange() {
+      updateDateButtonLabel();
+      loadExecutiveMetrics();
+    }
+
+    function openReportDatePicker() {
+      const input = document.getElementById('reportDate');
+      if (typeof input.showPicker === 'function') {
+        try {
+          input.showPicker();
+          return;
+        } catch (_) {}
+      }
+      input.focus();
+      input.click();
+    }
+
+    function handleDashboardShortcut(event) {
+      if (!(event.ctrlKey || event.metaKey) || !event.shiftKey || event.key !== 'Enter' || event.repeat) { return; }
+      if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]')) { return; }
+      const button = document.getElementById('btnCloseCash');
+      if (!button || button.disabled) { return; }
+      event.preventDefault();
+      registerCashClosing();
+    }
+
     function showToast(msg) {
       const t = document.getElementById('toast');
       t.textContent = msg;
@@ -577,9 +675,11 @@ function renderAdminGerencialHtml() {
     const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
 
     async function loadExecutiveMetrics() {
-      const date = document.getElementById('reportDate').value || new Date().toISOString().slice(0, 10);
+      const date = document.getElementById('reportDate').value || getBusinessToday();
       document.querySelector('.main-container').classList.add('metric-loading');
-      document.getElementById('btnRefresh').disabled = true;
+      const refreshButton = document.getElementById('btnRefresh');
+      refreshButton.disabled = true;
+      refreshButton.classList.add('is-loading');
       try {
         const res = await fetch('/api/admin/executive-metrics?date=' + encodeURIComponent(date));
         if (res.status === 401 || res.status === 403) {
@@ -593,7 +693,8 @@ function renderAdminGerencialHtml() {
         showToast('Erro ao carregar dados do dia: ' + err.message);
       } finally {
         document.querySelector('.main-container').classList.remove('metric-loading');
-        document.getElementById('btnRefresh').disabled = false;
+        refreshButton.disabled = false;
+        refreshButton.classList.remove('is-loading');
       }
     }
 
