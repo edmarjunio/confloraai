@@ -152,7 +152,7 @@ export function createCatalog(state, add, navigate) {
     const highlights = !compact && !isInactive ? getProductHighlights(product) : [];
 
     const button = element("button", {
-      class: "primary",
+      class: "cf-button",
       text: isInactive
         ? "Item Inativo"
         : unavailable
@@ -177,8 +177,8 @@ export function createCatalog(state, add, navigate) {
     });
 
     return element(
-      "article",
-      { class: compact ? "recommendation" : `product-card ${isInactive ? "is-inactive" : ""}` },
+      "cf-card",
+      { class: `cf-card--product ${compact ? "recommendation" : `product-card ${isInactive ? "is-inactive" : ""}`}`, padding: "none" },
       [
         ...(highlights.length
           ? [element("div", { class: "product-feature-tags", "aria-label": "Características do produto" }, highlights.map((highlight) => element("span", {

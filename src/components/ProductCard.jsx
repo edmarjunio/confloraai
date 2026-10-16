@@ -42,7 +42,7 @@ export function ProductCard({ product, primaryColor = '#2E9348' }) {
   };
 
   return (
-    <article className="product-card bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow flex flex-col h-full">
+    <cf-card className="cf-card--product" padding="none">
       <div className="product-card-media relative aspect-square bg-gray-50 overflow-hidden">
         {product.imageUrl ? (
           <img
@@ -115,8 +115,8 @@ export function ProductCard({ product, primaryColor = '#2E9348' }) {
               <button
                 type="button"
                 onClick={handleAddToCart}
-                style={{ backgroundColor: addedAnimation ? '#16a34a' : primaryColor }}
-                className="text-white p-2.5 rounded-lg flex items-center justify-center transition-all shadow-xs hover:opacity-90 active:scale-95"
+                style={{ '--cf-button-color': addedAnimation ? '#16a34a' : primaryColor }}
+                className="cf-button p-2.5 active:scale-95"
                 title={'catalog.add_to_cart'.tr}
               >
                 {addedAnimation ? <Check size={18} /> : <ShoppingBag size={18} />}
@@ -127,6 +127,6 @@ export function ProductCard({ product, primaryColor = '#2E9348' }) {
           )}
         </div>
       </div>
-    </article>
+    </cf-card>
   );
 }

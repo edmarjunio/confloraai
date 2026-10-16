@@ -35,7 +35,7 @@ function renderInitialProductCards(items) {
     const byKg = (p.unit || p.unidade || '').toUpperCase() === 'KG' || /\bkg\b/i.test(p.descricao || p.name || '');
     const img = (p.images && p.images[0]) || p.imageUrl || p.imageurl || p.imageFallbackUrl || 'https://images.unsplash.com/photo-1512428813834-c702c7702b78?w=800';
     return `
-      <div class="prod-card" data-prod-id="${p.id}">
+      <cf-card class="cf-card--product prod-card" padding="none" data-prod-id="${p.id}">
         <div class="card-img-wrapper" onclick="openGallery('${p.id}')">
           <img class="prod-img" src="${img}" alt="${p.descricao || p.name}" loading="lazy" decoding="async" />
           ${byKg ? '<span class="unit-tag-badge">⚖️ POR KG</span>' : ''}
@@ -55,7 +55,7 @@ function renderInitialProductCards(items) {
             </div>
           </div>
         </div>
-      </div>
+      </cf-card>
     `;
   }).join('');
 }
@@ -80,6 +80,7 @@ function renderHomeHtml() {
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,800;0,900;1,800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/store-assets/site-header.css">
+  <link rel="stylesheet" href="/store-assets/design-system.css">
 
   <style>
     @font-face {
@@ -2987,8 +2988,9 @@ function renderHomeHtml() {
 
     // 5. CRIAÇÃO DO CARD ESTILO IFOOD COM ADIÇÃO EM 1 CLIQUE
     function createProductCardElement(p) {
-      const card = document.createElement('div');
-      card.className = 'prod-card';
+      const card = document.createElement('cf-card');
+      card.className = 'cf-card--product prod-card';
+      card.setAttribute('padding', 'none');
       card.dataset.prodId = p.id;
       const price = Number(p.valor_num || p.price || 0);
       const images = (p.images && p.images.length > 0) ? p.images : [getProductImage(p)];

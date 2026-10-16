@@ -11,6 +11,8 @@ Agente de atendimento e vendas da Conflora para WhatsApp, usando:
 
 ## Arquitetura
 
+Para entender as superfícies da loja, caixa e administração, a fundação visual reutilizável e as próximas etapas de manutenção, consulte [Arquitetura de Frontend e UI](docs/ARQUITETURA-FRONTEND-E-UI.md).
+
 ```text
 WhatsApp / Meta
       |

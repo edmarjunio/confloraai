@@ -1227,12 +1227,13 @@ const { useState, useEffect, useRef, useMemo } = React;
                   {filteredProducts.slice(0, visibleCount).map((product) => {
                     const inCart = cart.find((i) => i.id === product.id);
                     return (
-                      <div
+                      <cf-card
                         key={product.id}
                         onClick={() => addToCart(product)}
-                        className={"group relative bg-white rounded-xl p-2 border transition-all cursor-pointer flex items-center gap-2 shadow-2xs hover:shadow-sm active:scale-[0.98] " + (inCart
-                          ? 'border-emerald-600 ring-1 ring-emerald-600/20 bg-emerald-50/10'
-                          : 'border-slate-200/90 hover:border-emerald-500')}
+                        interactive=""
+                        padding="sm"
+                        data-selected={inCart ? 'true' : undefined}
+                        className={"cf-pdv-product-card group relative flex items-center gap-2 " + (inCart ? 'is-selected' : '')}
                       >
                         {/* Quantity Badge if already in cart */}
                         {inCart && (
@@ -1297,7 +1298,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                             </span>
                           </div>
                         </div>
-                      </div>
+                      </cf-card>
                     );
                   })}
                 </div>

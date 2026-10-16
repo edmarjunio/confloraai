@@ -1,0 +1,122 @@
+/* Conflora UI foundation shared by the storefront, POS and server-rendered admin. */
+:root {
+  --cf-green: #109e46;
+  --cf-green-dark: #0d853a;
+  --cf-green-deep: #0f381e;
+  --cf-surface: #ffffff;
+  --cf-page: #f4f6f5;
+  --cf-border: #e2e8f0;
+  --cf-text: #1e293b;
+  --cf-muted: #64748b;
+  --cf-danger: #e11d48;
+  --cf-radius-card: 16px;
+  --cf-radius-control: 12px;
+  --cf-shadow-card: 0 1px 3px rgb(15 56 30 / 8%);
+  --cf-shadow-card-hover: 0 8px 22px rgb(15 56 30 / 12%);
+  --cf-space-card: 16px;
+}
+
+cf-card {
+  display: block;
+  min-width: 0;
+  border: 1px solid var(--cf-border);
+  border-radius: var(--cf-radius-card);
+  background: var(--cf-surface);
+  box-shadow: var(--cf-shadow-card);
+  color: var(--cf-text);
+}
+
+cf-card[interactive] {
+  cursor: pointer;
+  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+cf-card[interactive]:hover {
+  border-color: color-mix(in srgb, var(--cf-green) 55%, white);
+  box-shadow: var(--cf-shadow-card-hover);
+}
+
+cf-card[interactive]:active { transform: scale(.99); }
+cf-card[padding="none"] { padding: 0; }
+cf-card[padding="sm"] { padding: 12px; }
+cf-card[padding="md"] { padding: var(--cf-space-card); }
+cf-card[padding="lg"] { padding: 24px; }
+cf-card[tone="muted"] { background: var(--cf-page); }
+cf-card[tone="success"] { border-color: #a7f3d0; background: #ecfdf5; }
+cf-card[tone="warning"] { border-color: #fde68a; background: #fffbeb; }
+
+cf-card.cf-card--product,
+.cf-card--product {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--cf-border);
+  border-radius: var(--cf-radius-card);
+  background: var(--cf-surface);
+  box-shadow: var(--cf-shadow-card);
+}
+
+cf-card.cf-card--product[interactive]:hover,
+.cf-card--product[interactive]:hover { box-shadow: var(--cf-shadow-card-hover); }
+.cf-pdv-product-card { position: relative; display: flex; align-items: center; gap: 8px; }
+.cf-pdv-product-card.is-selected { border-color: var(--cf-green); background: #f0fdf4; box-shadow: 0 0 0 1px rgb(16 158 70 / 20%); }
+.cf-order-card { color: var(--cf-text); }
+.cf-order-card button:first-child { width: 100%; border: 0; background: transparent; padding: 0; text-align: left; }
+.stat-card,
+.metric-card {
+  border: 1px solid var(--cf-border);
+  border-radius: var(--cf-radius-card);
+  background: var(--cf-surface);
+  box-shadow: var(--cf-shadow-card);
+}
+
+.cf-button {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: var(--cf-radius-control);
+  padding: 9px 14px;
+  background: var(--cf-button-color, var(--cf-green));
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 150ms ease, box-shadow 150ms ease;
+}
+
+.cf-button:hover:not(:disabled) { background: var(--cf-green-dark); }
+.cf-button:focus-visible { outline: 3px solid rgb(16 158 70 / 35%); outline-offset: 2px; }
+.cf-button:disabled { opacity: .5; cursor: not-allowed; }
+.cf-button[data-variant="secondary"] { border-color: var(--cf-border); background: #fff; color: var(--cf-green-deep); }
+.cf-button[data-variant="secondary"]:hover:not(:disabled) { background: #f0fdf4; }
+.cf-button[data-variant="danger"] { background: var(--cf-danger); }
+.cf-button[data-variant="quiet"] { border-color: transparent; background: transparent; color: var(--cf-green-deep); }
+
+cf-list {
+  display: block;
+  overflow: hidden;
+  border: 1px solid var(--cf-border);
+  border-radius: var(--cf-radius-card);
+  background: var(--cf-surface);
+}
+
+cf-list-item {
+  display: block;
+  padding: 12px var(--cf-space-card);
+  color: var(--cf-text);
+}
+
+cf-list-item + cf-list-item { border-top: 1px solid #f1f5f9; }
+cf-list-item[interactive] { cursor: pointer; }
+cf-list-item[interactive]:hover { background: #f0fdf4; }
+
+@media (prefers-reduced-motion: reduce) {
+  cf-card[interactive], .cf-button { transition: none; }
+}

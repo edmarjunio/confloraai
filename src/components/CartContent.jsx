@@ -147,7 +147,7 @@ export function CartContent({
   return (
     <div className="flex flex-col gap-4 text-[#1A1A1A]">
       {/* Lista de Itens do Carrinho */}
-      <div className="flex flex-col gap-2 max-h-56 overflow-y-auto pr-1">
+      <cf-list className="flex max-h-56 flex-col overflow-y-auto">
         {items.length === 0 ? (
           <div className="text-center py-8 text-[#64748b] text-sm">
             <ShoppingBag className="w-10 h-10 mx-auto text-gray-300 mb-2" />
@@ -156,9 +156,9 @@ export function CartContent({
           </div>
         ) : (
           items.map((item) => (
-            <div
+            <cf-list-item
               key={item.id}
-              className="flex items-center justify-between p-2.5 bg-[#F8F9FA] rounded-xl border border-[#E5E7EB] gap-2 transition-all hover:border-[#2E9348]/40"
+              className="flex items-center justify-between gap-2"
             >
               <div className="flex items-center gap-2.5 min-w-0 flex-1">
                 {item.imageUrl && (
@@ -199,10 +199,10 @@ export function CartContent({
                   <Plus className="w-3.5 h-3.5" />
                 </button>
               </div>
-            </div>
+            </cf-list-item>
           ))
         )}
-      </div>
+      </cf-list>
 
       {items.length > 0 && (
         <>
