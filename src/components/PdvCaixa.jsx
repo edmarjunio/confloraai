@@ -600,7 +600,7 @@ export default function PdvCaixa() {
                         {item.quantity}x
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="font-bold text-slate-800 truncate leading-tight">
+                        <p title={item.name} className="font-bold text-slate-800 truncate leading-tight">
                           {item.name}
                         </p>
                         {isExpanded && (
@@ -851,7 +851,7 @@ const renderCashierPanel = () => (
                     <span className="text-xs font-extrabold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-md">
                       {item.quantity} X
                     </span>
-                    <p className="text-sm font-semibold text-slate-800 truncate">
+                    <p title={item.name} className="text-sm font-semibold text-slate-800 truncate">
                       {item.name}
                     </p>
                   </div>
@@ -1231,7 +1231,7 @@ const renderCashierPanel = () => (
                     {/* Compact Info & Price on Right */}
                     <div className="flex flex-col justify-between flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-1">
-                        <h3 className="text-xs font-bold text-slate-800 leading-tight line-clamp-2">
+                        <h3 title={product.name} className="text-xs font-bold text-slate-800 leading-tight line-clamp-2">
                           {product.name}
                         </h3>
                         <button
@@ -1747,7 +1747,7 @@ const renderCashierPanel = () => (
               <div className="my-4 p-4 rounded-2xl bg-slate-50 border border-dashed border-slate-300 text-left text-xs space-y-1.5">
                 {cart.map((item) => (
                   <div key={item.id} className="flex justify-between text-slate-700">
-                    <span>
+                    <span title={item.name}>
                       {item.quantity}x {item.name}
                     </span>
                     <span className="font-semibold">

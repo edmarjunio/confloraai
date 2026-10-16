@@ -1025,6 +1025,7 @@ function renderAdminHtml(storeConfig) {
           const row = document.createElement('li');
           const quantity = Number(item.quantity) || 0;
           const subtotal = Number(item.price || 0) * quantity;
+          row.title = item.name || 'Produto';
           row.textContent = quantity + ' × ' + (item.name || 'Produto') + ' · ' + Number(item.price || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) + ' un · ' + subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
           items.appendChild(row);
         });

@@ -842,10 +842,13 @@ Sou o assistente oficial de vendas. Como posso ajudar com nossas plantas, mudas 
         const div = document.createElement('div');
         div.className = 'movement-item';
         div.innerHTML = \`
-          <div><strong>\${m.productName}</strong>: -\${m.quantityDeducted} un</div>
+          <div><strong></strong>: -\${m.quantityDeducted} un</div>
           <div style="font-size: 11px; color: #475569;">Estoque: \${m.previousStock} ➔ \${m.newStock}</div>
           <div class="movement-date">\${new Date(m.createdAt).toLocaleTimeString()} • WhatsApp (\${m.customerPhone || 'Cliente'})</div>
         \`;
+        const productNameElement = div.querySelector('strong');
+        productNameElement.textContent = m.productName || 'Produto';
+        productNameElement.title = m.productName || 'Produto';
         movementListEl.appendChild(div);
       });
     }

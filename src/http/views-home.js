@@ -2,6 +2,12 @@ const { renderFirebaseAuthScript } = require('./firebase-client');
 const { GOOGLE_ANALYTICS_TAG } = require('./analytics');
 const { PRODUCT_IMAGE_FALLBACKS } = require('../catalog/product-image-fallbacks');
 
+function escapeHtmlAttribute(value) {
+  return String(value || '').replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[character]);
+}
+
 const FETCH_SHIM_SCRIPT = `<script>
   (function() {
     try {
@@ -36,7 +42,7 @@ function renderInitialProductCards(items) {
         </div>
         <div class="card-body">
           <span class="card-category">${p.subcategoria || p.subcategory || p.categoria || p.category || 'Conflora'}</span>
-          <div class="card-title" onclick="openGallery('${p.id}')">${p.descricao || p.name}</div>
+          <div class="card-title" title="${escapeHtmlAttribute(p.descricao || p.name)}" onclick="openGallery('${p.id}')">${p.descricao || p.name}</div>
           <div class="card-footer">
             <div>
               <div class="card-price">R$ ${price.toFixed(2).replace('.', ',')} <span style="font-size:11px; font-weight:normal; color:#64748b;">${byKg ? '/kg' : ''}</span></div>
@@ -2997,7 +3003,7 @@ function renderHomeHtml() {
         </div>
         <div class="card-body">
           <span class="card-category">\${p.subcategoria || p.subcategory || p.categoria || p.category || 'Conflora'}</span>
-          <div class="card-title" onclick="openGallery('\${p.id}')">\${p.descricao || p.name}</div>
+          <div class="card-title" title="\${escapeHtml(p.descricao || p.name)}" onclick="openGallery('\${p.id}')">\${p.descricao || p.name}</div>
           <div class="card-footer">
             <div>
               <div class="card-price">\${localization.formatCurrency(price)} <span style="font-size:11px; font-weight:normal; color:#64748b;">\${byKg ? '/kg' : ''}</span></div>
@@ -4064,7 +4070,7 @@ function renderHomeHtml() {
               '<img src="' + p.imageUrl + '" alt="' + escapeHtml(p.name) + '" class="ai-mini-card-img" loading="lazy" decoding="async" />' +
               '<div class="ai-mini-card-info">' +
                 '<span class="ai-mini-card-tag">' + escapeHtml(p.category) + '</span>' +
-                '<div class="ai-mini-card-name">' + escapeHtml(p.name) + '</div>' +
+                '<div class="ai-mini-card-name" title="' + escapeHtml(p.name) + '">' + escapeHtml(p.name) + '</div>' +
                 '<div class="ai-mini-card-price">' + p.formattedPrice + '</div>' +
               '</div>' +
               '<button type="button" class="ai-mini-add-btn" data-add-id="' + p.id + '" onclick="addFromAiChat(this.dataset.addId, event)">' +
@@ -4110,7 +4116,7 @@ function renderHomeHtml() {
               '<img src="' + img + '" alt="' + escapeHtml(p.descricao || p.name) + '" class="ai-mini-card-img" loading="lazy" decoding="async" />' +
               '<div class="ai-mini-card-info">' +
                 '<span class="ai-mini-card-tag">' + escapeHtml(p.subcategoria || p.categoria || 'Plantas') + '</span>' +
-                '<div class="ai-mini-card-name">' + escapeHtml(p.descricao || p.name) + '</div>' +
+                '<div class="ai-mini-card-name" title="' + escapeHtml(p.descricao || p.name) + '">' + escapeHtml(p.descricao || p.name) + '</div>' +
                 '<div class="ai-mini-card-price">R$ ' + price.toFixed(2).replace('.', ',') + '</div>' +
               '</div>' +
               '<button type="button" class="ai-mini-add-btn" data-add-id="' + p.id + '" onclick="addFromAiChat(this.dataset.addId, event)">' +

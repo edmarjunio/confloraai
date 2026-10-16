@@ -208,7 +208,7 @@ export function BotanicalAiDrawer({
                           />
                         )}
                         <div className="flex-1 min-w-0">
-                          <h4 className="font-bold text-xs truncate text-[#1A1A1A]">{prod.name}</h4>
+                          <h4 title={prod.name} className="font-bold text-xs truncate text-[#1A1A1A]">{prod.name}</h4>
                           <span className="text-[11px] font-extrabold text-[#2E9348]">
                             {prod.formattedPrice || `R$ ${Number(prod.price || 0).toFixed(2)}`}
                           </span>

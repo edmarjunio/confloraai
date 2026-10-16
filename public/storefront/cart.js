@@ -141,6 +141,7 @@ export function createCart(state) {
           element("div", {}, [
             element("strong", {
               text: product?.name || "catalog.unavailable".tr,
+              title: product?.name || "catalog.unavailable".tr,
             }),
             element("span", {
               text: money((product?.price?.amountMinor || 0) * item.quantity),

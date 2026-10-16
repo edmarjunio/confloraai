@@ -170,7 +170,7 @@ export function CartContent({
                   />
                 )}
                 <div className="min-w-0">
-                  <h4 className="text-xs font-semibold truncate text-[#1A1A1A]">{item.name}</h4>
+                  <h4 title={item.name} className="text-xs font-semibold truncate text-[#1A1A1A]">{item.name}</h4>
                   <span className="text-[11px] font-bold text-[#2E9348]">
                     R$ {Number(item.price || 0).toFixed(2).replace('.', ',')}
                   </span>

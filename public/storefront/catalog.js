@@ -192,7 +192,7 @@ export function createCatalog(state, add, navigate) {
           : []),
         element("button", { class: "product-photo", "aria-label": `Ver ${product.name}`, onclick: open }, [photo]),
         element("div", { class: "product-content" }, [
-          element("button", { class: "product-name", text: product.name, onclick: open }),
+          element("button", { class: "product-name", text: product.name, title: product.name, onclick: open }),
           element("small", {
             class: "muted",
             text: categoryLabel(product) || product.tags?.slice(0, 2).join(" · "),
@@ -439,7 +439,7 @@ export function createCatalog(state, add, navigate) {
             class: "detail-category",
             text: categoryLabel(product),
           }),
-          element("h1", { text: product.name }),
+          element("h1", { text: product.name, title: product.name }),
           element("strong", {
             class: "detail-price",
             text: money(product.price.amountMinor),
@@ -482,7 +482,7 @@ export function createCatalog(state, add, navigate) {
         id: "about",
         label: "Sobre o produto",
         nodes: [
-          element("h2", { text: product.name }),
+          element("h2", { text: product.name, title: product.name }),
           element("p", {
             text:
               product.description ||

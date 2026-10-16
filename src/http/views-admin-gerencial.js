@@ -755,7 +755,7 @@ function renderAdminGerencialHtml() {
         container.innerHTML = '<div class="metric-empty">Nenhum produto vendido nesta data.</div>';
         return;
       }
-      container.innerHTML = products.map((product, index) => '<div class="ranking-row"><div class="ranking-info"><span class="ranking-rank" style="color:var(--primary);">' + (index + 1) + 'º</span><div><div class="ranking-name">' + escapeHtml(product.name) + '</div><div class="ranking-meta">' + escapeHtml(product.category || 'Geral') + ' · ' + product.quantity + ' unidade(s)</div></div></div><div class="ranking-values"><div class="ranking-val">' + formatCurrency(product.revenue) + '</div></div></div>').join('');
+      container.innerHTML = products.map((product, index) => '<div class="ranking-row"><div class="ranking-info"><span class="ranking-rank" style="color:var(--primary);">' + (index + 1) + 'º</span><div><div class="ranking-name" title="' + escapeHtml(product.name) + '">' + escapeHtml(product.name) + '</div><div class="ranking-meta">' + escapeHtml(product.category || 'Geral') + ' · ' + product.quantity + ' unidade(s)</div></div></div><div class="ranking-values"><div class="ranking-val">' + formatCurrency(product.revenue) + '</div></div></div>').join('');
     }
 
     async function sendDailyReport() {

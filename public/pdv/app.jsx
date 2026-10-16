@@ -701,7 +701,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                             {item.quantity}x
                           </span>
                           <div className="min-w-0 flex-1">
-                            <p className="font-bold text-slate-800 truncate leading-tight">
+                            <p title={item.name} className="font-bold text-slate-800 truncate leading-tight">
                               {item.name}
                             </p>
                             {isExpanded && (
@@ -943,7 +943,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                         <span className="text-xs font-extrabold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-md">
                           {item.quantity} X
                         </span>
-                        <p className="text-sm font-semibold text-slate-800 truncate">
+                        <p title={item.name} className="text-sm font-semibold text-slate-800 truncate">
                           {item.name}
                         </p>
                       </div>
@@ -1258,7 +1258,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                         {/* Compact Info & Price on Right */}
                         <div className="flex flex-col justify-between flex-1 min-w-0">
                           <div className="flex items-start justify-between gap-1">
-                            <h3 className="text-xs font-bold text-slate-800 leading-tight line-clamp-2">
+                            <h3 title={product.name} className="text-xs font-bold text-slate-800 leading-tight line-clamp-2">
                               {product.name}
                             </h3>
                             <div className="flex shrink-0 items-center gap-1">
