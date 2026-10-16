@@ -22,7 +22,8 @@
       : String(image?.url || image?.imageUrl || image?.src || image?.downloadURL || "").trim());
     return [...new Set(candidates.filter((source) => /^https:\/\/(?:firebasestorage|storage)\.googleapis\.com\//i.test(source)
         || /^\/api\/images\//i.test(source)
-        || /^\/store-assets\//i.test(source)))];
+        || /^\/store-assets\//i.test(source)
+        || (product.imageIsIllustrative === true && /^https:\/\/images\.unsplash\.com\//i.test(source))))];
   };
 
   const getCategory = (product) => String(
@@ -113,7 +114,11 @@
       const category = getCategory(product);
       const quantity = Math.max(0, Number(this.getAttribute("quantity") || 0));
       const favorite = this.getAttribute("favorite") === "true";
-      const image = this.renderImage(product, "cf-shared-pdv-image", name);
+      const image = this.renderImage(
+        product,
+        "cf-shared-pdv-image",
+        product.imageIsIllustrative ? `Imagem ilustrativa de ${name}` : name,
+      );
       this.classList.add("cf-pdv-product-card");
       this.classList.toggle("is-selected", this.getAttribute("selected") === "true" || quantity > 0);
       this.setAttribute("role", "button");

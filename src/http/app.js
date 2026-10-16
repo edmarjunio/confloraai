@@ -1,6 +1,7 @@
 const { randomUUID } = require('node:crypto');
 const { createWebSessions, safeUser } = require('../security/web-session');
 const { rankProductSales } = require('../catalog/product-sales');
+const { resolveHdProductImage } = require('../catalog/image-resolver');
 const { getCashierProductDetails } = require('../catalog/cashier-product-details');
 let expressModule = null;
 function getExpress() {
@@ -18,12 +19,22 @@ function getProductImageCandidates(product = {}) {
   const images = (Array.isArray(product.images) ? product.images : [])
     .map((image) => (typeof image === 'string' ? image : image?.url || image?.imageUrl || image?.src || image?.downloadURL || ''))
     .filter(Boolean);
-  return [...new Set([
+  const registeredImages = [...new Set([
     ...images,
     product.imageUrl,
     product.imageurl,
     product.imagePathCache,
   ].filter(isRenderableProductImageUrl))];
+  if (registeredImages.length) {
+    return registeredImages;
+  }
+
+  const illustrativeImage = resolveHdProductImage(
+    product.name || product.descricao || '',
+    product.category || product.categoria || '',
+    product.subcategory || product.subcategoria || '',
+  );
+  return illustrativeImage ? [illustrativeImage] : [];
 }
 
 function isRenderableProductImageUrl(value) {
@@ -38,7 +49,7 @@ function getCashierProductImageCandidates(product = {}) {
   return [...new Set(
     getProductImageCandidates(product)
       .map((image) => String(image || '').trim())
-      .filter(isRenderableProductImageUrl),
+      .filter((image) => isRenderableProductImageUrl(image) || /^https:\/\/images\.unsplash\.com\//i.test(image)),
   )];
 }
 
@@ -1323,6 +1334,7 @@ function createApp({
           images: imageCandidates,
           imageUrl: imageCandidates[0] || '',
           imageurl: imageCandidates[0] || '',
+          imageIsIllustrative: /^https:\/\/images\.unsplash\.com\//i.test(imageCandidates[0] || ''),
           imageFallbackUrl: '/store-assets/placeholder.svg',
         };
       });
@@ -1785,6 +1797,7 @@ function createApp({
             variation: p.variation || p.variacao || '',
             imageUrl,
             images: imageCandidates,
+            imageIsIllustrative: /^https:\/\/images\.unsplash\.com\//i.test(imageUrl),
             imagePathCache: p.imagePathCache || '',
             imageFallbackUrl: '/store-assets/placeholder.svg',
             descriptionAi: p.descriptionAi || p.descricao_ia || '',

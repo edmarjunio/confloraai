@@ -1,6 +1,7 @@
 const profile = require("../../config/stores/conflora.example.json");
 const { rankProductSales } = require("../catalog/product-sales");
 const { productStatus } = require("../catalog/product-status");
+const { resolveHdProductImage } = require("../catalog/image-resolver");
 const {
   ensure,
   digest,
@@ -23,11 +24,11 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
       : "";
   const images = (Array.isArray(item.images) ? item.images : [])
     .map((image) => ({
-      url: photo(typeof image === "string" ? image : image.url),
+      url: photo(typeof image === "string" ? image : image.url || image.imageUrl || image.src || image.downloadURL),
       alt: name,
     }))
-    .filter((image) => image.url);
-  const registeredImage = photo(item.imageUrl || item.imageurl) || images[0]?.url || "";
+    .filter((image, index, all) => image.url && all.findIndex((candidate) => candidate.url === image.url) === index);
+  const registeredImage = photo(item.imageUrl || item.imageurl || item.imagePathCache || item.imageURL) || images[0]?.url || "";
   return {
     id: String(item.id),
     name,
@@ -38,8 +39,9 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
       amountMinor: Math.round(Number(item.price ?? item.valor_num ?? 0) * 100),
       currency: "BRL",
     },
-    imageUrl: registeredImage,
+    imageUrl: registeredImage || resolveHdProductImage(name, category, subcategory),
     imageIsIllustrative: !registeredImage,
+    imageFallbackUrl: "/store-assets/placeholder.svg",
     images,
     categories: [digest(category).slice(0, 16)],
     categoryName: category,
