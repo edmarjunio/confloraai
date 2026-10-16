@@ -22,6 +22,7 @@
       `<svg viewBox="0 0 24 24" aria-hidden="true" fill="${filled ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.75 5.58 6.16.9-4.46 4.35 1.05 6.14L12 17.07l-5.5 2.9 1.05-6.14L3.1 9.48l6.15-.9L12 3Z"/></svg>`,
     info: `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>`,
     cart: `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></svg>`,
+    cartPlus: `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/><path d="M16 2v6m-3-3h6"/></svg>`,
   });
 
   // ============================================================================
@@ -318,7 +319,7 @@
     const category = getCategory(p);
     const price = getPrice(p);
     const formattedPrice = formatPrice(price);
-    const unit = firstNonEmptyString(p.unit, p.unidade).toUpperCase();
+    const unit = firstNonEmptyString(p.saleUnit?.code, p.unit, p.unidade).toUpperCase();
     const byKg = unit === "KG";
     const stock = p.stockQuantity ?? p.estoque ?? 30;
     const isInactive = p.status === "INATIVO";
@@ -554,16 +555,17 @@
       this.setAttribute("aria-label", `Adicionar ${vm.name} ao carrinho`);
 
       this.innerHTML = `
-        ${quantity > 0 ? `<span aria-label="${quantity} no carrinho" class="cf-pdv-quantity-badge">${quantity}</span>` : ""}
+        ${quantity > 0 ? `<span aria-label="${quantity}${vm.byKg ? " kg" : " no carrinho"}" class="cf-pdv-quantity-badge">${escapeHtml(Number(quantity).toLocaleString("pt-BR", { maximumFractionDigits: vm.byKg ? 3 : 0 }))}${vm.byKg ? " kg" : ""}</span>` : ""}
         <div class="cf-shared-pdv-content">
           <div class="cf-shared-pdv-thumbnail">${this.buildImageHtml(vm, "cf-shared-pdv-image")}</div>
           <div class="cf-shared-pdv-details">
             <h3 title="${safeName}">${safeName}</h3>
             ${vm.category ? `<render-category-tag category="${escapeHtml(vm.category)}" class="cf-pdv-inline-category"></render-category-tag>` : ""}
-            <div class="cf-shared-pdv-price-row"><strong>${vm.formattedPrice}</strong></div>
+            <div class="cf-shared-pdv-price-row"><strong>${vm.formattedPrice}</strong>${vm.byKg ? '<span class="cf-shared-unit">/ kg</span>' : ''}</div>
           </div>
           <div class="cf-pdv-card-actions">
             <button type="button" data-action="info" class="cf-product-info-button cf-pdv-info-button" aria-label="Informações de ${safeName}" title="Informações de ${safeName}">${ICONS.info}</button>
+            <button type="button" data-action="add" class="cf-product-info-button cf-pdv-add-button" aria-label="Adicionar ${safeName} ao carrinho" title="Adicionar ao carrinho">${ICONS.cartPlus}</button>
             <button type="button" data-action="favorite" aria-pressed="${favorite}" aria-label="${favLabel}: ${safeName}" title="${favLabel}" class="cf-shared-pdv-favorite ${favorite ? "is-favorite" : ""}">${ICONS.star(favorite)}</button>
           </div>
         </div>`;
@@ -622,6 +624,7 @@
             ? `<div class="cf-product-actions product-card-actions">
           <button type="button" class="favorite" data-action="favorite" aria-label="Favoritar ${safeName}" aria-pressed="${favorite}">${ICONS.heart(favorite, "icon")}</button>
           <button type="button" class="cf-product-info-button product-information-button" data-action="info" aria-label="Informações de ${safeName}" title="Informações de ${safeName}">${ICONS.info}</button>
+          <button type="button" class="cf-product-info-button product-add-quick-button" data-action="add" aria-label="Adicionar ${safeName} ao carrinho" title="Adicionar ao carrinho" ${vm.isUnavailable ? "disabled" : ""}>${ICONS.cartPlus}</button>
         </div>`
             : ""
         }

@@ -299,7 +299,7 @@ function renderAdminHtml(storeConfig) {
             <select id="stockAdjustmentProduct" required></select>
           </label>
           <label><span id="stockAdjustmentQuantityLabel">Quantidade</span>
-            <input type="number" id="stockAdjustmentQuantity" min="0" step="1" required inputmode="numeric" />
+            <input type="number" id="stockAdjustmentQuantity" min="0" step="0.001" required inputmode="decimal" />
           </label>
           <label id="stockAdjustmentReasonWrap" hidden>Motivo
             <textarea id="stockAdjustmentReason" rows="3" maxlength="300" placeholder="Explique o motivo da baixa ou da contagem." ></textarea>
@@ -356,7 +356,7 @@ function renderAdminHtml(storeConfig) {
         </div>
         <div>
           <label style="font-size:12px; font-weight:bold;">Categoria:</label>
-          <input type="text" id="formProdCat" required style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="Ex: Frutíferas, Palmeiras..." />
+          <input type="text" id="formProdCat" required oninput="suggestProductSaleUnit()" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="Ex: Frutíferas, Palmeiras..." />
         </div>
         <div>
           <label style="font-size:12px; font-weight:bold;">Subcategoria:</label>
@@ -367,8 +367,13 @@ function renderAdminHtml(storeConfig) {
           <input type="number" step="0.01" id="formProdPrice" required style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="190.00" />
         </div>
         <div>
-          <label style="font-size:12px; font-weight:bold;">Estoque Inicial:</label>
-          <input type="number" id="formProdStock" required min="0" value="0" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="15" />
+          <label for="formProdUnit" style="font-size:12px; font-weight:bold;">Unidade de venda:</label>
+          <select id="formProdUnit" onchange="markProductUnitChoice()" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;"><option value="UN">Unidade (UN)</option><option value="KG">Quilograma (KG)</option></select>
+          <small style="display:block; margin-top:5px; color:#64748b;">Hortifrutti novo começa sugerido por KG; confirme a unidade antes de salvar. Produtos por KG perguntam o peso na venda.</small>
+        </div>
+        <div>
+          <label style="font-size:12px; font-weight:bold;">Estoque inicial (na unidade selecionada):</label>
+          <input type="number" id="formProdStock" required min="0" step="0.001" inputmode="decimal" value="0" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="15" />
         </div>
         <div>
           <label for="formProdStatus" style="font-size:12px; font-weight:bold;">Status no catálogo:</label>
@@ -1240,7 +1245,7 @@ function renderAdminHtml(storeConfig) {
           <td><strong>\${p.descricao || p.name}</strong></td>
           <td>\${p.categoria || p.category || ''} • \${p.subcategoria || ''}</td>
           <td><strong style="color:#15803d; font-size:15px;">R$ \${Number(p.valor_num || p.price || 0).toFixed(2).replace('.', ',')}</strong></td>
-          <td><span style="font-weight:bold;">\${p.stockQuantity ?? p.estoque ?? 0}</span> em estoque</td>
+          <td><span style="font-weight:bold;">\${p.stockQuantity ?? p.estoque ?? 0}</span> \${getAdminProductSaleUnit(p) === 'KG' ? 'kg' : 'un.'} em estoque</td>
         \`;
         tbody.appendChild(tr);
       });
@@ -1510,6 +1515,12 @@ function renderAdminHtml(storeConfig) {
       await loadStockMovements();
     }
 
+    function getAdminProductSaleUnit(product = {}) {
+      const savedUnit = String(product.saleUnit?.code || product.unit || product.unidade || '').trim().toUpperCase();
+      if (savedUnit) return savedUnit;
+      return /(^|[^A-Z])KG([^A-Z]|$)/i.test(String(product.name || product.descricao || '')) ? 'KG' : 'UN';
+    }
+
     function filterStockCards() {
       if (!Array.isArray(allProducts)) allProducts = [];
       const query = String(document.getElementById('stockSearchInput')?.value || '').trim().toLocaleLowerCase('pt-BR');
@@ -1529,7 +1540,8 @@ function renderAdminHtml(storeConfig) {
         card.dataset.productId = product.id;
         card.setAttribute('role', 'button');
         card.setAttribute('tabindex', '0');
-        card.setAttribute('aria-label', \`Adicionar uma unidade de \${product.name || product.descricao || 'produto'} ao estoque\`);
+        const stockUnit = getAdminProductSaleUnit(product);
+        card.setAttribute('aria-label', stockUnit === 'KG' ? \`Adicionar 1 kg de \${product.name || product.descricao || 'produto'} ao estoque\` : \`Adicionar uma unidade de \${product.name || product.descricao || 'produto'} ao estoque\`);
         const image = document.createElement('render-image');
         image.setAttribute('alt', product.name || product.descricao || 'Produto');
         image.setAttribute('loading', 'lazy');
@@ -1556,13 +1568,13 @@ function renderAdminHtml(storeConfig) {
         const quantity = document.createElement('strong');
         quantity.id = 'stk-' + product.id;
         quantity.textContent = String(product.stockQuantity ?? product.estoque ?? 0);
-        balance.append(quantity, ' un');
+        balance.append(quantity, stockUnit === 'KG' ? ' kg' : ' un');
         const actions = document.createElement('div');
         actions.className = 'stock-card-actions';
         const addButton = document.createElement('button');
         addButton.type = 'button';
         addButton.className = 'action-btn btn-green';
-        addButton.textContent = '＋1 Entrada';
+        addButton.textContent = stockUnit === 'KG' ? '＋1 kg Entrada' : '＋1 Entrada';
         addButton.addEventListener('click', () => addStock(product.id, 1));
         const countButton = document.createElement('button');
         countButton.type = 'button';
@@ -1643,6 +1655,16 @@ function renderAdminHtml(storeConfig) {
       [...allProducts].sort((a, b) => String(a.name || a.descricao || '').localeCompare(String(b.name || b.descricao || ''), 'pt-BR'))
         .forEach(product => select.add(new Option(\`\${product.name || product.descricao || 'Produto'} — estoque \${product.stockQuantity ?? product.estoque ?? 0}\`, product.id)));
       if (productId) select.value = productId;
+      const quantityInput = document.getElementById('stockAdjustmentQuantity');
+      const updateQuantityUnit = () => {
+        const product = allProducts.find(row => String(row.id) === String(select.value));
+        const isKg = getAdminProductSaleUnit(product) === 'KG';
+        document.getElementById('stockAdjustmentQuantityLabel').textContent = (kind === 'SET' ? 'Novo estoque contado' : 'Quantidade') + (isKg ? ' (kg)' : ' (unidades)');
+        quantityInput.step = isKg ? '0.001' : '1';
+        quantityInput.inputMode = isKg ? 'decimal' : 'numeric';
+      };
+      select.onchange = updateQuantityUnit;
+      updateQuantityUnit();
       modal.classList.add('open');
       select.focus();
     }
@@ -1660,7 +1682,12 @@ function renderAdminHtml(storeConfig) {
       const submitButton = document.getElementById('stockAdjustmentSubmit');
       const errorMessage = document.getElementById('stockAdjustmentError');
       const requiresReason = operation === 'SET' || operation === 'EXIT';
-      if (!productId || !Number.isInteger(quantity) || quantity < 0 || (operation !== 'SET' && quantity === 0) || (requiresReason && reason.length < 3)) {
+      const selectedProduct = allProducts.find(product => String(product.id) === String(productId));
+      const isKgProduct = getAdminProductSaleUnit(selectedProduct) === 'KG';
+      const quantityValid = Number.isFinite(quantity) && quantity >= 0 && (isKgProduct
+        ? Math.abs(quantity - Number(quantity.toFixed(3))) < 0.000001
+        : Number.isInteger(quantity));
+      if (!productId || !quantityValid || (operation !== 'SET' && quantity === 0) || (requiresReason && reason.length < 3)) {
         errorMessage.textContent = 'Confira o produto, a quantidade e o motivo da operação.';
         errorMessage.hidden = false;
         return;
@@ -1753,7 +1780,7 @@ function renderAdminHtml(storeConfig) {
           <td><strong>\${p.descricao || p.name}</strong>\${productIsInactive(p) ? '<p style="color:#92400e; background:#fef3c7; padding:6px 8px; border-radius:6px; font-size:12px; margin-top:6px;">INATIVO — oculto no catálogo, indisponível para compra.</p>' : ''}</td>
           <td>\${p.categoria || p.category || ''}</td>
           <td>R$ \${Number(p.valor_num || p.price || 0).toFixed(2).replace('.', ',')}</td>
-          <td><strong style="color:#15803d;">\${p.stockQuantity ?? p.estoque ?? 0}</strong> un</td>
+          <td><strong style="color:#15803d;">\${p.stockQuantity ?? p.estoque ?? 0}</strong> \${getAdminProductSaleUnit(p) === 'KG' ? 'kg' : 'un.'}</td>
           <td>
             <button class="action-btn btn-blue" style="padding:4px 8px;" onclick="editProduct('\${p.id}')">✏️ Editar</button>
             <button class="action-btn btn-red" style="padding:4px 8px;" onclick="deleteProduct('\${p.id}')">🗑️ Excluir</button>
@@ -1879,6 +1906,28 @@ function renderAdminHtml(storeConfig) {
       });
     }
 
+    let productUnitTouched = false;
+
+    function syncProductStockStep() {
+      const unit = document.getElementById('formProdUnit')?.value || 'UN';
+      const stock = document.getElementById('formProdStock');
+      if (!stock) return;
+      stock.step = unit === 'KG' ? '0.001' : '1';
+      stock.inputMode = unit === 'KG' ? 'decimal' : 'numeric';
+    }
+
+    function markProductUnitChoice() {
+      productUnitTouched = true;
+      syncProductStockStep();
+    }
+
+    function suggestProductSaleUnit() {
+      if (document.getElementById('formProdId').value) return;
+      const category = String(document.getElementById('formProdCat').value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+      if (!productUnitTouched) document.getElementById('formProdUnit').value = category.includes('hortifrutt') ? 'KG' : 'UN';
+      syncProductStockStep();
+    }
+
     function editProduct(id) {
       const p = allProducts.find(x => String(x.id) === String(id));
       if (!p) return;
@@ -1889,6 +1938,9 @@ function renderAdminHtml(storeConfig) {
       document.getElementById('formProdSubcat').value = p.subcategoria || p.subcategory || '';
       document.getElementById('formProdPrice').value = Number(p.valor_num || p.price || 0);
       document.getElementById('formProdStock').value = p.stockQuantity ?? p.estoque ?? 0;
+      document.getElementById('formProdUnit').value = getAdminProductSaleUnit(p);
+      productUnitTouched = true;
+      syncProductStockStep();
       document.getElementById('formProdStatus').value = productIsInactive(p) ? 'INATIVO' : 'ATIVO';
       document.getElementById('formProdImages').value = '';
       document.getElementById('formProdTags').value = p.tagsAi || p.tags_ia || '';
@@ -1932,6 +1984,9 @@ function renderAdminHtml(storeConfig) {
     function resetProdForm() {
       document.getElementById('prodForm').reset();
       document.getElementById('formProdId').value = '';
+      document.getElementById('formProdUnit').value = 'UN';
+      productUnitTouched = false;
+      syncProductStockStep();
       document.getElementById('formProdPhotoBase64').value = '';
       document.getElementById('formProdTags').value = '';
       clearAllPendingPhotos();
@@ -1956,7 +2011,7 @@ function renderAdminHtml(storeConfig) {
       const cat = document.getElementById('formProdCat').value;
       const sub = document.getElementById('formProdSubcat').value;
       const price = parseFloat(document.getElementById('formProdPrice').value);
-      const stock = parseInt(document.getElementById('formProdStock').value, 10);
+      const stock = parseFloat(document.getElementById('formProdStock').value);
       const externalImgs = document.getElementById('formProdImages').value.split(',').map(s => s.trim()).filter(Boolean);
       const tags = document.getElementById('formProdTags').value;
       const desc = document.getElementById('formProdDesc').value;

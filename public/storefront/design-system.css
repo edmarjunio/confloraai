@@ -166,8 +166,8 @@ cf-card.cf-card--product[interactive]:hover,
 .cf-product-info-button:hover { background: #fff; color: var(--cf-green-dark); }
 .cf-product-actions {
   position: absolute;
-  top: 7px;
-  right: 7px;
+  top: 11px;
+  right: 11px;
   z-index: 4;
   display: flex;
   flex-direction: column;
@@ -318,11 +318,12 @@ render-product-card.cf-pdv-product-card {
 .cf-shared-pdv-favorite.is-favorite { color: #ef4444; }
 .cf-pdv-card-actions {
   display: flex;
-  flex: 0 0 26px;
+  flex: 0 0 30px;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 5px;
+  justify-content: flex-start;
+  gap: 4px;
+  padding: 4px 4px 0 0;
 }
 .cf-pdv-info-button {
   width: 25px;
@@ -330,6 +331,7 @@ render-product-card.cf-pdv-product-card {
   padding: 4px;
 }
 .cf-pdv-info-button svg { width: 15px; height: 15px; }
+.cf-pdv-add-button svg { width: 15px; height: 15px; }
 .cf-pdv-card-actions .cf-shared-pdv-favorite {
   width: 25px;
   height: 25px;
@@ -431,6 +433,21 @@ cf-list-item + cf-list-item { border-top: 1px solid #f1f5f9; }
 cf-list-item[interactive] { cursor: pointer; }
 cf-list-item[interactive]:hover { background: #f0fdf4; }
 
+cf-card.cf-order-card {
+  border-width: 1px;
+  box-shadow: 0 5px 12px rgb(15 56 30 / 9%);
+  transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease, border-color 160ms ease;
+}
+cf-card.cf-order-card:hover { transform: translateY(-3px); box-shadow: 0 12px 22px rgb(15 56 30 / 15%); }
+cf-card.cf-order-card--amber { border-color: #fcd34d; background: rgb(254 243 199 / 68%); }
+cf-card.cf-order-card--blue,
+cf-card.cf-order-card--selected { border-color: #7dd3fc; background: rgb(224 242 254 / 78%); }
+cf-card.cf-order-card--green { border-color: #6ee7b7; background: rgb(209 250 229 / 72%); }
+cf-card.cf-order-card--red { border-color: #fda4af; background: rgb(255 228 230 / 76%); }
+cf-card.cf-order-card--selected { border-color: #0ea5e9; box-shadow: 0 0 0 3px rgb(14 165 233 / 20%), 0 8px 18px rgb(15 56 30 / 12%); }
+
 @media (prefers-reduced-motion: reduce) {
   cf-card[interactive], .cf-button { transition: none; }
+  cf-card.cf-order-card { transition: none; }
+  cf-card.cf-order-card:hover { transform: none; }
 }

@@ -29,20 +29,26 @@ function sentences(value) {
 
 function classifyProduct(product, category) {
   const categoryText = normalize(category);
+  const nameText = normalize([product.name, product.canonicalName].join(" "));
+  const subcategoryText = normalize([product.subcategoryName, product.subcategory, product.subcategoria].join(" "));
   const productText = normalize([
-    product.name,
-    product.subcategoryName,
-    product.subcategory,
-    product.subcategoria,
+    nameText,
+    subcategoryText,
   ].join(" "));
 
-  if (categoryText.includes("pet") || /animal|racao|acessorio pet/.test(productText)) return "pets";
-  if (categoryText.includes("hortifrutti") || categoryText.includes("hortifruti")) return "food";
+  const explicitType = normalize([product.productType, product.kind, product.tipo].join(" "));
+  const liveAnimal = /animal vivo|mini cabra|cabra|bode|galinha|galo|pintinho|coelho|jabuti|tartaruga|codorna|passaro|ave|pato|marreco|hamster|porquinho|cachorro|cao|gato/.test(nameText)
+    || /^(animal|vivo)$/.test(explicitType);
+  const petMerchandise = /racao|petisco|snack|coleira|brinquedo|acessorio|areia higienica|comedouro|bebedouro|cama pet|gaiola|casinha|casa para|aquario|terrario|alimento para|suplemento/.test(nameText);
+  if ((categoryText.includes("pet") || /animal|racao|acessorio pet/.test(productText)) && liveAnimal && !petMerchandise) return "animal";
+  if (categoryText.includes("pet") || /racao|acessorio pet/.test(productText)) return "pets";
+
   if (categoryText.includes("frutifera") || categoryText.includes("frutifero")) return "fruiting-plant";
-  if (categoryText.includes("horta")) return "garden";
-  if (categoryText.includes("planta") || categoryText.includes("muda")) return "plant";
+  const plantingProduct = /muda|mudas|semente|sementes|plantio|para plantar|para plantio|planta para/.test(`${nameText} ${subcategoryText}`);
+  if (categoryText.includes("planta") || categoryText.includes("muda") || plantingProduct) return "plant";
   if (/planta|muda|flor|palmeira|frutifera|grama|semente/.test(productText)) return "plant";
-  if (/fruta|legume|verdura|hortalica|alface|banana|manga|tomate|cebola|abacate|abacaxi/.test(productText)) return "food";
+  if (categoryText.includes("hortifrutti") || categoryText.includes("hortifruti")) return "food";
+  if (/fruta|legume|verdura|hortalica|alface|agriao|rucula|couve|espinafre|acelga|repolho|coentro|salsa|salsinha|cebolinha|hortela|manjericao|alecrim|oregano|tomilho|banana|manga|tomate|cebola|alho|abacate|abacaxi|cenoura|beterraba|rabanete|pepino|abobora|chuchu|quiabo|vagem|ervilha|feijao|milho|batata|mandioca|pimenta/.test(productText)) return "food";
   return "general";
 }
 
@@ -130,6 +136,29 @@ function categoryContent(kind, values, product) {
     };
   }
 
+  if (kind === "animal") {
+    return {
+      summary: values.description || `Conheça as necessidades de ${name} antes de levar para casa. Espaço, abrigo, alimentação e manejo variam conforme a espécie e a idade.`,
+      facts: [
+        { label: "Moradia", icon: "mapPin", tone: "green", value: make("housing", "Prepare um abrigo seco e ventilado, protegido de chuva, sol intenso e predadores, com área de descanso e espaço para se movimentar. Prefira materiais seguros e fáceis de limpar; confirme o tamanho adequado para a espécie.") },
+        { label: "Manejo", icon: "heart", tone: "blue", value: make("handling", "Aproxime-se com calma e deixe o animal se acostumar ao ambiente. Confirme com a equipe a forma segura de pegar e manejar esta espécie.") },
+        { label: "Alimentação e petiscos", icon: "leaf", tone: "yellow", value: make("feeding", "Ofereça dieta própria para a espécie e a fase de vida. Use apenas petiscos próprios para o animal, com moderação, e confirme alimentos e quantidades com a equipe ou um veterinário.") },
+        { label: "O que não oferecer", icon: "shield", tone: "orange", value: make("prohibitedFood", "Não ofereça restos, plantas, medicamentos ou alimentos sem confirmar que são seguros para esta espécie.") },
+      ],
+      pairTitle: "Bem-estar e segurança",
+      likesTitle: "O que ajuda",
+      likes: make("likes", "Rotina tranquila, água limpa, abrigo adequado e alimentação específica para a espécie."),
+      avoidTitle: "O que evitar",
+      avoid: make("avoid", "Mudanças bruscas de dieta, recinto apertado ou inseguro e contato sem adaptação."),
+      tipsTitle: "Antes de levar para casa",
+      tips: careTips.length ? careTips : [
+        "Confirme espécie, idade, sexo e necessidades de espaço com a equipe.",
+        "Prepare o abrigo e os itens essenciais antes da chegada do animal.",
+        "Para dúvidas de saúde, alimentação ou comportamento, procure um médico-veterinário.",
+      ],
+    };
+  }
+
   return {
     summary: values.description || `${name}: consulte a descrição e as orientações da embalagem para escolher e usar este item da melhor forma.`,
     facts: [
@@ -169,6 +198,9 @@ export function buildProductInfoContent(product, category) {
     precautions: firstText(product.precautions, product.precaucoes, product.precauções, product.cuidados_de_uso),
     storage: firstText(product.storageTips, product.storage, product.dicas_armazenamento, product.dicasArmazenamento),
     feeding: firstText(product.feeding, product.alimentacao, product.alimentação, product.dieta),
+    housing: firstText(product.housing, product.moradia, product.abrigo, product.habitat_ideal, product.habitatIdeal, product.ambiente_ideal),
+    handling: firstText(product.handling, product.manejo, product.comportamento, product.dicas_manejo, product.dicasManejo),
+    prohibitedFood: firstText(product.prohibitedFoods, product.alimentos_proibidos, product.alimentosProibidos, product.o_que_nao_oferecer, product.oQueNaoOferecer),
     durability: firstText(product.durability, product.durabilidade, product.validade),
     usage: firstText(product.usage, product.uso, product.modo_de_uso, product.modoDeUso),
     selection: firstText(product.selectionTips, product.dica_escolha, product.dicaEscolha),

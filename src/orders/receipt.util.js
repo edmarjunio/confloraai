@@ -20,10 +20,11 @@ function formatOrderReceipt(order) {
     const quantity = Number(item.quantity) || 1;
     const unitPrice = Number(item.price) || Number(item.unitPrice) || 0;
     const unit = item.unit || "UN";
+    const formattedQuantity = quantity.toLocaleString('pt-BR', { maximumFractionDigits: unit === 'KG' ? 3 : 0 });
     const subtotal = Number(item.subtotalMinor) / 100 ||
       Number(item.subtotal) ||
       unitPrice * quantity;
-    return `▫️ *${quantity}${unit === 'KG' ? 'kg' : 'x'}* ${item.name || "Produto"}\n   ${money(unitPrice)} un. = *${money(subtotal)}*`;
+    return `▫️ *${formattedQuantity}${unit === 'KG' ? ' kg' : 'x'}* ${item.name || "Produto"}\n   ${money(unitPrice)} ${unit === 'KG' ? '/ kg' : 'un.'} = *${money(subtotal)}*`;
   });
 
   const subtotal = Number(order.subtotal) || (order.items || []).reduce((acc, it) => acc + (Number(it.price || 0) * Number(it.quantity || 1)), 0);

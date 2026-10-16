@@ -189,9 +189,17 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone }) {
   app.get('/api/caixa/orders/:id', route(async (req, res) => res.json(await findOrder(req))));
   app.post('/api/caixa/orders/:id/confirm', requireCashier, route(async (req, res) => {
     const existing = await findOrder(req);
-    if (existing.paymentMethod === 'PIX') { return res.status(409).json({ error: 'Pix é confirmado exclusivamente pelo webhook do Sicredi.' }); }
-    const order = await store.receive(existing.id, actor(req.user), null, req.body.receivedAmount === null || req.body.receivedAmount === undefined ? null : Number(req.body.receivedAmount));
-    res.json({ success: true, order, receiptText: formatOrderReceipt(order) });
+    const paymentMethod = String(req.body.paymentMethod || existing.paymentMethod || '').toUpperCase();
+    if (paymentMethod === 'PIX') {
+      const order = await service.requestPixAtCashier(existing.id, req.user);
+      return res.status(202).json({ success: true, awaitingPayment: true, order, receiptText: formatOrderReceipt(order) });
+    }
+    const receivedAmount = req.body.receivedAmount === null || req.body.receivedAmount === undefined || req.body.receivedAmount === ''
+      ? null : Number(req.body.receivedAmount);
+    const order = await store.receive(existing.id, actor(req.user), null, receivedAmount, paymentMethod, { sendFinalReceipt: true });
+    await service.deliver(`${order.id}-final-receipt`);
+    const delivery = await store.read('pdv_outbox', `${order.id}-final-receipt`);
+    res.json({ success: true, order, receiptText: formatOrderReceipt(order), receiptDelivery: { sent: delivery?.status === 'SENT' && Boolean(order.customerPhone), reason: delivery?.lastError || (order.customerPhone ? '' : 'Sem WhatsApp informado.') } });
   }));
   // This compatibility endpoint only reads persisted status; it cannot confirm payment.
   app.post('/api/caixa/orders/:id/confirm-sicredi-pix', route(async (req, res) => {

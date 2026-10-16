@@ -31,7 +31,10 @@ function remainingStock(product, quantity) {
   if (!Number.isFinite(stock) || stock < quantity) {
     throw new Error(`Estoque insuficiente para ${product.name || 'produto'}.`);
   }
-  return stock - quantity;
+  const nextStock = stock - quantity;
+  const savedUnit = String(product.saleUnit?.code || product.unit || product.unidade || '').trim().toUpperCase();
+  const unit = savedUnit || (/(^|[^A-Z])KG([^A-Z]|$)/i.test(String(product.name || product.descricao || '')) ? 'KG' : 'UN');
+  return unit === 'KG' ? Number(nextStock.toFixed(3)) : nextStock;
 }
 
 module.exports = { PAID_ORDER_STATUSES, validateOrderConfirmation, validateStockQuantity, remainingStock };

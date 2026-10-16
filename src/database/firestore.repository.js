@@ -473,6 +473,37 @@ class FirestoreRepository {
 
     const previousProduct = await this.getProductById(product.id);
     const dataWithTs = { ...product, updatedAt: new Date().toISOString() };
+    if (product.unit !== undefined || product.unidade !== undefined || product.saleUnit?.code !== undefined) {
+      const unit = String(product.saleUnit?.code || product.unit || product.unidade || 'UN').trim().toUpperCase();
+      if (!['UN', 'KG'].includes(unit)) { throw new Error('A unidade de venda deve ser UN ou KG.'); }
+      const oldSaleUnit = previousProduct?.saleUnit || {};
+      const sameUnit = String(oldSaleUnit.code || previousProduct?.unit || previousProduct?.unidade || 'UN').toUpperCase() === unit;
+      const defaults = unit === 'KG'
+        ? { label: 'kg', minimum: 0.1, increment: 0.1 }
+        : { label: 'unidade', minimum: 1, increment: 1 };
+      Object.assign(dataWithTs, {
+        unit,
+        unidade: unit,
+        saleUnit: {
+          ...oldSaleUnit,
+          code: unit,
+          label: defaults.label,
+          minimum: sameUnit ? Number(oldSaleUnit.minimum) || defaults.minimum : defaults.minimum,
+          increment: sameUnit ? Number(oldSaleUnit.increment) || defaults.increment : defaults.increment,
+        },
+      });
+    }
+    if (product.stockQuantity !== undefined || product.estoque !== undefined) {
+      const stock = Number(product.stockQuantity ?? product.estoque);
+      const unit = String(dataWithTs.saleUnit?.code || dataWithTs.unit || dataWithTs.unidade || 'UN').toUpperCase();
+      const validPrecision = unit === 'KG'
+        ? Math.abs(stock * 1000 - Math.round(stock * 1000)) < 0.000001
+        : Number.isInteger(stock);
+      if (!Number.isFinite(stock) || stock < 0 || !validPrecision) {
+        throw new Error(unit === 'KG' ? 'O estoque por KG aceita até três casas decimais.' : 'O estoque por unidade deve ser um número inteiro igual ou maior que zero.');
+      }
+      Object.assign(dataWithTs, { stockQuantity: stock, estoque: stock });
+    }
     if (product.status !== undefined || product.STATUS !== undefined) {
       const status = productStatus(product);
       if (!['ATIVO', 'INATIVO'].includes(status)) {
@@ -1569,8 +1600,8 @@ class FirestoreRepository {
     if (!id || !movementId || !['ENTRY', 'EXIT', 'SET'].includes(kind)) {
       throw new Error('Produto, identificador da operação e tipo de ajuste são obrigatórios.');
     }
-    if (!Number.isInteger(amount) || amount < 0 || (kind !== 'SET' && amount === 0)) {
-      throw new Error(kind === 'SET' ? 'Informe uma contagem inteira igual ou maior que zero.' : 'Informe uma quantidade inteira maior que zero.');
+    if (!Number.isFinite(amount) || amount < 0 || (kind !== 'SET' && amount === 0)) {
+      throw new Error(kind === 'SET' ? 'Informe uma contagem igual ou maior que zero.' : 'Informe uma quantidade maior que zero.');
     }
     if ((kind === 'EXIT' || kind === 'SET') && note.length < 3) {
       throw new Error('Explique o motivo da baixa ou do ajuste de contagem.');
@@ -1578,6 +1609,15 @@ class FirestoreRepository {
 
     const now = new Date().toISOString();
     const resolveMovement = (product) => {
+      const savedUnit = String(product.saleUnit?.code || product.unit || product.unidade || '').trim().toUpperCase();
+      const unit = savedUnit || (/(^|[^A-Z])KG([^A-Z]|$)/i.test(String(product.name || product.descricao || '')) ? 'KG' : 'UN');
+      const isKilogram = unit === 'KG';
+      const validPrecision = isKilogram
+        ? Math.abs(amount * 1000 - Math.round(amount * 1000)) < 0.000001
+        : Number.isInteger(amount);
+      if (!validPrecision) {
+        throw new Error(isKilogram ? 'Para produtos por KG, informe até três casas decimais.' : 'Para este produto, informe uma quantidade inteira.');
+      }
       const previousStock = Number(product.stockQuantity ?? product.estoque ?? 0);
       if (!Number.isFinite(previousStock)) throw new Error('O estoque atual do produto não é um número válido.');
       const newStock = kind === 'SET' ? amount : kind === 'ENTRY' ? previousStock + amount : previousStock - amount;

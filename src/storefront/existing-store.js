@@ -15,7 +15,8 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
   const category = String(item.category || item.categoria || "Geral");
   const name = item.name || item.descricao || "Produto";
   const subcategory = String(item.subcategory || item.subcategoria || "");
-  const unit = item.unit || item.unidade || "UN";
+  const savedUnit = String(item.saleUnit?.code || item.unit || item.unidade || "").trim().toUpperCase();
+  const unit = savedUnit || (/(^|[^A-Z])KG([^A-Z]|$)/i.test(name) ? "KG" : "UN");
   const photo = (value) =>
     typeof value === "string" &&
     (/^https:\/\/(?:firebasestorage|storage)\.googleapis\.com\//.test(value) ||
@@ -46,6 +47,7 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
     id: String(item.id),
     name,
     canonicalName: item.canonicalName || item.canonical_name || name,
+    productType: item.productType || item.tipoProduto || item.tipo || "",
     variation: item.variation || item.variacao || item.variationLabel || item.apresentacao || "",
     description: item.description || item.descriptionAi || "",
     price: {
@@ -100,9 +102,9 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
     },
     saleUnit: {
       code: unit,
-      label: unit === "UN" ? "unidade" : unit,
-      minimum: unit === "KG" ? 0.1 : 1,
-      increment: unit === "KG" ? 0.1 : 1,
+      label: item.saleUnit?.label || (unit === "UN" ? "unidade" : unit),
+      minimum: Number(item.saleUnit?.minimum) || (unit === "KG" ? 0.1 : 1),
+      increment: Number(item.saleUnit?.increment) || (unit === "KG" ? 0.1 : 1),
     },
     salesCount: Number(item.salesCount) || 0,
     descriptionAi: item.descriptionAi || item.descricao_ia || "",
@@ -126,6 +128,9 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
     precautions: item.precautions || item.precaucoes || item.precauções || item.cuidados_de_uso || "",
     alimentacao: item.alimentacao || item.alimentação || item.feeding || item.dieta || "",
     feeding: item.feeding || item.alimentacao || item.alimentação || item.dieta || "",
+    housing: item.housing || item.moradia || item.abrigo || item.habitat_ideal || item.habitatIdeal || "",
+    handling: item.handling || item.manejo || item.comportamento || item.dicas_manejo || item.dicasManejo || "",
+    prohibitedFoods: item.prohibitedFoods || item.alimentos_proibidos || item.alimentosProibidos || item.o_que_nao_oferecer || item.oQueNaoOferecer || "",
   };
 }
 function existingConfig(products, saved, settings = { stockControlEnabled: true }) {
@@ -549,7 +554,7 @@ async function normalizeExistingCheckout(req, repository) {
     );
     quantities.set(
       String(item.productId),
-      (quantities.get(String(item.productId)) || 0) + item.quantity,
+      Number(((quantities.get(String(item.productId)) || 0) + item.quantity).toFixed(3)),
     );
   }
   const items = [...quantities].map(([id, quantity]) => {

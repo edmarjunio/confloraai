@@ -2,8 +2,9 @@ function normalizeCatalogItem(it) {
   const name = it.name || it.descricao || '';
   const category = it.category || it.categoria || 'Conflora';
   const subcategory = it.subcategory || it.subcategoria || '';
-  const isKg = (it.unit || it.unidade || '').toUpperCase() === 'KG' || /\bkg\b/i.test(name);
-  const unit = (it.unit || it.unidade || (isKg ? 'KG' : 'UN')).toUpperCase();
+  const savedUnit = it.saleUnit?.code || it.unit || it.unidade || '';
+  const isKg = savedUnit.toUpperCase() === 'KG' || /\bkg\b/i.test(name);
+  const unit = (savedUnit || (isKg ? 'KG' : 'UN')).toUpperCase();
   const price = typeof it.price === 'number'
     ? it.price
     : typeof it.valor_num === 'number'

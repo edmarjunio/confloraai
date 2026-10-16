@@ -194,6 +194,7 @@ const { useState, useEffect, useRef, useMemo } = React;
       const favoriteProductIdsRef = useRef(new Set());
       const favoriteSaveQueueRef = useRef(Promise.resolve());
       const [infoProduct, setInfoProduct] = useState(null);
+      const [weightProduct, setWeightProduct] = useState(null);
       const categoryTabs = useMemo(() => {
         const activeProducts = products.filter((product) =>
           String(product.status || product.STATUS || 'ATIVO').trim().toUpperCase() === 'ATIVO'
@@ -606,16 +607,20 @@ const { useState, useEffect, useRef, useMemo } = React;
         while (scheduler.active < 5 && scheduler.queue.length) startNext();
       }, [filteredProducts, visibleCount]);
 
+      const isSoldByKg = (product) => String(product?.saleUnit?.code || product?.unit || product?.unidade || '').trim().toUpperCase() === 'KG';
+      const saleQuantityStep = (product) => Number(product?.saleUnit?.increment) || (isSoldByKg(product) ? 0.1 : 1);
+
       const addToCart = (product, customQty = null) => {
-        const qtyToAdd = customQty !== null ? customQty : Math.max(1, Number(defaultMultiplier) || 1);
+        const rawQuantity = customQty !== null ? Number(customQty) : Math.max(1, Number(defaultMultiplier) || 1);
+        const qtyToAdd = isSoldByKg(product) ? Number(rawQuantity.toFixed(3)) : rawQuantity;
         const productId = String(product?.id ?? product?.productId ?? product?.sku ?? '').trim();
-        if (!productId) return;
+        if (!productId || !Number.isFinite(qtyToAdd) || qtyToAdd <= 0) return;
         setCart((prev) => {
           const existing = prev.find((item) => String(item?.id ?? item?.productId ?? item?.sku ?? '').trim() === productId);
           if (existing) {
             return prev.map((item) =>
               String(item?.id ?? item?.productId ?? item?.sku ?? '').trim() === productId
-                ? { ...item, quantity: item.quantity + qtyToAdd }
+                ? { ...item, quantity: Number((item.quantity + qtyToAdd).toFixed(3)) }
                 : item
             );
           }
@@ -625,17 +630,44 @@ const { useState, useEffect, useRef, useMemo } = React;
         setDefaultMultiplier(1);
       };
 
+      const addProductToCart = (product) => {
+        if (isSoldByKg(product)) {
+          setWeightProduct(product);
+          return;
+        }
+        addToCart(product);
+      };
+
+      const confirmWeightAdd = (quantity) => {
+        if (!weightProduct) return;
+        addToCart(weightProduct, quantity);
+        setWeightProduct(null);
+      };
+
       const updateCartQuantity = (productId, delta) => {
         const normalizedProductId = String(productId ?? '').trim();
         setCart((prev) =>
           prev
             .map((item) =>
               String(item?.id ?? item?.productId ?? item?.sku ?? '').trim() === normalizedProductId
-                ? { ...item, quantity: Math.max(0, item.quantity + delta) }
+                ? { ...item, quantity: Math.max(0, Number((item.quantity + delta).toFixed(3))) }
                 : item
             )
             .filter((item) => item.quantity > 0)
         );
+      };
+
+      const adjustCartItemQuantity = (item, direction) => {
+        if (!isSoldByKg(item)) {
+          updateCartQuantity(item.id, direction);
+          return;
+        }
+        const minimum = Number(item.saleUnit?.minimum) || 0.1;
+        const step = saleQuantityStep(item);
+        const delta = direction < 0 && item.quantity <= minimum + 0.00001
+          ? -item.quantity
+          : direction * step;
+        updateCartQuantity(item.id, delta);
       };
 
       const removeFromCart = (productId) => {
@@ -683,7 +715,7 @@ const { useState, useEffect, useRef, useMemo } = React;
         const { action, productId, nativeEvent } = event.detail || {};
         const product = products.find((candidate) => String(candidate.id) === String(productId));
         if (!product) return;
-        if (action === 'add') addToCart(product);
+        if (action === 'add') addProductToCart(product);
         if (action === 'favorite') toggleShortcut(product.id, nativeEvent || event);
         if (action === 'info') openProductInformation(product.id);
       };
@@ -1074,7 +1106,9 @@ const { useState, useEffect, useRef, useMemo } = React;
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <span className="text-xs font-extrabold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-md">
-                          {item.quantity} X
+                          {isSoldByKg(item)
+                            ? `${Number(item.quantity).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} kg`
+                            : `${item.quantity} X`}
                         </span>
                         <p title={item.name} className="text-sm font-semibold text-slate-800 truncate">
                           {item.name}
@@ -1082,18 +1116,18 @@ const { useState, useEffect, useRef, useMemo } = React;
                       </div>
                       <div className="flex items-center gap-2 mt-1">
                         <span className="text-xs text-slate-400">
-                          Un: {formatBRL(item.price)}
+                          {isSoldByKg(item) ? `${formatBRL(item.price)} / kg` : `Un: ${formatBRL(item.price)}`}
                         </span>
                         {/* Subtle quantity steppers for fast adjustments */}
                         <div className="flex items-center bg-slate-100 rounded-lg p-0.5">
                           <button
-                            onClick={() => updateCartQuantity(item.id, -1)}
+                            onClick={() => adjustCartItemQuantity(item, -1)}
                             className="w-5 h-5 flex items-center justify-center rounded-md hover:bg-white text-slate-600 transition"
                           >
                             <Minus className="w-3 h-3" />
                           </button>
                           <button
-                            onClick={() => updateCartQuantity(item.id, 1)}
+                            onClick={() => adjustCartItemQuantity(item, 1)}
                             className="w-5 h-5 flex items-center justify-center rounded-md hover:bg-white text-slate-600 transition"
                           >
                             <Plus className="w-3 h-3" />
@@ -1457,6 +1491,7 @@ const { useState, useEffect, useRef, useMemo } = React;
           </div>
 
           {/* MODALS */}
+          {weightProduct && <PdvComponents.WeightPrompt product={weightProduct} onCancel={() => setWeightProduct(null)} onConfirm={confirmWeightAdd} />}
           {infoProduct && <PdvComponents.ProductInformation product={infoProduct} onClose={() => setInfoProduct(null)} />}
           {activeModal && !['queue', 'debt_settle', 'approval'].includes(activeModal) && (
             <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">

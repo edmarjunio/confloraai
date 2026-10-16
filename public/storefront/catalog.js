@@ -31,6 +31,87 @@ export function createCatalog(state, add, navigate) {
   let favoriteSaveQueue = Promise.resolve();
   let searchEventTimer;
   const loadMoreButton = $("#loadMore");
+
+  function isSoldByKg(product) {
+    return String(product?.saleUnit?.code || product?.unit || product?.unidade || "").trim().toUpperCase() === "KG";
+  }
+
+  function nextValidWeight(minimum, increment, target = 1) {
+    const steps = Math.max(0, Math.ceil((target - minimum) / increment - 0.0000001));
+    return Number((minimum + steps * increment).toFixed(3));
+  }
+
+  function highestValidWeight(maximum, minimum, increment) {
+    if (!Number.isFinite(maximum)) return nextValidWeight(minimum, increment);
+    const steps = Math.floor((maximum - minimum) / increment + 0.0000001);
+    return Number((minimum + Math.max(0, steps) * increment).toFixed(3));
+  }
+
+  function openWeightQuantityDialog(product) {
+    const minimum = Number(product.saleUnit?.minimum) || 0.1;
+    const increment = Number(product.saleUnit?.increment) || 0.1;
+    const maxStock = product.stock?.tracked ? Number(product.stock.quantity) : Infinity;
+    const initialTarget = nextValidWeight(minimum, increment);
+    const initialQuantity = initialTarget <= maxStock ? initialTarget : highestValidWeight(maxStock, minimum, increment);
+    const dialog = element("dialog", { class: "product-weight-dialog" });
+    const title = element("h2", { text: `Quantos quilos de ${product.name}?` });
+    const price = element("p", { class: "product-weight-price", text: `${money(product.price.amountMinor)} / kg` });
+    const input = element("input", {
+      type: "text",
+      inputmode: "decimal",
+      autocomplete: "off",
+      min: String(minimum),
+      step: String(increment),
+      value: String(Number(initialQuantity.toFixed(3))),
+      "aria-label": `Quantidade em quilos de ${product.name}`,
+      required: "",
+    });
+    input.addEventListener("input", () => { input.value = input.value.replace(/[^\d.,]/g, "").replace(/(.*[.,].*)[.,]/g, "$1"); });
+    if (Number.isFinite(maxStock)) input.max = String(maxStock);
+    const total = element("strong", { class: "product-weight-total" });
+    const cancel = element("button", { type: "button", class: "quiet", text: "Cancelar", onclick: () => dialog.close() });
+    const confirm = element("button", { type: "button", class: "cf-button", text: "Adicionar ao carrinho" });
+    const updateTotal = () => {
+      const quantity = Number(String(input.value).replace(",", "."));
+      const valid = Number.isFinite(quantity)
+        && quantity >= minimum
+        && quantity <= maxStock
+        && Math.abs(quantity / increment - Math.round(quantity / increment)) < 0.00001;
+      total.textContent = `Total: ${money(Math.round(product.price.amountMinor * (Number.isFinite(quantity) ? quantity : 0)))}`;
+      confirm.disabled = !valid;
+    };
+    input.addEventListener("input", updateTotal);
+    confirm.addEventListener("click", () => {
+      if (!input.reportValidity()) return;
+      const quantity = Number(String(input.value).replace(",", "."));
+      if (!Number.isFinite(quantity) || quantity < minimum || quantity > maxStock) return;
+      add(product, quantity);
+      dialog.close();
+    });
+    dialog.append(
+      element("div", { class: "product-weight-content" }, [
+        element("header", { class: "product-weight-header" }, [title, element("button", { type: "button", class: "product-info-close", "aria-label": "Fechar", text: "×", onclick: () => dialog.close() })]),
+        price,
+        element("label", { class: "product-weight-label", text: "Peso para adicionar" }, [input, element("span", { text: "kg" })]),
+        total,
+        element("div", { class: "product-weight-actions" }, [cancel, confirm]),
+      ]),
+    );
+    dialog.addEventListener("click", (event) => { if (event.target === dialog) dialog.close(); });
+    dialog.addEventListener("close", () => dialog.remove(), { once: true });
+    document.body.append(dialog);
+    updateTotal();
+    dialog.showModal();
+    input.focus();
+  }
+
+  function addFromCard(product, defaultQuantity = product.saleUnit?.minimum || 1) {
+    if (isSoldByKg(product)) {
+      openWeightQuantityDialog(product);
+      return;
+    }
+    add(product, defaultQuantity);
+  }
   const pageObserver = typeof IntersectionObserver === "function"
     ? new IntersectionObserver((entries) => {
         if (!entries.some((entry) => entry.isIntersecting) || loadingNextPage) return;
@@ -208,9 +289,9 @@ export function createCatalog(state, add, navigate) {
     const minimumQuantity = product.saleUnit?.minimum || 1;
     const unavailable = product.status === "INATIVO" || product.isAvailable === false
       || (product.stock?.tracked && product.stock.quantity < minimumQuantity);
-    const addButton = element("button", { type: "button", class: "cf-button product-info-add", text: unavailable ? "Indisponível" : "Adicionar à sacola", disabled: unavailable, onclick: () => {
-      add(product, minimumQuantity);
+    const addButton = element("button", { type: "button", class: "cf-button product-info-add", text: unavailable ? "Indisponível" : isSoldByKg(product) ? "Escolher peso" : "Adicionar à sacola", disabled: unavailable, onclick: () => {
       dialog.close();
+      addFromCard(product, minimumQuantity);
     } }, unavailable ? [] : [icon("cart")]);
     const footerActions = [addButton];
     const contactPhone = String(state.config?.checkout?.contactPhone || "").replace(/\D/g, "");
@@ -330,7 +411,7 @@ export function createCatalog(state, add, navigate) {
     card.addEventListener("cf-product-card-action", (event) => {
       const { action } = event.detail || {};
       if (action === "open") open();
-      if (action === "add") add(product, product.saleUnit?.minimum || 1);
+      if (action === "add") addFromCard(product, product.saleUnit?.minimum || 1);
       if (action === "favorite" && toggleFavorite(product) && !showingFavorites) render();
       if (action === "info") openProductInformation(product);
     });
@@ -545,7 +626,7 @@ export function createCatalog(state, add, navigate) {
           : unavailable
             ? "Indisponível"
             : "Adicionar à sacola",
-        onclick: () => add(product, Number(quantity.value)),
+        onclick: () => addFromCard(product, Number(quantity.value)),
         ...(unavailable ? { disabled: "" } : {}),
       },
       [!isInactive ? icon("cart") : null].filter(Boolean),

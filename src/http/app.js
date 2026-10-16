@@ -2011,14 +2011,23 @@ function createApp({
         .map((p) => {
           const imageCandidates = getCashierProductImageCandidates(p);
           const imageUrl = imageCandidates[0] || '';
+          const name = p.name || p.descricao || 'Produto';
+          const savedUnit = String(p.saleUnit?.code || p.unit || p.unidade || '').trim().toUpperCase();
+          const unit = savedUnit || (/(^|[^A-Z])KG([^A-Z]|$)/i.test(name) ? 'KG' : 'UN');
 
           return {
             id: p.id,
             status: String(p.status || p.STATUS || '').trim().toUpperCase(),
-            name: p.name || p.descricao || 'Produto',
+            name,
             price: Number(p.price || p.valor_num || 0),
             stock: Number(p.stockQuantity ?? p.estoque ?? 0),
-            unit: p.unit || p.unidade || 'UN',
+            unit,
+            saleUnit: {
+              code: unit,
+              label: p.saleUnit?.label || (unit === 'UN' ? 'unidade' : unit),
+              minimum: Number(p.saleUnit?.minimum) || (unit === 'KG' ? 0.1 : 1),
+              increment: Number(p.saleUnit?.increment) || (unit === 'KG' ? 0.1 : 1),
+            },
             category: p.category || p.categoria || '',
             subcategory: p.subcategory || p.subcategoria || '',
             canonicalName: p.canonicalName || p.canonical_name || '',

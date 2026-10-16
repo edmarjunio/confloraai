@@ -95,23 +95,56 @@ class PdvRepository {
     });
   }
 
+  async requestPixAtCashier(orderId, receiver) {
+    return this.transaction(async (tx) => {
+      const order = await tx.get('orders', orderId);
+      if (!order || order.source !== 'PDV') { throw new Error('Comanda não encontrada.'); }
+      if (order.completedAt || order.status === 'CANCELLED') { throw new Error('Esta comanda já foi finalizada ou cancelada.'); }
+      if (!['ADMIN', 'CAIXA'].includes(receiver?.role)) { throw new Error('Somente o caixa pode gerar a cobrança Pix.'); }
+      if (order.paymentMethod === 'PIX') { return order; }
+      if (order.status !== 'AWAITING_CASHIER') { throw new Error('A comanda não está aguardando recebimento no caixa.'); }
+      const pixData = { txid: order.id.replace(/-/g, '').toUpperCase(), provider: 'SICREDI' };
+      const updated = { ...order, paymentMethod: 'PIX', paymentStatus: 'PENDING', status: 'CREATING_PIX', pixData, pixCopiaECola: '', updatedAt: new Date().toISOString() };
+      tx.set('orders', order.id, updated);
+      return updated;
+    });
+  }
+
+  async queuePixChargeReceipt(orderId) {
+    return this.transaction(async (tx) => {
+      const id = `${orderId}-pix-charge`;
+      const previous = await tx.get('pdv_outbox', id);
+      if (!previous || previous.status === 'FAILED') {
+        tx.set('pdv_outbox', id, { id, orderId, kind: 'pix-charge', status: 'PENDING', attempts: 0 });
+      }
+      return id;
+    });
+  }
+
   /** Stock, debt, attribution, payment and notification intent commit together. */
-  async receive(orderId, receiver, verification = null, cashReceived = null) {
+  async receive(orderId, receiver, verification = null, cashReceived = null, paymentMethodOverride = null, { sendFinalReceipt = false } = {}) {
     const inventory = await this.repository.getInventorySettings();
     return this.transaction(async (tx) => {
       const order = await tx.get('orders', orderId);
       if (!order || order.source !== 'PDV') { throw new Error('Comanda não encontrada.'); }
       if (order.status === 'CANCELLED') { throw new Error('Comanda cancelada.'); }
       if (order.completedAt) { return { ...order, alreadyConfirmed: true }; }
-      if (order.paymentMethod === 'PIX' && (!verification || verification.txid !== order.pixData?.txid || verification.amountMinor !== Math.round(order.total * 100))) {
+      const paymentMethod = paymentMethodOverride ? String(paymentMethodOverride).toUpperCase() : order.paymentMethod;
+      if (paymentMethodOverride && order.status !== 'AWAITING_CASHIER') { throw new Error('A forma de pagamento só pode ser escolhida antes do recebimento.'); }
+      if (paymentMethodOverride && !['DINHEIRO', 'DEBITO', 'CREDITO', 'FIADO', 'SALDO_CLIENTE'].includes(paymentMethod)) { throw new Error('Forma de pagamento inválida para recebimento manual.'); }
+      if (order.paymentMethod === 'PIX' && paymentMethod !== 'PIX') { throw new Error('Uma cobrança Pix já emitida não pode ser convertida; aguarde a confirmação do Sicredi.'); }
+      if (paymentMethod === 'PIX' && (!verification || verification.txid !== order.pixData?.txid || verification.amountMinor !== Math.round(order.total * 100))) {
         throw new Error('Pix exige confirmação do Sicredi com identificador e valor exatos.');
       }
-      if (order.paymentMethod !== 'PIX' && !['ADMIN', 'CAIXA'].includes(receiver?.role)) { throw new Error('Somente o caixa pode receber esta comanda.'); }
+      if (paymentMethod !== 'PIX' && !['ADMIN', 'CAIXA'].includes(receiver?.role)) { throw new Error('Somente o caixa pode receber esta comanda.'); }
       const tendered = cashReceived ?? order.cashTendered ?? order.total;
-      if (order.paymentMethod === 'DINHEIRO' && (!Number.isFinite(tendered) || Math.round(tendered * 100) < Math.round(order.total * 100))) { throw new Error('Valor recebido em dinheiro menor que o total.'); }
+      if (paymentMethod === 'DINHEIRO' && (!Number.isFinite(tendered) || Math.round(tendered * 100) < Math.round(order.total * 100))) { throw new Error('Valor recebido em dinheiro menor que o total.'); }
       const now = new Date().toISOString();
       const quantities = new Map();
-      for (const item of order.items) { quantities.set(item.productId, (quantities.get(item.productId) || 0) + validateStockQuantity(item)); }
+      for (const item of order.items) {
+        const total = (quantities.get(item.productId) || 0) + validateStockQuantity(item);
+        quantities.set(item.productId, Number(total.toFixed(3)));
+      }
       const products = [];
       if (inventory.stockControlEnabled && !order.stockDeducted) {
         for (const [id, quantity] of quantities) {
@@ -120,8 +153,8 @@ class PdvRepository {
           products.push({ id, quantity, product, stock: remainingStock(product, quantity) });
         }
       }
-      const onAccount = order.paymentMethod === 'FIADO';
-      const usingCredit = order.paymentMethod === 'SALDO_CLIENTE';
+      const onAccount = paymentMethod === 'FIADO';
+      const usingCredit = paymentMethod === 'SALDO_CLIENTE';
       const customer = onAccount || usingCredit ? await tx.get('customers', order.customerId) : null;
       if ((onAccount || usingCredit) && !customer) { throw new Error('Fiado ou uso de crédito exige cliente cadastrado.'); }
       const creditMinor = Math.round(Number(customer?.creditBalance || 0) * 100);
@@ -132,12 +165,12 @@ class PdvRepository {
         tx.set('products', id, { ...product, stockQuantity: stock, estoque: stock, updatedAt: now });
         tx.set('stock_movements', `${order.id}-${id}`, { productId: id, productName: product.name, orderId, quantityDeducted: quantity, previousStock: stock + quantity, newStock: stock, type: 'SALE_PDV', createdAt: now });
       }
-      const receivedBy = order.paymentMethod === 'PIX' ? order.createdBy : receiver;
-      const completed = { ...order, receivedBy, cashierName: receivedBy.name, cashierEmail: receivedBy.email || '', status: 'CONFIRMED',
+      const receivedBy = paymentMethod === 'PIX' ? order.createdBy : receiver;
+      const completed = { ...order, paymentMethod, receivedBy, cashierName: receivedBy.name, cashierEmail: receivedBy.email || '', status: 'CONFIRMED',
         paymentStatus: onAccount ? 'ON_ACCOUNT' : 'APPROVED', paidAt: onAccount ? null : now,
         completedAt: now, stockDeducted: true, stockDeductedAt: order.stockDeductedAt || now,
         verifiedVia: verification ? 'SICREDI_PIX_WEBHOOK' : 'CAIXA', updatedAt: now,
-        ...(order.paymentMethod === 'DINHEIRO' ? { cashReceived: tendered, changeGiven: (Math.round(tendered * 100) - Math.round(order.total * 100)) / 100 } : {}),
+        ...(paymentMethod === 'DINHEIRO' ? { cashReceived: tendered, changeGiven: (Math.round(tendered * 100) - Math.round(order.total * 100)) / 100 } : {}),
         ...(verification ? { paymentTransactionId: verification.endToEndId, paymentVerifiedAmount: verification.amountMinor / 100, pixVerified: true } : {}) };
       if (onAccount) {
         tx.set('customers', order.customerId, { ...customer, debtBalance: (Math.round(Number(customer.debtBalance || 0) * 100) + Math.round(order.total * 100)) / 100, updatedAt: now });
@@ -159,6 +192,10 @@ class PdvRepository {
           const id = `${order.id}-${kind}`;
           tx.set('pdv_outbox', id, { id, kind, orderId, status: 'PENDING', attempts: 0 });
         }
+      }
+      if (sendFinalReceipt) {
+        const id = `${order.id}-final-receipt`;
+        tx.set('pdv_outbox', id, { id, kind: 'receipt', orderId: order.id, status: 'PENDING', attempts: 0 });
       }
       return completed;
     });

@@ -68,8 +68,16 @@ class PdvService {
       const product = products.get(String(item.productId));
       const quantity = Number(item.quantity);
       const price = Number(product?.price ?? product?.valor_num);
-      if (!product || product.status === 'INATIVO' || product.isAvailable === false || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(price) || price < 0) { throw new Error('Produto ou quantidade inválida.'); }
-      return { productId: String(product.id), name: product.name || product.descricao, quantity, price, unit: product.unit || product.unidade || 'UN', subtotalMinor: Math.round(price * quantity * 100) };
+      const name = product?.name || product?.descricao || 'Produto';
+      const savedUnit = String(product?.saleUnit?.code || product?.unit || product?.unidade || '').trim().toUpperCase();
+      const unit = savedUnit || (/(^|[^A-Z])KG([^A-Z]|$)/i.test(name) ? 'KG' : 'UN');
+      const minimum = Number(product?.saleUnit?.minimum) || (unit === 'KG' ? 0.1 : 1);
+      const increment = Number(product?.saleUnit?.increment) || (unit === 'KG' ? 0.1 : 1);
+      const quantityMatchesUnit = Number.isFinite(quantity)
+        && quantity >= minimum
+        && Math.abs(quantity / increment - Math.round(quantity / increment)) < 0.00001;
+      if (!product || product.status === 'INATIVO' || product.isAvailable === false || !quantityMatchesUnit || !Number.isFinite(price) || price < 0) { throw new Error('Produto ou quantidade inválida para a unidade de venda.'); }
+      return { productId: String(product.id), name, quantity, price, unit, subtotalMinor: Math.round(price * quantity * 100) };
     });
     const inventory = await this.repository.repository.getInventorySettings();
     if (inventory.stockControlEnabled) {
@@ -128,6 +136,14 @@ class PdvService {
     return this.repository.attachCharge(order.id, charge);
   }
 
+  async requestPixAtCashier(orderId, user) {
+    let order = await this.repository.requestPixAtCashier(orderId, actor(user));
+    order = await this.preparePix(order);
+    const outboxId = await this.repository.queuePixChargeReceipt(order.id);
+    await this.deliver(outboxId);
+    return { ...order, receiptText: formatOrderReceipt(order) };
+  }
+
   async finishCreation(order, user, deferReceipt = false) {
     if (!deferReceipt && order.paymentMethod !== 'PIX' && ['ADMIN', 'CAIXA'].includes(user.role)) { order = await this.repository.receive(order.id, actor(user)); }
     await this.deliver(`${order.id}-receipt`);
@@ -172,7 +188,7 @@ class PdvService {
       if (!phone && job.kind === 'owner-paid') { throw new Error('WhatsApp da horta não configurado.'); }
       if (!phone) { await this.repository.updateMessage(id, { status: 'SENT', skipped: true, leaseUntil: 0 }); return; }
       let text;
-      if (job.kind === 'receipt' || job.kind === 'customer-paid') { text = formatOrderReceipt(order); }
+      if (job.kind === 'receipt' || job.kind === 'customer-paid' || job.kind === 'pix-charge') { text = formatOrderReceipt(order); }
       else if (settlement?.entryType === 'CREDITO_CLIENTE') { text = `CONFLORA — CRÉDITO DO CLIENTE\nCliente: ${settlement.customerName}\nValor recebido: ${money(settlement.amount)}\nCrédito disponível: ${money(settlement.newCreditBalance)}\nRecebido por: ${settlement.receivedBy.name}\nForma: ${settlement.paymentMethod}`; }
       else if (settlement) { text = `CONFLORA — QUITAÇÃO DE FIADO\nCliente: ${settlement.customerName}\nValor: ${money(settlement.amount)}\nSaldo devedor: ${money(settlement.newBalance)}\nRecebido por: ${settlement.receivedBy.name}\nForma: ${settlement.paymentMethod}`; }
       else { text = `CONFLORA — PIX CONFIRMADO\nPedido #${order.ticketNumber}\nCliente: ${order.customerName}\nValor: ${money(order.total)}\nPedido feito por: ${order.createdBy.name}\nRecebido por: ${order.receivedBy.name}\nPedido pago e finalizado. Estoque atualizado.`; }
@@ -183,7 +199,7 @@ class PdvService {
         if (result?.mock || !result?.messages?.[0]?.id) { throw new Error('WhatsApp não confirmou o envio.'); }
         await this.repository.updateMessage(id, { textChunksSent: index + 1, leaseUntil: Date.now() + 120000 });
       }
-      if (job.kind === 'receipt' && order.pixData && !order.paidAt && !job.qrSent) {
+      if (['receipt', 'pix-charge'].includes(job.kind) && order.pixData && !order.paidAt && !job.qrSent) {
         const image = Buffer.from(order.pixData.qrCodeBase64.split(',')[1], 'base64');
         const result = await this.whatsapp.sendImageBuffer(phone, image, `Pix pedido #${order.ticketNumber} — ${money(order.total)}`);
         if (!result?.messages?.[0]?.id) { throw new Error('WhatsApp não confirmou o QR Code.'); }

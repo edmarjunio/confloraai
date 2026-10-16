@@ -43,6 +43,32 @@ window.PdvComponents = (() => {
   function Panel({ title, onClose, children }) {
     return <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"><section role="dialog" aria-modal="true" aria-label={title} className="bg-white rounded-3xl p-6 w-full max-w-xl max-h-[90vh] overflow-auto"><div className="flex justify-between gap-4 mb-4"><h2 className="font-bold text-xl">{title}</h2><button onClick={onClose} aria-label="Fechar">✕</button></div>{children}</section></div>;
   }
+  function WeightPrompt({ product, onCancel, onConfirm }) {
+    const minimum = Number(product.saleUnit?.minimum) || 0.1;
+    const increment = Number(product.saleUnit?.increment) || 0.1;
+    const firstWholeKilogramStep = Math.max(0, Math.ceil((1 - minimum) / increment - 0.0000001));
+    const initialQuantity = Number((minimum + firstWholeKilogramStep * increment).toFixed(3));
+    const [quantity, setQuantity] = useState(String(initialQuantity));
+    const parsedQuantity = Number(String(quantity).replace(',', '.'));
+    const valid = Number.isFinite(parsedQuantity)
+      && parsedQuantity >= minimum
+      && Math.abs(parsedQuantity / increment - Math.round(parsedQuantity / increment)) < 0.00001;
+    const unitPrice = Number(product.price || 0);
+
+    return <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
+      <section role="dialog" aria-modal="true" aria-label={`Escolher peso de ${product.name}`} className="w-full max-w-sm rounded-3xl border border-slate-100 bg-white p-5 shadow-2xl sm:p-6">
+        <header className="mb-4 flex items-start justify-between gap-3">
+          <div><p className="text-[10px] font-extrabold uppercase tracking-wide text-emerald-700">Venda por peso</p><h2 className="mt-1 text-lg font-black leading-tight text-[#0F381E]">{product.name}</h2></div>
+          <button type="button" onClick={onCancel} aria-label="Fechar" className="rounded-full border border-slate-200 px-2.5 py-1 text-slate-500 hover:bg-slate-50">✕</button>
+        </header>
+        <p className="mb-3 text-sm text-slate-600">Preço: <strong className="text-emerald-800">{money(unitPrice)} / kg</strong></p>
+        <label className="block text-xs font-bold text-slate-700">Quantos quilos?<span className="mt-1 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/40 p-2 focus-within:ring-2 focus-within:ring-emerald-500"><input autoFocus type="text" inputMode="decimal" value={quantity} onChange={(event) => setQuantity(event.target.value.replace(/[^\d.,]/g, '').replace(/(.*[.,].*)[.,]/g, '$1'))} className="w-full bg-transparent px-2 py-2 text-center text-2xl font-black text-[#0F381E] outline-none" aria-label={`Peso em quilos de ${product.name}`} /><span className="pr-2 font-extrabold text-emerald-800">KG</span></span></label>
+        <div className="mt-3 grid grid-cols-3 gap-2">{[0.1, 0.5, 1].map((value) => { const steps = Math.max(0, Math.ceil((value - minimum) / increment - 0.0000001)); const preset = Number((minimum + steps * increment).toFixed(3)); return <button type="button" key={value} onClick={() => setQuantity(String(preset))} className="rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-700 hover:border-emerald-300 hover:bg-emerald-50">{preset.toLocaleString('pt-BR')} kg</button>; })}</div>
+        <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-50 p-3"><span className="text-sm font-semibold text-slate-600">Subtotal</span><strong className="text-lg font-black text-emerald-800">{money(valid ? unitPrice * parsedQuantity : 0)}</strong></div>
+        <div className="mt-4 grid grid-cols-2 gap-2"><button type="button" onClick={onCancel} className="rounded-xl border border-slate-200 px-3 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50">Cancelar</button><button type="button" disabled={!valid} onClick={() => valid && onConfirm(Number(parsedQuantity.toFixed(3)))} className={button + ' py-3 disabled:cursor-not-allowed disabled:opacity-50'}>Adicionar ao carrinho</button></div>
+      </section>
+    </div>;
+  }
   function ProductInformation({ product, onClose }) {
     const details = Array.isArray(product.details) ? product.details : [];
     const variants = Array.isArray(product.variants) ? product.variants : [product];
@@ -184,6 +210,10 @@ window.PdvComponents = (() => {
     ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Sao_Paulo' }).format(new Date(value))
     : '—';
   const paymentLabel = (method) => ({ PIX: 'Pix', DINHEIRO: 'Dinheiro', DEBITO: 'Débito', CREDITO: 'Crédito', FIADO: 'Fiado', SALDO_CLIENTE: 'Saldo do cliente' }[method] || method || '—');
+  const orderItemLabel = (item) => {
+    const quantity = Number(item?.quantity || 0).toLocaleString('pt-BR', { maximumFractionDigits: item?.unit === 'KG' ? 3 : 0 });
+    return item?.unit === 'KG' ? `${quantity} kg ${item?.name || 'Produto'}` : `${quantity} × ${item?.name || 'Produto'}`;
+  };
   const staffLabel = (staff) => {
     const name = staff?.name || staff?.email || '—';
     return staff?.email && staff.email !== name ? `${name} · ${staff.email}` : name;
@@ -197,12 +227,25 @@ window.PdvComponents = (() => {
     if (order.completedAt) return 'Confirmado';
     return 'Em andamento';
   }
-  function OrderDetails({ order, onClose }) {
+  function OrderDetails({ order, onClose, canReceive = false, busy = false, error = '', onReceive }) {
+    const [paymentMethod, setPaymentMethod] = useState(order.paymentMethod || 'DINHEIRO');
+    const [cashAmount, setCashAmount] = useState(Number(order.total || 0).toFixed(2));
+    const [copied, setCopied] = useState(false);
+    useEffect(() => {
+      setPaymentMethod(order.paymentMethod || 'DINHEIRO');
+      setCashAmount(Number(order.total || 0).toFixed(2));
+      setCopied(false);
+    }, [order.id, order.status, order.paymentMethod]);
+    const pixCopyPaste = order.pixData?.pixCopiaECola || order.pixCopiaECola || '';
+    const copyPixCode = async () => {
+      try { await navigator.clipboard.writeText(pixCopyPaste); setCopied(true); }
+      catch { setCopied(false); }
+    };
     return <Panel title={`Comanda #${order.ticketNumber}`} onClose={onClose}>
       <div className="space-y-2 text-sm">
         <p className="font-bold text-lg">{order.customerName || 'Cliente Balcão'}</p>
         <p className="text-slate-600">{orderStatusLabel(order)} · {paymentLabel(order.paymentMethod)}</p>
-        <cf-list>{(order.items || []).map((item, index) => <cf-list-item className="flex justify-between gap-3" key={`${item.productId}-${index}`}><span title={item.name}>{item.quantity} × {item.name}</span><strong>{money(item.subtotalMinor ? item.subtotalMinor / 100 : item.price * item.quantity)}</strong></cf-list-item>)}</cf-list>
+        <cf-list>{(order.items || []).map((item, index) => <cf-list-item className="flex justify-between gap-3" key={`${item.productId}-${index}`}><span title={item.name}>{orderItemLabel(item)}</span><strong>{money(item.subtotalMinor ? item.subtotalMinor / 100 : item.price * item.quantity)}</strong></cf-list-item>)}</cf-list>
         <p>Subtotal: {money(order.subtotal)}</p>
         {Number(order.discountAmount) > 0 && <p>Desconto: −{money(order.discountAmount)}</p>}
         {Number(order.freightValue) > 0 && <p>Entrega: {money(order.freightValue)}</p>}
@@ -214,27 +257,50 @@ window.PdvComponents = (() => {
         {order.paidAt && <p>Pago em: {dateTime(order.paidAt)}</p>}
         {order.deliveryAddress && <p>Entrega: {order.deliveryAddress}</p>}
         {order.notes && <p>Observação: {order.notes}</p>}
+        {order.paymentMethod === 'PIX' && ['CREATING_PIX', 'AWAITING_PIX'].includes(order.status) && <section className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 p-4">
+          <h3 className="font-black text-sky-950">Pix aguardando confirmação</h3>
+          <p className="mt-1 text-xs text-sky-900">A venda só será finalizada depois que o Sicredi confirmar o pagamento do valor exato.</p>
+          {order.pixData?.qrCodeBase64 && <img src={order.pixData.qrCodeBase64} alt={`QR Code Pix da comanda ${order.ticketNumber}`} className="mx-auto mt-3 block max-h-48 w-48 rounded-lg bg-white object-contain p-2" />}
+          {pixCopyPaste && <><label className="mt-3 block text-xs font-bold text-sky-950">Pix copia e cola<textarea readOnly value={pixCopyPaste} className="mt-1 w-full rounded-xl border border-sky-200 bg-white p-2 text-xs" rows={3} /></label><button type="button" className={button + ' mt-2 w-full'} onClick={copyPixCode}>{copied ? 'Código copiado' : 'Copiar Pix copia e cola'}</button></>}
+          {!order.pixData?.qrCodeBase64 && !pixCopyPaste && <p className="mt-2 text-xs text-sky-900">A cobrança está sendo preparada. Atualize em alguns instantes.</p>}
+        </section>}
+        {canReceive && <section className="mt-4 space-y-2 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
+          <h3 className="font-black text-emerald-950">Receber no caixa</h3>
+          <label className="block text-xs font-bold text-slate-700">Forma de pagamento
+            <select className={field} value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}>
+              <option value="DINHEIRO">Dinheiro</option><option value="DEBITO">Cartão de débito</option><option value="CREDITO">Cartão de crédito</option><option value="PIX">Pix com confirmação Sicredi</option>
+              <option value="FIADO" disabled={!order.customerId}>Fiado (cliente cadastrado)</option><option value="SALDO_CLIENTE" disabled={!order.customerId}>Saldo do cliente</option>
+            </select>
+          </label>
+          {paymentMethod === 'DINHEIRO' && <label className="block text-xs font-bold text-slate-700">Valor recebido em dinheiro (R$)<input className={field} type="number" min={Number(order.total || 0)} step="0.01" value={cashAmount} onChange={(event) => setCashAmount(event.target.value)} /></label>}
+          {paymentMethod === 'DINHEIRO' && Number(cashAmount) >= Number(order.total || 0) && <p className="text-right text-xs font-bold text-emerald-900">Troco: {money(Number(cashAmount) - Number(order.total || 0))}</p>}
+          {!order.customerId && ['FIADO', 'SALDO_CLIENTE'].includes(paymentMethod) && <p className="text-xs text-amber-900">Selecione um cliente cadastrado antes de receber em fiado ou usar saldo.</p>}
+          {error && <p role="alert" className="rounded-lg bg-red-50 p-2 text-xs text-red-800">{error}</p>}
+          <button type="button" className={button + ' w-full'} disabled={busy || (paymentMethod === 'DINHEIRO' && Number(cashAmount) < Number(order.total || 0)) || (['FIADO', 'SALDO_CLIENTE'].includes(paymentMethod) && !order.customerId)} onClick={() => onReceive(order, paymentMethod, paymentMethod === 'DINHEIRO' ? cashAmount : null)}>
+            {busy ? 'Processando…' : paymentMethod === 'PIX' ? 'Gerar QR Code Pix' : 'Confirmar pagamento e finalizar'}
+          </button>
+        </section>}
       </div>
     </Panel>;
   }
-  function OrderCard({ order, canReceive, busy, onReceive, onDetails }) {
+  function OrderCard({ order, tone, selected, onDetails }) {
     const items = (order.items || []).slice(0, 2);
     const extraItems = Math.max(0, (order.items || []).length - items.length);
-    return <cf-card padding="sm" className="cf-order-card">
-      <button className="w-full text-left" onClick={() => onDetails(order)} aria-label={`Detalhes da comanda ${order.ticketNumber}`}>
+    return <cf-card padding="sm" className={`cf-order-card cf-order-card--${tone || 'amber'} ${selected ? 'cf-order-card--selected' : ''}`}>
+      <button type="button" className="w-full cursor-pointer text-left" onClick={() => onDetails(order)} aria-label={`Abrir recibo e detalhes da comanda ${order.ticketNumber}`}>
         <div className="flex items-start justify-between gap-2">
           <span className="text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Comanda #{order.ticketNumber}</span>
           <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-900">{paymentLabel(order.paymentMethod)}</span>
         </div>
         <p className="mt-1 font-bold text-slate-800">{order.customerName || 'Cliente Balcão'}</p>
-        <p title={(order.items || []).map((item) => item.name).join(' · ')} className="mt-1 text-xs leading-5 text-slate-600">{items.map((item) => `${item.quantity} × ${item.name}`).join(' · ')}{extraItems ? ` · +${extraItems} item(ns)` : ''}</p>
+        <p title={(order.items || []).map((item) => item.name).join(' · ')} className="mt-1 text-xs leading-5 text-slate-600">{items.map(orderItemLabel).join(' · ')}{extraItems ? ` · +${extraItems} item(ns)` : ''}</p>
         <div className="mt-3 flex items-end justify-between gap-2">
           <span className="text-[11px] text-slate-500">{dateTime(order.createdAt)}</span>
           <strong className="text-base text-[#0F381E]">{money(order.total)}</strong>
         </div>
         <p className="mt-2 text-[11px] text-slate-500">Pedido feito por: <strong>{staffLabel(order.createdBy)}</strong></p>
+        <span className="mt-3 inline-flex rounded-full bg-white/80 px-3 py-1 text-[10px] font-extrabold text-emerald-900">Ver recibo e detalhes →</span>
       </button>
-      {canReceive && <button className={button + ' mt-3 w-full'} disabled={busy} onClick={() => onReceive(order)}>{busy ? 'Registrando…' : 'Receber no caixa'}</button>}
     </cf-card>;
   }
   function MetricCard({ label, value, description, tone = 'default' }) {
@@ -244,12 +310,12 @@ window.PdvComponents = (() => {
       {description && <p className="mt-1 text-[10px] text-slate-500">{description}</p>}
     </cf-card>;
   }
-  function CashierColumn({ title, hint, orders, tone, user, busy, onReceive, onDetails }) {
+  function CashierColumn({ title, hint, orders, tone, selectedOrderId, onDetails }) {
     const themes = {
       amber: 'border-amber-300 bg-amber-50 text-amber-950',
       blue: 'border-sky-300 bg-sky-50 text-sky-950',
-      violet: 'border-violet-300 bg-violet-50 text-violet-950',
       green: 'border-emerald-300 bg-emerald-50 text-emerald-950',
+      red: 'border-red-300 bg-red-50 text-red-950',
     };
     return <section className="min-w-[84vw] snap-start rounded-2xl border border-slate-200 bg-slate-100 p-3 md:min-w-0" aria-label={title}>
       <header className={`mb-3 rounded-xl border px-3 py-2 ${themes[tone]}`}>
@@ -257,7 +323,7 @@ window.PdvComponents = (() => {
         <p className="mt-1 text-[10px] opacity-75">{hint}</p>
       </header>
       <div className="max-h-[58vh] space-y-2 overflow-y-auto pr-1">
-        {orders.map((order) => <OrderCard key={order.id} order={order} canReceive={user.role !== 'VENDEDOR' && order.status === 'AWAITING_CASHIER'} busy={busy} onReceive={onReceive} onDetails={onDetails} />)}
+        {orders.map((order) => <OrderCard key={order.id} order={order} tone={tone} selected={selectedOrderId === order.id && order.status === 'AWAITING_CASHIER'} onDetails={onDetails} />)}
         {!orders.length && <p className="rounded-xl border border-dashed border-slate-300 bg-white/70 p-4 text-center text-xs text-slate-500">Nenhuma comanda nesta etapa.</p>}
       </div>
     </section>;
@@ -277,7 +343,13 @@ window.PdvComponents = (() => {
       setError('');
       try {
         const query = new URLSearchParams({ from: dateFrom, to: dateTo });
-        setData(await api('/api/caixa/orders?' + query.toString()));
+        const nextData = await api('/api/caixa/orders?' + query.toString());
+        setData(nextData);
+        setSelectedOrder((current) => {
+          if (!current) return current;
+          const available = [nextData.pendingConfirmation, nextData.pendingPayment, nextData.confirmed, nextData.paid, nextData.history].flat();
+          return available.find((order) => order.id === current.id) || current;
+        });
       } catch (err) { setError(err.message); }
       finally { if (!silent) setRefreshing(false); }
     };
@@ -291,13 +363,15 @@ window.PdvComponents = (() => {
       setDateTo(today);
       setDateFrom(days === 0 ? today : dateOffset(today, -(days - 1)));
     };
-    const receive = async (order) => {
-      if (!window.confirm(`Confirmar ${money(order.total)} em ${paymentLabel(order.paymentMethod)} na comanda #${order.ticketNumber}?`)) return;
-      const receivedAmount = order.paymentMethod === 'DINHEIRO' ? window.prompt('Valor recebido em dinheiro (R$):', Number(order.total).toFixed(2)) : null;
-      if (order.paymentMethod === 'DINHEIRO' && receivedAmount === null) return;
+    const receive = async (order, paymentMethod, receivedAmount) => {
+      setError('');
       setBusy(true);
       try {
-        await api('/api/caixa/orders/' + order.id + '/confirm', { receivedAmount: receivedAmount === null ? null : Number(receivedAmount.replace(',', '.')) });
+        const response = await api('/api/caixa/orders/' + order.id + '/confirm', {
+          paymentMethod,
+          receivedAmount: receivedAmount === null || receivedAmount === undefined || receivedAmount === '' ? null : Number(String(receivedAmount).replace(',', '.')),
+        });
+        setSelectedOrder(response.order || order);
         await refresh(true);
       } catch (err) { setError(err.message); }
       finally { setBusy(false); }
@@ -306,8 +380,8 @@ window.PdvComponents = (() => {
     const columns = data ? [
       { title: 'ESPERANDO CONFIRMAÇÃO', hint: 'Comandas aguardando recebimento no caixa', orders: data.pendingConfirmation, tone: 'amber' },
       { title: 'ESPERANDO PAGAMENTO', hint: 'Pix aguardando confirmação do Sicredi', orders: data.pendingPayment, tone: 'blue' },
-      { title: 'CONFIRMADOS', hint: 'Fiados registrados, aguardando quitação', orders: data.confirmed, tone: 'violet' },
       { title: 'PAGOS / FINALIZADOS', hint: 'Pagamentos recebidos e pedidos concluídos', orders: data.paid, tone: 'green' },
+      { title: 'FIADOS', hint: 'Vendas registradas para pagamento posterior', orders: data.confirmed, tone: 'red' },
     ] : [];
     const title = view === 'orders' ? 'Comandas' : view === 'history' ? 'Histórico de vendas' : 'Relatório';
     const reportOrders = data ? data.history.filter((order) => user.role === 'ADMIN'
@@ -348,7 +422,10 @@ window.PdvComponents = (() => {
       <div className="shrink-0 border-b border-slate-200 bg-white/80 px-4 py-3 sm:px-6">
           <div className="mx-auto flex max-w-[1600px] flex-wrap items-end gap-2">
             <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
-              {[{ days: 0, label: 'Hoje' }, { days: 7, label: '7 dias' }, { days: 30, label: '30 dias' }].map((option) => <button key={option.days} className="rounded-lg px-3 py-2 text-xs font-bold text-slate-600 hover:bg-white" onClick={() => setPeriod(option.days)}>{option.label}</button>)}
+              {[{ days: 0, label: 'Hoje' }, { days: 7, label: '7 dias' }, { days: 30, label: '30 dias' }].map((option) => {
+                const isActive = dateTo === today && dateFrom === (option.days === 0 ? today : dateOffset(today, -(option.days - 1)));
+                return <button key={option.days} aria-pressed={isActive} className={`rounded-full border px-4 py-2 text-xs font-extrabold transition ${isActive ? 'border-emerald-700 bg-emerald-700 text-white shadow-md' : 'border-slate-200 bg-white text-slate-700 hover:-translate-y-0.5 hover:border-emerald-400 hover:bg-emerald-50 hover:shadow-sm'}`} onClick={() => setPeriod(option.days)}>{option.label}</button>;
+              })}
             </div>
             <div className="flex items-end gap-2">
               <label className="text-[10px] font-bold uppercase tracking-wide text-slate-500">De<input aria-label="Data inicial" className="mt-1 block w-[124px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700" type="date" value={dateFrom} max={dateTo} onChange={(event) => setDateFrom(event.target.value)} /></label>
@@ -370,7 +447,7 @@ window.PdvComponents = (() => {
               </div>
               <p className="mb-2 text-[11px] font-medium text-slate-500">Deslize para o lado no celular para ver as etapas do quadro.</p>
               <div className="flex snap-x gap-3 overflow-x-auto pb-3 md:grid md:grid-cols-2 xl:grid-cols-4 md:overflow-visible">
-                {columns.map((column) => <CashierColumn key={column.title} {...column} user={user} busy={busy} onReceive={receive} onDetails={setSelectedOrder} />)}
+                {columns.map((column) => <CashierColumn key={column.title} {...column} selectedOrderId={selectedOrder?.id} onDetails={setSelectedOrder} />)}
               </div>
             </>}
 
@@ -409,7 +486,7 @@ window.PdvComponents = (() => {
             </>}
           </>}
       </main>
-      {selectedOrder && <OrderDetails order={selectedOrder} onClose={() => setSelectedOrder(null)} />}
+      {selectedOrder && <OrderDetails key={`${selectedOrder.id}:${selectedOrder.status}:${selectedOrder.paymentMethod}`} order={selectedOrder} canReceive={user.role !== 'VENDEDOR' && selectedOrder.status === 'AWAITING_CASHIER'} busy={busy} error={error} onReceive={receive} onClose={() => setSelectedOrder(null)} />}
     </div>;
   }
   function DebtSettlement({ onClose }) {
@@ -425,5 +502,5 @@ window.PdvComponents = (() => {
     const amountInvalid = !Number.isFinite(Number(amount)) || Number(amount) <= 0 || (!isCreditEntry && Number(amount) > balance);
     return <Panel title="Receber pagamento do cliente" onClose={onClose}>{error && <p role="alert" className="text-red-700">{error}</p>}{result ? <div><p>Recebimento registrado: {money(result.amount)}</p><p>Saldo devedor: {money(result.newBalance)}</p><p>Crédito disponível: {money(result.newCreditBalance)}</p></div> : <><label>Buscar cliente cadastrado<input className={field} value={query} onChange={(e) => setQuery(e.target.value)} /></label><div className="max-h-36 overflow-auto">{customers.map((row) => <button className="block w-full border-b p-2 text-left" key={row.id} onClick={() => select(row)}>{row.name} · {row.phone || 'Sem telefone'}</button>)}</div>{customer && <><p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm font-bold">{customer.name}<span className="mt-1 block text-xs font-medium text-amber-800">Saldo devedor: {money(balance)}</span><span className="block text-xs font-medium text-emerald-800">Crédito disponível: {money(creditBalance)}</span></p><label>Tipo de lançamento<select className={field} value={entryType} onChange={(event) => setEntryType(event.target.value)}><option value="QUITACAO_FIADO">Receber pagamento de dívida</option><option value="CREDITO_CLIENTE">Adicionar crédito antecipado</option></select></label><label>Valor recebido<input className={field} type="number" min="0.01" max={isCreditEntry ? undefined : balance} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></label><select aria-label="Forma de recebimento" className={field} value={method} onChange={(e) => setMethod(e.target.value)}><option value="DINHEIRO">Dinheiro</option><option value="DEBITO">Cartão de débito</option><option value="CREDITO">Cartão de crédito</option></select><button className={button} disabled={busy || amountInvalid || (!isCreditEntry && balance <= 0)} onClick={submit}>{busy ? 'Registrando…' : isCreditEntry ? 'Registrar crédito recebido' : 'Confirmar recebimento'}</button></>}</>}</Panel>;
   }
-  return { SiteBrand, Loading, Login, Receipt, CashierQueue, DebtSettlement, DiscountApproval, ProductInformation, handleProductImageError };
+  return { SiteBrand, Loading, Login, Receipt, CashierQueue, DebtSettlement, DiscountApproval, ProductInformation, WeightPrompt, handleProductImageError };
 })();

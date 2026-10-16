@@ -154,7 +154,13 @@ export function createCart(state) {
             element("span", {
               text: money((product?.price?.amountMinor || 0) * item.quantity),
             }),
+          element("div", { class: "cart-item-quantity-row" }, [
             quantityControl(quantity),
+            element("span", {
+              class: "cart-item-unit-label",
+              text: product?.saleUnit?.label || "unidade",
+            }),
+          ]),
           ]),
           element(
             "button",
