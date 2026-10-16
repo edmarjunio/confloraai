@@ -38,23 +38,20 @@ function setup() {
 
 test('seller creates a pending order; cashier receives once and attribution survives', async () => {
   const s = setup();
-  await assert.rejects(s.service.create(s.input, seller), /Selecione o caixa/);
-  await assert.rejects(s.service.create({ ...s.input, targetCashierId: 'caixa-inexistente' }, seller), /não está disponível/);
-  const order = await s.service.create({ ...s.input, targetCashierId: cashier.id, sellerName: 'Forged', receivedBy: actor(cashier) }, seller);
+  const order = await s.service.create({ ...s.input, sellerName: 'Forged', receivedBy: actor(cashier) }, seller);
   assert.equal(order.status, 'AWAITING_CASHIER');
   assert.equal(order.createdBy.name, seller.name);
   assert.equal(order.createdBy.email, seller.email);
-  assert.equal(order.assignedCashier.email, cashier.email);
+  assert.equal(Object.hasOwn(order, 'assignedCashier'), false);
   assert.equal(order.receivedBy, null);
   assert.equal(s.sent.length, 0);
   await assert.rejects(s.repository.receive(order.id, actor(seller)));
-  await assert.rejects(s.repository.receive(order.id, actor(secondCashier)), /outro caixa/);
-  const received = await Promise.all(Array.from({ length: 5 }, () => s.repository.receive(order.id, actor(cashier))));
+  const received = await Promise.all(Array.from({ length: 5 }, () => s.repository.receive(order.id, actor(secondCashier))));
   assert.equal(received.filter((row) => !row.alreadyConfirmed).length, 1);
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
   assert.equal(received[0].createdBy.id, seller.id);
-  assert.equal(received[0].receivedBy.id, cashier.id);
-  assert.equal(received[0].receivedBy.email, cashier.email);
+  assert.equal(received[0].receivedBy.id, secondCashier.id);
+  assert.equal(received[0].receivedBy.email, secondCashier.email);
   await assert.rejects(s.base.confirmOrderPayment(order.id), /PDV/);
 });
 
@@ -86,8 +83,8 @@ test('Pix never trusts webhook amounts, altered bank values or manual confirmati
 
 test('fiado is not paid; concurrent debt settlements cannot overdraw or change sales/stock', async () => {
   const s = setup();
-  await assert.rejects(s.service.create({ ...s.input, targetCashierId: cashier.id, paymentMethod: 'FIADO' }, seller), /cadastrado/);
-  const order = await s.service.create({ ...s.input, targetCashierId: cashier.id, paymentMethod: 'FIADO', customerId: 'customer' }, seller);
+  await assert.rejects(s.service.create({ ...s.input, paymentMethod: 'FIADO' }, seller), /cadastrado/);
+  const order = await s.service.create({ ...s.input, paymentMethod: 'FIADO', customerId: 'customer' }, seller);
   const received = await s.repository.receive(order.id, actor(cashier));
   assert.equal(received.paidAt, null);
   assert.equal(received.paymentStatus, 'ON_ACCOUNT');
@@ -108,7 +105,7 @@ test('order retries reuse ID; insufficient stock leaves debt and inventory uncha
   assert.equal(retry.id, order.id);
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
   await assert.rejects(s.service.create({ ...s.input, items: [{ productId: 'plant', quantity: 1 }] }, cashier), /outra venda/);
-  const pending = await s.service.create({ ...s.input, targetCashierId: cashier.id, requestId: randomUUID(), paymentMethod: 'FIADO', customerId: 'customer', items: [{ productId: 'plant', quantity: 100 }] }, seller);
+  const pending = await s.service.create({ ...s.input, requestId: randomUUID(), paymentMethod: 'FIADO', customerId: 'customer', items: [{ productId: 'plant', quantity: 100 }] }, seller);
   await assert.rejects(s.repository.receive(pending.id, actor(cashier)), /Estoque insuficiente/);
   assert.equal(s.base.inMemoryCustomers.get('customer').debtBalance, 0);
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
@@ -156,7 +153,7 @@ test('Sicredi creates a fixed-amount charge; payment is verified by end-to-end I
 
 test('Firestore transaction rolls back stock, debt and order together on failed commit', async () => {
   const s = setup();
-  const order = await s.service.create({ ...s.input, targetCashierId: cashier.id, paymentMethod: 'FIADO', customerId: 'customer' }, seller);
+  const order = await s.service.create({ ...s.input, paymentMethod: 'FIADO', customerId: 'customer' }, seller);
   let documents = new Map([
     ['orders/' + order.id, order], ['products/plant', s.base.inMemoryProducts.get('plant')],
     ['customers/customer', s.base.inMemoryCustomers.get('customer')],
@@ -228,7 +225,7 @@ test('Cashier board filters history, separates pending stages, and calculates cl
   const cashierCookie = await login(cashier);
   const secondCashierCookie = await login(secondCashier);
   const pdv = app.locals.pdv;
-  const createOrder = (paymentMethod, overrides = {}) => pdv.service.create({ requestId: randomUUID(), items: [{ productId: 'plant', quantity: 2 }], paymentMethod, ...(paymentMethod === 'PIX' ? {} : { targetCashierId: cashier.id }), ...overrides }, seller);
+  const createOrder = (paymentMethod, overrides = {}) => pdv.service.create({ requestId: randomUUID(), items: [{ productId: 'plant', quantity: 2 }], paymentMethod, ...overrides }, seller);
   const awaitingCash = await createOrder('DEBITO');
   const paidOrder = await createOrder('DINHEIRO');
   await pdv.store.receive(paidOrder.id, actor(cashier));
@@ -242,7 +239,7 @@ test('Cashier board filters history, separates pending stages, and calculates cl
   assert.equal(response.status, 200);
   const board = await response.json();
   assert.deepEqual(board.pendingConfirmation.map((order) => order.id), [awaitingCash.id]);
-  assert.deepEqual(board.pendingPayment.map((order) => order.id), []);
+  assert.deepEqual(board.pendingPayment.map((order) => order.id), [pixOrder.id]);
   assert.deepEqual(board.confirmed.map((order) => order.id), [onAccount.id]);
   assert.deepEqual(board.paid.map((order) => order.id), [paidOrder.id]);
   assert.equal(board.closing.salesReceived, 20);
@@ -255,23 +252,27 @@ test('Cashier board filters history, separates pending stages, and calculates cl
   const secondCashierResponse = await fetch(`${base}/api/caixa/orders?from=${today}&to=${today}`, { headers: { cookie: secondCashierCookie } });
   assert.equal(secondCashierResponse.status, 200);
   const secondCashierBoard = await secondCashierResponse.json();
-  assert.deepEqual(secondCashierBoard.pendingConfirmation, []);
-  assert.deepEqual(secondCashierBoard.pendingPayment, []);
+  assert.deepEqual(secondCashierBoard.pendingConfirmation.map((order) => order.id), [awaitingCash.id]);
+  assert.deepEqual(secondCashierBoard.pendingPayment.map((order) => order.id), [pixOrder.id]);
   assert.deepEqual(secondCashierBoard.history, []);
   assert.equal(secondCashierBoard.closing.totalReceived, 0);
 
+  await pdv.store.receive(awaitingCash.id, actor(secondCashier));
+  const refreshedSecondCashierResponse = await fetch(`${base}/api/caixa/orders?from=${today}&to=${today}`, { headers: { cookie: secondCashierCookie } });
+  const refreshedSecondCashierBoard = await refreshedSecondCashierResponse.json();
+  assert.deepEqual(refreshedSecondCashierBoard.pendingConfirmation, []);
+  assert.deepEqual(refreshedSecondCashierBoard.history.map((order) => order.id), [awaitingCash.id]);
+  assert.equal(refreshedSecondCashierBoard.closing.salesReceived, 20);
+
   const sellerCookie = await login(seller);
-  const cashierOptionsResponse = await fetch(`${base}/api/caixa/cashiers`, { headers: { cookie: sellerCookie } });
-  assert.equal(cashierOptionsResponse.status, 200);
-  const cashierOptions = await cashierOptionsResponse.json();
-  assert.ok(cashierOptions.some((user) => user.id === cashier.id));
-  assert.ok(cashierOptions.some((user) => user.id === secondCashier.id));
-  assert.equal(cashierOptions.find((user) => user.id === cashier.id).email, cashier.email);
   const sellerBoardResponse = await fetch(`${base}/api/caixa/orders?from=${today}&to=${today}`, { headers: { cookie: sellerCookie } });
   const sellerBoard = await sellerBoardResponse.json();
   assert.deepEqual(sellerBoard.pendingPayment.map((order) => order.id), [pixOrder.id]);
-  const forbiddenOrder = await fetch(`${base}/api/caixa/orders/${awaitingCash.id}`, { headers: { cookie: secondCashierCookie } });
-  assert.equal(forbiddenOrder.status, 400);
+  const receivedByAnotherCashier = await fetch(`${base}/api/caixa/orders/${awaitingCash.id}`, { headers: { cookie: cashierCookie } });
+  assert.equal(receivedByAnotherCashier.status, 400);
+  const receivedOrder = await fetch(`${base}/api/caixa/orders/${awaitingCash.id}`, { headers: { cookie: secondCashierCookie } });
+  assert.equal(receivedOrder.status, 200);
+  assert.equal((await receivedOrder.json()).receivedBy.id, secondCashier.id);
 
   const invalidRange = await fetch(`${base}/api/caixa/orders?from=2026-02-31&to=2026-03-01`, { headers: { cookie: cashierCookie } });
   assert.equal(invalidRange.status, 400);

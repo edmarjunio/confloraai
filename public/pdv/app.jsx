@@ -186,15 +186,11 @@ const { useState, useEffect, useRef, useMemo } = React;
       const [paymentMethod, setPaymentMethod] = useState('pix');
       const [cashReceived, setCashReceived] = useState('');
 
-      // Gestão de Vendedor e Caixa
+      // Atribuição de venda e recebimento vem da sessão autenticada.
       const [currentUser, setCurrentUser] = useState(null);
       const [authReady, setAuthReady] = useState(false);
-      const [cashiers, setCashiers] = useState([]);
-      const [targetCashierId, setTargetCashierId] = useState('');
       const [customerId, setCustomerId] = useState('');
       const operationRef = useRef(null);
-      const [sellerName, setSellerName] = useState('');
-      const [cashierName, setCashierName] = useState('');
       const [completedOrder, setCompletedOrder] = useState(null);
       const [discountApproval, setDiscountApproval] = useState(null);
       const [isSubmittingSale, setIsSubmittingSale] = useState(false);
@@ -208,19 +204,6 @@ const { useState, useEffect, useRef, useMemo } = React;
       }, []);
       useEffect(() => {
         if (!currentUser) return;
-        const staffName = currentUser.name?.trim() || currentUser.email || 'Colaborador';
-        setSellerName(staffName);
-        setCashierName(currentUser.role === 'VENDEDOR' ? 'Aguardando caixa' : staffName);
-        if (currentUser.role === 'VENDEDOR') {
-          fetch('/api/caixa/cashiers').then((res) => { if (!res.ok) throw new Error('Não foi possível carregar os caixas.'); return res.json(); }).then((rows) => {
-            const availableCashiers = Array.isArray(rows) ? rows : [];
-            setCashiers(availableCashiers);
-            if (availableCashiers.length === 1) {
-              setTargetCashierId(availableCashiers[0].id);
-              setCashierName(availableCashiers[0].name?.trim() || availableCashiers[0].email || 'Caixa');
-            }
-          }).catch(() => setCashiers([]));
-        }
         fetch('/api/caixa/products').then((res) => { if (!res.ok) throw new Error('Não foi possível carregar produtos.'); return res.json(); }).then((rows) => {
           setProducts(rows.map((item) => ({ ...item, sku: item.sku || item.id, category: (item.category || 'geral').toLowerCase(), categoryName: item.category || 'Geral', stock: item.stock + ' ' + item.unit, isShortcut: false, image: item.imageUrl || '/storefront/placeholder.svg' })));
         }).catch((error) => alert(error.message));
@@ -505,11 +488,6 @@ const { useState, useEffect, useRef, useMemo } = React;
 
       const handleCompleteSale = async () => {
         if (cart.length === 0 || isSubmittingSale || !currentUser) return;
-        const requiresCashier = currentUser.role === 'VENDEDOR' && paymentMethod !== 'pix';
-        if (requiresCashier && !targetCashierId) {
-          alert('Selecione o caixa que receberá esta comanda.');
-          return;
-        }
         setIsSubmittingSale(true);
         const isDelivery = orderType === 'DELIVERY';
 
@@ -521,7 +499,7 @@ const { useState, useEffect, useRef, useMemo } = React;
         else if (paymentMethod === 'cartao') normalizedPayMethod = 'CARTAO';
         else normalizedPayMethod = 'DINHEIRO';
 
-        const payload = { items: cart.map(i => ({ productId: String(i.id), quantity: i.quantity })), discountPercent, paymentMethod: normalizedPayMethod, freightValue: isDelivery ? Number(freightValue) || 0 : 0, orderType, cashReceived: paymentMethod === 'dinheiro' && cashReceived !== '' ? Number(cashReceived) : null, customerId, customerName, customerPhone, customerCpf, deliveryAddress: customerAddress, notes: customerNotes, ...(requiresCashier ? { targetCashierId } : {}) };
+        const payload = { items: cart.map(i => ({ productId: String(i.id), quantity: i.quantity })), discountPercent, paymentMethod: normalizedPayMethod, freightValue: isDelivery ? Number(freightValue) || 0 : 0, orderType, cashReceived: paymentMethod === 'dinheiro' && cashReceived !== '' ? Number(cashReceived) : null, customerId, customerName, customerPhone, customerCpf, deliveryAddress: customerAddress, notes: customerNotes };
         const fingerprint = JSON.stringify(payload);
         if (!operationRef.current || operationRef.current.fingerprint !== fingerprint) operationRef.current = { fingerprint, id: crypto.randomUUID() };
         try {
@@ -1008,7 +986,7 @@ const { useState, useEffect, useRef, useMemo } = React;
         </div>
       );
 
-      if (!authReady) return <p className="p-8">Carregando sessão…</p>;
+      if (!authReady) return <PdvComponents.Loading />;
       if (!currentUser) return <PdvComponents.Login onLogin={setCurrentUser} />;
       return (
         <div className="min-h-screen bg-[#F4F6F5] text-slate-800 flex flex-col font-sans select-none">
@@ -1018,39 +996,13 @@ const { useState, useEffect, useRef, useMemo } = React;
               ? 'max-w-[420px] w-full mx-auto my-4 rounded-[34px] border-[8px] border-slate-800 shadow-2xl overflow-y-auto bg-[#F4F6F5] max-h-[860px]'
               : 'w-full')}
           >
-            <div className="bg-white px-4 py-2 flex flex-wrap items-center gap-3 text-sm border-b">
-              <span>{currentUser.name} · {currentUser.role}</span>
-              <button className="underline" onClick={() => setActiveModal('queue')}>Comandas e meus números</button>
-              {currentUser.role !== 'VENDEDOR' && <button className="underline" onClick={() => setActiveModal('debt_settle')}>Receber dívida</button>}
-              <button className="ml-auto underline" onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }); window.location.reload(); }}>Sair</button>
-            </div>
             {activeModal === 'approval' && <PdvComponents.DiscountApproval approval={discountApproval} onClose={() => setActiveModal(null)} onOrder={(order) => { setCompletedOrder(order); setActiveModal('receipt'); }} />}
             {activeModal === 'queue' && <PdvComponents.CashierQueue user={currentUser} onClose={() => setActiveModal(null)} />}
             {activeModal === 'debt_settle' && <PdvComponents.DebtSettlement onClose={() => setActiveModal(null)} />}
             {/* Com Flora Standard Website Header adapted for POS */}
-            <header className="bg-white border-b border-slate-200/80 px-4 sm:px-6 py-2.5 sticky top-0 z-20">
-              <div className="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-3">
-                {/* Brand Logo matching Com Flora screenshot */}
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-amber-400 via-emerald-600 to-[#0F381E] p-0.5 flex items-center justify-center shadow-sm">
-                    <div className="w-full h-full bg-white rounded-full flex items-center justify-center">
-                      <span className="text-base">🌱</span>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h1 className="font-black text-base tracking-tight text-[#0F381E] leading-none">
-                        COM FLORA
-                      </h1>
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                        PDV Caixa
-                      </span>
-                    </div>
-                    <p className="text-[10px] font-medium text-emerald-700 tracking-wide">
-                      GARDEN E HORTIFRUTI
-                    </p>
-                  </div>
-                </div>
+            <header className="conflora-site-header sticky top-0 z-20">
+              <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center justify-between gap-3">
+                <PdvComponents.SiteBrand user={currentUser} />
 
                 {/* Search Bar + Nex Quantity Multiplier Pill ("Quant: 1") */}
                 <div className="flex items-center gap-2 flex-1 max-w-xl order-3 sm:order-2 w-full sm:w-auto">
@@ -1109,6 +1061,9 @@ const { useState, useEffect, useRef, useMemo } = React;
 
                 {/* Right Status Actions */}
                 <div className="flex items-center gap-2 order-2 sm:order-3">
+                  <button className="rounded-full px-3 py-1.5 text-xs font-semibold text-[#0F381E] hover:bg-emerald-50" onClick={() => setActiveModal('queue')}>Comandas e caixa</button>
+                  {currentUser.role !== 'VENDEDOR' && <button className="rounded-full px-3 py-1.5 text-xs font-semibold text-[#0F381E] hover:bg-emerald-50" onClick={() => setActiveModal('debt_settle')}>Receber dívida</button>}
+                  <button className="rounded-full px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100" onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }); window.location.reload(); }}>Sair</button>
                   <div className="hidden xl:flex items-center gap-1.5 text-[11px] text-slate-500 pl-2">
                     <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-slate-700 font-semibold">
                       F2 Pagar
@@ -1574,50 +1529,16 @@ const { useState, useEffect, useRef, useMemo } = React;
                     })}
                   </div>
 
-                  {currentUser.role === 'VENDEDOR' && paymentMethod !== 'pix' && (
-                    <label className="block mb-3 text-xs font-bold text-slate-600">
-                      Encaminhar para o caixa
-                      <select
-                        required
-                        value={targetCashierId}
-                        onChange={(event) => {
-                          const id = event.target.value;
-                          const selectedCashier = cashiers.find((cashier) => cashier.id === id);
-                          setTargetCashierId(id);
-                          setCashierName(selectedCashier?.name?.trim() || selectedCashier?.email || 'Aguardando caixa');
-                        }}
-                        className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
-                      >
-                        <option value="">Selecione um caixa</option>
-                        {cashiers.map((cashier) => <option key={cashier.id} value={cashier.id}>{cashier.name?.trim() || cashier.email || 'Caixa'}{cashier.name?.trim() && cashier.email ? ` · ${cashier.email}` : ''}</option>)}
-                      </select>
-                      {!cashiers.length && <span className="mt-1 block font-medium text-rose-700">Nenhum caixa ativo cadastrado.</span>}
-                    </label>
-                  )}
-
                   {/* Vendedor e Caixa Responsáveis */}
-                  <div className="grid grid-cols-2 gap-2 mb-3 p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+                  <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs">
                     <div>
                       <label className="block text-[10px] font-bold text-slate-500 uppercase">
                         Venda feita por (Vendedor):
                       </label>
                       <input
                         type="text"
-                        value={sellerName}
+                        value={currentUser.name?.trim() || currentUser.email || 'Colaborador'}
                         readOnly
-                        placeholder="Nome do vendedor"
-                        className="w-full mt-1 px-2.5 py-1 text-xs font-bold border border-slate-300 rounded-lg bg-white focus:outline-none focus:border-emerald-600"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase">
-                        {currentUser.role === 'VENDEDOR' && paymentMethod === 'pix' ? 'Recebido por (Pix Sicredi):' : 'Recebido no Caixa por:'}
-                      </label>
-                      <input
-                        type="text"
-                        value={currentUser.role === 'VENDEDOR' && paymentMethod === 'pix' ? sellerName : cashierName}
-                        readOnly
-                        placeholder="Nome do operador de caixa"
                         className="w-full mt-1 px-2.5 py-1 text-xs font-bold border border-slate-300 rounded-lg bg-white focus:outline-none focus:border-emerald-600"
                       />
                     </div>
@@ -1666,7 +1587,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                       Voltar
                     </button>
                     <button
-                      disabled={isSubmittingSale || (currentUser.role === 'VENDEDOR' && paymentMethod !== 'pix' && !targetCashierId)}
+                      disabled={isSubmittingSale}
                       onClick={handleCompleteSale}
                       className="w-2/3 py-3 rounded-xl bg-[#109E46] hover:bg-[#0d853a] text-white font-bold text-sm flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 active:scale-98"
                     >

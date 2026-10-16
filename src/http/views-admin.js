@@ -35,17 +35,21 @@ function renderAdminHtml(storeConfig) {
   ${FETCH_SHIM_SCRIPT}
 
   <link rel="stylesheet" href="/store-assets/admin-shell-v1.css">
+  <link rel="stylesheet" href="/store-assets/site-header.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>:root { --primary: ${color('primary','#2e9348')}; --primary-dark: ${color('primary','#2e9348')}; --accent: ${color('accent','#f5c518')}; --bg: ${color('background','#f8f9fa')}; } body { color: ${color('text','#1a1a1a')}; }</style>
 
 </head>
 <body>
   <div class="container">
-    <header>
-      <div class="admin-brand">
-        <a href="/" aria-label="Voltar ao catálogo"><img src="${logo}" alt="${name}" /></a>
-        <div class="admin-heading"><h1>Administração</h1>
-        <p>Catálogo, pedidos e operação da loja</p></div>
-      </div>
+    <header class="conflora-site-header">
+      <a href="/" class="conflora-site-brand" aria-label="${name} — página inicial">
+        <img src="${logo}" alt="" />
+        <span><strong>${name}</strong><small>Horta e Viveiro · Mineiros - GO</small></span>
+      </a>
+      <span class="conflora-site-header__context">Administração</span>
 
       <div class="header-actions">
         <div class="user-pill" id="userHeaderPill">

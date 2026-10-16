@@ -37,7 +37,22 @@ class PdvService {
   async create(input, user, { approvedDiscount = false } = {}) {
     const createdBy = actor(user);
     const id = requestId(input.requestId);
-    const requestHash = createHash('sha256').update(JSON.stringify(input)).digest('hex');
+    const requestPayload = {
+      requestId: input.requestId,
+      items: input.items,
+      discountPercent: input.discountPercent,
+      paymentMethod: input.paymentMethod,
+      freightValue: input.freightValue,
+      orderType: input.orderType,
+      cashReceived: input.cashReceived,
+      customerId: input.customerId,
+      customerName: input.customerName,
+      customerPhone: input.customerPhone,
+      customerCpf: input.customerCpf,
+      deliveryAddress: input.deliveryAddress,
+      notes: input.notes,
+    };
+    const requestHash = createHash('sha256').update(JSON.stringify(requestPayload)).digest('hex');
     const previous = await this.repository.read('orders', id);
     if (previous) {
       if (previous.createdBy?.id !== user.id || previous.requestHash !== requestHash) { throw new Error('Esta operação já pertence a outra venda.'); }
@@ -45,15 +60,6 @@ class PdvService {
     }
     const paymentMethod = String(input.paymentMethod || '').toUpperCase();
     if (paymentMethod !== 'PIX' && !CASH_METHODS.has(paymentMethod)) { throw new Error('Forma de pagamento inválida.'); }
-    let assignedCashier = null;
-    if (user.role === 'VENDEDOR' && paymentMethod !== 'PIX') {
-      const targetId = String(input.targetCashierId || '').trim();
-      if (!targetId || targetId.includes('/')) { throw new Error('Selecione o caixa que receberá esta comanda.'); }
-      const users = await this.repository.repository.getAllUsers();
-      const target = users.find((candidate) => candidate.id === targetId && candidate.active !== false && candidate.role === 'CAIXA');
-      if (!target) { throw new Error('O caixa selecionado não está disponível. Selecione um caixa ativo.'); }
-      assignedCashier = actor(target);
-    }
     if (!Array.isArray(input.items) || !input.items.length || input.items.length > 150) { throw new Error('Adicione os produtos à comanda.'); }
     const products = new Map((await this.repository.repository.getAllProducts()).map((product) => [String(product.id), product]));
     const items = input.items.map((item) => {
@@ -85,7 +91,7 @@ class PdvService {
           if (existing.requestHash !== requestHash || existing.requestedBy !== user.id) { throw new Error('Solicitação de desconto divergente.'); }
           return existing;
         }
-        const pending = { id, source: 'PDV', requestHash, input, createdBy, requestedBy: user.id, operatorName: createdBy.name, operatorEmail: createdBy.email, customerName: input.customerName || customer?.name || 'Cliente Balcão', customerPhone: phone, items, paymentMethod, subtotal: subtotalMinor / 100, discountPercent, discountAmount: discountMinor / 100, total, status: 'PENDING', createdAt: new Date().toISOString() };
+        const pending = { id, source: 'PDV', requestHash, input: requestPayload, createdBy, requestedBy: user.id, operatorName: createdBy.name, operatorEmail: createdBy.email, customerName: input.customerName || customer?.name || 'Cliente Balcão', customerPhone: phone, items, paymentMethod, subtotal: subtotalMinor / 100, discountPercent, discountAmount: discountMinor / 100, total, status: 'PENDING', createdAt: new Date().toISOString() };
         tx.set('discount_approvals', id, pending);
         return pending;
       });
@@ -100,7 +106,6 @@ class PdvService {
       customerId, customerName: String(input.customerName || customer?.name || 'Cliente Balcão').slice(0, 100), customerPhone: phone,
       orderType: input.orderType === 'DELIVERY' ? 'DELIVERY' : 'PICKUP', deliveryAddress: String(input.deliveryAddress || '').slice(0, 250), notes: String(input.notes || '').slice(0, 500),
       createdBy, sellerName: createdBy.name, sellerEmail: createdBy.email, operatorId: user.id, operatorName: createdBy.name, operatorEmail: createdBy.email,
-      assignedCashier,
       receivedBy: null, paymentMethod, paymentStatus: 'PENDING', status: pixData ? 'CREATING_PIX' : 'AWAITING_CASHIER',
       cashTendered,
       pixData, pixCopiaECola: pixData?.pixCopiaECola || '', createdAt: new Date().toISOString(),

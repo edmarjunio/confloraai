@@ -25,6 +25,10 @@ function renderAdminGerencialHtml() {
   </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Conflora — Painel Gerencial & Fluxo de Caixa (Looker)</title>
+  <link rel="stylesheet" href="/store-assets/site-header.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
       --primary: #2e9348;
@@ -46,7 +50,7 @@ function renderAdminGerencialHtml() {
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
@@ -541,14 +545,12 @@ function renderAdminGerencialHtml() {
 <body>
 
   <!-- CABEÇALHO -->
-  <header>
-    <a href="/admin" class="brand">
-      <div class="brand-logo">C</div>
-      <div>
-        <div class="brand-title">Conflora Gerencial</div>
-        <span class="brand-sub">Substituição Looker Studio · Faturamento & Equipe</span>
-      </div>
+  <header class="conflora-site-header">
+    <a href="/" class="conflora-site-brand" aria-label="Conflora — página inicial">
+      <img src="/store-assets/brands/conflora-logo.png" alt="" />
+      <span><strong>Conflora Horta e Viveiro</strong><small>Mineiros - GO</small></span>
     </a>
+    <span class="conflora-site-header__context">Painel gerencial</span>
 
     <div class="header-actions">
       <a href="/caixa" class="btn-action">⚡ Ir ao Caixa / PDV</a>

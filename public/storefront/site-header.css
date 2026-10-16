@@ -1,0 +1,85 @@
+.conflora-site-header {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 68px;
+  width: 100%;
+  padding: 12px max(16px, calc((100vw - 1600px) / 2 + 20px));
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+  color: #1a1a1a;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.conflora-site-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.conflora-site-brand img {
+  display: block;
+  width: auto;
+  max-width: 160px;
+  height: 42px;
+  max-height: 42px;
+  object-fit: contain;
+}
+
+.conflora-site-brand strong {
+  display: block;
+  color: #111827;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.35px;
+  line-height: 1.25;
+}
+
+.conflora-site-brand small {
+  display: block;
+  margin-top: 2px;
+  color: #647067;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.conflora-site-header__context {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #e8f5eb;
+  padding: 6px 10px;
+  color: #14532d;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+@media (max-width: 700px) {
+  .conflora-site-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 10px 14px;
+  }
+
+  .conflora-site-brand {
+    flex: 1 1 100%;
+  }
+
+  .conflora-site-brand img {
+    max-width: 124px;
+    height: 38px;
+  }
+
+  .conflora-site-brand strong {
+    font-size: 14px;
+  }
+
+  .conflora-site-header__context {
+    margin-left: 0;
+  }
+}

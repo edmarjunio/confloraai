@@ -13,6 +13,7 @@ const { LearningService } = require('../src/services/learning.service');
 const { MessageService } = require('../src/services/message.service');
 const { parseCurrencyString, formatCurrency } = require('../src/shared/string.util');
 const { renderPrivacyPolicyHtml, renderDataDeletionHtml, renderTermsOfServiceHtml, renderHomeHtml, renderAdminHtml } = require('../src/http/app');
+const { renderAdminGerencialHtml } = require('../src/http/views-admin-gerencial');
 
 const mockProducts = [
   {
@@ -445,14 +446,20 @@ test('16. Cardápio Digital & Painel Admin: Renderização e elementos essenciai
   assert.match(homeHtml, /Cardápio Digital/);
   assert.match(homeHtml, /galleryModal/);
   assert.match(homeHtml, /setOrderType/);
+  assert.match(homeHtml, /class="brand-title conflora-site-brand" aria-label="Ir para a página inicial"/);
+  assert.match(homeHtml, /site-header\.css/);
 
   const adminHtml = renderAdminHtml();
   assert.match(adminHtml, /Administração/);
+  assert.match(adminHtml, /class="conflora-site-brand" aria-label="Administração — página inicial"/);
   assert.match(adminHtml, /admin-shell-v1\.css/);
   assert.match(adminHtml, /Caixa e vendas/);
   assert.match(adminHtml, /Entrada Rápida de Estoque/);
   assert.match(adminHtml, /Cadastro & Alteração de Produtos/);
   assert.match(adminHtml, /id="tabBtn-import"/);
+
+  const managementHtml = renderAdminGerencialHtml();
+  assert.match(managementHtml, /class="conflora-site-brand" aria-label="Conflora — página inicial"/);
 });
 
 test('17. Firestore Repository: Entrada ágil de estoque, venda balcão e importador de planilha', async () => {

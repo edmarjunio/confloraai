@@ -93,7 +93,6 @@ class PdvRepository {
         throw new Error('Pix exige confirmação do Sicredi com identificador e valor exatos.');
       }
       if (order.paymentMethod !== 'PIX' && !['ADMIN', 'CAIXA'].includes(receiver?.role)) { throw new Error('Somente o caixa pode receber esta comanda.'); }
-      if (order.paymentMethod !== 'PIX' && order.assignedCashier?.id && receiver.role !== 'ADMIN' && order.assignedCashier.id !== receiver.id) { throw new Error('Esta comanda foi encaminhada para outro caixa.'); }
       const tendered = cashReceived ?? order.cashTendered ?? order.total;
       if (order.paymentMethod === 'DINHEIRO' && (!Number.isFinite(tendered) || Math.round(tendered * 100) < Math.round(order.total * 100))) { throw new Error('Valor recebido em dinheiro menor que o total.'); }
       const now = new Date().toISOString();

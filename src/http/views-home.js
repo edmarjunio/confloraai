@@ -72,6 +72,7 @@ function renderHomeHtml() {
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,800;0,900;1,800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/store-assets/site-header.css">
 
   <style>
     @font-face {
@@ -238,14 +239,13 @@ function renderHomeHtml() {
 
     .brand-header {
       width: 100%;
-      background: #14532d;
-      background-image: linear-gradient(135deg, #14532d 0%, #166534 60%, #1b4332 100%);
-      color: white;
-      padding: 16px 20px;
+      background: #fff;
+      color: #1a1a1a;
+      padding: 12px 20px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      border-bottom: 3px solid #22c55e;
+      border-bottom: 1px solid #e5e7eb;
       flex-wrap: wrap;
       gap: 12px;
     }
@@ -272,12 +272,12 @@ function renderHomeHtml() {
       font-size: 19px;
       letter-spacing: 0.5px;
       margin: 0;
-      color: #ffffff;
+      color: #111827;
       line-height: 1.2;
     }
     .brand-title p {
       font-size: 12px;
-      color: #bbf7d0;
+      color: #647067;
       margin-top: 2px;
     }
     .cart-pill-btn {
@@ -1701,8 +1701,8 @@ function renderHomeHtml() {
 </head>
 <body>
   <div class="top-toolbar">
-    <div style="display:flex; align-items:center; gap:8px;">
-      <span>🌱 Conflora Horta & Viveiro</span>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <a href="/" aria-label="Ir para a página inicial" style="color:inherit; text-decoration:none;">🌱 Conflora Horta & Viveiro</a>
       <span style="opacity:0.6;">|</span>
       <span>Mineiros - GO</span>
     </div>
@@ -1734,14 +1734,11 @@ function renderHomeHtml() {
   </div>
 
   <div class="app-container">
-    <header class="brand-header">
-      <div class="brand-title">
-        <div class="conflora-logo-badge">🌿</div>
-        <div>
-          <h1 data-i18n="header.brandTitle">Conflora</h1>
-          <p data-i18n="header.brandSubtitle">Horta e Viveiro • Mineiros - GO</p>
-        </div>
-      </div>
+    <header class="brand-header conflora-site-header">
+      <a href="/" class="brand-title conflora-site-brand" aria-label="Ir para a página inicial">
+        <img src="/store-assets/brands/conflora-logo.png" alt="" />
+        <span><strong data-i18n="header.brandTitle">Conflora Horta e Viveiro</strong><small data-i18n="header.brandSubtitle">Horta e Viveiro • Mineiros - GO</small></span>
+      </a>
       <div>
         <button class="cart-pill-btn" onclick="scrollToCart()">
           🛒 <span id="cartCountHeader">0 itens</span>

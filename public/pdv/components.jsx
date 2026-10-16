@@ -4,6 +4,21 @@ window.PdvComponents = (() => {
   const money = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   const button = 'px-4 py-2 rounded-xl bg-emerald-700 text-white font-semibold disabled:opacity-50';
   const field = 'w-full p-3 border rounded-xl my-2';
+  function SiteBrand({ user }) {
+    return <a href="/" aria-label="Ir para a página inicial" className="conflora-site-brand flex min-w-0 items-center gap-3 text-inherit no-underline">
+      <img src="/store-assets/brands/conflora-logo.png" alt="" className="h-10 w-12 shrink-0 object-contain" />
+      <span className="min-w-0">
+        <span className="flex flex-wrap items-center gap-2">
+          <strong className="text-base font-black tracking-tight text-[#0F381E]">Conflora Horta e Viveiro</strong>
+          {user && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-800">{user.name || user.email} · {user.role}</span>}
+        </span>
+        <span className="block text-[10px] font-medium tracking-wide text-emerald-700">Mineiros - GO</span>
+      </span>
+    </a>;
+  }
+  function Loading() {
+    return <main className="min-h-screen bg-[#F4F6F5] font-sans text-slate-800"><header className="conflora-site-header"><div className="mx-auto w-full max-w-[1600px]"><SiteBrand /></div></header><p className="p-8 text-center text-sm text-slate-500">Carregando sessão…</p></main>;
+  }
   async function api(path, body) {
     const response = await fetch(path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
     const data = await response.json();
@@ -20,7 +35,7 @@ window.PdvComponents = (() => {
       event.preventDefault();
       try { const result = await api('/api/admin/auth/login', { userId, pin }); onLogin(result.user); } catch (err) { setError(err.message); }
     };
-    return <main className="min-h-screen flex items-center justify-center bg-slate-50 p-6"><form onSubmit={submit} className="bg-white p-8 rounded-3xl shadow max-w-sm w-full"><h1 className="font-bold text-2xl">Conflora · PDV</h1><p className="my-2">Entre com sua conta de colaborador.</p><label>Usuário<select required className={field} value={userId} onChange={(e) => setUserId(e.target.value)}><option value="">Selecione</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label><label>PIN<input required type="password" className={field} value={pin} onChange={(e) => setPin(e.target.value)} /></label>{error && <p role="alert" className="text-red-700 mb-3">{error}</p>}<button className={button}>Entrar</button></form></main>;
+    return <main className="min-h-screen bg-[#F4F6F5] font-sans text-slate-800"><header className="conflora-site-header"><div className="mx-auto w-full max-w-[1600px]"><SiteBrand /></div></header><div className="flex min-h-[calc(100vh-66px)] items-center justify-center p-6"><form onSubmit={submit} className="w-full max-w-sm rounded-3xl bg-white p-8 shadow"><h1 className="text-2xl font-bold text-[#0F381E]">Frente de caixa</h1><p className="my-2">Entre com sua conta de colaborador.</p><label>Usuário<select required className={field} value={userId} onChange={(e) => setUserId(e.target.value)}><option value="">Selecione</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label><label>PIN<input required type="password" className={field} value={pin} onChange={(e) => setPin(e.target.value)} /></label>{error && <p role="alert" className="mb-3 text-red-700">{error}</p>}<button className={button}>Entrar</button></form></div></main>;
   }
   function Receipt({ order, onNewOrder }) {
     const [current, setCurrent] = useState(order); const [copyStatus, setCopyStatus] = useState('');
@@ -32,10 +47,10 @@ window.PdvComponents = (() => {
     const pending = !current.completedAt;
     return <Panel title={pending ? 'Pedido registrado' : current.paymentStatus === 'ON_ACCOUNT' ? 'Fiado registrado' : 'Venda finalizada'} onClose={onNewOrder}>
       <p>Comanda #{current.ticketNumber} · {current.customerName}</p>
-      <p className="my-2 font-semibold">{current.status === 'AWAITING_PIX' ? 'Aguardando pagamento Pix' : current.status === 'AWAITING_CASHIER' ? 'Encaminhe esta comanda ao caixa' : current.paymentStatus === 'ON_ACCOUNT' ? 'Saldo lançado na conta do cliente' : 'Pagamento confirmado'}</p>
+      <p className="my-2 font-semibold">{current.status === 'AWAITING_PIX' ? 'Aguardando pagamento Pix' : current.status === 'AWAITING_CASHIER' ? 'Comanda enviada para a fila do caixa' : current.paymentStatus === 'ON_ACCOUNT' ? 'Saldo lançado na conta do cliente' : 'Pagamento confirmado'}</p>
       <ul className="divide-y">{current.items.map((item, index) => <li className="py-2 flex justify-between gap-3" key={index}><span>{item.quantity} {item.unit} · {item.name}</span><span>{money(item.subtotalMinor / 100)}</span></li>)}</ul>
       <p className="mt-3">Subtotal: {money(current.subtotal)}</p><p>Desconto: {money(current.discountAmount)}</p><p>Frete: {money(current.freightValue)}</p><p className="text-xl font-bold my-3">Total: {money(current.total)}</p>
-      <p>Pedido feito por: <strong>{staffLabel(current.createdBy)}</strong></p>{current.assignedCashier && !current.receivedBy && <p>Encaminhado para: <strong>{staffLabel(current.assignedCashier)}</strong></p>}<p>Recebido por: <strong>{current.receivedBy ? staffLabel(current.receivedBy) : 'Aguardando recebimento'}</strong></p>
+      <p>Pedido feito por: <strong>{staffLabel(current.createdBy)}</strong></p>
       {current.status === 'AWAITING_PIX' && current.pixData && <div className="my-4 text-center"><img className="mx-auto w-56" src={current.pixData.qrCodeBase64} alt="QR Code Pix Sicredi" /><label>Pix copia e cola<textarea readOnly className={field} value={current.pixData.pixCopiaECola} /></label><button className={button} onClick={() => navigator.clipboard.writeText(current.pixData.pixCopiaECola).then(() => setCopyStatus('Copiado!')).catch(() => setCopyStatus('Selecione e copie o código acima.'))}>Copiar Pix</button><p role="status">{copyStatus}</p><p className="mt-2 text-sm">Valor fixo. A confirmação aparecerá automaticamente após o aviso do Sicredi.</p></div>}
       <p className="my-4 text-sm">{!current.customerPhone ? 'Sem WhatsApp informado.' : order.receiptDelivery?.sent ? 'Recibo enviado ao WhatsApp.' : 'Recibo na fila de envio ao WhatsApp.'}</p><button onClick={onNewOrder} className={button}>Nova venda</button>
     </Panel>;
@@ -85,8 +100,6 @@ window.PdvComponents = (() => {
         {Number(order.freightValue) > 0 && <p>Frete: {money(order.freightValue)}</p>}
         <p className="text-lg font-black text-emerald-900">Total: {money(order.total)}</p>
         <p>Pedido feito por: <strong>{staffLabel(order.createdBy)}</strong></p>
-        {order.assignedCashier && !order.receivedBy && <p>Encaminhado para: <strong>{staffLabel(order.assignedCashier)}</strong></p>}
-        <p>Recebido por: <strong>{order.receivedBy ? staffLabel(order.receivedBy) : 'Aguardando recebimento'}</strong></p>
         <p>Registrado em: {dateTime(order.createdAt)}</p>
         {order.deliveryAddress && <p>Entrega: {order.deliveryAddress}</p>}
         {order.notes && <p>Observação: {order.notes}</p>}
@@ -109,8 +122,6 @@ window.PdvComponents = (() => {
           <strong className="text-base text-[#0F381E]">{money(order.total)}</strong>
         </div>
         <p className="mt-2 text-[11px] text-slate-500">Pedido feito por: <strong>{staffLabel(order.createdBy)}</strong></p>
-        {order.assignedCashier && !order.receivedBy && <p className="text-[11px] text-slate-500">Encaminhado para: <strong>{staffLabel(order.assignedCashier)}</strong></p>}
-        {order.receivedBy && <p className="text-[11px] text-slate-500">Recebido por: <strong>{staffLabel(order.receivedBy)}</strong></p>}
       </button>
       {canReceive && <button className={button + ' mt-3 w-full'} disabled={busy} onClick={() => onReceive(order)}>{busy ? 'Registrando…' : 'Receber no caixa'}</button>}
     </article>;
@@ -189,7 +200,7 @@ window.PdvComponents = (() => {
     const closingRows = data ? Object.entries(data.closing.byPayment) : [];
 
     return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-0 sm:p-4">
-      <section role="dialog" aria-modal="true" aria-label="Comandas e meus números" className="flex h-full max-h-[96vh] w-full max-w-[1600px] flex-col overflow-hidden rounded-none bg-[#F4F6F5] text-slate-800 shadow-2xl sm:rounded-3xl">
+      <section role="dialog" aria-modal="true" aria-label="Comandas e fechamento" className="flex h-full max-h-[96vh] w-full max-w-[1600px] flex-col overflow-hidden rounded-none bg-[#F4F6F5] text-slate-800 shadow-2xl sm:rounded-3xl">
         <header className="shrink-0 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
           <div className="flex items-center justify-between gap-3">
             <div><h2 className="text-lg font-black text-[#0F381E] sm:text-xl">Comandas e fechamento</h2><p className="text-xs text-slate-500">Acompanhe recebimentos, vendas e movimento do caixa.</p></div>
@@ -235,13 +246,13 @@ window.PdvComponents = (() => {
             {view === 'history' && <>
               <div className="mb-3 flex items-center justify-between"><h3 className="font-black text-[#0F381E]">Histórico de vendas</h3><span className="text-xs text-slate-500">{data.history.length} registro(s)</span></div>
               <div className="space-y-2 md:hidden">
-                {data.history.map((order) => <button key={order.id} onClick={() => setSelectedOrder(order)} className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-sm"><span className="flex justify-between gap-2"><strong>#{order.ticketNumber} · {order.customerName || 'Cliente Balcão'}</strong><strong>{money(order.total)}</strong></span><span className="mt-1 block text-xs text-slate-500">{orderStatusLabel(order)} · {paymentLabel(order.paymentMethod)}</span><span className="mt-1 block text-[11px] text-slate-500">{dateTime(order.paidAt || order.completedAt || order.createdAt)} · Pedido: {staffLabel(order.createdBy)} · Recebeu: {staffLabel(order.receivedBy)}</span></button>)}
+                {data.history.map((order) => <button key={order.id} onClick={() => setSelectedOrder(order)} className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-sm"><span className="flex justify-between gap-2"><strong>#{order.ticketNumber} · {order.customerName || 'Cliente Balcão'}</strong><strong>{money(order.total)}</strong></span><span className="mt-1 block text-xs text-slate-500">{orderStatusLabel(order)} · {paymentLabel(order.paymentMethod)}</span><span className="mt-1 block text-[11px] text-slate-500">{dateTime(order.paidAt || order.completedAt || order.createdAt)} · Pedido: {staffLabel(order.createdBy)}</span></button>)}
               </div>
               <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white md:block">
-                <table className="w-full min-w-[850px] text-left text-sm"><thead className="bg-slate-100 text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="p-3">Data</th><th className="p-3">Comanda / cliente</th><th className="p-3">Status</th><th className="p-3">Pagamento</th><th className="p-3">Pedido por</th><th className="p-3">Recebido por</th><th className="p-3 text-right">Total</th></tr></thead><tbody className="divide-y divide-slate-100">{data.history.map((order) => <tr key={order.id} className="hover:bg-emerald-50/50"><td className="p-3 text-xs text-slate-500">{dateTime(order.paidAt || order.completedAt || order.createdAt)}</td><td className="p-3"><button className="font-bold text-[#0F381E] hover:underline" onClick={() => setSelectedOrder(order)}>#{order.ticketNumber} · {order.customerName || 'Cliente Balcão'}</button></td><td className="p-3">{orderStatusLabel(order)}</td><td className="p-3">{paymentLabel(order.paymentMethod)}</td><td className="p-3">{staffLabel(order.createdBy)}</td><td className="p-3">{staffLabel(order.receivedBy)}</td><td className="p-3 text-right font-bold">{money(order.total)}</td></tr>)}</tbody></table>
+                <table className="w-full min-w-[760px] text-left text-sm"><thead className="bg-slate-100 text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="p-3">Data</th><th className="p-3">Comanda / cliente</th><th className="p-3">Status</th><th className="p-3">Pagamento</th><th className="p-3">Pedido por</th><th className="p-3 text-right">Total</th></tr></thead><tbody className="divide-y divide-slate-100">{data.history.map((order) => <tr key={order.id} className="hover:bg-emerald-50/50"><td className="p-3 text-xs text-slate-500">{dateTime(order.paidAt || order.completedAt || order.createdAt)}</td><td className="p-3"><button className="font-bold text-[#0F381E] hover:underline" onClick={() => setSelectedOrder(order)}>#{order.ticketNumber} · {order.customerName || 'Cliente Balcão'}</button></td><td className="p-3">{orderStatusLabel(order)}</td><td className="p-3">{paymentLabel(order.paymentMethod)}</td><td className="p-3">{staffLabel(order.createdBy)}</td><td className="p-3 text-right font-bold">{money(order.total)}</td></tr>)}</tbody></table>
               </div>
               {!data.history.length && <p className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">Nenhuma venda encontrada neste período.</p>}
-              <section className="mt-6"><h3 className="mb-2 font-black text-[#0F381E]">Quitações de fiado</h3><div className="space-y-2">{data.debtHistory.map((item) => <article key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3 text-sm"><div><strong>{item.customerName}</strong><p className="text-xs text-slate-500">{dateTime(item.createdAt)} · Recebido por {item.receivedBy?.name || '—'} · {paymentLabel(item.paymentMethod)}</p></div><strong className="text-[#0F381E]">{money(item.amount)}</strong></article>)}{!data.debtHistory.length && <p className="text-xs text-slate-500">Nenhuma quitação registrada neste período.</p>}</div></section>
+              <section className="mt-6"><h3 className="mb-2 font-black text-[#0F381E]">Quitações de fiado</h3><div className="space-y-2">{data.debtHistory.map((item) => <article key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3 text-sm"><div><strong>{item.customerName}</strong><p className="text-xs text-slate-500">{dateTime(item.createdAt)} · {paymentLabel(item.paymentMethod)}</p></div><strong className="text-[#0F381E]">{money(item.amount)}</strong></article>)}{!data.debtHistory.length && <p className="text-xs text-slate-500">Nenhuma quitação registrada neste período.</p>}</div></section>
             </>}
 
             {view === 'closing' && <>
@@ -273,7 +284,7 @@ window.PdvComponents = (() => {
       setBusy(true); setError('');
       try { setResult(await api('/api/caixa/debts/settle', { requestId: id, customerKey: customer.id, amount: Number(amount), paymentMethod: method })); } catch (err) { setError(err.message); } finally { setBusy(false); }
     };
-    return <Panel title="Receber dívida de fiado" onClose={onClose}>{error && <p role="alert" className="text-red-700">{error}</p>}{result ? <div><p>Recebimento registrado: {money(result.amount)}</p><p>Saldo restante: {money(result.newBalance)}</p><p>Recebido por: {result.receivedBy.name}</p></div> : <><label>Buscar cliente<input className={field} value={query} onChange={(e) => setQuery(e.target.value)} /></label><div className="max-h-36 overflow-auto">{customers.map((row) => <button className="block w-full text-left border-b p-2" key={row.id} onClick={() => select(row)}>{row.name} · {row.phone || 'Sem telefone'}</button>)}</div>{customer && <><p className="mt-3 font-bold">{customer.name} · Dívida: {money(balance)}</p><label>Valor a receber<input className={field} type="number" min="0.01" max={balance} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></label><select className={field} value={method} onChange={(e) => setMethod(e.target.value)}><option value="DINHEIRO">Dinheiro</option><option value="DEBITO">Cartão de débito</option><option value="CREDITO">Cartão de crédito</option></select><button className={button} disabled={busy || Number(amount) <= 0 || Number(amount) > balance} onClick={submit}>{busy ? 'Registrando…' : 'Confirmar recebimento'}</button></>}</>}</Panel>;
+    return <Panel title="Receber dívida de fiado" onClose={onClose}>{error && <p role="alert" className="text-red-700">{error}</p>}{result ? <div><p>Recebimento registrado: {money(result.amount)}</p><p>Saldo restante: {money(result.newBalance)}</p></div> : <><label>Buscar cliente<input className={field} value={query} onChange={(e) => setQuery(e.target.value)} /></label><div className="max-h-36 overflow-auto">{customers.map((row) => <button className="block w-full text-left border-b p-2" key={row.id} onClick={() => select(row)}>{row.name} · {row.phone || 'Sem telefone'}</button>)}</div>{customer && <><p className="mt-3 font-bold">{customer.name} · Dívida: {money(balance)}</p><label>Valor a receber<input className={field} type="number" min="0.01" max={balance} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></label><select className={field} value={method} onChange={(e) => setMethod(e.target.value)}><option value="DINHEIRO">Dinheiro</option><option value="DEBITO">Cartão de débito</option><option value="CREDITO">Cartão de crédito</option></select><button className={button} disabled={busy || Number(amount) <= 0 || Number(amount) > balance} onClick={submit}>{busy ? 'Registrando…' : 'Confirmar recebimento'}</button></>}</>}</Panel>;
   }
-  return { Login, Receipt, CashierQueue, DebtSettlement, DiscountApproval };
+  return { SiteBrand, Loading, Login, Receipt, CashierQueue, DebtSettlement, DiscountApproval };
 })();
