@@ -1,16 +1,28 @@
 const { normalizeText, toSingular } = require('../shared/string.util');
 const Logger = require('../shared/logger');
 const { normalizeCatalogItem } = require('./normalize-catalog-item');
+const { extractDriveFileId } = require('./product-photo.service');
 
 function buildDriveDirectImageUrl(fileId, rawUrl) {
-  if (rawUrl && typeof rawUrl === 'string' && (rawUrl.startsWith('http') || rawUrl.startsWith('/api/images/'))) {
-    return rawUrl.trim();
+  const normalizedFileId = typeof fileId === 'string' ? fileId.trim() : '';
+  if (/^(img_|photo_)/.test(normalizedFileId)) {
+    return `/api/images/${normalizedFileId}`;
   }
-  if (fileId && typeof fileId === 'string' && (fileId.startsWith('img_') || fileId.startsWith('photo_'))) {
-    return `/api/images/${fileId.trim()}`;
+
+  const normalizedRawUrl = typeof rawUrl === 'string' ? rawUrl.trim() : '';
+  if (normalizedRawUrl.startsWith('/api/images/')) {
+    return normalizedRawUrl;
   }
-  if (fileId && typeof fileId === 'string' && fileId.trim().length > 10) {
-    return `https://drive.google.com/uc?export=view&id=${fileId.trim()}`;
+  if (normalizedRawUrl.startsWith('http')) {
+    const isGoogleDriveUrl = /https?:\/\/(?:drive|docs)\.google\.com\//i.test(normalizedRawUrl);
+    const driveFileId = isGoogleDriveUrl ? extractDriveFileId(normalizedRawUrl) : null;
+    if (driveFileId) {
+      return `https://drive.google.com/uc?export=view&id=${driveFileId}`;
+    }
+    return normalizedRawUrl;
+  }
+  if (normalizedFileId.length > 10) {
+    return `https://drive.google.com/uc?export=view&id=${normalizedFileId}`;
   }
   return null;
 }
@@ -324,4 +336,5 @@ class CatalogRepository {
 
 module.exports = {
   CatalogRepository,
+  buildDriveDirectImageUrl,
 };

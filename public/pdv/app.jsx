@@ -28,6 +28,7 @@ const { useState, useEffect, useRef, useMemo } = React;
     );
     const Check = (p) => <IconBase {...p}><polyline points="20 6 9 17 4 12"/></IconBase>;
     const Info = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></IconBase>;
+    const LogOut = (p) => <IconBase {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></IconBase>;
     const ChevronDown = (p) => <IconBase {...p}><path d="m6 9 6 6 6-6"/></IconBase>;
     const Percent = (p) => (
       <IconBase {...p}>
@@ -124,14 +125,24 @@ const { useState, useEffect, useRef, useMemo } = React;
 
     const CATEGORIES = [
       { id: 'atalhos', label: 'FAVORITOS', icon: '⭐' },
-      { id: 'todas', label: 'Todos os Produtos', icon: '🌿' },
-      { id: 'plantas', label: 'Plantas e Mudas', icon: '🌱' },
-      { id: 'horta', label: 'Horta', icon: '🥬' },
-      { id: 'hortifruti', label: 'Hortifruti', icon: '🥑' },
-      { id: 'frutiferas', label: 'Frutíferas', icon: '🍋' },
-      { id: 'pets', label: 'Pets', icon: '🦜' },
-      { id: 'bebidas', label: 'Bebidas & Empório', icon: '🍷' },
+      { id: 'todas', label: 'Todas', icon: '🌿' },
     ];
+
+    const CATEGORY_ICONS = {
+      Hortifrutti: '🍎',
+      Horta: '🥗',
+      'Plantas / Mudas': '🌱',
+      Frutífera: '🍋',
+      Frutíferas: '🍋',
+      Pets: '🐾',
+      'Insumos / Outros': '🪴',
+      Palmeiras: '🌴',
+      'Flores & Ornamentais': '🌺',
+      'Horta & Temperos': '🥗',
+      'Agromadeiras & Rurais': '🪵',
+      'Gramas & Insumos': '🪴',
+      'Pets & Animais': '🐾',
+    };
 
     const formatBRL = (value) => {
       return Number(value || 0).toLocaleString('pt-BR', {
@@ -140,12 +151,26 @@ const { useState, useEffect, useRef, useMemo } = React;
       });
     };
 
+    const primaryActionButtonClass = 'inline-flex items-center justify-center gap-2 rounded-xl bg-[#109E46] font-bold text-white shadow-sm transition hover:bg-[#0d853a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none';
+    const shortcutButtonClass = `${primaryActionButtonClass} px-3 py-2 text-xs`;
+
     function App() {
       // Device Simulator: 'responsive' | 'mobile-preview'
       const deviceView = 'responsive';
 
       const [products, setProducts] = useState([]);
       const [infoProduct, setInfoProduct] = useState(null);
+      const categoryTabs = useMemo(() => {
+        const productCategories = [...new Set(products.map((product) => product.category).filter(Boolean))]
+          .sort((a, b) => a.localeCompare(b, 'pt-BR'))
+          .map((category) => ({
+            id: `categoria:${category}`,
+            label: category,
+            icon: CATEGORY_ICONS[category] || '🌱',
+          }));
+
+        return [...CATEGORIES, ...productCategories];
+      }, [products]);
       const [visibleCount, setVisibleCount] = useState(60);
       const loadMoreRef = useRef(null);
       const imagePreloadRef = useRef({ queue: [], started: new Set(), inFlight: new Set(), active: 0 });
@@ -211,13 +236,14 @@ const { useState, useEffect, useRef, useMemo } = React;
             const images = (Array.isArray(item.images) ? item.images : [])
               .map((entry) => (typeof entry === 'string' ? entry : entry?.url || entry?.imageUrl || ''))
               .filter(Boolean);
-            const imageCandidates = [...new Set([item.imageUrl, ...images, item.imagePathCache].filter(Boolean))];
-            const image = imageCandidates[0] || '/storefront/placeholder.svg';
+            const imageCandidates = [...new Set([...images, item.imageUrl, item.imagePathCache].filter(Boolean))];
+            const image = imageCandidates[0] || item.imageFallbackUrl || '/storefront/placeholder.svg';
             return {
               ...item,
               sku: String(item.sku || item.id || ''),
-              category: (item.category || 'geral').toLowerCase(),
+              category: String(item.category || '').trim(),
               categoryName: [item.category || 'Geral', item.subcategory].filter(Boolean).join(' · '),
+              imageFallbackUrl: item.imageFallbackUrl || '',
               description: item.descriptionAi || item.descricao_ia || '',
               searchTags: item.tagsAi || item.tags_ia || '',
               stock: item.stock + ' ' + item.unit,
@@ -225,7 +251,7 @@ const { useState, useEffect, useRef, useMemo } = React;
               imageCandidates,
               image,
             };
-          }));
+          }).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')));
         }).catch((error) => alert(error.message));
       }, [currentUser]);
 
@@ -392,12 +418,18 @@ const { useState, useEffect, useRef, useMemo } = React;
 
       useEffect(() => {
         const handleKeyDown = (e) => {
-          if (e.key === 'F2') {
+          if (e.key === 'F1') {
+            e.preventDefault();
+            if (currentUser && currentUser.role !== 'VENDEDOR') setActiveModal('debt_settle');
+          } else if (e.key === 'F2') {
             e.preventDefault();
             if (cart.length > 0) setActiveModal('pay');
           } else if (e.key === 'F3') {
             e.preventDefault();
             setActiveModal('discount');
+          } else if (e.key === 'F4') {
+            e.preventDefault();
+            setActiveModal('queue');
           } else if (e.key === 'F9') {
             e.preventDefault();
             setActiveModal('freight');
@@ -409,16 +441,18 @@ const { useState, useEffect, useRef, useMemo } = React;
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-      }, [cart.length, infoProduct]);
+      }, [cart.length, currentUser, infoProduct]);
 
       const filteredProducts = useMemo(() => {
         return products.filter((product) => {
-          const matchesCategory =
-            selectedCategory === 'todas'
-              ? true
-              : selectedCategory === 'atalhos'
+          const categoryValue = selectedCategory.startsWith('categoria:')
+            ? selectedCategory.slice('categoria:'.length)
+            : '';
+          const matchesCategory = selectedCategory === 'todas'
+            ? true
+            : selectedCategory === 'atalhos'
               ? product.isShortcut
-              : product.category === selectedCategory;
+              : product.category === categoryValue;
 
           const normalizedQuery = searchQuery.trim().toLowerCase();
           const searchText = [product.name, product.sku, product.categoryName, product.description, product.searchTags]
@@ -881,11 +915,10 @@ const { useState, useEffect, useRef, useMemo } = React;
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     <img
                       src={item.image}
+                      data-image-index="0"
                       alt={item.name}
                       className="w-11 h-11 rounded-xl object-cover border border-slate-200 bg-slate-50 shrink-0"
-                      onError={(e) => {
-                        e.target.src = 'https://placehold.co/80x80/e2e8f0/1e293b?text=Item';
-                      }}
+                      onError={(e) => PdvComponents.handleProductImageError(e, item)}
                     />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
@@ -1024,9 +1057,9 @@ const { useState, useEffect, useRef, useMemo } = React;
             {activeModal === 'queue' && <PdvComponents.CashierQueue user={currentUser} onClose={() => setActiveModal(null)} />}
             {activeModal === 'debt_settle' && <PdvComponents.DebtSettlement onClose={() => setActiveModal(null)} />}
             {/* Com Flora Standard Website Header adapted for POS */}
-            <header className="conflora-site-header sticky top-0 z-20">
-              <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center justify-between gap-3">
-                <PdvComponents.SiteBrand user={currentUser} />
+            <header className="conflora-site-header sticky top-0 z-20 !flex-col !items-stretch">
+              <div className="mx-auto flex min-w-0 w-full max-w-[1600px] flex-wrap items-center justify-between gap-3">
+                <PdvComponents.SiteBrand />
 
                 {/* Search Bar + Nex Quantity Multiplier Pill ("Quant: 1") */}
                 <div className="flex items-center gap-2 flex-1 max-w-xl order-3 sm:order-2 w-full sm:w-auto">
@@ -1084,35 +1117,41 @@ const { useState, useEffect, useRef, useMemo } = React;
                 </div>
 
                 {/* Right Status Actions */}
-                <div className="flex items-center gap-2 order-2 sm:order-3">
-                  <button className="rounded-full px-3 py-1.5 text-xs font-semibold text-[#0F381E] hover:bg-emerald-50" onClick={() => setActiveModal('queue')}>Comandas e caixa</button>
-                  {currentUser.role !== 'VENDEDOR' && <button className="rounded-full px-3 py-1.5 text-xs font-semibold text-[#0F381E] hover:bg-emerald-50" onClick={() => setActiveModal('debt_settle')}>Receber dívida</button>}
-                  <button className="rounded-full px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100" onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }); window.location.reload(); }}>Sair</button>
-                  <div className="hidden xl:flex items-center gap-1.5 text-[11px] text-slate-500 pl-2">
-                    <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-slate-700 font-semibold">
-                      F2 Pagar
-                    </kbd>
-                    <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-slate-700 font-semibold">
-                      F3 Desc.
-                    </kbd>
-                    <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-slate-700 font-semibold">
-                      F9 Frete
-                    </kbd>
+                <div className="order-2 ml-auto flex items-center gap-2 sm:order-3">
+                  <div className="max-w-36 text-right sm:max-w-52">
+                    <p className="truncate text-xs font-extrabold text-slate-800">{currentUser.name || currentUser.email}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">{currentUser.role}</p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }); window.location.reload(); }}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-rose-600 px-3 py-2 text-xs font-extrabold text-white shadow-sm transition hover:bg-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2"
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                    Sair
+                  </button>
                 </div>
               </div>
 
+              <nav className="mx-auto mt-3 flex min-w-0 w-full max-w-[1600px] flex-wrap items-center gap-2 border-t border-slate-100 pt-3" aria-label="Ações do caixa por atalho">
+                {currentUser.role !== 'VENDEDOR' && <button type="button" className={shortcutButtonClass} onClick={() => setActiveModal('debt_settle')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F1</kbd><span>Receber dívida</span></button>}
+                <button type="button" className={shortcutButtonClass} disabled={cart.length === 0} onClick={() => setActiveModal('pay')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F2</kbd><span>Pagar</span></button>
+                <button type="button" className={shortcutButtonClass} onClick={() => setActiveModal('discount')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F3</kbd><span>Desconto</span></button>
+                <button type="button" className={shortcutButtonClass} onClick={() => setActiveModal('queue')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F4</kbd><span>Comandas e caixa</span></button>
+                <button type="button" className={shortcutButtonClass} onClick={() => setActiveModal('freight')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F9</kbd><span>Frete</span></button>
+              </nav>
+
               {/* Com Flora Category Pills Row */}
-              <div className="max-w-[1600px] mx-auto mt-2.5 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-                  {CATEGORIES.map((cat) => {
+              <div className="mx-auto mt-2.5 flex min-w-0 w-full max-w-[1600px] items-center justify-between gap-3">
+                <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                  {categoryTabs.map((cat) => {
                     const isActive = selectedCategory === cat.id;
                     return (
                       <button
                         key={cat.id}
                         onClick={() => setSelectedCategory(cat.id)}
                         className={"px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 transition whitespace-nowrap border " + (isActive
-                          ? 'bg-[#0F381E] text-white border-[#0F381E] shadow-xs'
+                          ? 'bg-[#109E46] text-white border-[#109E46] shadow-xs'
                           : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-600/40 hover:bg-emerald-50/40')}
                       >
                         <span>{cat.icon}</span>
@@ -1189,18 +1228,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                             data-image-index="0"
                             alt={product.name}
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                            onError={(e) => {
-                              const imageElement = e.currentTarget;
-                              const nextImageIndex = Number(imageElement.dataset.imageIndex || 0) + 1;
-                              const nextImage = product.imageCandidates[nextImageIndex];
-                              if (nextImage) {
-                                imageElement.dataset.imageIndex = String(nextImageIndex);
-                                imageElement.src = nextImage;
-                                return;
-                              }
-                              const fallback = '/storefront/placeholder.svg';
-                              if (!imageElement.src.endsWith(fallback)) imageElement.src = fallback;
-                            }}
+                            onError={(e) => PdvComponents.handleProductImageError(e, product)}
                           />
                         </div>
 
@@ -1637,7 +1665,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                     <button
                       disabled={isSubmittingSale}
                       onClick={handleCompleteSale}
-                      className="w-2/3 py-3 rounded-xl bg-[#109E46] hover:bg-[#0d853a] text-white font-bold text-sm flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 active:scale-98"
+                      className={primaryActionButtonClass + ' w-2/3 px-4 py-3 text-sm active:scale-98'}
                     >
                       <Check className="w-4 h-4" />
                       <span>{isSubmittingSale ? 'Processando...' : currentUser.role === 'VENDEDOR' && paymentMethod !== 'pix' ? 'Enviar comanda ao caixa' : paymentMethod === 'pix' ? 'Gerar Pix Sicredi' : 'Confirmar Venda'}</span>
@@ -1667,7 +1695,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                         key={pct}
                         onClick={() => setDiscountPercent(pct)}
                         className={"py-2.5 rounded-xl font-bold text-xs border transition " + (discountPercent === pct
-                          ? 'bg-rose-500 text-white border-rose-500'
+                          ? 'bg-[#109E46] text-white border-[#109E46]'
                           : 'border-slate-200 text-slate-700 hover:bg-slate-50')}
                       >
                         {pct}%
@@ -1691,7 +1719,7 @@ const { useState, useEffect, useRef, useMemo } = React;
 
                   <button
                     onClick={() => setActiveModal(null)}
-                    className="w-full py-3 rounded-xl bg-[#0F381E] text-white font-bold text-sm"
+                    className={primaryActionButtonClass + ' w-full px-4 py-3 text-sm'}
                   >
                     Confirmar Desconto
                   </button>
@@ -1741,7 +1769,7 @@ const { useState, useEffect, useRef, useMemo } = React;
 
                   <button
                     onClick={() => setActiveModal(null)}
-                    className="w-full py-3 rounded-xl bg-[#0F381E] text-white font-bold text-sm"
+                    className={primaryActionButtonClass + ' w-full px-4 py-3 text-sm'}
                   >
                     Salvar Frete
                   </button>

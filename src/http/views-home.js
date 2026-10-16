@@ -1,5 +1,6 @@
 const { renderFirebaseAuthScript } = require('./firebase-client');
 const { GOOGLE_ANALYTICS_TAG } = require('./analytics');
+const { PRODUCT_IMAGE_FALLBACKS } = require('../catalog/product-image-fallbacks');
 
 const FETCH_SHIM_SCRIPT = `<script>
   (function() {
@@ -26,7 +27,7 @@ function renderInitialProductCards(items) {
   return items.slice(0, 24).map(p => {
     const price = Number(p.valor_num || p.price || 0);
     const byKg = (p.unit || p.unidade || '').toUpperCase() === 'KG' || /\bkg\b/i.test(p.descricao || p.name || '');
-    const img = (p.images && p.images[0]) || p.imageUrl || p.imageurl || 'https://images.unsplash.com/photo-1512428813834-c702c7702b78?w=800';
+    const img = (p.images && p.images[0]) || p.imageUrl || p.imageurl || p.imageFallbackUrl || 'https://images.unsplash.com/photo-1512428813834-c702c7702b78?w=800';
     return `
       <div class="prod-card" data-prod-id="${p.id}">
         <div class="card-img-wrapper" onclick="openGallery('${p.id}')">
@@ -2253,17 +2254,7 @@ function renderHomeHtml() {
 
     const OWNER_WHATSAPP_PHONE = '5564999351616';
 
-    const REAL_HD_FALLBACKS = {
-      'Palmeiras': 'https://images.unsplash.com/photo-1596726596162-421712a433a0?w=800&auto=format&fit=crop&q=80',
-      'Frutíferas': 'https://images.unsplash.com/photo-1550258987-190a2d41a8ba?w=800&auto=format&fit=crop&q=80',
-      'Flores & Ornamentais': 'https://images.unsplash.com/photo-1508615039623-a25605d2b022?w=800&auto=format&fit=crop&q=80',
-      'Horta & Temperos': 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=800&auto=format&fit=crop&q=80',
-      'Agromadeiras & Rurais': 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=800&auto=format&fit=crop&q=80',
-      'Gramas & Insumos': 'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?w=800&auto=format&fit=crop&q=80',
-      'Pets & Animais': 'https://images.unsplash.com/photo-1535083783855-76ae62b2914e?w=800&auto=format&fit=crop&q=80',
-      'Plantas / Mudas': 'https://images.unsplash.com/photo-1512428813834-c702c7702b78?w=800&auto=format&fit=crop&q=80',
-      'DEFAULT': 'https://images.unsplash.com/photo-1512428813834-c702c7702b78?w=800&auto=format&fit=crop&q=80',
-    };
+    const REAL_HD_FALLBACKS = ${JSON.stringify(PRODUCT_IMAGE_FALLBACKS)};
 
     const VALID_COUPONS = {
       'CONFLORA10': { type: 'PERCENT', value: 10, label: '10% de desconto' },
@@ -2608,7 +2599,7 @@ function renderHomeHtml() {
         return product.imageUrl || product.imageurl;
       }
       const category = product.categoria || product.category || '';
-      return REAL_HD_FALLBACKS[category] || REAL_HD_FALLBACKS['DEFAULT'];
+      return product.imageFallbackUrl || REAL_HD_FALLBACKS[category] || REAL_HD_FALLBACKS['DEFAULT'];
     }
 
     // =========================================================================
@@ -3000,7 +2991,7 @@ function renderHomeHtml() {
 
       card.innerHTML = \`
         <div class="card-img-wrapper" onclick="openGallery('\${p.id}')">
-          <img class="prod-img" src="\${images[0]}" alt="\${p.descricao || p.name}" loading="lazy" decoding="async" onerror="this.onerror=null; this.src='\${REAL_HD_FALLBACKS['DEFAULT']}';" />
+          <img class="prod-img" src="\${images[0]}" alt="\${p.descricao || p.name}" loading="lazy" decoding="async" onerror="this.onerror=null; this.src='\${p.imageFallbackUrl || REAL_HD_FALLBACKS['DEFAULT']}';" />
           \${images.length > 1 ? ('<span class="photo-count-badge">📷 ' + images.length + ' fotos</span>') : ''}
           \${byKg ? '<span class="unit-tag-badge">⚖️ POR KG</span>' : ''}
         </div>

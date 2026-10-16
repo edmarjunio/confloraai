@@ -14,8 +14,9 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
       price: 2,
       stock: 20,
       unit: 'UN',
-      imageUrl: index === 129 ? '' : '/storefront/placeholder.svg',
+      imageUrl: index === 129 ? '' : index === 128 ? '/missing-product-photo.png' : '/storefront/placeholder.svg',
       images: index === 129 ? ['data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='] : [],
+      imageFallbackUrl: index === 128 ? 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"%3E%3Crect width="1" height="1" fill="green"/%3E%3C/svg%3E' : '',
       descriptionAi: index === 129 ? 'Plantas de sombra para jardim.' : '',
       details: index === 129 ? [{ label: 'Cuidados', value: 'Manter em local protegido.' }] : [],
     }));
@@ -28,19 +29,27 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
   await page.getByLabel('PIN', { exact: true }).fill('0000');
   await page.getByRole('button', { name: 'Entrar', exact: true }).click();
   await expect(page.getByRole('link', { name: 'Ir para a página inicial' }).first()).toHaveAttribute('href', '/');
-  await expect(page.getByRole('button', { name: 'Comandas e caixa' })).toBeVisible();
+  await expect(page.getByText('Atendente do Caixa', { exact: true })).toBeVisible();
+  await expect(page.getByText('CAIXA', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sair', exact: true })).toHaveCSS('background-color', 'rgb(225, 29, 72)');
+  await expect(page.locator('header').getByText('Conflora Horta e Viveiro')).toHaveCount(0);
+  await expect(page.locator('header').getByText('Mineiros - GO')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /FAVORITOS/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Bebidas & Empório|Drinks/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '🌱 Plantas', exact: true })).toBeVisible();
+  await expect(page.getByText('ITEM', { exact: true })).toHaveCount(0);
+  const shortcutLabels = await page.locator('header nav[aria-label="Ações do caixa por atalho"] button').allTextContents();
+  expect(shortcutLabels.map((label) => label.trim().slice(0, 2))).toEqual(['F1', 'F2', 'F3', 'F4', 'F9']);
   await expect(page.getByRole('button', { name: /Escanear|Leitor de Código/i })).toHaveCount(0);
   await expect(page.getByText('Computador (2/3 + 1/3)')).toHaveCount(0);
   await expect(page.getByText('Tela 2/3 e 1/3')).toHaveCount(0);
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    if (await page.getByText('Produto Carregamento 130', { exact: true }).count()) break;
-    await page.waitForTimeout(150);
-  }
-  await expect(page.getByText('Produto Carregamento 130', { exact: true })).toBeVisible();
-  await page.evaluate(() => window.scrollTo(0, 0));
+  const productInformationButtons = page.locator('button[aria-label^="Informações de "]');
+  const productsVisibleBeforeScroll = await productInformationButtons.count();
+  await page.locator('main [aria-live="polite"]').scrollIntoViewIfNeeded();
+  await expect.poll(() => productInformationButtons.count()).toBeGreaterThan(productsVisibleBeforeScroll);
   const search = page.getByPlaceholder('Nome, categoria ou descrição (Ex.: plantas de sombra, plantas para jardim, flores, e etc)');
+  await search.fill('Produto Carregamento 130');
+  await expect(page.getByText('Produto Carregamento 130', { exact: true })).toBeVisible();
   await expect(page.getByAltText('Produto Carregamento 130')).toHaveAttribute('src', 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=');
   await page.getByRole('button', { name: 'Informações de Produto Carregamento 130' }).click();
   const productInformation = page.getByRole('dialog', { name: 'Informações de Produto Carregamento 130' });
@@ -48,6 +57,8 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
   await productInformation.getByRole('button', { name: 'Fechar informações' }).click();
   await search.fill('Plantas de sombra');
   await expect(page.getByText('Produto Carregamento 130', { exact: true })).toBeVisible();
+  await search.fill('Produto Carregamento 129');
+  await expect(page.getByAltText('Produto Carregamento 129')).toHaveAttribute('src', /data:image\/svg\+xml/);
   await search.fill('Planta Teste');
   await page.getByText('Planta Teste', { exact: true }).click();
   await page.keyboard.press('F2');
@@ -57,7 +68,7 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
   await expect(page.getByRole('dialog').getByText('Pagamento confirmado', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Nova venda', exact: true }).click();
   await search.fill('');
-  await page.getByRole('button', { name: 'Comandas e caixa' }).click();
+  await page.keyboard.press('F4');
   await expect(page.getByRole('dialog', { name: 'Comandas e fechamento' })).toBeVisible();
   for (const column of ['ESPERANDO CONFIRMAÇÃO', 'ESPERANDO PAGAMENTO', 'CONFIRMADOS', 'PAGOS / FINALIZADOS']) {
     await expect(page.getByRole('region', { name: column })).toBeVisible();
@@ -72,11 +83,16 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
   await page.getByRole('button', { name: 'Fechamento', exact: true }).click();
   await expect(page.getByRole('heading', { name: /Resumo para fechamento/ })).toBeVisible();
   await page.getByRole('button', { name: 'Fechar', exact: true }).click();
-  await page.getByRole('button', { name: 'Receber dívida', exact: true }).click();
+  await page.keyboard.press('F1');
   await expect(page.getByRole('dialog', { name: 'Receber dívida de fiado' })).toBeVisible();
   await page.getByRole('button', { name: 'Fechar', exact: true }).click();
+  await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: 'test-results/pdv-desktop.png', fullPage: false });
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(page.getByRole('link', { name: 'Ir para a página inicial' }).first()).toBeInViewport();
+  await expect(page.getByRole('button', { name: 'Sair', exact: true })).toBeInViewport();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   await page.screenshot({ path: 'test-results/pdv-mobile.png', fullPage: false });
   expect(errors).toEqual([]);
 });

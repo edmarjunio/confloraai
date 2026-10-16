@@ -1,8 +1,10 @@
 const { randomUUID } = require('node:crypto');
 const { createWebSessions, safeUser } = require('../security/web-session');
 const { readProductWorkbook } = require('../catalog/spreadsheet-import');
+const { buildDriveDirectImageUrl } = require('../catalog/catalog.repository');
 const { rankProductSales } = require('../catalog/product-sales');
 const { getCashierProductDetails } = require('../catalog/cashier-product-details');
+const { getProductImageFallback } = require('../catalog/product-image-fallbacks');
 let expressModule = null;
 function getExpress() {
   if (!expressModule) {
@@ -13,6 +15,33 @@ function getExpress() {
     }
   }
   return expressModule;
+}
+
+function getProductImageCandidates(product = {}) {
+  const images = (Array.isArray(product.images) ? product.images : [])
+    .map((image) => (typeof image === 'string' ? image : image?.url || image?.imageUrl || ''))
+    .map((image) => buildDriveDirectImageUrl('', image) || image)
+    .filter(Boolean);
+  const fileId = product.imageFileId || product.ImageFileId || product.ImageFileID || '';
+  const fileIdImage = buildDriveDirectImageUrl(fileId, '');
+
+  return [...new Set([
+    fileIdImage,
+    ...images,
+    product.imageUrl,
+    product.imageurl,
+    product.imageURL,
+    product.ImageURL,
+    product.ImageUrl,
+    product.imagePathCache,
+    product.ImagePathCache,
+    product.originalDrivePath,
+    product.driveImagePath,
+    product.CAMINHO_FOTO,
+    product.FOTO,
+    product.IMAGEM,
+    product.DRIVE_PATH,
+  ].map((image) => buildDriveDirectImageUrl('', image) || image).filter(Boolean))];
 }
 
 const config = require('../config/env');
@@ -1319,6 +1348,15 @@ function createApp({
           Logger.warn('Ranking de vendas temporariamente indisponível', { error: error.message });
         }
       }
+      products = products.map((product) => {
+        const imageCandidates = getProductImageCandidates(product);
+        return {
+          ...product,
+          images: imageCandidates,
+          imageUrl: imageCandidates[0] || product.imageUrl || product.imageurl || '',
+          imageFallbackUrl: getProductImageFallback(product.category || product.categoria || ''),
+        };
+      });
       let movements = [];
       try {
         movements = await messageService.firestoreRepo.getStockMovements(15);
@@ -1747,12 +1785,9 @@ function createApp({
     try {
       const products = await messageService.firestoreRepo.getAllProducts();
       const active = products
-        .filter((p) => p.status !== 'INATIVO' && p.isAvailable !== false)
+        .filter((p) => String(p.status || p.STATUS || 'ATIVO').toUpperCase() !== 'INATIVO')
         .map((p) => {
-          const images = (Array.isArray(p.images) ? p.images : [])
-            .map((image) => (typeof image === 'string' ? image : image?.url || image?.imageUrl || ''))
-            .filter(Boolean);
-          const imageCandidates = [...new Set([p.imageUrl, p.imageurl, ...images, p.imagePathCache].filter(Boolean))];
+          const imageCandidates = getProductImageCandidates(p);
           const imageUrl = imageCandidates[0] || '';
 
           return {
@@ -1761,11 +1796,12 @@ function createApp({
             price: Number(p.price || p.valor_num || 0),
             stock: Number(p.stockQuantity ?? p.estoque ?? 0),
             unit: p.unit || p.unidade || 'UN',
-            category: p.category || p.categoria || 'Geral',
+            category: p.category || p.categoria || '',
             subcategory: p.subcategory || p.subcategoria || '',
             imageUrl,
             images: imageCandidates,
             imagePathCache: p.imagePathCache || '',
+            imageFallbackUrl: getProductImageFallback(p.category || p.categoria || ''),
             descriptionAi: p.descriptionAi || p.descricao_ia || '',
             tagsAi: p.tagsAi || p.tags_ia || '',
             details: getCashierProductDetails(p),

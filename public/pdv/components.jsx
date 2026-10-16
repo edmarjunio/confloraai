@@ -2,19 +2,34 @@
 window.PdvComponents = (() => {
   const { useState, useEffect } = React;
   const money = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  const button = 'px-4 py-2 rounded-xl bg-emerald-700 text-white font-semibold disabled:opacity-50';
+  const button = 'inline-flex items-center justify-center gap-2 rounded-xl bg-[#109E46] px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-[#0d853a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50';
   const field = 'w-full p-3 border rounded-xl my-2';
-  function SiteBrand({ user }) {
+  function SiteBrand() {
     return <a href="/" aria-label="Ir para a página inicial" className="conflora-site-brand flex min-w-0 items-center gap-3 text-inherit no-underline">
-      <img src="/store-assets/brands/conflora-logo.png" alt="" className="h-10 w-12 shrink-0 object-contain" />
-      <span className="min-w-0">
-        <span className="flex flex-wrap items-center gap-2">
-          <strong className="text-base font-black tracking-tight text-[#0F381E]">Conflora Horta e Viveiro</strong>
-          {user && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-800">{user.name || user.email} · {user.role}</span>}
-        </span>
-        <span className="block text-[10px] font-medium tracking-wide text-emerald-700">Mineiros - GO</span>
-      </span>
+      <img src="/store-assets/brands/conflora-logo.png" alt="Conflora Horta e Viveiro" className="h-10 w-auto max-w-[160px] shrink-0 object-contain" />
     </a>;
+  }
+  function handleProductImageError(event, product) {
+    const imageElement = event.currentTarget;
+    const imageCandidates = Array.isArray(product.imageCandidates) ? product.imageCandidates : [];
+    const nextImageIndex = Number(imageElement.dataset.imageIndex || 0) + 1;
+    const nextImage = imageCandidates[nextImageIndex];
+    if (nextImage) {
+      imageElement.dataset.imageIndex = String(nextImageIndex);
+      imageElement.src = nextImage;
+      return;
+    }
+
+    const imageFallbackUrl = product.imageFallbackUrl || '/storefront/placeholder.svg';
+    const absoluteFallbackUrl = new URL(imageFallbackUrl, window.location.origin).href;
+    if (!imageElement.dataset.fallbackTried && imageElement.src !== absoluteFallbackUrl) {
+      imageElement.dataset.fallbackTried = 'true';
+      imageElement.src = imageFallbackUrl;
+      return;
+    }
+
+    const placeholderUrl = new URL('/storefront/placeholder.svg', window.location.origin).href;
+    if (imageElement.src !== placeholderUrl) imageElement.src = '/storefront/placeholder.svg';
   }
   function Loading() {
     return <main className="min-h-screen bg-[#F4F6F5] font-sans text-slate-800"><header className="conflora-site-header"><div className="mx-auto w-full max-w-[1600px]"><SiteBrand /></div></header><p className="p-8 text-center text-sm text-slate-500">Carregando sessão…</p></main>;
@@ -41,18 +56,7 @@ window.PdvComponents = (() => {
               data-image-index="0"
               alt=""
               className="h-16 w-16 shrink-0 rounded-2xl border border-slate-100 bg-slate-50 object-cover"
-              onError={(event) => {
-                const imageElement = event.currentTarget;
-                const imageCandidates = product.imageCandidates || [];
-                const nextImageIndex = Number(imageElement.dataset.imageIndex || 0) + 1;
-                const nextImage = imageCandidates[nextImageIndex];
-                if (nextImage) {
-                  imageElement.dataset.imageIndex = String(nextImageIndex);
-                  imageElement.src = nextImage;
-                  return;
-                }
-                if (!imageElement.src.endsWith('/storefront/placeholder.svg')) imageElement.src = '/storefront/placeholder.svg';
-              }}
+              onError={(event) => handleProductImageError(event, product)}
             />
             <div className="min-w-0">
               <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">{product.categoryName || product.category || 'Produto'}</p>
@@ -68,7 +72,7 @@ window.PdvComponents = (() => {
           </section>)}
           {!details.length && <p className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">Ainda não há informações adicionais cadastradas para este produto.</p>}
         </div>
-        <button type="button" onClick={onClose} className="mt-5 w-full rounded-xl bg-[#0F381E] px-4 py-3 text-sm font-bold text-white hover:bg-emerald-800">Fechar</button>
+        <button type="button" onClick={onClose} className={button + ' mt-5 w-full py-3'}>Fechar</button>
       </section>
     </div>;
   }
@@ -249,12 +253,12 @@ window.PdvComponents = (() => {
           <div className="flex items-center justify-between gap-3">
             <div><h2 className="text-lg font-black text-[#0F381E] sm:text-xl">Comandas e fechamento</h2><p className="text-xs text-slate-500">Acompanhe recebimentos, vendas e movimento do caixa.</p></div>
             <div className="flex items-center gap-2">
-              <button className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-emerald-50" disabled={refreshing} onClick={() => refresh()}>{refreshing ? 'Atualizando…' : 'Atualizar'}</button>
+              <button className={button} disabled={refreshing} onClick={() => refresh()}>{refreshing ? 'Atualizando…' : 'Atualizar'}</button>
               <button onClick={onClose} aria-label="Fechar" className="rounded-full p-2 text-xl leading-none text-slate-500 hover:bg-slate-100">✕</button>
             </div>
           </div>
           <nav className="mt-3 flex gap-2 overflow-x-auto" aria-label="Seções de comandas">
-            {tabs.map((tab) => <button key={tab.id} aria-pressed={view === tab.id} onClick={() => setView(tab.id)} className={`shrink-0 rounded-xl px-3 py-2 text-xs font-bold ${view === tab.id ? 'bg-[#0F381E] text-white' : 'bg-slate-100 text-slate-600 hover:bg-emerald-50'}`}>{tab.label}</button>)}
+            {tabs.map((tab) => <button key={tab.id} aria-pressed={view === tab.id} onClick={() => setView(tab.id)} className={`shrink-0 rounded-xl px-3 py-2 text-xs font-bold transition ${view === tab.id ? 'bg-[#109E46] text-white shadow-sm' : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-emerald-50'}`}>{tab.label}</button>)}
           </nav>
         </header>
 
@@ -330,5 +334,5 @@ window.PdvComponents = (() => {
     };
     return <Panel title="Receber dívida de fiado" onClose={onClose}>{error && <p role="alert" className="text-red-700">{error}</p>}{result ? <div><p>Recebimento registrado: {money(result.amount)}</p><p>Saldo restante: {money(result.newBalance)}</p></div> : <><label>Buscar cliente<input className={field} value={query} onChange={(e) => setQuery(e.target.value)} /></label><div className="max-h-36 overflow-auto">{customers.map((row) => <button className="block w-full text-left border-b p-2" key={row.id} onClick={() => select(row)}>{row.name} · {row.phone || 'Sem telefone'}</button>)}</div>{customer && <><p className="mt-3 font-bold">{customer.name} · Dívida: {money(balance)}</p><label>Valor a receber<input className={field} type="number" min="0.01" max={balance} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></label><select className={field} value={method} onChange={(e) => setMethod(e.target.value)}><option value="DINHEIRO">Dinheiro</option><option value="DEBITO">Cartão de débito</option><option value="CREDITO">Cartão de crédito</option></select><button className={button} disabled={busy || Number(amount) <= 0 || Number(amount) > balance} onClick={submit}>{busy ? 'Registrando…' : 'Confirmar recebimento'}</button></>}</>}</Panel>;
   }
-  return { SiteBrand, Loading, Login, Receipt, CashierQueue, DebtSettlement, DiscountApproval, ProductInformation };
+  return { SiteBrand, Loading, Login, Receipt, CashierQueue, DebtSettlement, DiscountApproval, ProductInformation, handleProductImageError };
 })();
