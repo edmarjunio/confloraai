@@ -29,6 +29,16 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
     }))
     .filter((image, index, all) => image.url && all.findIndex((candidate) => candidate.url === image.url) === index);
   const registeredImage = photo(item.imageUrl || item.imageurl || item.imagePathCache || item.imageURL) || images[0]?.url || "";
+  const imageFileId = String(item.imageFileId || item.image_file_id || "").trim();
+  const imageProxyId = imageFileId || String(item.id || "").trim();
+  const storageImageProxy = imageProxyId
+    ? `/api/images/${encodeURIComponent(imageProxyId)}`
+    : "";
+  const imageCandidates = [...new Set([
+    ...images.map((image) => image.url),
+    registeredImage,
+    storageImageProxy,
+  ].filter(Boolean))];
   return {
     id: String(item.id),
     name,
@@ -39,10 +49,11 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
       amountMinor: Math.round(Number(item.price ?? item.valor_num ?? 0) * 100),
       currency: "BRL",
     },
-    imageUrl: registeredImage || resolveHdProductImage(name, category, subcategory),
-    imageIsIllustrative: !registeredImage,
+    imageUrl: imageCandidates[0] || resolveHdProductImage(name, category, subcategory),
+    imageIsIllustrative: !registeredImage && !storageImageProxy,
     imageFallbackUrl: "/store-assets/placeholder.svg",
-    images,
+    images: imageCandidates,
+    imageFileId,
     categories: [digest(category).slice(0, 16)],
     categoryName: category,
     subcategoryName: subcategory,

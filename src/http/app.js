@@ -25,8 +25,16 @@ function getProductImageCandidates(product = {}) {
     product.imageurl,
     product.imagePathCache,
   ].filter(isRenderableProductImageUrl))];
+  const imageFileId = String(product.imageFileId || product.image_file_id || '').trim();
+  const imageProxyId = imageFileId || String(product.id || product.productId || '').trim();
+  const storageImageProxy = imageProxyId
+    ? `/api/images/${encodeURIComponent(imageProxyId)}`
+    : '';
   if (registeredImages.length) {
-    return registeredImages;
+    return [...new Set([...registeredImages, storageImageProxy].filter(Boolean))];
+  }
+  if (storageImageProxy) {
+    return [storageImageProxy];
   }
 
   const illustrativeImage = resolveHdProductImage(
@@ -1797,6 +1805,7 @@ function createApp({
             variation: p.variation || p.variacao || '',
             imageUrl,
             images: imageCandidates,
+            imageFileId: p.imageFileId || p.image_file_id || '',
             imageIsIllustrative: /^https:\/\/images\.unsplash\.com\//i.test(imageUrl),
             imagePathCache: p.imagePathCache || '',
             imageFallbackUrl: '/store-assets/placeholder.svg',

@@ -8,8 +8,11 @@
     .replace(/'/g, "&#39;");
 
   const getImageCandidates = (product) => {
+    product = product && typeof product === "object" ? product : {};
     const images = Array.isArray(product.images) ? product.images : [];
     const alternateImages = Array.isArray(product.imageCandidates) ? product.imageCandidates : [];
+    const storedImageId = String(product.imageFileId || product.image_file_id || "").trim();
+    const imageProxyId = storedImageId || String(product.id || product.productId || product.sku || "").trim();
     const candidates = [
       ...images,
       ...alternateImages,
@@ -17,6 +20,9 @@
       product.imageUrl,
       product.imageurl,
       product.imagePathCache,
+      imageProxyId
+        ? `/api/images/${encodeURIComponent(imageProxyId)}`
+        : "",
     ].map((image) => typeof image === "string"
       ? image.trim()
       : String(image?.url || image?.imageUrl || image?.src || image?.downloadURL || "").trim());

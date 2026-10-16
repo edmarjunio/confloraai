@@ -21,6 +21,7 @@ const { useState, useEffect, useRef, useMemo } = React;
     const Plus = (p) => <IconBase {...p}><path d="M5 12h14"/><path d="M12 5v14"/></IconBase>;
     const Minus = (p) => <IconBase {...p}><path d="M5 12h14"/></IconBase>;
     const X = (p) => <IconBase {...p}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></IconBase>;
+    const Menu = (p) => <IconBase {...p}><path d="M3 6h18M3 12h18M3 18h18"/></IconBase>;
     const ShoppingBag = (p) => (
       <IconBase {...p}>
         <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>
@@ -328,6 +329,7 @@ const { useState, useEffect, useRef, useMemo } = React;
               variation: String(item.variation || item.variacao || '').trim(),
               category: String(item.category || '').trim(),
               categoryName: String(item.category || 'Geral').trim(),
+              imageFileId: String(item.imageFileId || item.image_file_id || '').trim(),
               imageFallbackUrl: item.imageFallbackUrl || '',
               description: item.descriptionAi || item.descricao_ia || '',
               searchTags: item.tagsAi || item.tags_ia || '',
@@ -1256,6 +1258,17 @@ const { useState, useEffect, useRef, useMemo } = React;
                     <p className="truncate text-xs font-extrabold text-slate-800">{currentUser.name || currentUser.email}</p>
                     <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">{currentUser.role}</p>
                   </div>
+                  {String(currentUser.role || '').toUpperCase() === 'ADMIN' && (
+                    <button
+                      type="button"
+                      onClick={() => window.location.assign('/admin')}
+                      className="inline-flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full border border-slate-300 bg-white p-2 text-slate-700 transition hover:-translate-y-0.5 hover:border-emerald-600 hover:bg-green-50 hover:text-emerald-700 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                      title="Configurações administrativas"
+                      aria-label="Abrir configurações administrativas"
+                    >
+                      <Menu className="h-5 w-5" />
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }); window.location.reload(); }}

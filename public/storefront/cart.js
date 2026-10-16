@@ -92,11 +92,13 @@ export function createCart(state) {
     ).toLocaleString("pt-BR");
     $("#cartFabCount").textContent = Number(count.toFixed(3)).toLocaleString("pt-BR");
     $("#cartTitle").textContent = `${"cart.title".tr} (${items.length})`;
+    $("#cartClearButton").disabled = items.length === 0 || sending;
     $("#cartTotal").textContent = $("#mobileTotal").textContent =
       money(subtotal());
     $("#cartItems").replaceChildren(
       ...items.map((item) => {
         const product = productFor(item);
+        const imageCandidates = window.ConfloraProductCard?.getImageCandidates(product) || product?.images || [];
         const remove = () => {
           items = items.filter((i) => i !== item);
           persist();
@@ -131,8 +133,8 @@ export function createCart(state) {
         });
         return element("article", { class: "cart-item" }, [
           element("render-image", {
-            src: product?.imageUrl || "/store-assets/placeholder.svg",
-            "image-candidates": JSON.stringify(product?.images || []),
+            src: imageCandidates[0] || product?.imageUrl || "/store-assets/placeholder.svg",
+            "image-candidates": JSON.stringify(imageCandidates.slice(1)),
             "fallback-src": "/store-assets/placeholder.svg",
             alt: "",
             class: "cart-item-image",
@@ -455,10 +457,20 @@ export function createCart(state) {
     $("#cartDialog").close();
   }
 
+  function clear() {
+    if (items.length === 0 || sending) return;
+    items = [];
+    confirmationAccepted = false;
+    persist();
+    cartStore.getState().clearCart();
+    render();
+  }
+
   $("#cartButton").addEventListener("click", open);
   $("#mobileCart").addEventListener("click", open);
   $("#cartFab").addEventListener("click", open);
   $("#cartCloseButton").addEventListener("click", close);
+  $("#cartClearButton").addEventListener("click", clear);
 
   return { add, render, configure, open, close };
 }
