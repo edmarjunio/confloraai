@@ -50,7 +50,7 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
   const search = page.getByPlaceholder('Nome, categoria ou descrição (Ex.: plantas de sombra, plantas para jardim, flores, e etc)');
   await search.fill('Produto Carregamento 130');
   await expect(page.getByText('Produto Carregamento 130', { exact: true })).toBeVisible();
-  await expect(page.getByAltText('Produto Carregamento 130')).toHaveAttribute('src', 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=');
+  await expect(page.locator('img[alt="Produto Carregamento 130"]')).toHaveAttribute('src', 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=');
   await page.getByRole('button', { name: 'Informações de Produto Carregamento 130' }).click();
   const productInformation = page.getByRole('dialog', { name: 'Informações de Produto Carregamento 130' });
   await expect(productInformation.getByText('Manter em local protegido.')).toBeVisible();
@@ -58,12 +58,12 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
   await search.fill('Plantas de sombra');
   await expect(page.getByText('Produto Carregamento 130', { exact: true })).toBeVisible();
   await search.fill('Produto Carregamento 129');
-  await expect(page.getByAltText('Produto Carregamento 129')).toHaveAttribute('src', /data:image\/svg\+xml/);
+  await expect(page.locator('img[alt="Produto Carregamento 129"]')).toHaveAttribute('src', /data:image\/svg\+xml/);
   await search.fill('Planta Teste');
   await page.getByText('Planta Teste', { exact: true }).click();
-  await page.keyboard.press('F1');
+  await page.getByRole('button', { name: /PAGAR - F1/ }).click();
   await page.getByRole('button', { name: 'Dinheiro', exact: true }).click();
-  await page.getByRole('button', { name: 'Confirmar Venda', exact: true }).click();
+  await page.getByRole('button', { name: 'Finalizar venda', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Venda finalizada', exact: true })).toBeVisible();
   await expect(page.getByRole('dialog').getByText('Pagamento confirmado', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Nova venda', exact: true }).click();

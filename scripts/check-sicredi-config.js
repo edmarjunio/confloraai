@@ -16,7 +16,8 @@ const checks = [
   ['SICREDI_CERT_PEM', Boolean(config.sicredi.certificate)],
   ['SICREDI_KEY_PEM', Boolean(config.sicredi.privateKey)],
   ['SICREDI_PIX_KEY', Boolean(config.sicredi.pixKey)],
-  ['SICREDI_WEBHOOK_SECRET (mínimo 32 caracteres)', (process.env.SICREDI_WEBHOOK_SECRET || '').length >= 32],
+  ['SICREDI_WEBHOOK_SECRET ou SICREDI_WEBHOOK_GATEWAY_SECRET', (process.env.SICREDI_WEBHOOK_SECRET || '').length >= 32 || (process.env.SICREDI_WEBHOOK_GATEWAY_SECRET || '').length >= 32],
+  ['SICREDI_WEBHOOK_URL (HTTPS público) ou SERVICE_URL', isPublicHttps(process.env.SICREDI_WEBHOOK_URL || config.tasks.serviceUrl)],
   ['SERVICE_URL (HTTPS público)', isPublicHttps(config.tasks.serviceUrl)],
   ['PDV_WORKER_SECRET', Boolean(process.env.PDV_WORKER_SECRET)],
 ];

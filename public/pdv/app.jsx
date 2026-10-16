@@ -505,7 +505,9 @@ const { useState, useEffect, useRef, useMemo } = React;
 
       useEffect(() => {
         const handleKeyDown = (e) => {
-          if (e.target instanceof HTMLElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+          const isEditingField = e.target instanceof HTMLElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName);
+          const isCashierShortcut = ['F1', 'F2', 'F3', 'F4', 'F8', 'F9'].includes(e.key);
+          if (isEditingField && !isCashierShortcut) return;
           if (e.key === 'F1') {
             e.preventDefault();
             if (cart.length > 0) setActiveModal('pay');

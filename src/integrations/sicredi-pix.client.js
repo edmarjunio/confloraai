@@ -2,6 +2,10 @@ const https = require('node:https');
 const { randomBytes } = require('node:crypto');
 const QRCode = require('qrcode');
 
+function normalizePem(value) {
+  return String(value || '').replace(/\\n/g, '\n').trim();
+}
+
 // Native HTTPS: Node fetch does not support https.Agent for mTLS.
 function requestJson(url, options) {
   return new Promise((resolve, reject) => {
@@ -31,7 +35,10 @@ class SicrediPixClient {
     certificate = process.env.SICREDI_CERT_PEM || '', privateKey = process.env.SICREDI_KEY_PEM || '',
     pixKey = process.env.SICREDI_PIX_KEY || '', request = requestJson,
   } = {}) {
-    Object.assign(this, { baseUrl: baseUrl.replace(/\/$/, ''), authUrl, clientId, clientSecret, certificate, privateKey, pixKey, request });
+    Object.assign(this, {
+      baseUrl: baseUrl.replace(/\/$/, ''), authUrl, clientId, clientSecret,
+      certificate: normalizePem(certificate), privateKey: normalizePem(privateKey), pixKey, request,
+    });
     this.tokenExpiresAt = 0;
   }
   get isOfficialApiConfigured() {
@@ -103,4 +110,4 @@ class SicrediPixClient {
     return this.call('PUT', '/webhook/' + encodeURIComponent(this.pixKey), { webhookURL: parsedUrl.toString() });
   }
 }
-module.exports = { SicrediPixClient, requestJson };
+module.exports = { SicrediPixClient, requestJson, normalizePem };

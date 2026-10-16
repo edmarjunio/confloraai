@@ -5,7 +5,7 @@ const { randomUUID } = require('node:crypto');
 const { FirestoreRepository } = require('../src/database/firestore.repository');
 const { PdvRepository } = require('../src/orders/pdv.repository');
 const { PdvService } = require('../src/orders/pdv.service');
-const { SicrediPixClient } = require('../src/integrations/sicredi-pix.client');
+const { SicrediPixClient, normalizePem } = require('../src/integrations/sicredi-pix.client');
 const { createApp } = require('../src/http/app');
 
 const seller = { id: 'seller', name: 'Vendedor', email: 'vendedor@conflora.test', role: 'VENDEDOR', pin: '4321' };
@@ -149,6 +149,13 @@ test('Sicredi creates a fixed-amount charge; payment is verified by end-to-end I
     url.includes('/oauth/token') ? { access_token: 'token', expires_in: 3600 } : { txid: 'B'.repeat(32), chave: 'pix', valor: { original: '20.00', modalidadeAlteracao: 1 }, pixCopiaECola: 'editable-code' }
   ) });
   await assert.rejects(editableCharge.createCharge({ amount: 20, txid: 'B'.repeat(32) }), /cobrança fixa/);
+});
+
+test('Sicredi PEM credentials accept escaped newlines from environment variables', () => {
+  assert.equal(normalizePem('-----BEGIN CERTIFICATE-----\\nline\\n-----END CERTIFICATE-----'), '-----BEGIN CERTIFICATE-----\nline\n-----END CERTIFICATE-----');
+  const client = new SicrediPixClient({ certificate: 'cert\\nline', privateKey: 'key\\nline' });
+  assert.equal(client.certificate, 'cert\nline');
+  assert.equal(client.privateKey, 'key\nline');
 });
 
 test('Sicredi webhook registration accepts HTTPS only and uses the configured Pix key', async () => {
