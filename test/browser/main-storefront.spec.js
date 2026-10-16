@@ -94,6 +94,8 @@ test("main URL shows the new layout and uses existing customer accounts, catalog
   const coachSkip = page.locator("#coachSkip");
   if (await coachSkip.isVisible()) await coachSkip.click();
   await page.locator("#accountButton").click();
+  await expect(page.locator("#accountDialog")).toBeVisible();
+  await expect(page.locator("#googleAccountButton .google-mark")).toBeVisible();
   await page.locator("#accountContent select").selectOption("register");
   await page
     .locator("#accountContent input[name=name]")
@@ -150,9 +152,29 @@ test("main URL shows the new layout and uses existing customer accounts, catalog
   await page.locator("#historyCloseButton").click();
   await page.locator("#headerAccountIdentity").click();
   await expect(page.locator("#accountContent")).toContainText("Cliente Nova Vitrine");
+  await expect(page.locator("#accountContent .account-profile")).toContainText("CLIENTE");
   await page.locator("#accountContent").getByRole("button", { name: "Sair" }).click();
   await expect(page.locator("#accountButton")).toHaveText("Entrar");
   expect(errors).toEqual([]);
+});
+
+test("Google login button sends the auth result into the storefront account session", async ({ page }) => {
+  await page.goto("/");
+  await selectPortuguese(page);
+  await page.locator("#accountButton").click();
+  await page.evaluate(() => {
+    window.authenticateGoogle = async () => ({
+      success: true,
+      user: { id: "google-demo", name: "Cliente Google", email: "google@test.com", role: "CLIENTE" },
+    });
+    document.querySelector("#googleAccountButton").disabled = false;
+  });
+  await page.locator("#googleAccountButton").click();
+  await expect(page.locator("#headerAccountName")).toHaveText("Cliente Google");
+  await expect(page.locator("#accountDialog")).toBeHidden();
+  await page.locator("#headerAccountIdentity").click();
+  await expect(page.locator("#accountContent .account-profile")).toContainText("google@test.com");
+  await expect(page.locator("#accountContent .account-role")).toHaveText("CLIENTE");
 });
 
 test("main mobile product, bottom sheet and conversational cards follow the approved flow", async ({

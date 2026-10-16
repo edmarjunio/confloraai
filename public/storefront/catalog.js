@@ -280,20 +280,28 @@ export function createCatalog(state, add, navigate) {
   }
 
   const categoryLabel = (product) => {
-    const subcategory = normalizeProductText(product.subcategoryName || product.subcategory || product.subcategoria);
-    const names = product.categories
-      ?.map((id) => state.config?.categories?.find((c) => c.id === id)?.name)
-      .filter((name) => name && normalizeProductText(name) !== subcategory);
-    const sharedCategory = window.ConfloraProductCard?.getCategory(product);
-    if (sharedCategory) return sharedCategory;
+    const names = (Array.isArray(product.categories) ? product.categories : [])
+      .map((id) => state.config?.categories?.find((c) => c.id === id)?.name)
+      .filter(Boolean);
     const canonicalNames = ["Frutífera", "Horta", "Hortifrutti", "Outros", "Pets", "Plantas / Mudas"];
-    const canonicalCategory = names?.find((name) => canonicalNames.some((item) => normalizeProductText(item) === normalizeProductText(name)));
-    const category = canonicalCategory || names?.[0] || product.category || product.categoria || product.categoryName || "";
-    const parts = String(category).split(/\s*(?:\/|\||>)\s*/).filter(Boolean);
-    if (parts.length > 1 && canonicalNames.some((item) => normalizeProductText(item) === normalizeProductText(parts[0]))) {
-      return parts[0];
-    }
-    return category;
+    const isCanonical = (value) => canonicalNames.find(
+      (item) => normalizeProductText(item) === normalizeProductText(value),
+    );
+    const configuredCategory = names.map(isCanonical).find(Boolean);
+    if (configuredCategory) return configuredCategory;
+
+    const sharedCategory = window.ConfloraProductCard?.getCategory({
+      ...product,
+      // Category IDs resolved from the active store configuration are more
+      // authoritative than legacy display fields on older product records.
+      categoryName: product.categoryName,
+      category: product.category,
+      categoria: product.categoria,
+      categories: names,
+    });
+    if (sharedCategory) return sharedCategory;
+
+    return names.map(isCanonical).find(Boolean) || "";
   };
   const categoryIcon = (name) => {
     const value = normalizeProductText(name);

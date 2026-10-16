@@ -55,6 +55,12 @@ test('Admin: cabeçalho, ordem das abas e navegação dos sete módulos', async 
     await page.locator('#tabBtn-' + tab).click();
     await expect(page.locator('#tab-' + tab)).toHaveClass(/active/);
   }
+  await page.locator('#tabBtn-products').click();
+  await page.getByRole('button', { name: /ADICIONAR PRODUTO/ }).click();
+  await expect(page.locator('#productEditorDialog')).toBeVisible();
+  await expect(page.locator('#productEditorDialog #prodForm')).toBeVisible();
+  await page.getByRole('button', { name: 'Cancelar' }).click();
+  await expect(page.locator('#productEditorDialog')).toBeHidden();
   await expect(page.locator('#tabBtn-import')).toHaveCount(0);
 });
 

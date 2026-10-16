@@ -458,7 +458,8 @@ test('16. Cardápio Digital & Painel Admin: Renderização e elementos essenciai
   assert.match(adminHtml, /Baixa de estoque/);
   assert.match(adminHtml, /Contagem/);
   assert.match(adminHtml, /admin-cashier-link/);
-  assert.match(adminHtml, /Cadastro & Alteração de Produtos/);
+  assert.match(adminHtml, /ADICIONAR PRODUTO/);
+  assert.match(adminHtml, /id="productEditorDialog"/);
   assert.doesNotMatch(adminHtml, /tabBtn-import|import-data|import-xlsx|AppSheet|Google Sheets/);
 
   const managementHtml = renderAdminGerencialHtml();

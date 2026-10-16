@@ -266,7 +266,15 @@ async function account() {
   content.replaceChildren();
   $("#googleAccount").hidden = !existingStore || !!state.user;
   if (state.user) {
-    content.append(element("p", { text: `Olá, ${state.user.name}` }));
+    $("#accountTitle").textContent = "Sua conta";
+    $("#accountSubtitle").textContent = "Gerencie seu acesso e consulte suas compras na Conflora.";
+    content.className = "account-content account-signed-in";
+    content.append(element("section", { class: "account-profile" }, [
+      element("span", { class: "account-profile-eyebrow", text: "CONECTADO" }),
+      element("strong", { class: "account-greeting", text: `Olá, ${state.user.name}` }),
+      ...(state.user.email ? [element("span", { class: "account-email", text: state.user.email })] : []),
+      element("span", { class: "account-role", text: state.user.role || "CLIENTE" }),
+    ]));
     if (
       state.user.role === "ADMIN" ||
       (existingStore && state.user.role === "CAIXA")
@@ -274,6 +282,7 @@ async function account() {
       content.append(
         element("button", {
           class: "primary",
+          type: "button",
           text: "team.admin_full".tr,
           onclick: () =>
             existingStore
@@ -284,6 +293,8 @@ async function account() {
     }
     content.append(
       element("button", {
+        class: "account-secondary-action",
+        type: "button",
         text: "team.logout".tr,
         onclick: async () => {
           try {
@@ -306,13 +317,16 @@ async function account() {
     if (existingStore) {
       content.append(element("button", {
         type: "button",
-        class: "primary",
+        class: "primary account-history-action",
         text: "Histórico de compras",
         onclick: () => { $("#accountDialog").close(); openPurchaseHistory(); },
       }));
     }
   } else {
-    const form = element("form");
+    $("#accountTitle").textContent = "Entrar na sua conta";
+    $("#accountSubtitle").textContent = "Acesse seus pedidos e aproveite uma compra mais prática.";
+    content.className = "account-content account-signed-out";
+    const form = element("form", { class: "account-form" });
     const mode = element("select", { "aria-label": "header.login".tr }, [
       element("option", { value: "login", text: "header.login".tr }),
       element("option", { value: "register", text: "Cadastrar" }),
@@ -344,12 +358,14 @@ async function account() {
       name.required = mode.value === "register";
       password.autocomplete =
         mode.value === "register" ? "new-password" : "current-password";
+      button.textContent = mode.value === "register" ? "Criar minha conta" : "Entrar";
     });
     const button = element("button", {
       type: "submit",
       class: "primary",
-      text: "cart.submit_order".tr,
+      text: "Entrar",
     });
+    mode.classList.add("account-mode");
     const errorLabel = element("p", { class: "error", role: "alert" });
     form.append(
       mode,
@@ -388,6 +404,30 @@ async function account() {
   }
   openDialog($("#accountDialog"));
 }
+
+$("#googleAccountButton").addEventListener("click", async () => {
+  const button = $("#googleAccountButton");
+  const status = $("[data-google-status]");
+  if (button.disabled || typeof window.authenticateGoogle !== "function") return;
+  button.disabled = true;
+  status.textContent = "Conectando com sua conta Google…";
+  try {
+    const result = await window.authenticateGoogle();
+    if (!result?.success || !result.user) {
+      throw new Error(result?.error || "Não foi possível autenticar sua conta.");
+    }
+    state.user = result.user;
+    appStore.getState().setUser(state.user);
+    catalog?.refreshFavorites();
+    updateHeaderActions();
+    $("#accountDialog").close();
+    route();
+  } catch (error) {
+    status.textContent = error.message || "Não foi possível entrar com Google. Tente novamente.";
+  } finally {
+    button.disabled = false;
+  }
+});
 
 const historyDialog = $("#historyDialog");
 const historyList = $("#historyList");

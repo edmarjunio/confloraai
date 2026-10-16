@@ -234,38 +234,53 @@
   // 4. ADAPTER DE DOMÍNIO (NORMALIZAÇÃO CANÔNICA DO PRODUTO)
   // ============================================================================
   const getCategory = (product) => {
-    const category = firstNonEmptyString(
+    const candidates = [
       product?.categoryName,
       product?.category,
       product?.categoria,
-    );
-    const subcategory = firstNonEmptyString(
-      product?.subcategoryName,
-      product?.subcategory,
-      product?.subcategoria,
-    );
-    if (!category) return category;
-    const cleanedCategory = category.replace(/\p{Extended_Pictographic}/gu, "").replace(/\uFE0F/g, "").trim();
-    const canonicalLabel = CATEGORY_LABELS.find((label) => normalizeCategoryText(label) === normalizeCategoryText(cleanedCategory));
-    if (canonicalLabel) return canonicalLabel;
+      product?.categoryLabel,
+      ...(Array.isArray(product?.categories)
+        ? product.categories.filter((value) => typeof value === "string")
+        : []),
+    ]
+      .filter((value) => typeof value === "string" && value.trim())
+      .map((value) => value.replace(/\p{Extended_Pictographic}/gu, "").replace(/\uFE0F/g, "").trim());
 
-    const categoryParts = cleanedCategory.split(/\s*(?:\/|\||>)\s*/).filter(Boolean);
-    if (categoryParts.length < 2) return cleanedCategory;
+    if (!candidates.length) return "";
 
-    // Prefer the longest prefix that is a canonical storefront category. This
-    // also repairs legacy values such as "Frutífera / Mudas" when the source
-    // document has no explicit subcategory field.
-    for (let prefixLength = categoryParts.length - 1; prefixLength > 0; prefixLength--) {
-      const prefix = categoryParts.slice(0, prefixLength).join(" / ");
-      const matchingLabel = CATEGORY_LABELS.find((label) => normalizeCategoryText(label) === normalizeCategoryText(prefix));
-      if (matchingLabel) return matchingLabel;
+    // A product can carry stale display text alongside the proper Firestore
+    // category. Search every category field before considering any fallback.
+    for (const candidate of candidates) {
+      const match = CATEGORY_LABELS.find(
+        (label) => normalizeCategoryText(label) === normalizeCategoryText(candidate),
+      );
+      if (match) return match;
     }
 
-    const lastPart = categoryParts.at(-1) || "";
-    if (subcategory && normalizeCategoryText(lastPart) === normalizeCategoryText(subcategory)) {
-      return categoryParts.slice(0, -1).join(" / ").trim();
+    // Legacy values sometimes concatenate category/subcategory with a slash,
+    // pipe, or plain spaces. Keep only a recognized storefront category.
+    for (const candidate of candidates) {
+      const parts = candidate.split(/\s*(?:\/|\||>)\s*/).filter(Boolean);
+      for (const part of parts) {
+        const match = CATEGORY_LABELS.find(
+          (label) => normalizeCategoryText(label) === normalizeCategoryText(part),
+        );
+        if (match) return match;
+      }
+
+      const normalized = normalizeCategoryText(candidate).replace(/[\/|>]/g, " ").replace(/\s+/g, " ");
+      if (/\bplantas?\b/.test(normalized) && /\bmudas?\b/.test(normalized)) {
+        return "Plantas / Mudas";
+      }
+      if (/\bmudas?\b/.test(normalized) && /\b(meia sombra|sol pleno|luz indireta|folhagens?|ornamentais?)\b/.test(normalized)) {
+        return "Plantas / Mudas";
+      }
     }
-    return cleanedCategory;
+
+    // Unknown legacy text is intentionally omitted from the card. Showing it
+    // as a category is what allowed values such as "Meia Sombra" to overlap
+    // the real category badge.
+    return "";
   };
 
   const getName = (product) =>

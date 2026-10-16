@@ -32,4 +32,8 @@ test('cartão normaliza categoria legada e remove prefixo de emoji sem renderiza
   assert.equal(getCategory({ category: '🍋 Frutífera / Mudas' }), 'Frutífera');
   assert.equal(getCategory({ category: 'Plantas / Mudas', subcategory: 'Árvores' }), 'Plantas / Mudas');
   assert.equal(getCategory({ category: 'Horta', subcategory: 'Folhosas' }), 'Horta');
+  assert.equal(getCategory({ categoryName: 'Meia Sombra', category: 'Plantas / Mudas' }), 'Plantas / Mudas');
+  assert.equal(getCategory({ categoryName: 'Meia Sombra Mudas' }), 'Plantas / Mudas');
+  assert.equal(getCategory({ categoryName: 'O Meia Sombra' }), '');
+  assert.equal(getCategory({ categoryName: 'texto antigo', categories: ['Hortifrutti'] }), 'Hortifrutti');
 });

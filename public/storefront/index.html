@@ -321,7 +321,11 @@
       aria-labelledby="accountTitle"
     >
       <div class="dialog-header">
-        <h2 id="accountTitle" data-i18n="header.login">Sua conta</h2>
+        <div class="account-dialog-heading">
+          <span class="product-info-eyebrow">CONFLORA HORTA E VIVEIRO</span>
+          <h2 id="accountTitle" data-i18n="header.login">Sua conta</h2>
+          <p class="muted" id="accountSubtitle">Acesse sua conta para acompanhar seus pedidos e comprar com praticidade.</p>
+        </div>
         <button data-close aria-label="Fechar conta" data-i18n-aria="common.close">×</button>
       </div>
       <div id="accountContent"></div>
@@ -333,6 +337,7 @@
           data-google-login
           disabled
         >
+          <svg class="google-mark" viewBox="0 0 48 48" aria-hidden="true"><path fill="#4285F4" d="M43.6 24.5c0-1.4-.1-2.8-.4-4.1H24v7.8h11c-.5 2.5-2 4.6-4.2 6v5h6.8c4-3.7 6-9 6-14.7Z"/><path fill="#34A853" d="M24 44c5.5 0 10.1-1.8 13.5-4.8l-6.8-5c-1.9 1.3-4.1 2.1-6.7 2.1-5.2 0-9.6-3.5-11.2-8.2H5.8v5.2C9.2 39.7 16.1 44 24 44Z"/><path fill="#FBBC05" d="M12.8 28.1a12 12 0 0 1 0-7.7v-5.2H5.8a20 20 0 0 0 0 18.1l7-5.2Z"/><path fill="#EA4335" d="M24 12.2c3 0 5.7 1 7.8 3.1l5.9-5.9C34.1 6 29.5 4 24 4 16.1 4 9.2 8.3 5.8 15.2l7 5.2c1.6-4.7 6-8.2 11.2-8.2Z"/></svg>
           Entrar com Google
         </button>
         <a href="/admin" class="staff-link">Acesso da equipe</a>

@@ -71,6 +71,18 @@ function renderAdminHtml(storeConfig) {
     .stock-adjust-form input, .stock-adjust-form select, .stock-adjust-form textarea, .product-form input:not([type=file]):not([type=hidden]), .product-form select, .product-form textarea { width:100%; min-height:44px !important; padding:11px 13px !important; border:1px solid #cbd5e1 !important; border-radius:12px !important; background:#fff; font:inherit; }
     .product-form textarea, .stock-adjust-form textarea { min-height:96px !important; height:auto !important; resize:vertical; }
     .product-form { border:1px solid var(--border); border-radius:18px; padding:20px; background:#fbfdfb; gap:16px; box-shadow:0 4px 16px rgba(15,23,42,.04); }
+    .admin-products-toolbar { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:18px; }
+    .admin-products-toolbar h2 { margin:0; }
+    .admin-add-product { min-height:48px; padding:12px 20px; border:0; border-radius:14px; background:var(--primary); color:#fff; font-weight:800; font-size:14px; box-shadow:0 5px 14px rgba(46,147,72,.22); }
+    .admin-product-dialog { width:min(980px, calc(100vw - 32px)); max-width:none; max-height:calc(100dvh - 32px); padding:0; border:1px solid #dbe6dd; border-radius:22px; overflow:auto; background:#fff; color:#17251a; box-shadow:0 24px 80px rgba(15,23,42,.28); }
+    .admin-product-dialog::backdrop { background:rgba(15,23,42,.48); backdrop-filter:blur(3px); }
+    .admin-product-dialog__surface { padding:24px; }
+    .admin-product-dialog__header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:18px; }
+    .admin-product-dialog__header h2 { margin:0 0 6px; }
+    .admin-product-dialog__header p { margin:0; color:#64748b; font-size:13px; }
+    .admin-product-dialog__close { width:42px; height:42px; flex:none; border-radius:50%; font-size:24px; line-height:1; background:#fff; }
+    .admin-product-dialog .product-form { box-shadow:none; }
+    @media (max-width:700px) { .admin-product-dialog__surface { padding:18px 14px; } .admin-product-dialog .product-form { padding:14px; } }
     @media (max-width:700px) { .tab-content { padding:18px 14px; } .header-actions { justify-content:flex-start; } .stock-toolbar-actions { width:100%; } .stock-toolbar-actions button { flex:1; } }
   </style>
 
@@ -322,8 +334,20 @@ function renderAdminHtml(storeConfig) {
 
     <!-- ABA 7: CADASTRO DE PRODUTOS COM MÚLTIPLAS IMAGENS (ADMIN) -->
     <div id="tab-products" class="tab-content">
-      <h2 id="productFormTitle">Cadastro & Alteração de Produtos</h2>
+      <div class="admin-products-toolbar">
+        <h2>Cadastro de produtos</h2>
+        <button type="button" class="admin-add-product" onclick="openNewProductDialog()">＋ ADICIONAR PRODUTO</button>
+      </div>
       <button type="button" class="action-btn btn-gray" onclick="showTab('price')">Abrir consulta e ajuste de preços</button>
+      <dialog id="productEditorDialog" class="admin-product-dialog" aria-labelledby="productFormTitle">
+        <div class="admin-product-dialog__surface">
+          <div class="admin-product-dialog__header">
+            <div>
+              <h2 id="productFormTitle">Novo produto no catálogo</h2>
+              <p>Cadastre categoria, preço, estoque, fotos e informações para o catálogo.</p>
+            </div>
+            <button type="button" class="admin-product-dialog__close" aria-label="Fechar cadastro de produto" onclick="closeProductEditorDialog()">×</button>
+          </div>
       <form id="prodForm" onsubmit="handleProductSubmit(event)" class="product-form">
         <input type="hidden" id="formProdId" />
         <div>
@@ -390,9 +414,11 @@ function renderAdminHtml(storeConfig) {
         </div>
         <div style="grid-column: 1/-1; display:flex; gap:8px; flex-wrap:wrap;">
           <button type="submit" class="action-btn btn-green">💾 Salvar no Firestore</button>
-          <button type="button" class="action-btn btn-gray" onclick="resetProdForm()">Limpar / Cancelar</button>
+          <button type="button" class="action-btn btn-gray" onclick="closeProductEditorDialog()">Cancelar</button>
         </div>
       </form>
+        </div>
+      </dialog>
 
       <div style="display:flex; justify-content:space-between; align-items:center; margin-top:28px; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
         <h3 style="margin:0;">Produtos no Banco de Dados</h3>
@@ -1856,6 +1882,7 @@ function renderAdminHtml(storeConfig) {
     function editProduct(id) {
       const p = allProducts.find(x => String(x.id) === String(id));
       if (!p) return;
+      showTab('products');
       document.getElementById('formProdId').value = p.id;
       document.getElementById('formProdName').value = p.descricao || p.name;
       document.getElementById('formProdCat').value = p.categoria || p.category;
@@ -1885,7 +1912,21 @@ function renderAdminHtml(storeConfig) {
       renderPendingPhotosGrid();
 
       document.getElementById('productFormTitle').textContent = 'Editar Produto #' + p.id;
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      document.getElementById('productEditorDialog').showModal();
+    }
+
+    function openNewProductDialog() {
+      showTab('products');
+      resetProdForm();
+      document.getElementById('productFormTitle').textContent = 'Novo produto no catálogo';
+      document.getElementById('productEditorDialog').showModal();
+      document.getElementById('formProdName').focus();
+    }
+
+    function closeProductEditorDialog() {
+      const dialog = document.getElementById('productEditorDialog');
+      if (dialog?.open) dialog.close();
+      resetProdForm();
     }
 
     function resetProdForm() {
@@ -2004,6 +2045,7 @@ function renderAdminHtml(storeConfig) {
           return;
         }
         alert('✅ Produto salvo e fotos enviadas ao Firebase Storage em alta qualidade para zoom!');
+        document.getElementById('productEditorDialog').close();
         resetProdForm();
         loadAdminProducts();
         loadPriceProducts();
