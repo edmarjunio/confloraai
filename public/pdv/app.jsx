@@ -122,6 +122,11 @@ const { useState, useEffect, useRef, useMemo } = React;
         <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
       </IconBase>
     );
+    const CashRegister = (p) => (
+      <IconBase {...p}>
+        <rect x="3" y="8" width="18" height="12" rx="2"/><path d="M5 8V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v3"/><path d="M7 12h.01M11 12h.01M15 12h.01M7 16h4M15 16h2"/>
+      </IconBase>
+    );
 
     const CATEGORIES = [
       { id: 'atalhos', label: 'FAVORITOS', icon: '⭐' },
@@ -245,7 +250,7 @@ const { useState, useEffect, useRef, useMemo } = React;
               .map((entry) => (typeof entry === 'string' ? entry : entry?.url || entry?.imageUrl || ''))
               .filter(Boolean);
             const imageCandidates = [...new Set([...images, item.imageUrl, item.imagePathCache].filter(Boolean))];
-            const image = imageCandidates[0] || item.imageFallbackUrl || '/storefront/placeholder.svg';
+            const image = imageCandidates[0] || item.imageFallbackUrl || '/store-assets/placeholder.svg';
             return {
               ...item,
               sku: String(item.sku || item.id || ''),
@@ -624,7 +629,7 @@ const { useState, useEffect, useRef, useMemo } = React;
             )}
 
             <div
-              className={(deviceView === 'mobile-preview' ? 'sticky bottom-0' : 'fixed bottom-0 left-0 right-0 md:hidden') + " z-40 bg-white rounded-t-3xl shadow-[0_-10px_30px_rgba(15,56,30,0.14)] border-t border-slate-200/90 transition-all duration-300 flex flex-col"}
+              className={(deviceView === 'mobile-preview' ? 'sticky bottom-0' : 'fixed bottom-0 left-0 right-0 lg:hidden') + " z-40 bg-white rounded-t-3xl shadow-[0_-10px_30px_rgba(15,56,30,0.14)] border-t border-slate-200/90 transition-all duration-300 flex flex-col"}
             >
               {/* Drag Handle & Sheet Mode Switcher */}
               <div
@@ -1151,7 +1156,7 @@ const { useState, useEffect, useRef, useMemo } = React;
               </nav>
 
               {/* Com Flora Category Pills Row */}
-              <div className="mx-auto mt-2.5 flex min-w-0 w-full max-w-[1600px] items-center justify-between gap-3">
+              <div className="mx-auto mt-2.5 flex min-w-0 w-full max-w-[1600px] items-center justify-between gap-3 lg:mx-0 lg:w-2/3">
                 <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
                   {categoryTabs.map((cat) => {
                     const isActive = selectedCategory === cat.id;
@@ -1236,6 +1241,9 @@ const { useState, useEffect, useRef, useMemo } = React;
                             src={product.image}
                             data-image-index="0"
                             alt={product.name}
+                            loading="lazy"
+                            decoding="async"
+                            fetchPriority="low"
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                             onError={(e) => PdvComponents.handleProductImageError(e, product)}
                           />
@@ -1314,8 +1322,42 @@ const { useState, useEffect, useRef, useMemo } = React;
 
             {/* Mobile Bottom Sheet with Real-Time Simplified Receipt */}
             {(deviceView === 'mobile-preview' || deviceView === 'responsive') && (
-              <div className={deviceView === 'mobile-preview' ? 'block sticky bottom-0 z-40' : 'md:hidden'}>
+              <div className={deviceView === 'mobile-preview' ? 'block sticky bottom-0 z-40' : 'lg:hidden'}>
                 {renderMobileBottomSheet()}
+              </div>
+            )}
+            {deviceView === 'responsive' && (
+              <div className="fixed bottom-56 right-4 z-50 flex flex-col items-end gap-2 lg:hidden">
+                <button
+                  type="button"
+                  onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                  aria-label="Voltar ao início da página"
+                  title="Voltar ao início"
+                  className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-[#0F381E] shadow-lg ring-1 ring-slate-200 transition hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
+                >
+                  <IconBase className="h-5 w-5"><path d="m18 15-6-6-6 6"/><path d="M12 9v12"/></IconBase>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveModal('pay')}
+                  disabled={cart.length === 0}
+                  aria-label="Ir para pagamento"
+                  title="Ir para pagamento"
+                  className="flex h-12 w-12 items-center justify-center rounded-full bg-[#109E46] text-white shadow-lg transition hover:bg-[#0d853a] disabled:cursor-not-allowed disabled:bg-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
+                >
+                  <CashRegister className="h-5 w-5" />
+                </button>
+                {!customerId && customerName === 'Cliente Balcão' && (
+                  <button
+                    type="button"
+                    onClick={openCustomerModal}
+                    aria-label="Selecionar cliente"
+                    title="Selecionar cliente"
+                    className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-[#109E46] shadow-lg ring-1 ring-emerald-200 transition hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
+                  >
+                    <UserPlus className="h-5 w-5" />
+                  </button>
+                )}
               </div>
             )}
           </div>

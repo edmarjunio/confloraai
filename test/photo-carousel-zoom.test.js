@@ -77,6 +77,34 @@ test('1. Múltiplas fotos por produto no FirestoreRepository e preservação de 
   assert.equal(allProductPhotos[2].index, 2);
 });
 
+test('Firestore guarda metadados e URL da foto sem reter Base64 no servidor', async () => {
+  const repo = new FirestoreRepository({ isInMemory: true });
+  repo.isInMemory = false;
+  let persistedPhoto = null;
+  repo.firestore = {
+    collection(name) {
+      assert.equal(name, 'product_images');
+      return { doc: () => ({ set: async (photo) => { persistedPhoto = photo; } }) };
+    },
+  };
+
+  await repo.saveProductPhoto({
+    id: 'img-prod-storage-01',
+    productId: 'prod-storage-01',
+    data: 'large-base64-payload',
+    dataUrl: 'data:image/jpeg;base64,large-base64-payload',
+    imageUrl: 'https://storage.example.test/products/prod-storage-01/photo.jpg',
+    imagePath: 'products/prod-storage-01/photo.jpg',
+  });
+
+  assert.equal(persistedPhoto.imageUrl, 'https://storage.example.test/products/prod-storage-01/photo.jpg');
+  assert.equal(persistedPhoto.imagePath, 'products/prod-storage-01/photo.jpg');
+  assert.equal(persistedPhoto.storageLocation, 'firebase-storage');
+  assert.equal(Object.hasOwn(persistedPhoto, 'data'), false);
+  assert.equal(Object.hasOwn(persistedPhoto, 'dataUrl'), false);
+  assert.equal(repo.inMemoryProductImages.size, 0);
+});
+
 test('2. Preservação de nitidez para zoom sem estourar o limite de 1MB do Firestore', async () => {
   // Foto 2000x1500 em alta definição
   const highResImg = await createTestImage(2000, 1500, { r: 15, g: 118, b: 110 });

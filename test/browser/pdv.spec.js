@@ -93,6 +93,14 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
   await expect(page.getByRole('link', { name: 'Ir para a página inicial' }).first()).toBeInViewport();
   await expect(page.getByRole('button', { name: 'Sair', exact: true })).toBeInViewport();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await expect(page.getByRole('button', { name: 'Voltar ao início da página' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ir para pagamento' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Selecionar cliente' })).toBeVisible();
+  const cashierPlaceholder = await page.request.get('/store-assets/placeholder.svg');
+  expect(cashierPlaceholder.status()).toBe(200);
   await page.screenshot({ path: 'test-results/pdv-mobile.png', fullPage: false });
+  await page.setViewportSize({ width: 800, height: 900 });
+  await expect(page.getByText('Recibo em Tempo Real', { exact: true })).toBeVisible();
+  await page.screenshot({ path: 'test-results/pdv-tablet.png', fullPage: false });
   expect(errors).toEqual([]);
 });

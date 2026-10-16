@@ -1408,6 +1408,11 @@ function createApp({
         return res.status(200).send(imgBuffer);
       }
 
+      if (photo?.imageUrl && photo.imageUrl !== `/api/images/${id}`) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        return res.redirect(302, photo.imageUrl);
+      }
+
       // Se não encontrou foto diretamente, tenta buscar o produto correspondente
       const cleanProdId = id.replace(/^img_/, '');
       const prod = await messageService.firestoreRepo.getProductById(cleanProdId);
@@ -1949,8 +1954,9 @@ function createApp({
         });
 
         const storedImage = await messageService.firestoreRepo.uploadProductImage(photoDoc);
-        await messageService.firestoreRepo.saveProductPhoto(photoDoc);
-        savedPhotos.push({ ...photoDoc, ...storedImage });
+        const storedPhoto = { ...photoDoc, ...storedImage };
+        await messageService.firestoreRepo.saveProductPhoto(storedPhoto);
+        savedPhotos.push(storedPhoto);
       }
 
       const imageEntries = new Map();
@@ -2021,7 +2027,13 @@ function createApp({
     try {
       const { id } = req.params;
       const photos = await messageService.firestoreRepo.getProductPhotos(id);
-      res.status(200).json({ success: true, count: photos.length, photos });
+      const metadata = photos.map((photo) => {
+        const safePhoto = { ...photo };
+        delete safePhoto.data;
+        delete safePhoto.dataUrl;
+        return safePhoto;
+      });
+      res.status(200).json({ success: true, count: metadata.length, photos: metadata });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

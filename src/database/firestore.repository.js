@@ -683,6 +683,13 @@ class FirestoreRepository {
       return null;
     }
 
+    const metadata = { ...photoDoc };
+    delete metadata.data;
+    delete metadata.dataUrl;
+    if (metadata.imagePath) {
+      metadata.storageLocation = 'firebase-storage';
+    }
+
     if (this.isInMemory) {
       this.inMemoryProductImages.set(photoDoc.id, photoDoc);
       if (photoDoc.productId) {
@@ -696,7 +703,7 @@ class FirestoreRepository {
         await this.firestore
           .collection('product_images')
           .doc(photoDoc.id)
-          .set(photoDoc, { merge: true });
+          .set(metadata);
       } catch (err) {
         if (
           err.code === 7 ||
@@ -711,11 +718,7 @@ class FirestoreRepository {
       }
     }
 
-    this.inMemoryProductImages.set(photoDoc.id, photoDoc);
-    if (photoDoc.productId) {
-      this.inMemoryProductImages.set(String(photoDoc.productId), photoDoc);
-    }
-    return photoDoc;
+    return metadata;
   }
 
   async getProductPhoto(idOrProductId) {
@@ -728,10 +731,6 @@ class FirestoreRepository {
       return this.inMemoryProductImages.get(cleanId) || null;
     }
 
-    if (this.inMemoryProductImages.has(cleanId)) {
-      return this.inMemoryProductImages.get(cleanId);
-    }
-
     if (this.firestore && !this._firestoreClientDisabled) {
       try {
         const directDoc = await this.firestore
@@ -739,9 +738,7 @@ class FirestoreRepository {
           .doc(cleanId)
           .get();
         if (directDoc.exists) {
-          const photo = directDoc.data();
-          this.inMemoryProductImages.set(cleanId, photo);
-          return photo;
+          return directDoc.data();
         }
 
         const querySnap = await this.firestore
@@ -750,9 +747,7 @@ class FirestoreRepository {
           .limit(1)
           .get();
         if (!querySnap.empty) {
-          const photo = querySnap.docs[0].data();
-          this.inMemoryProductImages.set(cleanId, photo);
-          return photo;
+          return querySnap.docs[0].data();
         }
       } catch (err) {
         if (
@@ -768,13 +763,12 @@ class FirestoreRepository {
       try {
         const photo = await this.fetchDocViaRest('product_images', cleanId);
         if (photo) {
-          this.inMemoryProductImages.set(cleanId, photo);
           return photo;
         }
       } catch {}
     }
 
-    return this.inMemoryProductImages.get(cleanId) || null;
+    return null;
   }
 
   async getProductPhotos(idOrProductId) {
@@ -782,58 +776,30 @@ class FirestoreRepository {
       return [];
     }
     const cleanId = String(idOrProductId).trim();
-    const allPhotos = await this.getAllProductPhotos();
-    const matches = allPhotos.filter(
-      (p) => String(p.productId) === cleanId || p.id === cleanId || (p.id && p.id.startsWith(`img_${cleanId}`))
-    );
-    matches.sort((a, b) => (a.index || 0) - (b.index || 0));
-    return matches;
-  }
-
-  async getAllProductPhotos() {
     if (this.isInMemory) {
-      return Array.from(new Set(this.inMemoryProductImages.values()));
+      return Array.from(new Set(this.inMemoryProductImages.values()))
+        .filter((photo) => String(photo.productId) === cleanId || photo.id === cleanId || photo.id?.startsWith(`img_${cleanId}`))
+        .sort((a, b) => (a.index || 0) - (b.index || 0));
     }
 
     if (this.firestore && !this._firestoreClientDisabled) {
       try {
         const snap = await this.firestore
           .collection('product_images')
+          .where('productId', '==', cleanId)
           .get();
-        const photos = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
-        for (const p of photos) {
-          this.inMemoryProductImages.set(p.id, p);
-          if (p.productId) {
-            this.inMemoryProductImages.set(String(p.productId), p);
-          }
-        }
-        return photos;
+        return snap.docs
+          .map((doc) => ({ ...doc.data(), id: doc.id }))
+          .sort((a, b) => (a.index || 0) - (b.index || 0));
       } catch (err) {
-        if (
-          err.code === 7 ||
-          err.message?.includes('PERMISSION_DENIED')
-        ) {
+        if (err.code === 7 || err.message?.includes('PERMISSION_DENIED')) {
           this._firestoreClientDisabled = true;
+        } else {
+          Logger.warn('Erro ao consultar fotos do produto no Firestore', { error: err.message, productId: cleanId });
         }
       }
     }
-
-    if (config.firebase?.apiKey) {
-      try {
-        const restPhotos = await this.fetchCollectionViaRest('product_images');
-        if (restPhotos && restPhotos.length > 0) {
-          for (const p of restPhotos) {
-            this.inMemoryProductImages.set(p.id, p);
-            if (p.productId) {
-              this.inMemoryProductImages.set(String(p.productId), p);
-            }
-          }
-          return restPhotos;
-        }
-      } catch {}
-    }
-
-    return Array.from(new Set(this.inMemoryProductImages.values()));
+    return [];
   }
 
   async transferAllDrivePhotosToFirestore() {
@@ -865,7 +831,7 @@ class FirestoreRepository {
         });
 
         const storedImage = await this.uploadProductImage(photoDoc);
-        await this.saveProductPhoto(photoDoc);
+        await this.saveProductPhoto({ ...photoDoc, ...storedImage });
 
         const updated = {
           ...prod,
@@ -957,8 +923,8 @@ class FirestoreRepository {
           // Fallback silencioso
         }
 
-        await this.saveProductPhoto(pDoc);
         const storedImage = await this.uploadProductImage(pDoc);
+        await this.saveProductPhoto({ ...pDoc, ...storedImage });
         savedUrls.push(storedImage.imageUrl);
         savedPaths.push(storedImage.imagePath);
         if (idx === 0) {
@@ -1001,8 +967,8 @@ class FirestoreRepository {
         // Fallback silencioso
       }
 
-      await this.saveProductPhoto(photoDoc);
       const storedImage = await this.uploadProductImage(photoDoc);
+      await this.saveProductPhoto({ ...photoDoc, ...storedImage });
 
       const existingImages = getProductImageEntries(product)
         .filter((image) => (

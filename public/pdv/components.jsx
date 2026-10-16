@@ -20,7 +20,7 @@ window.PdvComponents = (() => {
       return;
     }
 
-    const imageFallbackUrl = product.imageFallbackUrl || '/storefront/placeholder.svg';
+    const imageFallbackUrl = product.imageFallbackUrl || '/store-assets/placeholder.svg';
     const absoluteFallbackUrl = new URL(imageFallbackUrl, window.location.origin).href;
     if (!imageElement.dataset.fallbackTried && imageElement.src !== absoluteFallbackUrl) {
       imageElement.dataset.fallbackTried = 'true';
@@ -28,8 +28,8 @@ window.PdvComponents = (() => {
       return;
     }
 
-    const placeholderUrl = new URL('/storefront/placeholder.svg', window.location.origin).href;
-    if (imageElement.src !== placeholderUrl) imageElement.src = '/storefront/placeholder.svg';
+    const placeholderUrl = new URL('/store-assets/placeholder.svg', window.location.origin).href;
+    if (imageElement.src !== placeholderUrl) imageElement.src = '/store-assets/placeholder.svg';
   }
   function Loading() {
     return <main className="min-h-screen bg-[#F4F6F5] font-sans text-slate-800"><header className="conflora-site-header"><div className="mx-auto w-full max-w-[1600px]"><SiteBrand /></div></header><p className="p-8 text-center text-sm text-slate-500">Carregando sessão…</p></main>;
@@ -45,7 +45,7 @@ window.PdvComponents = (() => {
   }
   function ProductInformation({ product, onClose }) {
     const details = Array.isArray(product.details) ? product.details : [];
-    const imageUrl = product.image || product.imageUrl || '/storefront/placeholder.svg';
+    const imageUrl = product.image || product.imageUrl || '/store-assets/placeholder.svg';
 
     return <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section role="dialog" aria-modal="true" aria-label={`Informações de ${product.name}`} className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-3xl border border-slate-100 bg-white p-5 shadow-2xl sm:p-6">
