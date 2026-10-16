@@ -79,7 +79,7 @@ class PdvService {
       return { approvalRequired: true, approval };
     }
     const ticketNumber = id.replace(/-/g, '').slice(0, 10).toUpperCase();
-    const pixData = paymentMethod === 'PIX' ? { txid: id.replace(/-/g, ''), provider: 'SICREDI' } : null;
+    const pixData = paymentMethod === 'PIX' ? { txid: id.replace(/-/g, '').toUpperCase(), provider: 'SICREDI' } : null;
     const order = await this.repository.create({
       id, requestHash, source: 'PDV', ticketNumber, items, subtotal: subtotalMinor / 100,
       discountPercent, discountAmount: discountMinor / 100, freightValue, total,
@@ -106,30 +106,30 @@ class PdvService {
     return { ...order, receiptText: formatOrderReceipt(order), qrCodeBase64: order.pixData?.qrCodeBase64 || '', receiptDelivery: { sent: delivery?.status === 'SENT' && Boolean(order.customerPhone), reason: delivery?.lastError || (order.customerPhone ? '' : 'Sem WhatsApp informado.') } };
   }
 
-  async handlePix(txid) {
-    if (!/^[a-zA-Z0-9]{26,35}$/.test(txid)) { throw new Error('Identificador Pix inválido.'); }
+  async handlePix(txid, endToEndId) {
+    if (!/^[a-zA-Z0-9]{26,35}$/.test(txid) || !/^E[a-zA-Z0-9]{31}$/.test(endToEndId || '')) { throw new Error('Identificador Pix inválido.'); }
     const orders = await this.repository.list('orders', 'pixData.txid', txid);
     // Memory collections use flat filtering; production query targets the exact txid.
     const order = orders[0];
     if (!order || order.source !== 'PDV' || order.paymentMethod !== 'PIX') { return true; }
     if (!order.completedAt) {
-      const status = await this.pix.checkChargeStatus(txid);
+      const status = await this.pix.checkReceivedPayment(endToEndId);
       if (!status.isPaid) { return false; }
-      const payments = status.raw.pix || [];
-      const payment = payments.find((entry) => entry.txid === txid && /^E[a-zA-Z0-9]{31}$/.test(entry.endToEndId || '') && Math.round(Number(entry.valor) * 100) === Math.round(order.total * 100) && !(entry.devolucoes || []).length);
-      if (!payment || status.raw.chave !== this.pix.pixKey || Math.round(Number(status.raw.valor?.original) * 100) !== Math.round(order.total * 100)) { throw new Error('Pagamento Sicredi divergente. Verifique a conciliação.'); }
-      await this.repository.receive(order.id, null, { txid, endToEndId: payment.endToEndId, amountMinor: Math.round(Number(payment.valor) * 100) });
+      const payment = status.raw;
+      if (payment.txid !== txid || payment.endToEndId !== endToEndId || payment.chave !== this.pix.pixKey || Math.round(Number(payment.valor) * 100) !== Math.round(order.total * 100) || (payment.devolucoes || []).length) { throw new Error('Pagamento Sicredi divergente. Verifique a conciliação.'); }
+      await this.repository.receive(order.id, null, { txid, endToEndId, amountMinor: Math.round(Number(payment.valor) * 100) });
     }
     await this.deliver(`${order.id}-customer-paid`);
     await this.deliver(`${order.id}-owner-paid`);
     return true;
   }
 
-  async processPixEvent(txid) {
-    if (!await this.handlePix(txid)) { return; }
+  async processPixEvent(txid, endToEndId) {
+    if (!await this.handlePix(txid, endToEndId)) { return; }
     await this.repository.transaction(async (tx) => {
-      const event = await tx.get('pdv_pix_events', txid);
-      if (event) { tx.set('pdv_pix_events', txid, { ...event, status: 'DONE' }); }
+      const eventId = `${txid}-${endToEndId}`;
+      const event = await tx.get('pdv_pix_events', eventId);
+      if (event) { tx.set('pdv_pix_events', eventId, { ...event, status: 'DONE' }); }
     });
   }
 
@@ -168,7 +168,7 @@ class PdvService {
   async retryMessages() {
     const events = await this.repository.list('pdv_pix_events', 'status', 'PENDING');
     for (const event of events.slice(0, 100)) {
-      try { await this.processPixEvent(event.id); }
+      try { await this.processPixEvent(event.txid, event.endToEndId); }
       catch (error) {
         await this.repository.transaction(async (tx) => {
           const current = await tx.get('pdv_pix_events', event.id);

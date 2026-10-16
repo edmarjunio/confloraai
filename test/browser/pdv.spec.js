@@ -22,7 +22,18 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
   await page.getByPlaceholder('O que você procura? (Nome, código ou categoria)...').fill('');
   await page.getByRole('button', { name: 'Comandas e meus números' }).click();
   await expect(page.getByRole('dialog', { name: 'Comandas e meus números' })).toBeVisible();
-  await expect(page.getByText('Nenhuma comanda pendente.')).toBeVisible();
+  for (const column of ['ESPERANDO CONFIRMAÇÃO', 'ESPERANDO PAGAMENTO', 'CONFIRMADOS', 'PAGOS / FINALIZADOS']) {
+    await expect(page.getByRole('region', { name: column })).toBeVisible();
+  }
+  await expect(page.getByText('Nenhuma comanda nesta etapa.').first()).toBeVisible();
+  await page.screenshot({ path: 'test-results/pdv-board-desktop.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: 'test-results/pdv-board-mobile.png' });
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.getByRole('button', { name: 'Histórico', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Histórico de vendas' })).toBeVisible();
+  await page.getByRole('button', { name: 'Fechamento', exact: true }).click();
+  await expect(page.getByRole('heading', { name: /Resumo para fechamento/ })).toBeVisible();
   await page.getByRole('button', { name: 'Fechar', exact: true }).click();
   await page.getByRole('button', { name: 'Receber dívida', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Receber dívida de fiado' })).toBeVisible();

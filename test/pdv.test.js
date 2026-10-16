@@ -25,7 +25,7 @@ function setup() {
   const pix = {
     pixKey: 'pix-key',
     createCharge: async ({ amount, txid }) => ({ txid, amount, pixCopiaECola: 'pix-code', qrCodeBase64: 'data:image/png;base64,aGVsbG8=', provider: 'SICREDI' }),
-    checkChargeStatus: async (txid) => ({ isPaid: true, raw: { status: 'CONCLUIDA', txid, chave: 'pix-key', valor: { original: '20.00' }, pix: [{ txid, valor: '20.00', endToEndId: 'E' + '1'.repeat(31) }] } }),
+    checkReceivedPayment: async (endToEndId) => ({ isPaid: true, raw: { txid: 'replace', endToEndId, chave: 'pix-key', valor: '20.00', devolucoes: [] } }),
   };
   const service = new PdvService({ repository, whatsapp, pix, ownerPhone: '5564999994321' });
   const input = { requestId: randomUUID(), items: [{ productId: 'plant', quantity: 2 }], paymentMethod: 'DINHEIRO' };
@@ -54,7 +54,8 @@ test('Pix receipt includes image; bank verification finalizes exactly once under
   assert.equal(s.sent.length, 2);
   assert.ok(s.sent[1].image);
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
-  await Promise.all(Array.from({ length: 4 }, () => s.service.handlePix(order.pixData.txid)));
+  s.pix.checkReceivedPayment = async (endToEndId) => ({ isPaid: true, raw: { txid: order.pixData.txid, endToEndId, chave: 'pix-key', valor: '20.00', devolucoes: [] } });
+  await Promise.all(Array.from({ length: 4 }, () => s.service.handlePix(order.pixData.txid, 'E' + '1'.repeat(31))));
   const paid = await s.repository.read('orders', order.id);
   assert.equal(paid.receivedBy.id, seller.id);
   assert.equal(paid.paymentStatus, 'APPROVED');
@@ -67,8 +68,8 @@ test('Pix never trusts webhook amounts, altered bank values or manual confirmati
   const s = setup();
   const order = await s.service.create({ ...s.input, paymentMethod: 'PIX' }, seller);
   await assert.rejects(s.repository.receive(order.id, actor(cashier)));
-  s.pix.checkChargeStatus = async () => ({ isPaid: true, raw: { chave: 'pix-key', valor: { original: '20' }, pix: [{ txid: order.pixData.txid, valor: '1', endToEndId: 'E' + '1'.repeat(31) }] } });
-  await assert.rejects(s.service.handlePix(order.pixData.txid), /divergente/);
+  s.pix.checkReceivedPayment = async (endToEndId) => ({ isPaid: true, raw: { txid: order.pixData.txid, endToEndId, chave: 'pix-key', valor: '1', devolucoes: [] } });
+  await assert.rejects(s.service.handlePix(order.pixData.txid, 'E' + '1'.repeat(31)), /divergente/);
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
   assert.equal((await s.repository.read('orders', order.id)).status, 'AWAITING_PIX');
 });
@@ -116,19 +117,31 @@ test('WhatsApp failure is retried independently from the sale and resumes after 
   assert.equal((await s.repository.read('pdv_outbox', `${order.id}-receipt`)).status, 'SENT');
 });
 
-test('Sicredi uses real TLS credentials, fixed amount and never falls back to static code', async () => {
+test('Sicredi creates a fixed-amount charge; payment is verified by end-to-end ID', async () => {
   const requests = [];
   const client = new SicrediPixClient({ clientId: 'id', clientSecret: 'secret', certificate: 'cert', privateKey: 'key', pixKey: 'pix', request: async (url, options) => {
     requests.push({ url, options });
     if (url.includes('/oauth/token')) return { access_token: 'token', expires_in: 3600 };
-    return { txid: '1'.repeat(32), pixCopiaECola: 'code' };
+    if (url.includes('/cob/')) return { txid: 'A'.repeat(32), chave: 'pix', valor: { original: '20.00', modalidadeAlteracao: 0 }, pixCopiaECola: 'sicredi-code', status: 'ATIVA' };
+    return { endToEndId: 'E' + '1'.repeat(31), txid: 'A'.repeat(32), chave: 'pix', valor: '20.00', devolucoes: [] };
   } });
-  await client.createCharge({ amount: 20, txid: '1'.repeat(32) });
-  assert.ok(requests[1].url.includes('/api/v2/cob/'));
-  assert.equal(requests[1].options.cert, 'cert');
-  assert.equal(JSON.parse(requests[1].options.body).valor.modalidadeAlteracao, 0);
+  const charge = await client.createCharge({ amount: 20, txid: 'A'.repeat(32), ticketNumber: '123' });
+  assert.equal(charge.pixCopiaECola, 'sicredi-code');
+  assert.equal(charge.mode, 'API_SICREDI_FIXED_AMOUNT');
+  assert.equal(client.generateTxId().length, 32);
+  assert.equal(requests[1].options.method, 'PUT');
+  assert.deepEqual(JSON.parse(requests[1].options.body).valor, { original: '20.00', modalidadeAlteracao: 0 });
+  await client.checkReceivedPayment('E' + '1'.repeat(31));
+  assert.ok(requests[2].url.includes('/api/v2/pix/'));
+  assert.ok(requests[2].url.endsWith('/api/v2/pix/E' + '1'.repeat(31)));
+  assert.equal(requests[2].options.cert, 'cert');
+  assert.equal(requests[2].options.method, 'GET');
   client.request = async () => { throw new Error('offline'); };
-  await assert.rejects(client.createCharge({ amount: 20 }));
+  await assert.rejects(client.checkReceivedPayment('E' + '1'.repeat(31)));
+  const editableCharge = new SicrediPixClient({ clientId: 'id', clientSecret: 'secret', certificate: 'cert', privateKey: 'key', pixKey: 'pix', request: async (url) => (
+    url.includes('/oauth/token') ? { access_token: 'token', expires_in: 3600 } : { txid: 'B'.repeat(32), chave: 'pix', valor: { original: '20.00', modalidadeAlteracao: 1 }, pixCopiaECola: 'editable-code' }
+  ) });
+  await assert.rejects(editableCharge.createCharge({ amount: 20, txid: 'B'.repeat(32) }), /cobrança fixa/);
 });
 
 test('Firestore transaction rolls back stock, debt and order together on failed commit', async () => {
@@ -188,4 +201,45 @@ test('HTTP requires real login, isolates staff and refuses manual/forged Pix', a
   assert.equal((await post(`/api/caixa/orders/${order.id}/confirm-sicredi-pix`, {}, cookie)).status, 202);
   assert.equal((await post('/webhooks/sicredi-pix', { pix: [{ txid: order.pixData.txid, valor: 20 }] })).status, 401);
   assert.equal((await post('/api/caixa/debts/settle', { amount: 1 }, cookie)).status, 403);
+});
+
+test('Cashier board filters history, separates pending stages, and calculates closing totals', async (t) => {
+  const s = setup();
+  await s.base.saveUser(seller);
+  await s.base.saveUser(cashier);
+  const app = createApp({ messageService: { firestoreRepo: s.base, whatsappClient: s.whatsapp }, sicrediClient: s.pix });
+  const server = app.listen(0); t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const login = async (user) => {
+    const response = await fetch(base + '/api/admin/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: user.id, pin: user.pin }) });
+    return response.headers.get('set-cookie').split(';')[0];
+  };
+  const cashierCookie = await login(cashier);
+  const pdv = app.locals.pdv;
+  const createOrder = (paymentMethod, overrides = {}) => pdv.service.create({ requestId: randomUUID(), items: [{ productId: 'plant', quantity: 2 }], paymentMethod, ...overrides }, seller);
+  const awaitingCash = await createOrder('DEBITO');
+  const paidOrder = await createOrder('DINHEIRO');
+  await pdv.store.receive(paidOrder.id, actor(cashier));
+  const onAccount = await createOrder('FIADO', { customerId: 'customer' });
+  await pdv.store.receive(onAccount.id, actor(cashier));
+  await pdv.store.settle({ id: randomUUID(), customerKey: 'customer', amount: 5, paymentMethod: 'DINHEIRO', notes: '', receivedBy: actor(cashier) });
+  const pixOrder = await createOrder('PIX');
+
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+  const response = await fetch(`${base}/api/caixa/orders?from=${today}&to=${today}`, { headers: { cookie: cashierCookie } });
+  assert.equal(response.status, 200);
+  const board = await response.json();
+  assert.deepEqual(board.pendingConfirmation.map((order) => order.id), [awaitingCash.id]);
+  assert.deepEqual(board.pendingPayment.map((order) => order.id), [pixOrder.id]);
+  assert.deepEqual(board.confirmed.map((order) => order.id), [onAccount.id]);
+  assert.deepEqual(board.paid.map((order) => order.id), [paidOrder.id]);
+  assert.equal(board.closing.salesReceived, 20);
+  assert.equal(board.closing.debtReceived, 5);
+  assert.equal(board.closing.totalReceived, 25);
+  assert.equal(board.closing.confirmedDebt, 20);
+  assert.equal(board.closing.byPayment.DINHEIRO.sales, 20);
+  assert.equal(board.closing.byPayment.DINHEIRO.debt, 5);
+
+  const invalidRange = await fetch(`${base}/api/caixa/orders?from=2026-02-31&to=2026-03-01`, { headers: { cookie: cashierCookie } });
+  assert.equal(invalidRange.status, 400);
 });

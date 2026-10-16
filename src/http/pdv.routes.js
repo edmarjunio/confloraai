@@ -19,6 +19,48 @@ function requireCashier(req, res, next) {
   next();
 }
 
+function businessDate(value) {
+  if (!value) { return ''; }
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date(value));
+}
+
+function reportRange(query = {}) {
+  const today = businessDate(new Date());
+  const from = String(query.from || today);
+  const to = String(query.to || today);
+  const isDate = (value) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) { return false; }
+    const date = new Date(`${value}T00:00:00Z`);
+    return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  };
+  if (!isDate(from) || !isDate(to) || from > to) { throw new Error('Selecione um período válido para o relatório.'); }
+  return { from, to };
+}
+
+function isWithinRange(value, range) {
+  const date = businessDate(value);
+  return Boolean(date && date >= range.from && date <= range.to);
+}
+
+function paymentTotals(orders, settlements) {
+  const methods = ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO'];
+  const totals = Object.fromEntries(methods.map((method) => [method, { sales: 0, debt: 0, count: 0, debtCount: 0 }]));
+  for (const order of orders) {
+    const row = totals[order.paymentMethod];
+    if (!row) { continue; }
+    row.sales += Number(order.total || 0);
+    row.count += 1;
+  }
+  for (const settlement of settlements) {
+    const row = totals[settlement.paymentMethod];
+    if (!row) { continue; }
+    row.debt += Number(settlement.amount || 0);
+    row.debtCount += 1;
+  }
+  for (const row of Object.values(totals)) { row.total = row.sales + row.debt; }
+  return totals;
+}
+
 function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone }) {
   const store = new PdvRepository(repository);
   const service = new PdvService({ repository: store, pix, whatsapp, ownerPhone });
@@ -54,19 +96,51 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone }) {
   }));
   app.get('/api/caixa/orders', route(async (req, res) => {
     const orders = await store.list('orders', 'source', 'PDV');
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-    const completedToday = orders.filter((order) => order.completedAt && new Date(order.completedAt).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }) === today);
-    const ownSales = completedToday.filter((order) => order.createdBy.id === req.user.id);
-    const ownReceipts = completedToday.filter((order) => order.receivedBy?.id === req.user.id && order.paymentStatus === 'APPROVED');
-    const settlements = await store.list('debt_settlements', 'receivedBy.id', req.user.id);
-    const debtReceipts = settlements.filter((row) => new Date(row.createdAt).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }) === today);
-    const byPayment = { PIX: 0, DINHEIRO: 0, DEBITO: 0, CREDITO: 0 };
-    for (const row of ownReceipts) { byPayment[row.paymentMethod] = (byPayment[row.paymentMethod] || 0) + row.total; }
+    const range = reportRange(req.query);
+    const isAdmin = req.user.role === 'ADMIN';
+    const isCashier = ['ADMIN', 'CAIXA'].includes(req.user.role);
+    const canViewOrder = (order) => isAdmin || order.createdBy?.id === req.user.id || order.receivedBy?.id === req.user.id;
+    const openOrders = orders.filter((order) => !order.completedAt && order.status !== 'CANCELLED' &&
+      (isAdmin || order.createdBy?.id === req.user.id || (isCashier && ['AWAITING_CASHIER', 'CREATING_PIX', 'AWAITING_PIX'].includes(order.status))));
+    const pendingConfirmation = openOrders.filter((order) => order.status === 'AWAITING_CASHIER');
+    const pendingPayment = openOrders.filter((order) => ['CREATING_PIX', 'AWAITING_PIX'].includes(order.status));
+    const history = orders.filter((order) => canViewOrder(order) && isWithinRange(order.paidAt || order.completedAt || order.createdAt, range));
+    const completed = history.filter((order) => order.completedAt && order.status !== 'CANCELLED');
+    const confirmed = completed.filter((order) => order.paymentStatus === 'ON_ACCOUNT');
+    const paid = completed.filter((order) => order.paymentStatus === 'APPROVED' && (order.paidAt || order.completedAt));
+    const allSettlements = await store.list('debt_settlements', 'type', 'QUITACAO_FIADO');
+    const debtHistory = allSettlements.filter((row) => (isAdmin || row.receivedBy?.id === req.user.id) && isWithinRange(row.createdAt, range));
+    const mySales = completed.filter((order) => order.createdBy?.id === req.user.id);
+    const myReceipts = paid.filter((order) => order.receivedBy?.id === req.user.id);
+    const myDebtReceipts = debtHistory.filter((row) => row.receivedBy?.id === req.user.id);
+    const closingOrders = isAdmin ? paid : paid.filter((order) => order.receivedBy?.id === req.user.id);
+    const closingSettlements = isAdmin ? debtHistory : myDebtReceipts;
+    const byPayment = paymentTotals(closingOrders, closingSettlements);
+    const sum = (rows, field) => rows.reduce((total, row) => total + Number(row[field] || 0), 0);
+    const closing = {
+      orderCount: closingOrders.length,
+      debtSettlementCount: closingSettlements.length,
+      salesReceived: sum(closingOrders, 'total'),
+      debtReceived: sum(closingSettlements, 'amount'),
+      totalReceived: sum(closingOrders, 'total') + sum(closingSettlements, 'amount'),
+      confirmedDebt: sum(isAdmin ? confirmed : confirmed.filter((order) => order.createdBy?.id === req.user.id || order.receivedBy?.id === req.user.id), 'total'),
+      byPayment,
+    };
     res.json({
-      pendingCashier: req.user.role === 'VENDEDOR' ? orders.filter((order) => order.createdBy.id === req.user.id && order.status === 'AWAITING_CASHIER') : orders.filter((order) => order.status === 'AWAITING_CASHIER'),
-      pendingPix: orders.filter((order) => ['CREATING_PIX', 'AWAITING_PIX'].includes(order.status) && (req.user.role === 'ADMIN' || order.createdBy.id === req.user.id)),
-      completedToday: req.user.role === 'ADMIN' ? completedToday : completedToday.filter((order) => order.createdBy.id === req.user.id || order.receivedBy?.id === req.user.id),
-      metrics: { sales: ownSales.reduce((sum, row) => sum + row.total, 0), receipts: ownReceipts.reduce((sum, row) => sum + row.total, 0), debtReceipts: debtReceipts.reduce((sum, row) => sum + row.amount, 0), totalRevenue: ownReceipts.reduce((sum, row) => sum + row.total, 0), byPayment, orderCount: ownSales.length },
+      range,
+      pendingConfirmation,
+      pendingPayment,
+      confirmed,
+      paid,
+      history: history.sort((a, b) => String(b.paidAt || b.completedAt || b.createdAt).localeCompare(String(a.paidAt || a.completedAt || a.createdAt))),
+      debtHistory: debtHistory.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))),
+      metrics: {
+        sales: sum(mySales, 'total'),
+        receipts: sum(myReceipts, 'total'),
+        debtReceipts: sum(myDebtReceipts, 'amount'),
+        orderCount: mySales.length,
+      },
+      closing,
     });
   }));
   const findOrder = async (req) => {
@@ -124,12 +198,14 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone }) {
     try {
       for (const entry of req.body.pix) {
         const txid = String(entry.txid || '');
-        if (!/^[a-zA-Z0-9]{26,35}$/.test(txid)) { return res.sendStatus(400); }
+        const endToEndId = String(entry.endToEndId || '');
+        if (!/^[a-zA-Z0-9]{26,35}$/.test(txid) || !/^E[a-zA-Z0-9]{31}$/.test(endToEndId)) { return res.sendStatus(400); }
         await store.transaction(async (tx) => {
-          const previous = await tx.get('pdv_pix_events', txid);
-          if (!previous) { tx.set('pdv_pix_events', txid, { id: txid, status: 'PENDING', receivedAt: new Date().toISOString() }); }
+          const eventId = `${txid}-${endToEndId}`;
+          const previous = await tx.get('pdv_pix_events', eventId);
+          if (!previous) { tx.set('pdv_pix_events', eventId, { id: eventId, txid, endToEndId, status: 'PENDING', receivedAt: new Date().toISOString() }); }
         });
-        await service.processPixEvent(txid);
+        await service.processPixEvent(txid, endToEndId);
       }
       res.sendStatus(200);
     } catch (error) { Logger.error('Conciliação Sicredi pendente', { error: error.message }); res.sendStatus(503); }
@@ -148,4 +224,4 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone }) {
   app.locals.pdv = { service, store };
   return { service, store };
 }
-module.exports = { installPdvRoutes, requireStaff, requireCashier };
+module.exports = { installPdvRoutes, requireStaff, requireCashier, businessDate, reportRange, paymentTotals };
