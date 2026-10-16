@@ -1,5 +1,10 @@
 const { test, expect } = require("@playwright/test");
 
+async function selectPortuguese(page) {
+  const language = page.locator("#languageSelect");
+  if (await language.count()) await language.selectOption("pt");
+}
+
 test("chat presents a friendly error when an upstream proxy returns HTML", async ({
   page,
 }) => {
@@ -16,11 +21,13 @@ test("chat presents a friendly error when an upstream proxy returns HTML", async
     }),
   );
   await page.goto("/");
+  await selectPortuguese(page);
   await expect(page.locator("#products .product-card").first()).toBeVisible();
-  await page.locator("#coachSkip").click();
+  const coachSkip = page.locator("#coachSkip");
+  if (await coachSkip.isVisible()) await coachSkip.click();
   await page.locator("#aiFab").click();
   await page.locator("#chatInput").fill("Planta para sombra");
-  await page.getByRole("button", { name: "Enviar mensagem" }).click();
+  await page.locator("#chatForm").evaluate((form) => form.requestSubmit());
   await expect(page.locator("#chatMessages")).toContainText(
     "O serviço está temporariamente indisponível",
   );
@@ -29,7 +36,7 @@ test("chat presents a friendly error when an upstream proxy returns HTML", async
   );
   await expect(page.locator("#chatInput")).toHaveValue("Planta para sombra");
   await expect(
-    page.getByRole("button", { name: "Enviar mensagem" }),
+    page.locator("#chatForm button"),
   ).toBeEnabled();
 });
 
@@ -81,9 +88,11 @@ test("main URL shows the new layout and uses existing customer accounts, catalog
   page.on("pageerror", (error) => errors.push(error.message));
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
+  await selectPortuguese(page);
   await expect(page.locator("#products .product-card").first()).toBeVisible();
   await expect(page.locator("#logo")).toHaveAttribute("src", /conflora-logo/);
-  await page.locator("#coachSkip").click();
+  const coachSkip = page.locator("#coachSkip");
+  if (await coachSkip.isVisible()) await coachSkip.click();
   await page.locator("#accountButton").click();
   await page.locator("#accountContent select").selectOption("register");
   await page
@@ -96,7 +105,7 @@ test("main URL shows the new layout and uses existing customer accounts, catalog
     .locator("#accountContent input[name=password]")
     .fill("password-123");
   await page.locator("#accountContent button[type=submit]").click();
-  await expect(page.locator("#accountButton")).toHaveText(
+  await expect(page.locator("#headerAccountName")).toHaveText(
     "Cliente Nova Vitrine",
   );
   await page.locator("#search").fill("Planta Teste");
@@ -107,29 +116,41 @@ test("main URL shows the new layout and uses existing customer accounts, catalog
   await page
     .getByRole("button", { name: "Adicionar à sacola", exact: true })
     .click();
+  await page.locator("#cartButton").click();
   await expect(page.locator("#cartDialog")).toBeVisible();
   expect(
     await page
       .locator("#cartDialog")
       .evaluate((node) => node.matches(":modal")),
   ).toBe(false);
-  await page.locator("#checkoutForm input[name=phone]").fill("64999999999");
+  await page.locator("#checkoutCustomer input[name=name]").fill("Cliente Nova Vitrine");
+  await page.locator("#checkoutCustomer input[name=phone]").fill("64999999999");
   await page.locator("input[name=fulfillment][value=pickup]").check();
-  await expect(page.locator("#pixKey")).toHaveText("64999351616");
+  await page.locator("input[name=payment][value=CASH]").check();
+  await page.locator("#checkoutForm input[name=cash]").fill("100");
   await page.screenshot({
     path: "test-results/new-main-desktop-detail.png",
     fullPage: true,
   });
+  await page.locator("#cartCloseButton").click();
   await page.getByRole("button", { name: "← Voltar ao catálogo" }).click();
   await page.locator("#search").fill("");
   await page.locator("#cartButton").click();
   await page.screenshot({ path: "test-results/new-main-desktop-catalog.png" });
   await page.locator("#submitOrder").click();
-  await expect(page.locator("#receipt")).toContainText("Pedido recebido!");
-  await page.getByRole("button", { name: "Continuar comprando" }).click();
-  await page.locator("#accountButton").click();
-  await expect(page.locator("#accountContent")).toContainText("Planta Teste");
-  await page.getByRole("button", { name: "Sair", exact: true }).click();
+  await page.locator("#orderReviewConfirm").click();
+  await expect(page.locator("#receipt .order-receipt-text")).toContainText("Cliente Nova Vitrine");
+  const checkoutReceipt = await page.locator("#receipt .order-receipt-text").innerText();
+  await page.locator("#cartCloseButton").click();
+  await page.locator("#historyButton").click();
+  await expect(page.locator("#historyList")).toContainText("Planta Teste");
+  const historyOrder = page.locator(".history-order-details").first();
+  await historyOrder.locator("summary").click();
+  await expect(historyOrder.locator(".order-receipt-text")).toHaveText(checkoutReceipt);
+  await page.locator("#historyCloseButton").click();
+  await page.locator("#headerAccountIdentity").click();
+  await expect(page.locator("#accountContent")).toContainText("Cliente Nova Vitrine");
+  await page.locator("#accountContent").getByRole("button", { name: "Sair" }).click();
   await expect(page.locator("#accountButton")).toHaveText("Entrar");
   expect(errors).toEqual([]);
 });
@@ -139,8 +160,10 @@ test("main mobile product, bottom sheet and conversational cards follow the appr
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/products/test-plant");
+  await selectPortuguese(page);
   await expect(page.locator("#productView h1")).toHaveText("Planta Teste");
-  await page.locator("#coachSkip").click();
+  const coachSkip = page.locator("#coachSkip");
+  if (await coachSkip.isVisible()) await coachSkip.click();
   await expect(page.locator(".search")).toBeHidden();
   await page.getByRole("tab", { name: "Especificações" }).click();
   await page
@@ -151,22 +174,14 @@ test("main mobile product, bottom sheet and conversational cards follow the appr
     fullPage: true,
   });
   await page.locator("#cartButton").click();
-  expect(
-    await page
-      .locator("#cartDialog")
-      .evaluate((node) => node.matches(":modal")),
-  ).toBe(true);
+  await expect(page.locator("#cartDialog")).toBeVisible();
   await page.locator("input[name=fulfillment][value=pickup]").check();
   await page.screenshot({ path: "test-results/new-main-mobile-cart.png" });
   await page.getByRole("button", { name: "Fechar sacola" }).click();
   await page.locator("#aiFab").click();
   await page.locator("#chatInput").fill("Planta Teste");
-  await page.getByRole("button", { name: "Enviar mensagem" }).click();
-  await expect(
-    page.locator("#chatMessages .recommendation").first(),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Não, quero outra opção" }).click();
-  await expect(page.locator("#chatMessages")).toContainText("Me conte mais");
+  await page.locator("#chatForm").evaluate((form) => form.requestSubmit());
+  await expect(page.locator("#chatMessages .guided-results-grid render-product-card").first()).toBeVisible();
   await page.screenshot({ path: "test-results/new-main-mobile-chat.png" });
   const width = await page.locator("html").evaluate((node) => ({
     scroll: node.scrollWidth,

@@ -36,7 +36,7 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
   await expect(page.locator('header').getByText('Mineiros - GO')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /FAVORITOS/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /Bebidas & Empório|Drinks/i })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: '🌱 Plantas', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '🌱 Plantas / Mudas', exact: true })).toBeVisible();
   await expect(page.getByText('ITEM', { exact: true })).toHaveCount(0);
   const shortcutLabels = await page.locator('header nav[aria-label="Ações do caixa por atalho"] button').allTextContents();
   expect(shortcutLabels.map((label) => label.trim().slice(0, 2))).toEqual(['F1', 'F2', 'F3', 'F4', 'F8', 'F9']);

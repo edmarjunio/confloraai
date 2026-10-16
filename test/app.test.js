@@ -454,7 +454,10 @@ test('16. Cardápio Digital & Painel Admin: Renderização e elementos essenciai
   assert.match(adminHtml, /class="conflora-site-brand" aria-label="Administração — página inicial"/);
   assert.match(adminHtml, /admin-shell-v1\.css/);
   assert.match(adminHtml, /Caixa e vendas/);
-  assert.match(adminHtml, /Entrada Rápida de Estoque/);
+  assert.match(adminHtml, /Entrada de estoque/);
+  assert.match(adminHtml, /Baixa de estoque/);
+  assert.match(adminHtml, /Contagem/);
+  assert.match(adminHtml, /admin-cashier-link/);
   assert.match(adminHtml, /Cadastro & Alteração de Produtos/);
   assert.doesNotMatch(adminHtml, /tabBtn-import|import-data|import-xlsx|AppSheet|Google Sheets/);
 

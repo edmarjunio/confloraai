@@ -84,6 +84,66 @@ test("inventory settings are admin-only and control stock deduction", async (t) 
   assert.equal((await repo.getAllProducts()).find(p => p.id === "stock-switch").stockQuantity, 3);
 });
 
+test('ajustes do estoque exigem Admin e preservam histórico, motivo e idempotência', async (t) => {
+  const { repo, request, login } = await appContext(t);
+  const admin = await login('usr-edmar', '1234');
+  const cashier = await login('usr-caixa1', '0000');
+  await repo.saveProduct({ id: 'stock-audit', name: 'Muda auditada', price: 20, stockQuantity: 10 });
+
+  assert.equal((await request('/api/admin/stock/movements')).status, 401);
+  assert.equal((await request('/api/admin/stock/movements', undefined, cashier)).status, 403);
+  assert.equal((await request('/api/admin/stock/adjustments', {
+    productId: 'stock-audit', operation: 'ENTRY', quantity: 1, requestId: 'cashier-denied-001',
+  }, cashier)).status, 403);
+
+  const entryBody = { productId: 'stock-audit', operation: 'ENTRY', quantity: 5, requestId: 'admin-entry-0001' };
+  const entry = await (await request('/api/admin/stock/adjustments', entryBody, admin)).json();
+  assert.equal(entry.newStock, 15);
+  assert.equal((await (await request('/api/admin/stock/adjustments', entryBody, admin)).json()).duplicate, true);
+  const missingReason = await request('/api/admin/stock/adjustments', {
+    productId: 'stock-audit', operation: 'EXIT', quantity: 1, requestId: 'admin-exit-missing',
+  }, admin);
+  assert.equal(missingReason.status, 400);
+  const exit = await (await request('/api/admin/stock/adjustments', {
+    productId: 'stock-audit', operation: 'EXIT', quantity: 2,
+    reason: 'Folhas danificadas na contagem', requestId: 'admin-exit-0001',
+  }, admin)).json();
+  assert.equal(exit.newStock, 13);
+  const count = await (await request('/api/admin/stock/adjustments', {
+    productId: 'stock-audit', operation: 'SET', quantity: 7,
+    reason: 'Contagem física do viveiro', requestId: 'admin-count-0001',
+  }, admin)).json();
+  assert.equal(count.newStock, 7);
+  assert.equal((await repo.getAllProducts()).find((product) => product.id === 'stock-audit').stockQuantity, 7);
+  assert.equal((await request('/api/admin/stock/movements?limit=10', undefined, admin)).status, 200);
+  assert.ok((await repo.getUserNotifications('usr-edmar')).some((notification) => notification.type === 'STOCK_DECREASED'));
+});
+
+test('histórico autenticado entrega o mesmo recibo salvo para envio ao cliente', async (t) => {
+  const { repo, request } = await appContext(t);
+  const registration = await request('/api/auth/register', {
+    email: 'historico@test.com', name: 'Cliente Histórico', password: 'senha123',
+  });
+  const account = (await registration.json()).user;
+  const loginResponse = await request('/api/auth/login', { email: 'historico@test.com', password: 'senha123' });
+  const cookie = loginResponse.headers.get('set-cookie').split(';')[0];
+  const order = await repo.createDirectOrder({
+    id: 'order-history-exact', customerId: account.id, customerEmail: account.email,
+    customerName: account.name, customerPhone: '64999990000', orderType: 'DELIVERY',
+    deliveryAddress: 'Rua das Flores, 10', paymentMethod: 'PIX', total: 25, subtotal: 25,
+    items: [{ productId: 'muda-1', name: 'Muda teste', price: 25, quantity: 1, unit: 'UN' }],
+  });
+  const { formatOrderReceipt } = require('../src/orders/receipt.util');
+  const sentReceiptText = formatOrderReceipt(order);
+  await repo.saveOrderReceipt(order.id, sentReceiptText);
+
+  const response = await request('/api/customer/orders?limit=12', undefined, cookie);
+  const history = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(history.orders[0].receiptText, sentReceiptText);
+  assert.equal(history.orders[0].id, order.id);
+});
+
 test("Login PIN: inválido, conta sem PIN, inativa, cliente e encerramento de sessão", async (t) => {
   const { repo, request, login } = await appContext(t);
   assert.equal(

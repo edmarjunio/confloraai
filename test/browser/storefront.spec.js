@@ -25,7 +25,7 @@ async function login(page) {
     .locator("#accountContent input[name=password]")
     .fill("test-password-123");
   await page.locator("#accountContent button[type=submit]").click();
-  await expect(page.locator("#accountButton")).toHaveText("Admin");
+  await expect(page.locator("#headerAccountName")).toHaveText("Admin");
 }
 test("desktop catalogue, product page, cart sidebar and checkout use one cart", async ({
   page,
@@ -56,12 +56,16 @@ test("desktop catalogue, product page, cart sidebar and checkout use one cart", 
   if (await page.locator("#coachSkip").isVisible()) {
     await page.locator("#coachSkip").click();
   }
-  await page.locator("#checkoutForm input[name=name]").fill("Cliente Web");
-  await page.locator("#checkoutForm input[name=phone]").fill("64999999999");
+  await page.locator("#checkoutCustomer input[name=name]").fill("Cliente Web");
+  await page.locator("#checkoutCustomer input[name=phone]").fill("64999999999");
   await page.locator("input[name=fulfillment][value=pickup]").check();
+  await page.locator("input[name=payment][value=CASH]").check();
+  await page.locator("#checkoutForm input[name=cash]").fill("30");
   await expect(page.locator("#checkoutTotal")).toHaveText("R$ 24,00");
   await page.locator("#submitOrder").click();
-  await expect(page.locator("#receipt")).toContainText("Pedido recebido");
+  await page.locator("#orderReviewConfirm").click();
+  await expect(page.locator("#receipt")).toBeVisible();
+  await expect(page.locator("#receipt h2")).toBeVisible();
   await page.screenshot({
     path: "test-results/storefront-desktop-checkout.png",
     fullPage: true,
@@ -77,28 +81,27 @@ test("mobile bottom sheet, assistant recommendations and tenant-local storage", 
   await page.locator("#chatForm button").click();
   await expect(
     page
-      .locator("#chatMessages .recommendation")
+      .locator("#chatMessages render-product-card")
       .filter({ hasText: "Ração para gatos" }),
   ).toBeVisible();
   await page
-    .locator("#chatMessages .recommendation")
+    .locator("#chatMessages render-product-card")
     .filter({ hasText: "Ração para gatos" })
     .getByRole("button", { name: "Adicionar", exact: true })
     .click();
-  await page.getByRole("button", { name: "Não, quero outra opção" }).click();
-  await expect(page.locator("#chatMessages")).toContainText("Me conte mais");
+  await expect(page.locator("#cartButton")).toContainText("1");
   await page.screenshot({
     path: "test-results/storefront-mobile-chat.png",
     fullPage: true,
   });
-  await page.getByRole("button", { name: "Fechar conversa" }).click();
-  await page.locator("#mobileCart").click();
+  await page.locator("#chatDialog button[data-close]").click();
+  await page.locator("#cartFab").click();
   await expect(page.locator("#cartDialog")).toBeVisible();
   expect(
     await page
       .locator("#cartDialog")
       .evaluate((dialog) => dialog.matches(":modal")),
-  ).toBe(true);
+  ).toBe(false);
   await expect(page.locator("#cartItems")).toContainText("Ração para gatos");
   const width = await page
     .locator("html")

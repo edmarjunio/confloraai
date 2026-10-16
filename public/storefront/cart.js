@@ -9,9 +9,10 @@ import {
   quantityControl,
 } from "./ui.js";
 import { icon } from "./icons.js";
-import { tr, onLanguageChange } from "./i18n/index.js";
+import { onLanguageChange } from "./i18n/index.js";
 import { cartStore } from "./store/index.js";
 import { storeQueries } from "./query/tanstackQuery.js";
+import { renderOrderReceipt } from "./receipt.js";
 
 export function createCart(state) {
   const key = `store:${state.slug}:cart:v1`;
@@ -393,7 +394,7 @@ export function createCart(state) {
 
     try {
       // Execute order via TanStack Query mutation
-      const order = await storeQueries.submitOrder(payload);
+      const order = await storeQueries.submitOrder(payload, state.api, pending.key);
       state.trackEvent?.("purchase", {
         orderId: order.id,
         value: Number(order.totalMinor || subtotal()) / 100,
@@ -423,7 +424,7 @@ export function createCart(state) {
       receipt.replaceChildren(
         element("h2", { text: "cart.order_success_title".tr }),
         element("p", { text: "cart.order_success_desc".tr }),
-        element("pre", { text: order.receiptText || `${tr("cart.order_number", { id: order.id })}\nTotal: ${money(order.totalMinor || subtotal())}` }),
+        renderOrderReceipt(order),
       );
       if (order.paymentMethod === "PIX" && order.paymentCheckoutUrl) {
         receipt.append(

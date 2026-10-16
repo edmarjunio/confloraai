@@ -1,4 +1,4 @@
-const { randomUUID } = require('node:crypto');
+const { createHash, randomUUID } = require('node:crypto');
 const { createWebSessions, safeUser } = require('../security/web-session');
 const { rankProductSales } = require('../catalog/product-sales');
 const { resolveHdProductImage } = require('../catalog/image-resolver');
@@ -13,6 +13,26 @@ function getExpress() {
     }
   }
   return expressModule;
+}
+
+async function acquireRequestLock(locks, key) {
+  const previous = locks.get(key) || Promise.resolve();
+  let unlock;
+  const current = new Promise((resolve) => {
+    unlock = resolve;
+  });
+  locks.set(key, current);
+  await previous.catch(() => {});
+  return () => {
+    unlock();
+    if (locks.get(key) === current) locks.delete(key);
+  };
+}
+
+function withoutIdempotencyFingerprint(order) {
+  const safeOrder = { ...order };
+  delete safeOrder.idempotencyFingerprint;
+  return safeOrder;
 }
 
 function getProductImageCandidates(product = {}) {
@@ -995,6 +1015,7 @@ function createApp({
   const sicrediPixClient = sicrediClient || new SicrediPixClient();
   messageService.sicrediPixClient = sicrediPixClient;
   const app = express();
+  app.locals.storefrontCheckoutLocks = new Map();
   if (config.appEnvironment === 'dev') {
     app.use((_req, res, next) => {
       res.setHeader('X-Conflora-Environment', 'dev');
@@ -1285,6 +1306,10 @@ function createApp({
           ...confirmedOrder,
           paymentStatus: 'APPROVED',
         });
+        confirmedOrder.receiptText = receiptText;
+        await messageService.firestoreRepo.saveOrderReceipt(confirmedOrder.id, receiptText).catch((saveError) => {
+          Logger.warn('PIX confirmado; não foi possível salvar a cópia final do recibo.', { orderId, error: saveError.message });
+        });
         const delivery = await sendCustomerOrderReceipt(
           messageService.whatsappClient,
           order.customerPhone,
@@ -1425,6 +1450,14 @@ function createApp({
 
   // Client Web Orders API
   app.post(['/api/orders', '/api/storefront/orders'], async (req, res) => {
+    const isStorefrontOrder = req.path === '/api/storefront/orders';
+    const idempotencyKey = String(req.get('Idempotency-Key') || '').trim();
+    if (isStorefrontOrder && !/^[a-zA-Z0-9_-]{1,128}$/.test(idempotencyKey)) {
+      return res.status(400).json({ error: 'Chave de envio do pedido inválida. Atualize a página e tente novamente.' });
+    }
+    const releaseRequestLock = idempotencyKey
+      ? await acquireRequestLock(app.locals.storefrontCheckoutLocks, idempotencyKey)
+      : () => {};
     try {
       await normalizeExistingCheckout(req, messageService.firestoreRepo);
       const {
@@ -1507,7 +1540,41 @@ function createApp({
       }
       const finalTotal = Math.max(0, calculatedSubtotal - appliedDiscount);
       const resolvedPaymentMethod = String(paymentMethod || 'PIX').toUpperCase();
-      const orderId = randomUUID();
+      const checkoutFingerprint = idempotencyKey
+        ? createHash('sha256').update(JSON.stringify({
+          customerName: String(customerName).trim(),
+          customerPhone: String(customerPhone).replace(/\D/g, ''),
+          orderType,
+          deliveryAddress,
+          paymentMethod: resolvedPaymentMethod,
+          items: orderItems.map((item) => ({
+            productId: String(item.productId || item.id),
+            quantity: Number(item.quantity),
+            price: Number(item.price),
+          })),
+          total: finalTotal,
+          cashTendered: Number(cashTendered) || 0,
+        })).digest('hex')
+        : '';
+      const orderId = idempotencyKey || randomUUID();
+      if (idempotencyKey) {
+        const existingOrder = await messageService.firestoreRepo.getOrderById(orderId);
+        if (existingOrder) {
+          if (existingOrder.idempotencyFingerprint !== checkoutFingerprint) {
+            return res.status(409).json({ error: 'Este pedido já foi enviado com dados diferentes. Confira a sacola e tente novamente.' });
+          }
+          const receiptText = existingOrder.receiptText || formatOrderReceipt(existingOrder);
+          const receiptDelivery = existingOrder.receiptDelivery || {
+            sent: false,
+            reason: 'Pedido já registrado anteriormente.',
+          };
+          return res.status(200).json({
+            success: true,
+            order: { ...withoutIdempotencyFingerprint(existingOrder), receiptText, receiptDelivery },
+            receiptDelivery,
+          });
+        }
+      }
       let mercadoPagoPreference = null;
       if (resolvedPaymentMethod === 'PIX') {
         if (!payments.checkoutConfigured) {
@@ -1538,6 +1605,7 @@ function createApp({
         total: finalTotal,
         cashTendered: Number(cashTendered) || 0,
         changeDue: Number(changeDue) || 0,
+        ...(idempotencyKey ? { idempotencyFingerprint: checkoutFingerprint } : {}),
         status: 'PENDING',
         source: 'WEB_CATALOG',
         mercadoPagoPreferenceId: mercadoPagoPreference?.id || '',
@@ -1546,6 +1614,10 @@ function createApp({
 
       // A confirmação efetiva a baixa de estoque junto com o pagamento.
       const receiptText = formatOrderReceipt(order);
+      order.receiptText = receiptText;
+      await messageService.firestoreRepo.saveOrderReceipt(order.id, receiptText).catch((error) => {
+        Logger.warn('Pedido registrado; a cópia persistente do recibo ficou indisponível.', { orderId: order.id, error: error.message });
+      });
       let receiptDelivery = { sent: false, reason: 'Envio não solicitado.' };
       if (resolvedPaymentMethod === 'PIX') {
         receiptDelivery = await sendCustomerOrderReceipt(
@@ -1614,7 +1686,7 @@ function createApp({
       res.status(200).json({
         success: true,
         order: {
-          ...order,
+          ...withoutIdempotencyFingerprint(order),
           receiptText,
           paymentCheckoutUrl: mercadoPagoPreference?.checkoutUrl || '',
           receiptDelivery,
@@ -1624,6 +1696,8 @@ function createApp({
     } catch (err) {
       Logger.error('Erro ao registrar pedido web', err);
       res.status(err.status || 500).json({ error: err.message });
+    } finally {
+      releaseRequestLock();
     }
   });
 
@@ -1638,7 +1712,13 @@ function createApp({
         cursor: String(req.query.cursor || '').slice(0, 180),
         limit,
       });
-      res.status(200).json({ success: true, ...data });
+      const orders = (Array.isArray(data.orders) ? data.orders : []).map((order) => {
+        return {
+          ...withoutIdempotencyFingerprint(order),
+          receiptText: order.receiptText || formatOrderReceipt(order),
+        };
+      });
+      res.status(200).json({ success: true, ...data, orders });
     } catch (err) {
       Logger.error('Erro ao buscar pedidos do cliente', err);
       res.status(500).json({ success: false, error: err.message });
@@ -1819,6 +1899,8 @@ function createApp({
         customerPhone,
         items: normalizedItems,
         paymentMethod: resolvedPaymentMethod,
+        operatorName: req.user?.name || '',
+        operatorId: req.user?.id || '',
         notes,
         orderId,
         status: resolvedPaymentMethod === 'PIX' ? 'AWAITING_PIX' : 'CONFIRMED',
@@ -1827,6 +1909,10 @@ function createApp({
         requirePersistence: resolvedPaymentMethod === 'PIX',
       });
       const receiptText = formatOrderReceipt(order);
+      order.receiptText = receiptText;
+      await messageService.firestoreRepo.saveOrderReceipt(order.id, receiptText).catch((error) => {
+        Logger.warn('Venda registrada; a cópia persistente do recibo ficou indisponível.', { orderId: order.id, error: error.message });
+      });
       let receiptDelivery = { sent: false, reason: 'Envio não solicitado.' };
       if (resolvedPaymentMethod === 'PIX') {
         receiptDelivery = await sendCustomerOrderReceipt(
@@ -1959,6 +2045,14 @@ function createApp({
     } catch (error) { next(error); }
   });
 
+  app.get('/api/admin/stock/movements', async (req, res, next) => {
+    try {
+      const limit = Math.max(1, Math.min(100, Number.parseInt(req.query.limit, 10) || 20));
+      const movements = await messageService.firestoreRepo.getStockMovements(limit);
+      res.json({ movements });
+    } catch (error) { next(error); }
+  });
+
   // Admin: Entrada Rápida de Estoque
   app.post('/api/admin/stock/quick-entry', async (req, res) => {
     try {
@@ -1968,6 +2062,33 @@ function createApp({
     } catch (err) {
       Logger.error('Erro na entrada rápida de estoque', err);
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/admin/stock/adjustments', async (req, res) => {
+    const { productId, operation, quantity, reason } = req.body || {};
+    const requestId = String(req.body?.requestId || '').trim();
+    if (!/^[a-zA-Z0-9_-]{8,100}$/.test(requestId)) {
+      return res.status(400).json({ error: 'Identificador de ajuste inválido. Atualize a tela e tente novamente.' });
+    }
+    try {
+      const movement = await messageService.firestoreRepo.adjustStock({
+        productId,
+        operation,
+        quantity,
+        reason,
+        requestId,
+        actor: { id: req.user.id, name: req.user.name },
+      });
+      if (movement.operation === 'EXIT' && !movement.duplicate) {
+        await messageService.firestoreRepo.notifyAllAdminUsersOfStockAdjustment(movement).catch((error) => {
+          Logger.warn('Baixa registrada, mas não foi possível notificar os administradores.', { error: error.message });
+        });
+      }
+      res.status(200).json(movement);
+    } catch (error) {
+      const status = /não encontrado/i.test(error.message) ? 404 : /insuficiente/i.test(error.message) ? 409 : 400;
+      res.status(status).json({ error: error.message || 'Não foi possível ajustar o estoque.' });
     }
   });
 
@@ -2466,6 +2587,10 @@ function createApp({
         requirePersistence: isPix,
       });
       const receiptText = formatOrderReceipt(order);
+      order.receiptText = receiptText;
+      await messageService.firestoreRepo.saveOrderReceipt(order.id, receiptText).catch((error) => {
+        Logger.warn('Venda registrada; a cópia persistente do recibo ficou indisponível.', { orderId: order.id, error: error.message });
+      });
       let receiptDelivery = { sent: false, reason: 'Envio não solicitado.' };
       const orderWithReceipt = { ...order, receiptText };
       if (isPix) {

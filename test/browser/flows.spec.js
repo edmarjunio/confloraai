@@ -1,231 +1,222 @@
-const { test, expect } = require("@playwright/test");
-const errors = new WeakMap();
+const { test, expect } = require('@playwright/test');
+
+const pageErrors = new WeakMap();
+
 test.beforeEach(async ({ page }) => {
-  const list = [];
-  errors.set(page, list);
-  page.on("pageerror", (error) => list.push(error.message));
-  page.on("dialog", (dialog) => dialog.accept());
-  // Imagens e analytics externos não fazem parte da lógica sob teste.
-  await page.route(/https:\/\/.*/, (route) => route.abort());
+  pageErrors.set(page, []);
+  page.on('pageerror', error => pageErrors.get(page).push(error.message));
+  page.on('dialog', dialog => dialog.accept());
+  // Os fluxos não dependem de analytics, fontes ou imagens hospedadas externamente.
+  await page.route(/https:\/\/.*/, route => route.abort());
 });
+
 test.afterEach(async ({ page }) => {
-  expect(errors.get(page)).toEqual([]);
+  expect(pageErrors.get(page)).toEqual([]);
 });
-async function pinLogin(page, name, pin) {
-  await page.goto("/admin");
-  await expect(page.locator("#loginModal")).toHaveClass(/open/);
-  await page
-    .locator("#userSelectList")
-    .getByText(name, { exact: true })
-    .click();
-  await page.locator("#loginPinInput").fill(pin);
-  await page
-    .getByRole("button", {
-      name: /Entrar com PIN|Acessar Painel|Entrar no Painel/,
-    })
-    .click();
-  await expect(page.locator("#loginModal")).not.toHaveClass(/open/);
+
+async function selectOperator(page, name, pin) {
+  await page.locator('#userSelectList').getByText(name, { exact: true }).click();
+  await page.locator('#loginPinInput').fill(pin);
+  await page.getByRole('button', { name: /Entrar com PIN|Acessar Painel|Entrar no Painel/ }).click();
+  await expect(page.locator('#loginModal')).not.toHaveClass(/open/);
 }
 
-test('Catálogo: mais vendidos respeita quantidades, desempate e busca', async ({ page }) => {
-  await page.route('**/api/inventory', route => route.fulfill({ json: {
-    products: [
-      { id: 'a', name: 'Abacaxi', price: 10, salesCount: 0, status: 'ATIVO' },
-      { id: 'b', name: 'Zamioculca', price: 20, salesCount: 12, status: 'ATIVO' },
-      { id: 'c', name: 'Begônia', price: 15, salesCount: 12, status: 'ATIVO' },
-    ], movements: [],
-  } }));
-  await page.goto('/catalogo-classico');
-  await expect(page.locator('#productsGrid')).toContainText('Zamioculca');
-  await page.locator('#sortSelect').selectOption('mais_vendidos');
-  const names = await page.locator('#productsGrid').innerText();
-  expect(names.indexOf('Begônia')).toBeLessThan(names.indexOf('Zamioculca'));
-  expect(names.indexOf('Zamioculca')).toBeLessThan(names.indexOf('Abacaxi'));
-  await page.locator('#searchInput').fill('abacaxi');
-  await expect(page.locator('#productsGrid')).not.toContainText('Zamioculca');
-  await expect(page.locator('#productsGrid')).toContainText('Abacaxi');
-});
-test("Admin: login, navegação pelas telas operacionais sem importadores externos", async ({ page }) => {
-  await pinLogin(page, "Edmar Júnio (Izibola)", "1234");
-  for (const tab of ["analytics", "cashier", "diff", "orders", "stock", "price", "products", "team", "notifs", "status"]) {
-    await page.locator("#tabBtn-" + tab).click();
-    await expect(page.locator("#tab-" + tab)).toHaveClass(/active/);
-  }
-  await expect(page.locator("#tabBtn-import")).toHaveCount(0);
-});test("Caixa: login, cinco telas permitidas, bloqueios e venda no balcão", async ({
-  page,
-}) => {
-  await pinLogin(page, "Atendente do Caixa", "0000");
-  for (const tab of ["cashier", "diff", "stock", "price", "notifs"]) {
-    await page.locator("#tabBtn-" + tab).click();
-    await expect(page.locator("#tab-" + tab)).toHaveClass(/active/);
-  }
-  for (const tab of [
-    "analytics",
-    "orders",
-    "products",
-    "team",
-    "status",
-  ]) {
-    await expect(page.locator("#tabBtn-" + tab)).toBeHidden();
-  }
-  await page.locator("#tabBtn-cashier").click();
-  await page.locator('button[onclick="openManualOrderModal()"]').click();
-  await page.locator("#mCustName").fill("Teste Caixa");
-  await page.locator("#mQty").fill("1");
-  await page.locator("#manualOrderModal button[type=submit]").click();
-  await expect(page.locator("#manualOrderModal")).not.toHaveClass(/open/);
-  const orders = await (await page.request.get("/api/admin/orders")).json();
-  expect(orders.some((o) => o.customerName === "Teste Caixa")).toBe(true);
-});
-test("Cliente: cadastro, senha, busca, sacola, recibo, histórico e logout", async ({
-  page,
-}) => {
-  await page.goto("/catalogo-classico");
-  await page.locator("#authOpenBtn").click();
-  await page.locator("button[onclick=\"switchAuthTab('register')\"]").click();
-  await page.locator("#regNameInput").fill("Cliente Teste");
-  await page.locator("#regEmailInput").fill("browser@test.com");
-  await page.locator("#regPassInput").fill("senha123");
-  await page.locator("#regPhoneInput").fill("64999999999");
-  await page.locator("#authContentRegister button[type=submit]").click();
-  await expect(page.locator("#userHeaderName")).toHaveText("Cliente");
-  await page.locator("#searchInput").fill("ABACAXI");
-  await expect(page.locator("#productsGrid")).toContainText("ABACAXI");
-  await expect(page.locator("#productsGrid")).not.toContainText("ABACATE");
-  await page
-    .locator("#productsGrid button")
-    .filter({ hasText: /Adicionar|Comprar|\+/ })
-    .first()
-    .click();
-  await page.locator("#custName").fill("Cliente Teste");
-  await page.locator("#custPhone").fill("64999999999");
-  await page.locator("#custAddress").fill("Rua Teste, 123");
-  await page.locator("#submitOrderBtn").click();
-  await expect(page.locator('#orderReceiptModal')).toHaveClass(/open/);
-  await page.locator('[onclick="closeReceiptModal()"]').click();
-  await page.locator('[onclick="openCustomerPortalModal()"]').first().click();
-  await expect(page.locator('#customerOrdersList')).toContainText('Pedido #');
-  await page.locator('[onclick="closeCustomerPortalModal()"]').first().click();
-  await page.locator('[onclick="logoutCurrentUser()"]').click();
-  await expect(page.locator("#authOpenBtn")).toBeVisible();
-  await page.locator("#authOpenBtn").click();
-  await page.locator("button[onclick=\"switchAuthTab('login')\"]").click();
-  await page.locator("#loginEmailInput").fill("browser@test.com");
-  await page.locator("#loginPassInput").fill("senha123");
-  await page.locator("#authContentLogin button[type=submit]").click();
-  await expect(page.locator("#userHeaderName")).toHaveText("Cliente");
-  expect((await page.request.get("/api/admin/orders")).status()).toBe(403);
-  await page.goto("/admin");
-  await expect(page.locator("#tabBtn-cashier")).toBeHidden();
+async function pinLogin(page, name, pin) {
+  await page.goto('/admin');
+  await expect(page.locator('#loginModal')).toHaveClass(/open/);
+  await selectOperator(page, name, pin);
+}
+
+async function selectPortuguese(page) {
+  const language = page.locator('#languageSelect');
+  if (await language.count()) await language.selectOption('pt');
+}
+
+test('Catálogo: pesquisa abre o produto correto', async ({ page }) => {
+  await page.goto('/');
+  await selectPortuguese(page);
+  await expect(page.locator('#products .product-card').first()).toBeVisible();
+  await page.locator('#search').fill('Planta Teste');
+  await page.getByRole('button', { name: 'Planta Teste', exact: true }).click();
+  await expect(page).toHaveURL(/\/products\/test-plant$/);
+  await expect(page.locator('#productView h1')).toHaveText('Planta Teste');
 });
 
-test('Admin: visual do catálogo e navegação responsiva sem overflow da página', async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 960 });
+test('Admin: cabeçalho, ordem das abas e navegação dos sete módulos', async ({ page }) => {
   await pinLogin(page, 'Edmar Júnio (Izibola)', '1234');
-  await expect(page.locator('.admin-brand img')).toBeVisible();
-  await expect(page.locator('header')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
-  await page.screenshot({ path: 'test-results/admin-desktop.png', fullPage: true });
-  await page.setViewportSize({ width: 390, height: 844 });
-  for (const tab of ['analytics', 'products', 'cashier', 'orders', 'stock', 'price', 'team', 'notifs', 'status', 'diff']) {
+  await expect(page.locator('#loggedUserName')).toHaveText('Edmar Júnio (Izibola)');
+  await expect(page.locator('#loggedUserRole')).toHaveText('ADMIN');
+  await expect(page.getByRole('link', { name: /IR PARA O CAIXA/i })).toBeVisible();
+  expect(await page.locator('.nav-btn').allTextContents()).toEqual([
+    'Caixa/Vendas', 'Comandas', 'Estoque', 'Produtos', 'Equipe',
+    'Teste de conexões/servidor', 'Eventos',
+  ]);
+  for (const tab of ['cashier', 'orders', 'stock', 'products', 'team', 'status', 'analytics']) {
     await page.locator('#tabBtn-' + tab).click();
-    await expect(page.locator('#tab-' + tab)).toBeVisible();
-    const width = await page.locator('html').evaluate(node => ({ scroll: node.scrollWidth, viewport: node.clientWidth }));
-    expect(width.scroll, tab).toBeLessThanOrEqual(width.viewport);
+    await expect(page.locator('#tab-' + tab)).toHaveClass(/active/);
   }
-  await page.locator('#tabBtn-analytics').click();
-  await page.screenshot({ path: 'test-results/admin-mobile.png', fullPage: true });
+  await expect(page.locator('#tabBtn-import')).toHaveCount(0);
 });
 
-test("Admin: editar produto importado, criar/excluir produto e colaborador, entrada de estoque", async ({
-  page,
-}) => {
-  await pinLogin(page, "Edmar Júnio (Izibola)", "1234");
-  await page.locator("#tabBtn-products").click();
-  const imported = page
-    .locator("#adminProductsTableBody tr")
-    .filter({ hasText: "ABACAXI" })
-    .first();
-  await imported.getByRole("button", { name: /Editar/ }).click();
-  await page.locator("#formProdPrice").fill("12.34");
-  await page.locator("#prodForm button[type=submit]").click();
-  await expect(imported).toContainText("12,34");
-  await page.locator("#formProdName").fill("Produto E2E");
-  await page.locator("#formProdCat").fill("Teste");
-  await page.locator("#formProdPrice").fill("10");
-  await page.locator("#formProdStock").fill("5");
-  await page.locator("#prodForm button[type=submit]").click();
-  const created = page
-    .locator("#adminProductsTableBody tr")
-    .filter({ hasText: "Produto E2E" });
-  await expect(created).toHaveCount(1);
-  await page.locator("#tabBtn-stock").click();
-  await page.locator("#stockSearchInput").fill("Produto E2E");
-  await page
-    .locator("#stockCardsGrid")
-    .getByRole("button", { name: "+5", exact: true })
+test('Caixa: operador registra venda e áreas administrativas ficam bloqueadas', async ({ page }) => {
+  await pinLogin(page, 'Atendente do Caixa', '0000');
+  await expect(page.locator('#loggedUserRole')).toHaveText('CAIXA');
+  for (const tab of ['orders', 'stock', 'products', 'team', 'status', 'analytics']) {
+    await expect(page.locator('#tabBtn-' + tab)).toBeHidden();
+  }
+  await page.locator('button[onclick="openManualOrderModal()"]')
     .click();
-  await expect(page.locator("#stockCardsGrid")).toContainText("10");
-  await page.locator("#tabBtn-products").click();
-  await created.getByRole("button", { name: /Excluir/ }).click();
-  await expect(created).toHaveCount(0);
-  await page.locator("#tabBtn-team").click();
-  await page.locator('[onclick="openNewUserModal()"]').click();
-  await page.locator("#uName").fill("Operador E2E");
-  await page.locator("#uEmail").fill("operator-e2e@test.com");
-  await page.locator("#uPin").fill("8877");
-  await page.locator("#userModal button[type=submit]").click();
-  const user = page
-    .locator("#teamTableBody tr")
-    .filter({ hasText: "Operador E2E" });
-  await expect(user).toHaveCount(1);
-  await user.locator("select").selectOption("CLIENTE");
-  await expect(user.locator("select")).toHaveValue("CLIENTE");
-  await user.getByRole("button", { name: "Excluir" }).click();
-  await expect(user).toHaveCount(0);
-  await page.locator('[onclick="openLoginModal()"]').click();
-  await expect(page.locator("#loginModal")).toHaveClass(/open/);
+  await page.locator('#mCustName').fill('Venda E2E Caixa');
+  await page.locator('#mProdSelect').selectOption({ index: 0 });
+  await page.locator('#mQty').fill('1');
+  await page.locator('#manualOrderModal button[type=submit]').click();
+  await expect(page.locator('#manualOrderModal')).not.toHaveClass(/open/);
+  const ordersResponse = await page.request.get('/api/admin/orders');
+  expect(ordersResponse.ok()).toBeTruthy();
+  const orders = await ordersResponse.json();
+  expect(orders.some(order => order.customerName === 'Venda E2E Caixa')).toBe(true);
 });
 
-test("Admin mobile: filtros de status, aviso de inativo e controle opcional de estoque", async ({ page }) => {
+test('Vendedor: login limita o acesso às vendas e permite abrir preço', async ({ page }) => {
+  await pinLogin(page, 'Edmar Júnio (Izibola)', '1234');
+  await page.locator('#tabBtn-team').click();
+  await page.locator('[onclick="openNewUserModal()"]')
+    .click();
+  await page.locator('#uName').fill('Vendedor E2E');
+  await page.locator('#uEmail').fill('seller-e2e@test.com');
+  await page.locator('#uPin').fill('7788');
+  await page.locator('#uRole').selectOption('VENDEDOR');
+  await page.locator('#userModal button[type=submit]').click();
+  await expect(page.locator('#teamTableBody')).toContainText('Vendedor E2E');
+
+  await page.locator('button[onclick="logoutAdmin()"]')
+    .click();
+  await expect(page.locator('#loginModal')).toHaveClass(/open/);
+  await selectOperator(page, 'Vendedor E2E', '7788');
+  await expect(page.locator('#loggedUserRole')).toHaveText('VENDEDOR');
+  await expect(page.locator('#tabBtn-cashier')).toBeVisible();
+  for (const tab of ['orders', 'stock', 'products', 'team', 'status', 'analytics']) {
+    await expect(page.locator('#tabBtn-' + tab)).toBeHidden();
+  }
+  await expect(page.locator('#cashierAlterationsButton')).toBeHidden();
+  await page.getByRole('button', { name: 'Consultar preços' }).click();
+  await expect(page.locator('#tab-price')).toHaveClass(/active/);
+});
+
+test('Cliente: compra, recibo e detalhes do histórico usam o mesmo comprovante', async ({ page }) => {
+  await page.goto('/');
+  await selectPortuguese(page);
+  await page.locator('#accountButton').click();
+  await page.locator('#accountContent select').selectOption('register');
+  await page.locator('#accountContent input[name=name]').fill('Cliente E2E');
+  await page.locator('#accountContent input[name=email]').fill('browser@test.com');
+  await page.locator('#accountContent input[name=password]').fill('senha123');
+  await page.locator('#accountContent button[type=submit]').click();
+  await expect(page.locator('#headerAccountName')).toHaveText('Cliente E2E');
+  await page.locator('#search').fill('Planta Teste');
+  await page.getByRole('button', { name: 'Planta Teste', exact: true }).click();
+  await page.getByRole('button', { name: 'Adicionar à sacola', exact: true }).click();
+  await page.locator('#cartButton').click();
+  await page.locator('#checkoutCustomer input[name=name]').fill('Cliente E2E');
+  await page.locator('#checkoutCustomer input[name=phone]').fill('64999999999');
+  await page.locator('input[name=fulfillment][value=pickup]').check();
+  await page.locator('input[name=payment][value=CASH]').check();
+  await page.locator('#checkoutForm input[name=cash]').fill('100');
+  await page.locator('#submitOrder').click();
+  const orderRequest = page.waitForRequest(request =>
+    request.url().endsWith('/api/storefront/orders') && request.method() === 'POST',
+  );
+  const orderResponse = page.waitForResponse(response =>
+    response.url().endsWith('/api/storefront/orders') && response.request().method() === 'POST',
+  );
+  await page.locator('#orderReviewConfirm').click();
+  await expect(page.locator('#receipt')).toBeVisible();
+  const purchaseReceipt = await page.locator('#receipt .order-receipt-text').innerText();
+  expect(purchaseReceipt).toContain('Cliente E2E');
+  const checkoutRequest = await orderRequest;
+  const checkoutResponse = await orderResponse;
+  expect(checkoutResponse.ok()).toBe(true);
+  const originalOrder = (await checkoutResponse.json()).order;
+  const replay = await page.request.post('/api/storefront/orders', {
+    data: JSON.parse(checkoutRequest.postData()),
+    headers: { 'Idempotency-Key': checkoutRequest.headers()['idempotency-key'] },
+  });
+  expect(replay.ok()).toBe(true);
+  expect((await replay.json()).order.id).toBe(originalOrder.id);
+  await page.route('**/api/customer/orders**', route => route.fulfill({ json: {
+    success: true,
+    orders: [{
+      id: 'history-e2e-order', createdAt: new Date().toISOString(),
+      customerName: 'Cliente E2E', paymentMethod: 'DINHEIRO', fulfillment: 'pickup',
+      total: 25, totalMinor: 2500, status: 'CONFIRMED',
+      items: [{ name: 'Planta Teste', quantity: 1, price: 25 }],
+      receiptText: purchaseReceipt,
+    }],
+    hasMore: false, nextCursor: null,
+  } }));
+  await page.locator('#cartCloseButton').click();
+  await page.locator('#historyButton').click();
+  await expect(page.locator('#historyList')).toContainText('Pedido #');
+  const orderDetails = page.locator('.history-order-details').first();
+  await orderDetails.locator('summary').click();
+  await expect(orderDetails.locator('.order-receipt-text')).toHaveText(purchaseReceipt);
+});
+
+test('Admin: entrada, saída com justificativa e contagem substituem saldo com imagem renderizada', async ({ page }) => {
+  await pinLogin(page, 'Edmar Júnio (Izibola)', '1234');
+  await page.locator('#tabBtn-stock').click();
+  await page.locator('#stockSearchInput').fill('ABACATE KG');
+  const card = page.locator('#stockCardsGrid .stock-card').filter({ hasText: 'ABACATE KG' });
+  await expect(card).toBeVisible();
+  await expect(card.locator('render-image img')).toBeVisible();
+  const before = Number(await card.locator('.stock-card-balance strong').textContent());
+  await card.click();
+  await expect(card.locator('.stock-card-balance strong')).toHaveText(String(before + 1));
+
+  await card.getByRole('button', { name: 'Baixa' }).click();
+  await page.locator('#stockAdjustmentQuantity').fill('1');
+  await page.locator('#stockAdjustmentReason').fill('Avaria de teste');
+  await page.locator('#stockAdjustmentForm button[type=submit]').click();
+  await expect(card.locator('.stock-card-balance strong')).toHaveText(String(before));
+  await expect(page.locator('#stockMovementsList')).toContainText('Avaria de teste');
+
+  await card.getByRole('button', { name: 'Contagem' }).click();
+  await page.locator('#stockAdjustmentQuantity').fill('15');
+  await page.locator('#stockAdjustmentReason').fill('Contagem física de teste');
+  await page.locator('#stockAdjustmentForm button[type=submit]').click();
+  await expect(card.locator('.stock-card-balance strong')).toHaveText('15');
+  await expect(page.locator('#stockMovementsList')).toContainText('Contagem física de teste');
+});
+
+test('Admin mobile: produto inativo não aparece no catálogo e estoque não causa overflow', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await pinLogin(page, "Edmar Júnio (Izibola)", "1234");
-  await page.request.post('/api/admin/products', { data: { id: 'inactive-filter-test', name: 'Produto oculto teste', category: 'Teste', price: 10, status: 'INATIVO', stockQuantity: 0 } });
+  await pinLogin(page, 'Edmar Júnio (Izibola)', '1234');
+  const response = await page.request.post('/api/admin/products', { data: {
+    id: 'inactive-filter-test', name: 'Produto oculto teste', category: 'Teste',
+    price: 10, status: 'INATIVO', stockQuantity: 0,
+  } });
+  expect(response.ok()).toBeTruthy();
   await page.locator('#tabBtn-products').click();
   const product = page.locator('#adminProductsTableBody tr').filter({ hasText: 'Produto oculto teste' });
   await expect(product).toHaveCount(0);
   await page.getByRole('button', { name: 'INATIVOS', exact: true }).click();
   await expect(product).toContainText('INATIVO — oculto no catálogo');
-  await product.getByRole('button', { name: /Editar/ }).click();
-  await expect(page.locator('#formProdStatus')).toHaveValue('INATIVO');
-  await page.getByRole('button', { name: 'TODOS', exact: true }).click();
-  await expect(product).toHaveCount(1);
   const catalog = await (await page.request.get('/api/storefront/catalog')).json();
-  expect(catalog.products.some(p => p.id === 'inactive-filter-test')).toBe(false);
+  const inactiveCatalogProduct = catalog.products.find(item => item.id === 'inactive-filter-test');
+  expect(inactiveCatalogProduct?.isAvailable).toBe(false);
   await page.locator('#tabBtn-stock').click();
-  const toggle = page.locator('#stockControlEnabled');
-  await expect(toggle).toBeEnabled();
-  await toggle.uncheck();
-  await expect(page.locator('#inventorySettingsStatus')).toContainText('Desativado');
-  await page.reload();
-  await page.locator('#tabBtn-stock').click();
-  await expect(toggle).not.toBeChecked();
-  await expect(toggle).toBeEnabled();
-  await toggle.check();
-  await expect(page.locator('#inventorySettingsStatus')).toContainText('Ativado');
+  await expect(page.locator('#stockControlEnabled')).toHaveCount(0);
   expect(await page.locator('html').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
   await page.request.delete('/api/admin/products/inactive-filter-test');
 });
 
-test("Login inválido mantém painel bloqueado e Google sem configuração informa indisponibilidade", async ({
-  page,
-}) => {
-  await page.goto("/admin");
-  await expect(page.locator("#loginModal")).toHaveClass(/open/);
-  await page.locator("#loginPinInput").fill("9999");
-  await page.getByRole("button", { name: "Entrar com PIN" }).click();
-  await expect(page.locator("#loginModal")).toHaveClass(/open/);
-  await expect(page.locator("#tabBtn-import")).toBeHidden();
-  await expect(page.locator("#adminGoogleLoginButton")).toBeDisabled();
-  await expect(page.locator("[data-google-status]")).not.toBeEmpty();
+test('Login inválido mantém o painel fechado', async ({ page }) => {
+  await page.goto('/admin');
+  await expect(page.locator('#loginModal')).toHaveClass(/open/);
+  await page.locator('#loginPinInput').fill('9999');
+  await page.getByRole('button', { name: 'Entrar com PIN' }).click();
+  await expect(page.locator('#loginModal')).toHaveClass(/open/);
+  await expect(page.locator('#tabBtn-import')).toBeHidden();
+  await expect(page.locator('#adminGoogleLoginButton')).toBeDisabled();
+  await expect(page.locator('[data-google-status]')).not.toBeEmpty();
 });

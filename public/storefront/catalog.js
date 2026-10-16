@@ -284,7 +284,16 @@ export function createCatalog(state, add, navigate) {
     const names = product.categories
       ?.map((id) => state.config?.categories?.find((c) => c.id === id)?.name)
       .filter((name) => name && normalizeProductText(name) !== subcategory);
-    return names?.length ? names.join(" · ") : (product.category || product.categoria || product.categoryName || "");
+    const sharedCategory = window.ConfloraProductCard?.getCategory(product);
+    if (sharedCategory) return sharedCategory;
+    const canonicalNames = ["Frutífera", "Horta", "Hortifrutti", "Outros", "Pets", "Plantas / Mudas"];
+    const canonicalCategory = names?.find((name) => canonicalNames.some((item) => normalizeProductText(item) === normalizeProductText(name)));
+    const category = canonicalCategory || names?.[0] || product.category || product.categoria || product.categoryName || "";
+    const parts = String(category).split(/\s*(?:\/|\||>)\s*/).filter(Boolean);
+    if (parts.length > 1 && canonicalNames.some((item) => normalizeProductText(item) === normalizeProductText(parts[0]))) {
+      return parts[0];
+    }
+    return category;
   };
   const categoryIcon = (name) => {
     const value = normalizeProductText(name);

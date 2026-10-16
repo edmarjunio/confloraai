@@ -205,7 +205,8 @@ export const storeQueries = {
         if (!res.ok) {
           return [];
         }
-        return await res.json();
+        const result = await res.json();
+        return result?.order || result;
       },
     });
   },
@@ -213,12 +214,23 @@ export const storeQueries = {
   /**
    * Submit Checkout Order Mutation with automatic catalog cache invalidation
    */
-  async submitOrder(orderPayload) {
+  async submitOrder(orderPayload, api, idempotencyKey) {
+    const headers = idempotencyKey
+      ? { "Idempotency-Key": idempotencyKey }
+      : {};
     return queryClient.mutate({
       mutationFn: async () => {
+        if (typeof api === 'function') {
+          const result = await api('/orders', {
+            method: 'POST',
+            body: orderPayload,
+            headers,
+          });
+          return result?.order || result;
+        }
         const res = await fetch('/api/storefront/orders', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...headers },
           body: JSON.stringify(orderPayload),
         });
         if (!res.ok) {

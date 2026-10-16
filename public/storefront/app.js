@@ -21,6 +21,7 @@ import {
 } from "./i18n/index.js";
 import { appStore } from "./store/index.js";
 import { storeQueries, queryClient } from "./query/tanstackQuery.js";
+import { renderOrderReceipt } from "./receipt.js";
 
 const existingStore = !location.pathname.startsWith("/shop/");
 const slug = existingStore
@@ -405,6 +406,7 @@ function renderPurchase(order) {
       ...(order.serviceArea ? [element("span", { text: `Região: ${order.serviceArea}` })] : []),
       ...(order.deliveryAddress || order.address ? [element("span", { text: `Endereço: ${order.deliveryAddress || order.address}` })] : []),
       ...items.map((item) => element("span", { text: `${item.quantity || 1} × ${item.name || "Produto"} · ${money(Math.round(Number(item.price || 0) * Number(item.quantity || 1) * 100))}` })),
+      renderOrderReceipt(order),
     ]),
   ]);
   return element("article", { class: "history-order-card" }, [

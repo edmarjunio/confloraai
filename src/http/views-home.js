@@ -2183,18 +2183,18 @@ function renderHomeHtml() {
 
   <!-- MODAL: PAINEL DO CLIENTE -->
   <div class="modal-overlay" id="customerPortalModal">
-    <div class="modal-box" style="max-width:750px; padding:22px;">
+    <div class="modal-box" style="max-width:750px; max-height:88vh; display:flex; flex-direction:column; padding:22px;">
       <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:12px; margin-bottom:14px;">
         <div style="display:flex; align-items:center; gap:10px;">
           <img id="portalUserPic" style="width:36px; height:36px; border-radius:50%; object-fit:cover;" src="" />
           <div>
-            <h3 id="portalUserName" style="font-size:16px; font-weight:800; color:#0f172a; margin:0;">Painel do Cliente</h3>
+            <h3 id="portalUserName" style="font-size:16px; font-weight:800; color:#0f172a; margin:0;">Histórico de compras</h3>
             <span id="portalUserEmail" style="font-size:12px; color:#64748b;"></span>
           </div>
         </div>
-        <button onclick="closeCustomerPortalModal()" style="background:none; border:none; font-size:22px; cursor:pointer; color:#64748b;">✕</button>
+        <button type="button" onclick="closeCustomerPortalModal()" aria-label="Fechar histórico" style="background:none; border:1px solid #dbe5df; border-radius:50%; width:40px; height:40px; font-size:20px; cursor:pointer; color:#14532d;">✕</button>
       </div>
-      <div id="customerOrdersList" style="padding:10px 0;">Carregando pedidos...</div>
+      <div id="customerOrdersList" style="flex:1; min-height:0; padding:4px 2px; overflow-y:auto; overscroll-behavior:contain;">Carregando pedidos...</div>
     </div>
   </div>
 
@@ -3848,8 +3848,11 @@ function renderHomeHtml() {
       const paper = document.getElementById('receiptPaperContent');
       const waBtn = document.getElementById('receiptOwnerWaLink');
       if (!modal || !paper) return;
-      paper.textContent = rec.receiptText || buildOwnerWhatsAppMessage(rec);
+      lastCompletedOrderReceipt = rec;
+      paper.textContent = rec.receiptText || rec.order?.receiptText || 'O comprovante deste pedido não está disponível.';
       paper.style.whiteSpace = 'pre-wrap';
+      const title = modal.querySelector('[data-i18n="receipt.title"]');
+      if (title) title.textContent = rec.fromHistory ? 'Recibo da compra' : 'Comprovante do Pedido';
       const paymentLink = document.getElementById('receiptPaymentLink');
       if (paymentLink) {
         paymentLink.href = rec.paymentCheckoutUrl || '#';
@@ -3870,6 +3873,8 @@ function renderHomeHtml() {
       const waUrl = 'https://wa.me/' + OWNER_WHATSAPP_PHONE + '?text=' + encodeURIComponent(msg);
       if (waBtn) {
         waBtn.href = waUrl;
+        waBtn.hidden = Boolean(rec.fromHistory);
+        waBtn.style.display = rec.fromHistory ? 'none' : 'flex';
       }
 
       modal.classList.add('open');
@@ -3882,7 +3887,8 @@ function renderHomeHtml() {
 
     function copyReceiptText() {
       if (!lastCompletedOrderReceipt) return;
-      const text = lastCompletedOrderReceipt.receiptText || buildOwnerWhatsAppMessage(lastCompletedOrderReceipt);
+      const text = lastCompletedOrderReceipt.receiptText || lastCompletedOrderReceipt.order?.receiptText || '';
+      if (!text) return;
       navigator.clipboard.writeText(text).then(() => {
         alert(localization.translate('receipt.copySuccess', '📋 Recibo copiado com sucesso para a área de transferência!'));
       });
@@ -4333,37 +4339,121 @@ function renderHomeHtml() {
       if (!currentUser) { openAuthModal(); return; }
       const modal = document.getElementById('customerPortalModal');
       if (modal) modal.classList.add('open');
-      loadCustomerData();
+      const list = document.getElementById('customerOrdersList');
+      if (list && !list.dataset.scrollBound) {
+        list.dataset.scrollBound = 'true';
+        list.addEventListener('scroll', () => {
+          if (list.scrollTop + list.clientHeight >= list.scrollHeight - 160) {
+            loadCustomerData({ reset: false });
+          }
+        });
+      }
+      loadCustomerData({ reset: true });
     }
     function closeCustomerPortalModal() {
       const modal = document.getElementById('customerPortalModal');
       if (modal) modal.classList.remove('open');
     }
 
-    async function loadCustomerData() {
-      if (!currentUser) return;
+    let customerOrderHistoryCursor = null;
+    let customerOrderHistoryHasMore = true;
+    let customerOrderHistoryLoading = false;
+    const customerOrderHistoryById = new Map();
+
+    async function loadCustomerData({ reset = true } = {}) {
+      if (!currentUser || customerOrderHistoryLoading) return;
+      const container = document.getElementById('customerOrdersList');
+      if (!container) return;
+      if (reset) {
+        customerOrderHistoryCursor = null;
+        customerOrderHistoryHasMore = true;
+        customerOrderHistoryById.clear();
+        container.replaceChildren();
+        container.scrollTop = 0;
+      }
+      if (!customerOrderHistoryHasMore) return;
+
+      customerOrderHistoryLoading = true;
+      const loading = document.createElement('div');
+      loading.textContent = customerOrderHistoryCursor ? 'Carregando mais compras…' : 'Carregando compras…';
+      loading.style.cssText = 'text-align:center;padding:14px;color:#64748b;font-size:13px;';
+      container.appendChild(loading);
       try {
-        const res = await fetch('/api/customer/orders?userId=' + encodeURIComponent(currentUser.id || ''));
-        const data = await res.json();
-        const container = document.getElementById('customerOrdersList');
-        if (data.success && Array.isArray(data.orders)) {
-          if (data.orders.length === 0) {
-            container.innerHTML = '<div style="text-align:center; padding:20px; color:#64748b;">Nenhum pedido realizado ainda.</div>';
-          } else {
-            container.innerHTML = data.orders.map(o => \`
-              <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px; margin-bottom:8px;">
-                <div style="display:flex; justify-content:space-between; font-weight:bold;">
-                  <span>Pedido #\${o.id}</span>
-                  <span style="color:#15803d;">\${localization.formatCurrency(Number(o.total || 0))}</span>
-                </div>
-                <div style="font-size:12px; color:#64748b;">\${new Date(o.createdAt || Date.now()).toLocaleString('pt-BR')} • \${o.status || 'PENDING'}</div>
-              </div>
-            \`).join('');
-          }
+        const parameters = new URLSearchParams({ limit: '12' });
+        if (customerOrderHistoryCursor) parameters.set('cursor', customerOrderHistoryCursor);
+        const response = await fetch('/api/customer/orders?' + parameters.toString());
+        const data = await response.json();
+        loading.remove();
+        if (!response.ok || !data.success) throw new Error(data.error || 'Não foi possível carregar o histórico.');
+
+        const orders = Array.isArray(data.orders) ? data.orders : [];
+        customerOrderHistoryHasMore = Boolean(data.hasMore);
+        customerOrderHistoryCursor = data.nextCursor || null;
+        orders.forEach(order => customerOrderHistoryById.set(String(order.id), order));
+        if (!customerOrderHistoryById.size) {
+          const emptyState = document.createElement('div');
+          emptyState.textContent = 'Nenhuma compra encontrada nesta conta.';
+          emptyState.style.cssText = 'text-align:center;padding:24px;color:#64748b;';
+          container.replaceChildren(emptyState);
+          customerOrderHistoryHasMore = false;
+          return;
         }
-      } catch (_) {}
+
+        orders.forEach(order => {
+          const card = document.createElement('article');
+          card.className = 'customer-order-card';
+          card.style.cssText = 'background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:14px;margin-bottom:10px;';
+          const header = document.createElement('div');
+          header.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;gap:12px;font-weight:800;';
+          const number = document.createElement('span');
+          number.textContent = 'Compra #' + String(order.ticketNumber || String(order.id).slice(-6).toUpperCase());
+          const total = document.createElement('span');
+          total.textContent = localization.formatCurrency(Number(order.total || 0));
+          total.style.cssText = 'color:#15803d;white-space:nowrap;';
+          header.append(number, total);
+
+          const details = document.createElement('div');
+          const orderDate = new Date(order.createdAt || Date.now());
+          details.textContent = orderDate.toLocaleString('pt-BR') + ' · ' + String(order.status || 'PENDING');
+          details.style.cssText = 'font-size:12px;color:#64748b;margin:5px 0 12px;';
+
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'action-btn btn-green';
+          button.textContent = 'Ver detalhes da compra';
+          button.addEventListener('click', () => showHistoryReceipt(order.id));
+          card.append(header, details, button);
+          container.appendChild(card);
+        });
+
+        if (!customerOrderHistoryHasMore && orders.length) {
+          const endNote = document.createElement('div');
+          endNote.textContent = 'Você chegou ao início do seu histórico.';
+          endNote.style.cssText = 'text-align:center;padding:12px;color:#64748b;font-size:12px;';
+          container.appendChild(endNote);
+        }
+      } catch (error) {
+        loading.remove();
+        const message = document.createElement('div');
+        message.textContent = error.message || 'Não foi possível carregar o histórico.';
+        message.style.cssText = 'padding:16px;color:#b91c1c;';
+        const retry = document.createElement('button');
+        retry.type = 'button';
+        retry.className = 'action-btn btn-gray';
+        retry.textContent = 'Tentar novamente';
+        retry.addEventListener('click', () => loadCustomerData({ reset: !customerOrderHistoryCursor }));
+        message.appendChild(retry);
+        container.appendChild(message);
+      } finally {
+        customerOrderHistoryLoading = false;
+      }
     }
 
+    function showHistoryReceipt(orderId) {
+      const order = customerOrderHistoryById.get(String(orderId));
+      if (!order) return;
+      showCustomerReceiptModal({ ...order, fromHistory: true });
+    }
     // --- STATUS MODAL (ADMIN) ---
     function openStatusModal() {
       const modal = document.getElementById('statusModal');

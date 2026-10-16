@@ -44,15 +44,14 @@
     return "";
   };
 
+  const CATEGORY_LABELS = ["Frutífera", "Horta", "Hortifrutti", "Outros", "Pets", "Plantas / Mudas"];
   const normalizeCategoryText = (value) => value
+    .replace(/\p{Extended_Pictographic}/gu, "")
+    .replace(/\uFE0F/g, "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .trim()
     .toLocaleLowerCase("pt-BR");
-  const CANONICAL_CATEGORIES = new Set([
-    "frutífera", "horta", "hortifrutti", "outros", "pets", "plantas / mudas",
-  ].map(normalizeCategoryText));
-
   // ============================================================================
   // 3. RESOLUÇÃO DE IMAGENS (FIREBASE STORAGE & FIRESTORE)
   // ============================================================================
@@ -245,14 +244,28 @@
       product?.subcategory,
       product?.subcategoria,
     );
-    if (!category || CANONICAL_CATEGORIES.has(normalizeCategoryText(category)) || !subcategory) return category;
+    if (!category) return category;
+    const cleanedCategory = category.replace(/\p{Extended_Pictographic}/gu, "").replace(/\uFE0F/g, "").trim();
+    const canonicalLabel = CATEGORY_LABELS.find((label) => normalizeCategoryText(label) === normalizeCategoryText(cleanedCategory));
+    if (canonicalLabel) return canonicalLabel;
 
-    const categoryParts = category.split(/\s*(?:\/|\||>)\s*/);
+    const categoryParts = cleanedCategory.split(/\s*(?:\/|\||>)\s*/).filter(Boolean);
+    if (categoryParts.length < 2) return cleanedCategory;
+
+    // Prefer the longest prefix that is a canonical storefront category. This
+    // also repairs legacy values such as "Frutífera / Mudas" when the source
+    // document has no explicit subcategory field.
+    for (let prefixLength = categoryParts.length - 1; prefixLength > 0; prefixLength--) {
+      const prefix = categoryParts.slice(0, prefixLength).join(" / ");
+      const matchingLabel = CATEGORY_LABELS.find((label) => normalizeCategoryText(label) === normalizeCategoryText(prefix));
+      if (matchingLabel) return matchingLabel;
+    }
+
     const lastPart = categoryParts.at(-1) || "";
-    if (categoryParts.length > 1 && normalizeCategoryText(lastPart) === normalizeCategoryText(subcategory)) {
+    if (subcategory && normalizeCategoryText(lastPart) === normalizeCategoryText(subcategory)) {
       return categoryParts.slice(0, -1).join(" / ").trim();
     }
-    return category;
+    return cleanedCategory;
   };
 
   const getName = (product) =>
@@ -642,6 +655,7 @@
   window.ConfloraProductCard = Object.freeze({
     getImageCandidates,
     normalizeImageSource,
+    getCategory,
     normalizeProduct,
     formatPrice,
   });

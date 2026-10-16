@@ -56,6 +56,12 @@ function getUpdatedProductImageEntries(product, previousProduct) {
 
 let firestoreModule = null;
 
+function orderTimestamp(value) {
+  const dateValue = value && typeof value.toDate === 'function' ? value.toDate() : new Date(value || 0);
+  const timestamp = dateValue.getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
 function getFirestoreModule() {
   if (!firestoreModule) {
     try {
@@ -786,6 +792,24 @@ class FirestoreRepository {
     return this.inMemoryOrders.get(idStr) || null;
   }
 
+  async saveOrderReceipt(orderId, receiptText) {
+    const id = String(orderId || '').trim();
+    const receipt = String(receiptText || '');
+    if (!id || !receipt.trim()) throw new Error('Pedido e conteúdo do recibo são obrigatórios.');
+    const order = await this.getOrderById(id);
+    if (!order) throw new Error('Pedido não encontrado para salvar o recibo.');
+    const updatedOrder = { ...order, receiptText: receipt };
+    this.inMemoryOrders.set(id, updatedOrder);
+    if (this.firestore && !this._firestoreClientDisabled) {
+      try {
+        await this.firestore.collection('orders').doc(id).update({ receiptText: receipt });
+      } catch (error) {
+        Logger.warn('Não foi possível persistir a cópia do recibo no pedido.', { orderId: id, error: error.message });
+      }
+    }
+    return updatedOrder;
+  }
+
   async findPendingPixOrderByPhone(phone) {
     const cleanTarget = String(phone || '').replace(/\D/g, '');
     if (!cleanTarget) {return null;}
@@ -1480,85 +1504,84 @@ class FirestoreRepository {
   }
 
   async quickAddStock(productId, quantityAdded) {
-    const qty = parseInt(quantityAdded, 10) || 1;
+    return this.adjustStock({
+      productId,
+      operation: 'ENTRY',
+      quantity: quantityAdded,
+      reason: 'Entrada rápida de estoque',
+      requestId: `quick-${require('node:crypto').randomUUID()}`,
+    });
+  }
+
+  async adjustStock({ productId, operation, quantity, reason = '', requestId, actor = {} }) {
+    const id = String(productId || '').trim();
+    const movementId = String(requestId || '').trim();
+    const kind = String(operation || '').toUpperCase();
+    const amount = Number(quantity);
+    const note = String(reason || '').trim().slice(0, 300);
+    if (!id || !movementId || !['ENTRY', 'EXIT', 'SET'].includes(kind)) {
+      throw new Error('Produto, identificador da operação e tipo de ajuste são obrigatórios.');
+    }
+    if (!Number.isInteger(amount) || amount < 0 || (kind !== 'SET' && amount === 0)) {
+      throw new Error(kind === 'SET' ? 'Informe uma contagem inteira igual ou maior que zero.' : 'Informe uma quantidade inteira maior que zero.');
+    }
+    if ((kind === 'EXIT' || kind === 'SET') && note.length < 3) {
+      throw new Error('Explique o motivo da baixa ou do ajuste de contagem.');
+    }
+
     const now = new Date().toISOString();
-
-    if (this.firestore) {
-      try {
-        const docRef = this.firestore
-          .collection('products')
-          .doc(String(productId));
-
-        const snap = await docRef.get();
-
-        if (snap.exists) {
-          const data = snap.data();
-
-          const currentStock =
-            typeof data.stockQuantity === 'number'
-              ? data.stockQuantity
-              : data.estoque || 0;
-
-          const newStock = currentStock + qty;
-
-          await docRef.update({
-            stockQuantity: newStock,
-            estoque: newStock,
-            updatedAt: now,
-          });
-
-          await this.firestore
-            .collection('stock_movements')
-            .add({
-              productId: String(productId),
-              productName: data.name || data.descricao,
-              quantityAdded: qty,
-              previousStock: currentStock,
-              newStock,
-              type: 'ENTRY_STOCK_QUICK',
-              createdAt: now,
-            });
-
-          return {
-            success: true,
-            productId,
-            newStock,
-            previousStock: currentStock,
-          };
-        }
-      } catch (err) {
-        Logger.warn(
-          'Erro ao dar entrada rápida no Firestore',
-          { error: err.message }
-        );
-      }
-    }
-
-    const prod = this.inMemoryProducts.get(
-      String(productId)
-    );
-
-    if (prod) {
-      const prev =
-        prod.stockQuantity ?? prod.estoque ?? 0;
-
-      const next = prev + qty;
-
-      prod.stockQuantity = next;
-      prod.estoque = next;
-
-      return {
-        success: true,
-        productId,
-        newStock: next,
-        previousStock: prev,
-      };
-    }
-
-    return {
-      success: false,
-      error: 'Produto não encontrado',
+    const resolveMovement = (product) => {
+      const previousStock = Number(product.stockQuantity ?? product.estoque ?? 0);
+      if (!Number.isFinite(previousStock)) throw new Error('O estoque atual do produto não é um número válido.');
+      const newStock = kind === 'SET' ? amount : kind === 'ENTRY' ? previousStock + amount : previousStock - amount;
+      if (newStock < 0) throw new Error(`Estoque insuficiente. Saldo atual: ${previousStock}.`);
+      return { previousStock, newStock };
     };
+    const buildMovement = (product, previousStock, newStock) => ({
+      id: movementId,
+      requestId: movementId,
+      productId: id,
+      productName: product.name || product.descricao || 'Produto',
+      operation: kind,
+      type: kind === 'ENTRY' ? 'MANUAL_STOCK_ENTRY' : kind === 'EXIT' ? 'MANUAL_STOCK_EXIT' : 'STOCK_COUNT_ADJUSTMENT',
+      quantity: amount,
+      ...(kind === 'ENTRY' ? { quantityAdded: amount } : {}),
+      ...(kind === 'EXIT' ? { quantityDeducted: amount } : {}),
+      previousStock,
+      newStock,
+      reason: note || 'Entrada de estoque',
+      actorId: String(actor.id || ''),
+      actorName: String(actor.name || ''),
+      createdAt: now,
+    });
+
+    if (this.firestore && !this._firestoreClientDisabled) {
+      const productRef = this.firestore.collection('products').doc(id);
+      const movementRef = this.firestore.collection('stock_movements').doc(movementId);
+      return this.firestore.runTransaction(async (transaction) => {
+        const movementSnapshot = await transaction.get(movementRef);
+        if (movementSnapshot.exists) return { success: true, duplicate: true, ...movementSnapshot.data() };
+        const productSnapshot = await transaction.get(productRef);
+        if (!productSnapshot.exists) throw new Error('Produto não encontrado.');
+        const product = { id, ...productSnapshot.data() };
+        const { previousStock, newStock } = resolveMovement(product);
+        const movement = buildMovement(product, previousStock, newStock);
+        transaction.update(productRef, { stockQuantity: newStock, estoque: newStock, updatedAt: now });
+        transaction.set(movementRef, movement);
+        return { success: true, duplicate: false, ...movement };
+      });
+    }
+
+    const existingMovement = this.inMemoryStockMovements.find((movement) => movement.id === movementId || movement.requestId === movementId);
+    if (existingMovement) return { success: true, duplicate: true, ...existingMovement };
+    const product = this.inMemoryProducts.get(id);
+    if (!product) throw new Error('Produto não encontrado.');
+    const { previousStock, newStock } = resolveMovement(product);
+    Object.assign(product, { stockQuantity: newStock, estoque: newStock, updatedAt: now });
+    this.inMemoryProducts.set(id, product);
+    const movement = buildMovement(product, previousStock, newStock);
+    this.inMemoryStockMovements.push(movement);
+    return { success: true, duplicate: false, ...movement };
   }
 
   async createDirectOrder(orderData, { requirePersistence = false } = {}) {
@@ -1697,7 +1720,7 @@ class FirestoreRepository {
       }
     }
 
-    if (config.firebase?.apiKey) {
+    if (!this.isInMemory && config.firebase?.apiKey) {
       try {
         const restOrders = await this.fetchCollectionViaRest('orders');
         if (restOrders && restOrders.length > 0) {
@@ -3080,6 +3103,35 @@ class FirestoreRepository {
     return createdNotifications;
   }
 
+  async notifyAllAdminUsersOfStockAdjustment(movement) {
+    if (!movement || movement.operation !== 'EXIT') return [];
+    let administrators = [];
+    try {
+      administrators = (await this.getAllUsers()).filter((user) => user.active !== false && user.role === 'ADMIN');
+    } catch (error) {
+      Logger.warn('Não foi possível listar os administradores para avisar sobre baixa de estoque.', { error: error.message });
+    }
+    if (!administrators.length) administrators = [{ id: 'usr-edmar', name: 'Edmar Júnio (Admin)' }];
+    const notifications = [];
+    for (const administrator of administrators) {
+      notifications.push(await this.createNotification({
+        toUserId: administrator.id,
+        toUserName: administrator.name,
+        targetRole: 'ADMIN',
+        type: 'STOCK_DECREASED',
+        title: `Baixa de estoque: ${movement.productName}`,
+        message: `${movement.actorName || 'Operador'} retirou ${movement.quantity} unidade(s). Estoque: ${movement.previousStock} → ${movement.newStock}.`,
+        reason: movement.reason,
+        productId: movement.productId,
+        productName: movement.productName,
+        quantity: movement.quantity,
+        previousStock: movement.previousStock,
+        newStock: movement.newStock,
+      }));
+    }
+    return notifications;
+  }
+
   async createNotification(notifData) {
     const now = new Date().toISOString();
 
@@ -3372,17 +3424,21 @@ class FirestoreRepository {
           ...(cleanId ? [collection.where('customerId', '==', cleanId)] : []),
           ...(cleanEmail ? [collection.where('customerEmail', '==', cleanEmail)] : []),
         ];
-        const snapshots = await Promise.all(identityQueries.map((query) => query.get()));
+        const cursorSnapshot = cursor ? await collection.doc(cursor).get() : null;
+        const snapshots = await Promise.all(identityQueries.map((query) => {
+          let pagedQuery = query.orderBy('createdAt', 'desc').limit(pageSize + 1);
+          if (cursorSnapshot?.exists) pagedQuery = pagedQuery.startAfter(cursorSnapshot);
+          return pagedQuery.get();
+        }));
         const uniqueOrders = new Map();
         for (const snapshot of snapshots) {
           for (const doc of snapshot.docs) uniqueOrders.set(doc.id, { id: doc.id, ...doc.data() });
         }
         const allCustomerOrders = [...uniqueOrders.values()].filter(matches).sort((a, b) =>
-          String(b.createdAt || '').localeCompare(String(a.createdAt || '')) || String(b.id).localeCompare(String(a.id)),
+          orderTimestamp(b.createdAt) - orderTimestamp(a.createdAt) || String(b.id).localeCompare(String(a.id)),
         );
-        const cursorIndex = cursor ? allCustomerOrders.findIndex((order) => order.id === cursor) + 1 : 0;
-        const page = allCustomerOrders.slice(cursorIndex, cursorIndex + pageSize);
-        const hasMore = cursorIndex + page.length < allCustomerOrders.length;
+        const page = allCustomerOrders.slice(0, pageSize);
+        const hasMore = allCustomerOrders.length > pageSize;
         const orders = page;
         return { orders, nextCursor: hasMore ? orders[orders.length - 1]?.id || null : null, hasMore };
       } catch (error) {
@@ -3390,7 +3446,7 @@ class FirestoreRepository {
       }
     }
 
-    const orders = (await this.getAllOrders(10000)).filter(matches).sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    const orders = (await this.getAllOrders(10000)).filter(matches).sort((a, b) => orderTimestamp(b.createdAt) - orderTimestamp(a.createdAt));
     const cursorIndex = cursor ? orders.findIndex((order) => order.id === cursor) + 1 : 0;
     const page = orders.slice(cursorIndex, cursorIndex + pageSize);
     const hasMore = cursorIndex + page.length < orders.length;

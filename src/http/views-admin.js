@@ -41,6 +41,38 @@ function renderAdminHtml(storeConfig) {
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>:root { --primary: ${color('primary','#2e9348')}; --primary-dark: ${color('primary','#2e9348')}; --accent: ${color('accent','#f5c518')}; --bg: ${color('background','#f8f9fa')}; } body { color: ${color('text','#1a1a1a')}; }</style>
+  <style>
+    .header-actions { flex-wrap: wrap; justify-content: flex-end; }
+    button, .header-btn { transition: transform .18s ease, box-shadow .18s ease, filter .18s ease, background-color .18s ease; }
+    button:hover, .header-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(15, 23, 42, .14); }
+    button:focus-visible, .header-btn:focus-visible { outline: 3px solid rgba(46, 147, 72, .28); outline-offset: 2px; }
+    button:disabled, .header-btn:disabled { transform: none; box-shadow: none; cursor: not-allowed; }
+    .admin-cashier-link { background: var(--accent); color: #111827; border-color: #eab308; font-weight: 800; }
+    .admin-section-heading { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:16px; }
+    .stock-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+    .stock-toolbar-actions { display:flex; gap:8px; flex-wrap:wrap; }
+    .stock-search { width:min(100%, 420px); padding:11px 14px; border:1px solid var(--border); border-radius:12px; font:inherit; }
+    .stock-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:14px; }
+    .stock-card { border:1px solid var(--border); border-radius:16px; background:#fff; padding:14px; display:grid; gap:12px; cursor:pointer; box-shadow:0 2px 6px rgba(15,23,42,.05); transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+    .stock-card:hover { transform:translateY(-2px); box-shadow:0 9px 22px rgba(15,23,42,.12); border-color:#86c99a; }
+    .stock-card-head { display:flex; align-items:center; gap:12px; min-width:0; }
+    .stock-card render-image { width:64px; height:64px; flex:none; overflow:hidden; border-radius:12px; background:#f1f5f3; }
+    .stock-card render-image img { width:100%; height:100%; object-fit:cover; }
+    .stock-card-name { font-weight:800; font-size:14px; color:#0f172a; overflow-wrap:anywhere; }
+    .stock-card-category { font-size:11px; color:#64748b; margin-top:4px; }
+    .stock-card-balance { font-size:13px; color:#475569; }
+    .stock-card-balance strong { font-size:20px; color:var(--primary-dark); }
+    .stock-card-actions { display:flex; gap:8px; flex-wrap:wrap; }
+    .stock-card-actions .action-btn { flex:1; justify-content:center; }
+    .stock-movement-row { padding:10px 12px; border:1px solid #e2e8f0; border-radius:10px; background:#fff; color:#475569; font-size:12px; line-height:1.5; }
+    .stock-adjust-modal .modal-card { width:min(100% - 24px, 520px); border-radius:20px; padding:24px; }
+    .stock-adjust-form { display:grid; gap:14px; margin-top:16px; }
+    .stock-adjust-form label, .product-form label { display:grid; gap:6px; font-weight:700; font-size:12px; color:#334155; }
+    .stock-adjust-form input, .stock-adjust-form select, .stock-adjust-form textarea, .product-form input:not([type=file]):not([type=hidden]), .product-form select, .product-form textarea { width:100%; min-height:44px !important; padding:11px 13px !important; border:1px solid #cbd5e1 !important; border-radius:12px !important; background:#fff; font:inherit; }
+    .product-form textarea, .stock-adjust-form textarea { min-height:96px !important; height:auto !important; resize:vertical; }
+    .product-form { border:1px solid var(--border); border-radius:18px; padding:20px; background:#fbfdfb; gap:16px; box-shadow:0 4px 16px rgba(15,23,42,.04); }
+    @media (max-width:700px) { .tab-content { padding:18px 14px; } .header-actions { justify-content:flex-start; } .stock-toolbar-actions { width:100%; } .stock-toolbar-actions button { flex:1; } }
+  </style>
 
 </head>
 <body>
@@ -61,6 +93,7 @@ function renderAdminHtml(storeConfig) {
         </div>
         <button class="header-btn" onclick="openLoginModal()">Trocar operador</button>
         <button class="header-btn" onclick="logoutAdmin()" title="Sair da conta de operador/admin">Sair</button>
+        <a href="/caixa" class="header-btn admin-cashier-link" aria-label="Ir para o Caixa">▣ IR PARA O CAIXA</a>
         <a href="/admin-gerencial" class="header-btn" style="background:#0f172a; color:#fff;" title="Painel Gerencial Executivo & Looker Studio">📊 Painel Gerencial</a>
         <button class="header-btn notification-button" onclick="showTab('notifs')" aria-label="Notificações">Avisos <span id="notifBadge">0</span></button>
         <a href="/configuracoes" class="header-btn">Personalizar loja</a>
@@ -222,20 +255,50 @@ function renderAdminHtml(storeConfig) {
       <div id="allOrdersListContainer">Carregando histórico...</div>
     </div>
 
-    <!-- ABA 5: ENTRADA ÁGIL DE ESTOQUE (ADMIN E CAIXA) -->
+    <!-- ABA 5: CONTROLE DE ESTOQUE -->
     <div id="tab-stock" class="tab-content">
-      <div id="inventorySettingsPanel" hidden style="padding:16px; margin-bottom:20px; border:1px solid #E5E7EB; border-radius:12px; background:#F8F9FA;">
-        <h2>Controle de estoque</h2>
-        <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
-          <input id="stockControlEnabled" type="checkbox" style="width:20px; height:20px;" disabled onchange="saveInventorySettings()" />
-          Usar estoque para limitar as vendas
-        </label>
-        <p id="inventorySettingsStatus" role="status" style="margin-top:10px; font-size:13px;">Carregando configuração…</p>
+      <div class="admin-section-heading">
+        <div><h2>Estoque</h2><p class="muted">Toque no cartão para somar uma unidade; use os botões para entrada, baixa ou contagem exata.</p></div>
+        <div class="stock-toolbar-actions">
+          <button type="button" class="action-btn btn-green" onclick="openStockAdjustment('ENTRY')">＋ Entrada de estoque</button>
+          <button type="button" class="action-btn btn-red" onclick="openStockAdjustment('EXIT')">− Baixa de estoque</button>
+        </div>
       </div>
-      <h2>Entrada Rápida de Estoque (1 Toque para Somar)</h2>
-      <p style="font-size:12px; color:#64748b; margin-bottom:12px;">Para funcionários do viveiro: busque a planta e aperte no botão para somar unidades no Firestore.</p>
-      <input type="text" id="stockSearchInput" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px;" placeholder="Digitar nome da planta para achar rápido..." oninput="filterStockCards()" />
-      <div class="quick-stock-grid" id="stockCardsGrid"></div>
+      <div class="stock-toolbar">
+        <input type="search" id="stockSearchInput" class="stock-search" placeholder="Buscar produto no estoque…" oninput="filterStockCards()" />
+        <span id="stockProductsCount" class="muted" role="status"></span>
+      </div>
+      <div class="stock-cards" id="stockCardsGrid"></div>
+      <div class="card" style="margin-top:22px;">
+        <h3>Movimentações recentes</h3>
+        <div id="stockMovementsList" class="muted">Carregando movimentações…</div>
+      </div>
+    </div>
+
+    <div class="modal stock-adjust-modal" id="stockAdjustmentModal" role="dialog" aria-modal="true" aria-labelledby="stockAdjustmentTitle">
+      <div class="modal-card">
+        <div class="admin-section-heading">
+          <div><h2 id="stockAdjustmentTitle">Movimentar estoque</h2><p id="stockAdjustmentHelp" class="muted"></p></div>
+          <button type="button" class="header-btn" onclick="closeStockAdjustment()" aria-label="Fechar">✕</button>
+        </div>
+        <form id="stockAdjustmentForm" class="stock-adjust-form" onsubmit="submitStockAdjustment(event)">
+          <input type="hidden" id="stockAdjustmentOperation" />
+          <label>Produto
+            <select id="stockAdjustmentProduct" required></select>
+          </label>
+          <label><span id="stockAdjustmentQuantityLabel">Quantidade</span>
+            <input type="number" id="stockAdjustmentQuantity" min="0" step="1" required inputmode="numeric" />
+          </label>
+          <label id="stockAdjustmentReasonWrap" hidden>Motivo
+            <textarea id="stockAdjustmentReason" rows="3" maxlength="300" placeholder="Explique o motivo da baixa ou da contagem." ></textarea>
+          </label>
+          <p id="stockAdjustmentError" class="error" role="alert" hidden></p>
+          <div class="stock-toolbar-actions">
+            <button type="button" class="action-btn btn-gray" onclick="closeStockAdjustment()">Cancelar</button>
+            <button type="submit" id="stockAdjustmentSubmit" class="action-btn btn-green">Salvar movimentação</button>
+          </div>
+        </form>
+      </div>
     </div>
 
     <!-- ABA 6: CONSULTA RÁPIDA DE PREÇO (ADMIN E CAIXA) -->
@@ -261,11 +324,6 @@ function renderAdminHtml(storeConfig) {
     <div id="tab-products" class="tab-content">
       <h2 id="productFormTitle">Cadastro & Alteração de Produtos</h2>
       <button type="button" class="action-btn btn-gray" onclick="showTab('price')">Abrir consulta e ajuste de preços</button>
-      <div class="product-admin-toolbar">
-        <button type="button" id="adminQuickEntryButton" class="action-btn btn-blue" onclick="openAdminQuickEntry()">+ Entrada rápida</button>
-        <button type="button" id="productInventoryToggle" class="action-btn btn-gray" disabled onclick="toggleProductInventory()">Carregando controle de estoque...</button>
-        <span id="productInventoryStatus" class="muted" role="status"></span>
-      </div>
       <form id="prodForm" onsubmit="handleProductSubmit(event)" class="product-form">
         <input type="hidden" id="formProdId" />
         <div>
@@ -330,7 +388,7 @@ function renderAdminHtml(storeConfig) {
           <label style="font-size:12px; font-weight:bold;">Descrição Botânica & Cuidados:</label>
           <textarea id="formProdDesc" style="width:100%; height:60px; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="Porte da muda, rega, sol pleno ou meia sombra..."></textarea>
         </div>
-        <div style="grid-column: 1/-1; display:flex; gap:8px;">
+        <div style="grid-column: 1/-1; display:flex; gap:8px; flex-wrap:wrap;">
           <button type="submit" class="action-btn btn-green">💾 Salvar no Firestore</button>
           <button type="button" class="action-btn btn-gray" onclick="resetProdForm()">Limpar / Cancelar</button>
         </div>
@@ -577,6 +635,8 @@ function renderAdminHtml(storeConfig) {
     </div>
   </div>
 
+  <script src="/store-assets/render-image.js"></script>
+  <script src="/store-assets/product-card.js"></script>
   <script>
     // ESTADO GLOBAL
     let currentUser = null;
@@ -659,7 +719,6 @@ function renderAdminHtml(storeConfig) {
       if (tab === 'stock') loadStockProducts();
       if (tab === 'price') loadPriceProducts();
       if (tab === 'products') loadAdminProducts();
-      if (tab === 'products') loadInventorySettings();
       if (tab === 'team') loadTeam();
       if (tab === 'notifs') loadNotifications();
       if (tab === 'status') loadAdminStatusData();
@@ -1129,13 +1188,16 @@ function renderAdminHtml(storeConfig) {
     }
 
     function getProductImageUrl(product) {
+      const sharedCandidates = window.ConfloraProductCard?.getImageCandidates(product) || [];
+      if (sharedCandidates.length) return sharedCandidates[0];
       const candidates = [
         ...(Array.isArray(product.images) ? product.images : []),
+        ...(Array.isArray(product.imagePaths) ? product.imagePaths : []),
         product.imageUrl,
         product.imageurl,
         product.imagePathCache,
       ].map((image) => typeof image === 'string' ? image.trim() : image?.url || image?.imageUrl || '');
-      return candidates.find(isStoredProductImageUrl) || '/store-assets/placeholder.svg';
+      return candidates.find(isStoredProductImageUrl) || product.imageFallbackUrl || '/store-assets/placeholder.svg';
     }
 
     function filterPriceTable() {
@@ -1404,7 +1466,6 @@ function renderAdminHtml(storeConfig) {
 
     // 9. ESTOQUE ÁGIL (+1, +5, +10)
     async function loadStockProducts() {
-      if (currentUser?.role === 'ADMIN') await loadInventorySettings();
       try {
         const res = await fetch('/api/inventory');
         if (res.ok) {
@@ -1420,134 +1481,207 @@ function renderAdminHtml(storeConfig) {
       }
       if (!Array.isArray(allProducts)) allProducts = [];
       filterStockCards();
-    }
-
-    function showInventorySettings(settings) {
-      document.getElementById('stockControlEnabled').checked = settings.stockControlEnabled;
-      document.getElementById('inventorySettingsStatus').textContent = settings.stockControlEnabled
-        ? 'Ativado: o catálogo limita compras ao saldo disponível e as vendas dão baixa no estoque.'
-        : 'Desativado: produtos ativos podem ser vendidos mesmo com saldo zero. As vendas não alteram o saldo; você pode cadastrar as entradas normalmente.';
-      const toggleButton = document.getElementById('productInventoryToggle');
-      if (toggleButton) {
-        toggleButton.textContent = settings.stockControlEnabled
-          ? '📦 Estoque: ATIVO (Controlando)'
-          : '⚡ Vender Tudo (Sem controle de estoque)';
-        toggleButton.className = 'action-btn ' + (settings.stockControlEnabled ? 'btn-green' : 'btn-amber');
-        toggleButton.setAttribute('aria-pressed', String(settings.stockControlEnabled));
-        toggleButton.disabled = false;
-      }
-      const productStatus = document.getElementById('productInventoryStatus');
-      if (productStatus) {
-        productStatus.textContent = settings.stockControlEnabled
-          ? 'Produtos sem saldo ficam bloqueados na venda.'
-          : 'Produtos ativos podem ser vendidos com saldo zero.';
-      }
-    }
-    function openAdminQuickEntry() {
-      if (currentUser?.role !== 'ADMIN') return;
-      showTab('stock');
-    }
-    async function loadInventorySettings() {
-      const panel = document.getElementById('inventorySettingsPanel');
-      const checkbox = document.getElementById('stockControlEnabled');
-      panel.hidden = false;
-      checkbox.disabled = true;
-      try {
-        const response = await fetch('/api/admin/inventory-settings');
-        if (!response.ok) throw new Error('Não foi possível carregar a configuração.');
-        showInventorySettings(await response.json());
-        checkbox.disabled = false;
-      } catch (error) {
-        document.getElementById('inventorySettingsStatus').textContent = error.message;
-        const toggleButton = document.getElementById('productInventoryToggle');
-        if (toggleButton) {
-          toggleButton.textContent = 'Não foi possível carregar o controle de estoque';
-          toggleButton.disabled = true;
-        }
-      }
-    }
-    async function toggleProductInventory() {
-      const toggleButton = document.getElementById('productInventoryToggle');
-      const productStatus = document.getElementById('productInventoryStatus');
-      if (!toggleButton || toggleButton.disabled) return;
-      toggleButton.disabled = true;
-      if (productStatus) productStatus.textContent = 'Salvando configuração...';
-      try {
-        const currentResponse = await fetch('/api/admin/inventory-settings');
-        if (!currentResponse.ok) throw new Error('Não foi possível carregar a configuração.');
-        const current = await currentResponse.json();
-        const response = await fetch('/api/admin/inventory-settings', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ stockControlEnabled: !current.stockControlEnabled }),
-        });
-        const settings = await response.json();
-        if (!response.ok) throw new Error(settings.error || 'Não foi possível salvar a configuração.');
-        showInventorySettings(settings);
-      } catch (error) {
-        if (productStatus) productStatus.textContent = error.message;
-        toggleButton.disabled = false;
-      }
-    }
-    async function saveInventorySettings() {
-      const checkbox = document.getElementById('stockControlEnabled');
-      checkbox.disabled = true;
-      try {
-        const response = await fetch('/api/admin/inventory-settings', {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ stockControlEnabled: checkbox.checked }),
-        });
-        if (!response.ok) throw new Error('Não foi possível salvar a configuração.');
-        showInventorySettings(await response.json());
-      } catch (error) {
-        checkbox.checked = !checkbox.checked;
-        document.getElementById('inventorySettingsStatus').textContent = error.message;
-      } finally { checkbox.disabled = false; }
+      await loadStockMovements();
     }
 
     function filterStockCards() {
       if (!Array.isArray(allProducts)) allProducts = [];
-      const q = document.getElementById('stockSearchInput').value.toLowerCase();
+      const query = String(document.getElementById('stockSearchInput')?.value || '').trim().toLocaleLowerCase('pt-BR');
       const grid = document.getElementById('stockCardsGrid');
-      grid.innerHTML = '';
-
-      allProducts.filter(p => !q || (p.name || p.descricao || '').toLowerCase().includes(q)).forEach(p => {
-        const div = document.createElement('div');
-        div.className = 'stock-card';
-        const img = getProductImageUrl(p);
-        div.innerHTML = \`
-          <div style="display:flex; gap:10px; align-items:center;">
-            \${img ? \`<img src="\${img}" style="width:40px; height:40px; border-radius:6px; object-fit:cover;" />\` : ''}
-            <div>
-              <div style="font-weight:bold; font-size:13px;">\${p.descricao || p.name}</div>
-              <div style="font-size:11px; color:#64748b;">\${p.subcategoria || p.categoria || ''}</div>
-            </div>
-          </div>
-          <div style="font-size:12px; color:#64748b;">Estoque Atual: <strong id="stk-\${p.id}" style="color:#15803d; font-size:16px;">\${p.stockQuantity ?? p.estoque ?? 0}</strong> un</div>
-          <div class="stock-btns-row">
-            <button class="plus-btn" onclick="addStock('\${p.id}', 1)">+1</button>
-            <button class="plus-btn" onclick="addStock('\${p.id}', 5)">+5</button>
-            <button class="plus-btn" onclick="addStock('\${p.id}', 10)">+10</button>
-            <button class="plus-btn" onclick="addStock('\${p.id}', 50)">+50</button>
-          </div>
-        \`;
-        grid.appendChild(div);
+      if (!grid) return;
+      grid.replaceChildren();
+      const products = allProducts.filter(product => {
+        const searchableText = [product.name, product.descricao, product.category, product.categoria, product.subcategory, product.subcategoria]
+          .filter(Boolean).join(' ').toLocaleLowerCase('pt-BR');
+        return !query || searchableText.includes(query);
+      });
+      const count = document.getElementById('stockProductsCount');
+      if (count) count.textContent = \`\${products.length} produto\${products.length === 1 ? '' : 's'}\`;
+      products.forEach(product => {
+        const card = document.createElement('div');
+        card.className = 'stock-card';
+        card.dataset.productId = product.id;
+        card.setAttribute('role', 'button');
+        card.setAttribute('tabindex', '0');
+        card.setAttribute('aria-label', \`Adicionar uma unidade de \${product.name || product.descricao || 'produto'} ao estoque\`);
+        const image = document.createElement('render-image');
+        image.setAttribute('alt', product.name || product.descricao || 'Produto');
+        image.setAttribute('loading', 'lazy');
+        image.setAttribute('fallback-src', '/store-assets/placeholder.svg');
+        const candidates = window.ConfloraProductCard?.getImageCandidates(product) || [getProductImageUrl(product)];
+        image.setAttribute('image-candidates', JSON.stringify(candidates));
+        image.setAttribute('src', candidates[0] || '/store-assets/placeholder.svg');
+        const head = document.createElement('div');
+        head.className = 'stock-card-head';
+        head.appendChild(image);
+        const meta = document.createElement('div');
+        meta.style.minWidth = '0';
+        const name = document.createElement('div');
+        name.className = 'stock-card-name';
+        name.textContent = product.name || product.descricao || 'Produto sem nome';
+        const category = document.createElement('div');
+        category.className = 'stock-card-category';
+        category.textContent = window.ConfloraProductCard?.getCategory(product) || product.category || product.categoria || '';
+        meta.append(name, category);
+        head.appendChild(meta);
+        const balance = document.createElement('div');
+        balance.className = 'stock-card-balance';
+        balance.append('Estoque atual: ');
+        const quantity = document.createElement('strong');
+        quantity.id = 'stk-' + product.id;
+        quantity.textContent = String(product.stockQuantity ?? product.estoque ?? 0);
+        balance.append(quantity, ' un');
+        const actions = document.createElement('div');
+        actions.className = 'stock-card-actions';
+        const addButton = document.createElement('button');
+        addButton.type = 'button';
+        addButton.className = 'action-btn btn-green';
+        addButton.textContent = '＋1 Entrada';
+        addButton.addEventListener('click', () => addStock(product.id, 1));
+        const countButton = document.createElement('button');
+        countButton.type = 'button';
+        countButton.className = 'action-btn btn-gray';
+        countButton.textContent = 'Contagem';
+        countButton.addEventListener('click', () => openStockAdjustment('SET', product.id));
+        const exitButton = document.createElement('button');
+        exitButton.type = 'button';
+        exitButton.className = 'action-btn btn-red';
+        exitButton.textContent = 'Baixa';
+        exitButton.addEventListener('click', () => openStockAdjustment('EXIT', product.id));
+        actions.append(addButton, countButton, exitButton);
+        card.append(head, balance, actions);
+        card.addEventListener('click', event => {
+          if (!event.target.closest('button')) addStock(product.id, 1);
+        });
+        card.addEventListener('keydown', event => {
+          if ((event.key === 'Enter' || event.key === ' ') && !event.target.closest('button')) {
+            event.preventDefault();
+            addStock(product.id, 1);
+          }
+        });
+        grid.appendChild(card);
       });
     }
 
-    async function addStock(prodId, qty) {
-      const res = await fetch('/api/admin/stock/quick-entry', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productId: prodId, quantityAdded: qty })
-      });
-      const data = await res.json();
-      if (data.success) {
-        const el = document.getElementById('stk-' + prodId);
-        if (el) el.innerText = data.newStock;
+    function createStockRequestId() {
+      return window.crypto?.randomUUID?.() || \`stock-\${Date.now()}-\${Math.random().toString(36).slice(2, 12)}\`;
+    }
+
+    async function addStock(productId, quantity) {
+      const selector = \`.stock-card[data-product-id="\${CSS.escape(String(productId))}"]\`;
+      const card = document.querySelector(selector);
+      if (card?.dataset.saving === 'true') return;
+      if (card) { card.dataset.saving = 'true'; card.setAttribute('aria-busy', 'true'); }
+      try {
+        const response = await fetch('/api/admin/stock/adjustments', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productId, operation: 'ENTRY', quantity, requestId: createStockRequestId() }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Não foi possível atualizar o estoque.');
+        updateStockBalance(productId, data.newStock);
+      } catch (error) {
+        alert(error.message || 'Não foi possível atualizar o estoque.');
+      } finally {
+        if (card) { card.dataset.saving = 'false'; card.removeAttribute('aria-busy'); }
       }
     }
 
+    function updateStockBalance(productId, value) {
+      const stock = Number(value);
+      if (!Number.isFinite(stock)) return;
+      const element = document.getElementById('stk-' + productId);
+      if (element) element.textContent = String(stock);
+      const product = allProducts.find(item => String(item.id) === String(productId));
+      if (product) { product.stockQuantity = stock; product.estoque = stock; }
+    }
+
+    function openStockAdjustment(operation, productId = '') {
+      if (currentUser?.role !== 'ADMIN') return;
+      const form = document.getElementById('stockAdjustmentForm');
+      const modal = document.getElementById('stockAdjustmentModal');
+      const select = document.getElementById('stockAdjustmentProduct');
+      const reason = document.getElementById('stockAdjustmentReason');
+      if (!form || !modal || !select) return;
+      const kind = String(operation || 'ENTRY').toUpperCase();
+      document.getElementById('stockAdjustmentOperation').value = kind;
+      document.getElementById('stockAdjustmentTitle').textContent = kind === 'ENTRY' ? 'Entrada de estoque' : kind === 'EXIT' ? 'Baixa de estoque' : 'Contagem e ajuste de estoque';
+      document.getElementById('stockAdjustmentHelp').textContent = kind === 'SET' ? 'Informe a quantidade física contada. O saldo será substituído por esse valor.' : 'Registre a quantidade movimentada. A operação ficará no histórico de estoque.';
+      document.getElementById('stockAdjustmentQuantityLabel').textContent = kind === 'SET' ? 'Novo estoque contado' : 'Quantidade';
+      document.getElementById('stockAdjustmentQuantity').value = kind === 'SET' ? '0' : '1';
+      document.getElementById('stockAdjustmentReasonWrap').hidden = kind === 'ENTRY';
+      reason.required = kind !== 'ENTRY';
+      reason.value = '';
+      document.getElementById('stockAdjustmentError').hidden = true;
+      select.replaceChildren(new Option('Selecione um produto', ''));
+      [...allProducts].sort((a, b) => String(a.name || a.descricao || '').localeCompare(String(b.name || b.descricao || ''), 'pt-BR'))
+        .forEach(product => select.add(new Option(\`\${product.name || product.descricao || 'Produto'} — estoque \${product.stockQuantity ?? product.estoque ?? 0}\`, product.id)));
+      if (productId) select.value = productId;
+      modal.classList.add('open');
+      select.focus();
+    }
+
+    function closeStockAdjustment() {
+      document.getElementById('stockAdjustmentModal')?.classList.remove('open');
+    }
+
+    async function submitStockAdjustment(event) {
+      event.preventDefault();
+      const operation = document.getElementById('stockAdjustmentOperation').value;
+      const productId = document.getElementById('stockAdjustmentProduct').value;
+      const quantity = Number(document.getElementById('stockAdjustmentQuantity').value);
+      const reason = document.getElementById('stockAdjustmentReason').value.trim();
+      const submitButton = document.getElementById('stockAdjustmentSubmit');
+      const errorMessage = document.getElementById('stockAdjustmentError');
+      const requiresReason = operation === 'SET' || operation === 'EXIT';
+      if (!productId || !Number.isInteger(quantity) || quantity < 0 || (operation !== 'SET' && quantity === 0) || (requiresReason && reason.length < 3)) {
+        errorMessage.textContent = 'Confira o produto, a quantidade e o motivo da operação.';
+        errorMessage.hidden = false;
+        return;
+      }
+      submitButton.disabled = true;
+      errorMessage.hidden = true;
+      try {
+        const response = await fetch('/api/admin/stock/adjustments', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productId, operation, quantity, reason, requestId: createStockRequestId() }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Não foi possível salvar a movimentação.');
+        updateStockBalance(productId, data.newStock);
+        closeStockAdjustment();
+        await loadStockMovements();
+      } catch (error) {
+        errorMessage.textContent = error.message || 'Não foi possível salvar a movimentação.';
+        errorMessage.hidden = false;
+      } finally {
+        submitButton.disabled = false;
+      }
+    }
+
+    async function loadStockMovements() {
+      const container = document.getElementById('stockMovementsList');
+      if (!container) return;
+      try {
+        const response = await fetch('/api/admin/stock/movements?limit=20');
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Não foi possível carregar as movimentações.');
+        const movements = Array.isArray(data.movements) ? data.movements : [];
+        if (!movements.length) { container.textContent = 'Nenhuma movimentação registrada.'; return; }
+        const list = document.createElement('div');
+        list.style.display = 'grid';
+        list.style.gap = '8px';
+        movements.forEach(movement => {
+          const row = document.createElement('div');
+          row.className = 'stock-movement-row';
+          row.textContent = \`\${new Date(movement.createdAt || Date.now()).toLocaleString('pt-BR')} · \${movement.productName || 'Produto'} · \${movement.operation || movement.type || 'Movimento'} · \${movement.quantity} un · \${movement.reason || movement.actorName || 'Venda'}\`;
+          list.appendChild(row);
+        });
+        container.replaceChildren(list);
+      } catch (error) {
+        container.textContent = error.message || 'Não foi possível carregar as movimentações.';
+      }
+    }
     // 10. CADASTRO DE PRODUTOS
     let productStatusFilter = 'ATIVO';
     function productIsInactive(product) {
@@ -1913,7 +2047,18 @@ function renderAdminHtml(storeConfig) {
     }
 
     // 12. VENDA MANUAL NO BALCÃO
-    function openManualOrderModal() {
+    async function openManualOrderModal() {
+      if (!allProducts.length) {
+        try {
+          const response = await fetch('/api/inventory');
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || 'Não foi possível carregar os produtos.');
+          allProducts = safeExtractProductsAdmin(data);
+        } catch (error) {
+          alert(error.message || 'Não foi possível carregar os produtos para a venda.');
+          return;
+        }
+      }
       const select = document.getElementById('mProdSelect');
       select.innerHTML = '';
       allProducts.forEach(p => {
@@ -1922,6 +2067,10 @@ function renderAdminHtml(storeConfig) {
         opt.textContent = (p.descricao || p.name) + ' — R$ ' + Number(p.valor_num || p.price || 0).toFixed(2);
         select.appendChild(opt);
       });
+      if (!allProducts.length) {
+        alert('Não há produtos disponíveis para registrar a venda.');
+        return;
+      }
       document.getElementById('manualOrderModal').classList.add('open');
     }
 
@@ -1970,31 +2119,6 @@ function renderAdminHtml(storeConfig) {
       }
     }
 
-    // 14. CONTROLE / MODO CONTAGEM DE ESTOQUE
-    function setStockControlMode(active) {
-      localStorage.setItem('conflora_stock_control_active', active ? 'true' : 'false');
-      updateStockControlBadge(active);
-      if (active) {
-        alert('✅ Controle de Estoque ATIVADO: Vendas no cardápio e no balcão darão baixa automática no estoque.');
-      } else {
-        alert('📋 MODO CONTAGEM ATIVADO: Durante essa semana de inventário, as vendas registradas NÃO descontarão do estoque, permitindo a contagem física com a loja rodando sem divergências.');
-      }
-    }
-
-    function updateStockControlBadge(active) {
-      const label = document.getElementById('stockModeLabel');
-      if (!label) return;
-      if (active) {
-        label.textContent = '✅ Baixa Automática Ativa';
-        label.style.background = '#dcfce7';
-        label.style.color = '#15803d';
-      } else {
-        label.textContent = '📋 Modo Inventário (Sem Baixa)';
-        label.style.background = '#fef3c7';
-        label.style.color = '#92400e';
-      }
-    }
-
     async function seedDefaultConflora() {
       if (!confirm('Deseja restaurar o catálogo oficial da Conflora Horta e Viveiro no Firestore?')) return;
       const res = await fetch('/api/admin/seed-catalog', { method: 'POST' });
@@ -2008,8 +2132,6 @@ function renderAdminHtml(storeConfig) {
 
     // INICIALIZAÇÃO
     applyUserRoleUI();
-    const isStockActive = localStorage.getItem('conflora_stock_control_active') !== 'false';
-    updateStockControlBadge(isStockActive);
     document.getElementById('adminSalesFilter')?.addEventListener('change', loadCashierDaily);
   </script>
 ${renderFirebaseAuthScript()}

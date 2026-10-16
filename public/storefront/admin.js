@@ -57,17 +57,17 @@ export function createAdmin(state) {
     const config = configDraft;
     const assistant = response.assistant;
     const form = element("form", { class: "admin-form" });
-    const preview = element("img", {
+    const preview = state.existingStore ? null : element("img", {
       src: config.branding.logoUrl || "/store-assets/placeholder.svg",
       alt: "Prévia do logo",
       style: "max-width:220px;max-height:100px;object-fit:contain",
     });
-    const upload = element("input", {
+    const upload = state.existingStore ? null : element("input", {
       type: "file",
       accept: "image/png,image/jpeg,image/webp",
       "aria-label": "Escolher logo do computador",
     });
-    upload.addEventListener("change", async () => {
+    upload?.addEventListener("change", async () => {
       const file = upload.files[0];
       if (!file) {
         return;
@@ -131,9 +131,13 @@ export function createAdmin(state) {
       field("Nicho / segmento", "niche", config.identity.niche),
       field("Cidade", "city", config.identity.city),
       field("Estado / região", "region", config.identity.region),
-      field("URL do logo (HTTPS)", "logo", config.branding.logoUrl),
-      field("URL do ícone (HTTPS)", "icon", config.branding.iconUrl),
     );
+    if (!state.existingStore) {
+      form.append(
+        field("URL do logo (HTTPS)", "logo", config.branding.logoUrl),
+        field("URL do ícone (HTTPS)", "icon", config.branding.iconUrl),
+      );
+    }
     for (const [key, label] of [
       ["primary", "Cor das ações"],
       ["accent", "Cor dos destaques"],
@@ -142,13 +146,15 @@ export function createAdmin(state) {
     ]) {
       form.append(inputField(label, key, config.branding.colors[key], "color"));
     }
-    form.append(
-      element("label", { text: "Escolher logo do computador" }, [upload]),
-      preview,
-    );
-    form.elements.logo.addEventListener("change", () => {
-      preview.src = form.elements.logo.value || "/store-assets/placeholder.svg";
-    });
+    if (!state.existingStore) {
+      form.append(
+        element("label", { text: "Escolher logo do computador" }, [upload]),
+        preview,
+      );
+      form.elements.logo.addEventListener("change", () => {
+        preview.src = form.elements.logo.value || "/store-assets/placeholder.svg";
+      });
+    }
     const mode = element(
       "select",
       { name: "chatMode", "aria-label": "Modo do assistente" },
@@ -316,8 +322,10 @@ export function createAdmin(state) {
         city: f.city.value,
         region: f.region.value,
       };
-      next.branding.logoUrl = f.logo.value;
-      next.branding.iconUrl = f.icon.value;
+      if (!state.existingStore) {
+        next.branding.logoUrl = f.logo.value;
+        next.branding.iconUrl = f.icon.value;
+      }
       for (const color of ["primary", "accent", "text", "background"]) {
         next.branding.colors[color] = f[color].value;
       }

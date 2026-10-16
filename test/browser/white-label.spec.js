@@ -1,6 +1,5 @@
 const { test, expect } = require("@playwright/test");
-const sharp = require("sharp");
-test("white-label settings persist logo, colors, synonyms and a generic guided purchase on mobile", async ({
+test("Conflora settings keep the official logo, save colors and support guided product selection on mobile", async ({
   page,
 }) => {
   await page.request.post("/api/admin/auth/login", {
@@ -30,21 +29,13 @@ test("white-label settings persist logo, colors, synonyms and a generic guided p
   await form.locator("[name=niche]").fill("Materiais de construção");
   await form.locator("[name=primary]").fill("#2345ab");
   await form.locator("[name=synonyms]").fill("cola, adesivo");
-  const png = await sharp({
-    create: { width: 32, height: 32, channels: 4, background: "#2345ab" },
-  })
-    .png()
-    .toBuffer();
-  await page
-    .getByLabel("Escolher logo do computador", { exact: true })
-    .setInputFiles({ name: "logo.png", mimeType: "image/png", buffer: png });
-  await expect(form.locator("[name=logo]")).toHaveValue(/^data:image\/webp/);
+  await expect(form.locator("[name=logo]")).toHaveCount(0);
   await form.getByRole("button", { name: "Salvar configurações" }).click();
   await expect(page.locator("#storeName")).toHaveText("Loja de Construção");
   await page.reload();
   await expect(page.locator("#logo")).toHaveAttribute(
     "src",
-    /^data:image\/webp/,
+    /conflora-logo\.png$/,
   );
   expect(
     await page
@@ -70,20 +61,22 @@ test("white-label settings persist logo, colors, synonyms and a generic guided p
     .locator("#chatMessages")
     .getByRole("button", { name: "Adesivos", exact: true })
     .click();
-  await expect(page.locator("#chatMessages .recommendation")).toHaveCount(1);
+  await expect(page.locator("#chatMessages .guided-results-grid render-product-card")).toHaveCount(1);
   await page.locator("#chatInput").fill("cola multiuzo 2m");
-  await page.getByRole("button", { name: "Enviar mensagem" }).click();
+  await page.locator("#chatForm").evaluate((chatForm) => chatForm.requestSubmit());
   await expect(page.locator("#chatMessages")).toContainText("nomes parecidos");
   await page
-    .getByRole("button", { name: "Sobre Cola Multiuso 2m" })
-    .last()
+    .getByRole("button", { name: "Informações de Cola Multiuso 2m" })
     .click();
-  await expect(page.locator("#chatMessages")).toContainText(
+  await expect(page.locator("#productInfoDialog")).toContainText(
     "Resistente à água conforme rótulo.",
   );
+  await page.locator("#productInfoDialog").getByRole("button", { name: "Fechar informações" }).click();
+  await expect(
+    page.locator("#chatMessages .guided-results-grid render-product-card"),
+  ).toContainText("Cola Multiuso 2m");
   await page
-    .locator("#chatMessages .recommendation")
-    .last()
+    .locator("#chatMessages .guided-results-grid render-product-card")
     .getByRole("button", { name: "Adicionar", exact: true })
     .click();
   await expect(page.locator("#cartButton")).toContainText("1");
