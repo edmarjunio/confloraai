@@ -1,6 +1,5 @@
 const { createHash } = require('node:crypto');
 const { formatOrderReceipt, money } = require('./receipt.util');
-const { remainingStock } = require('./order-integrity');
 
 const ORDER_PAYMENT_METHODS = new Set(['DINHEIRO', 'DEBITO', 'CREDITO', 'FIADO', 'SALDO_CLIENTE']);
 function actor(user) {
@@ -32,7 +31,7 @@ function messageChunks(text, limit) {
 }
 
 class PdvService {
-  constructor({ repository, pix, whatsapp, ownerPhone = '' }) { Object.assign(this, { repository, pix, whatsapp, ownerPhone }); }
+  constructor({ repository, pix, whatsapp, ownerPhone = '', taskQueueClient = null }) { Object.assign(this, { repository, pix, whatsapp, ownerPhone, taskQueueClient }); }
 
   /** @param {import('./pdv.contracts').SaleInput} input @param {import('./pdv.contracts').StaffActor} user */
   async create(input, user, { approvedDiscount = false } = {}) {
@@ -80,10 +79,14 @@ class PdvService {
       return { productId: String(product.id), name, quantity, price, unit, subtotalMinor: Math.round(price * quantity * 100) };
     });
     const inventory = await this.repository.repository.getInventorySettings();
-    if (inventory.stockControlEnabled) {
+    if (inventory.stockControlEnabled || paymentMethod === 'PIX') {
       const quantities = new Map();
       for (const item of items) { quantities.set(item.productId, (quantities.get(item.productId) || 0) + item.quantity); }
-      for (const [productId, quantity] of quantities) { remainingStock(products.get(productId), quantity); }
+      for (const [productId, quantity] of quantities) {
+        const product = products.get(productId);
+        const availableStock = Number(product.stockQuantity ?? product.estoque ?? 0) - Number(product.reservedQuantity || 0);
+        if (availableStock < quantity) throw new Error(`Estoque disponível insuficiente para ${product.name}.`);
+      }
     }
     const discountPercent = Number(input.discountPercent || 0);
     if (!Number.isFinite(discountPercent) || discountPercent < 0 || discountPercent > 100) { throw new Error('Desconto inválido.'); }
@@ -125,22 +128,56 @@ class PdvService {
       createdBy, sellerName: createdBy.name, sellerEmail: createdBy.email, operatorId: user.id, operatorName: createdBy.name, operatorEmail: createdBy.email,
       receivedBy: null, paymentMethod, paymentStatus: 'PENDING', status: pixData ? 'CREATING_PIX' : 'AWAITING_CASHIER',
       cashTendered,
-      pixData, pixCopiaECola: pixData?.pixCopiaECola || '', createdAt: new Date().toISOString(),
+      pixData, pixCopiaECola: pixData?.pixCopiaECola || '',
+      ...(pixData ? { pixTtlSeconds: Math.min(86400, Math.max(300, Number(process.env.PIX_PAYMENT_TTL_SECONDS) || 3600)), pixExpiresAt: new Date(Date.now() + Math.min(86400, Math.max(300, Number(process.env.PIX_PAYMENT_TTL_SECONDS) || 3600)) * 1000).toISOString() } : {}),
+      createdAt: new Date().toISOString(),
     });
+    if (pixData) await this.schedulePixExpiration(order);
     return this.finishCreation(await this.preparePix(order), user, approvedDiscount);
+  }
+
+  async schedulePixExpiration(order) {
+    if (!order?.id || order.paymentMethod !== 'PIX') return;
+    if (process.env.NODE_ENV === 'production' && typeof this.taskQueueClient?.enqueuePixExpiration !== 'function') {
+      await this.repository.cancelOrder(order.id, 'Cloud Tasks não está disponível para expirar a reserva Pix.').catch(() => {});
+      throw new Error('Cloud Tasks não está disponível para expirar a reserva Pix.');
+    }
+    try {
+      await this.taskQueueClient?.enqueuePixExpiration?.(order.id, Number(order.pixTtlSeconds || order.pixData?.expiresInSeconds) || 3600);
+    } catch (error) {
+      await this.repository.cancelOrder(order.id, 'Não foi possível agendar a expiração da reserva Pix.').catch(() => {});
+      throw error;
+    }
+  }
+
+  async expirePixOrder(orderId) {
+    const order = await this.repository.read('orders', String(orderId));
+    if (!order || order.paymentMethod !== 'PIX' || order.completedAt || order.status === 'CANCELLED' || order.paymentTransactionId) return false;
+    const expiresAt = Date.parse(order.pixExpiresAt || '');
+    if (!Number.isFinite(expiresAt) || expiresAt > Date.now()) return false;
+    await this.repository.repository.cancelOrder(order.id, 'Prazo de pagamento Pix expirado');
+    return true;
+  }
+
+  async expirePixOrders() {
+    const orders = await this.repository.repository.getAllOrders(10000);
+    for (const order of orders.filter((item) => ['CREATING_PIX', 'AWAITING_PIX', 'PENDING'].includes(item.status) && item.paymentMethod === 'PIX')) {
+      try { await this.expirePixOrder(order.id); } catch {}
+    }
   }
 
   async preparePix(order) {
     if (order.paymentMethod !== 'PIX' || order.pixData?.pixCopiaECola) { return order; }
-    const charge = await this.pix.createCharge({ amount: order.total, txid: order.pixData.txid, ticketNumber: order.ticketNumber });
+    const charge = await this.pix.createCharge({ amount: order.total, txid: order.pixData.txid, ticketNumber: order.ticketNumber,
+      expiresInSeconds: Number(order.pixTtlSeconds || order.pixData?.expiresInSeconds) || 3600 });
     return this.repository.attachCharge(order.id, charge);
   }
 
   async requestPixAtCashier(orderId, user) {
     let order = await this.repository.requestPixAtCashier(orderId, actor(user));
+    await this.schedulePixExpiration(order);
     order = await this.preparePix(order);
-    const outboxId = await this.repository.queuePixChargeReceipt(order.id);
-    await this.deliver(outboxId);
+    await this.deliver(`${order.id}-receipt`);
     return { ...order, receiptText: formatOrderReceipt(order) };
   }
 
@@ -156,13 +193,40 @@ class PdvService {
     const orders = await this.repository.list('orders', 'pixData.txid', txid);
     // Memory collections use flat filtering; production query targets the exact txid.
     const order = orders[0];
-    if (!order || order.source !== 'PDV' || order.paymentMethod !== 'PIX') { return true; }
+    if (!order || !['PDV', 'WEB_CATALOG'].includes(order.source) || order.paymentMethod !== 'PIX') { return true; }
     if (!order.completedAt) {
       const status = await this.pix.checkReceivedPayment(endToEndId);
       if (!status.isPaid) { return false; }
       const payment = status.raw;
       if (payment.txid !== txid || payment.endToEndId !== endToEndId || payment.chave !== this.pix.pixKey || Math.round(Number(payment.valor) * 100) !== Math.round(order.total * 100) || (payment.devolucoes || []).length) { throw new Error('Pagamento Sicredi divergente. Verifique a conciliação.'); }
-      await this.repository.receive(order.id, null, { txid, endToEndId, amountMinor: Math.round(Number(payment.valor) * 100) });
+      if (order.status === 'CANCELLED' || (Date.parse(order.pixExpiresAt || '') > 0 && Date.parse(order.pixExpiresAt) <= Date.now())) {
+        const eventId = `${txid}-${endToEndId}`;
+        await this.repository.transaction(async (tx) => {
+          if (await tx.get('pdv_pix_late_payments', eventId)) return;
+          tx.set('pdv_pix_late_payments', eventId, { id: eventId, orderId: order.id, txid, endToEndId, amount: Number(payment.valor), status: 'NEEDS_RECONCILIATION', createdAt: new Date().toISOString() });
+        });
+        if (order.status !== 'CANCELLED') await this.expirePixOrder(order.id);
+        return true;
+      }
+      const verification = { txid, endToEndId, amountMinor: Math.round(Number(payment.valor) * 100), verifiedVia: 'SICREDI_PIX_WEBHOOK' };
+      if (order.source === 'PDV') {
+        await this.repository.receive(order.id, null, verification);
+      } else {
+        const result = await this.repository.repository.confirmOrderPayment(order.id, {
+          verifiedVia: verification.verifiedVia,
+          paymentTransactionId: endToEndId,
+          paymentAmount: Number(payment.valor),
+          pixTxid: txid,
+        });
+        if (!result.alreadyConfirmed) {
+          await this.repository.transaction(async (tx) => {
+            for (const kind of ['customer-paid', 'owner-paid']) {
+              const id = `${order.id}-${kind}`;
+              tx.set('pdv_outbox', id, { id, kind, orderId: order.id, status: 'PENDING', attempts: 0 });
+            }
+          });
+        }
+      }
     }
     await this.deliver(`${order.id}-customer-paid`);
     await this.deliver(`${order.id}-owner-paid`);

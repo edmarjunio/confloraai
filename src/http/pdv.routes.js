@@ -61,9 +61,9 @@ function paymentTotals(orders, settlements) {
   return totals;
 }
 
-function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone }) {
+function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueueClient }) {
   const store = new PdvRepository(repository);
-  const service = new PdvService({ repository: store, pix, whatsapp, ownerPhone });
+  const service = new PdvService({ repository: store, pix, whatsapp, ownerPhone, taskQueueClient });
   const route = (handler) => async (req, res) => {
     try { await handler(req, res); }
     catch (error) { Logger.warn('Operação PDV não concluída', { error: error.message }); res.status(400).json({ error: error.message }); }
@@ -116,21 +116,43 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone }) {
     if (order.approvalRequired) { return res.status(202).json({ success: true, ...order }); }
     res.json({ success: true, order, receiptDelivery: order.receiptDelivery });
   }));
+  app.get('/api/caixa/orders/stream', (req, res) => {
+    res.status(200);
+    res.set({ 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
+    res.flushHeaders?.();
+    res.write('retry: 3000\n\n');
+    const send = (event, payload) => res.write(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`);
+    let closed = false;
+    const heartbeat = setInterval(() => { if (!closed) res.write(': keep-alive\n\n'); }, 20000);
+    heartbeat.unref?.();
+    const unsubscribe = store.watchOpenOrders((orders) => {
+      if (closed) return;
+      const visibleOrders = orders.filter((order) => order.source === 'PDV' || order.source === 'WEB_CATALOG');
+      send('orders-changed', { orderIds: visibleOrders.map((order) => order.id), updatedAt: new Date().toISOString() });
+    }, () => {
+      if (!closed) send('stream-fallback', { updatedAt: new Date().toISOString() });
+    });
+    req.on('close', () => {
+      closed = true;
+      clearInterval(heartbeat);
+      unsubscribe?.();
+    });
+  });
   app.get('/api/caixa/discount-approvals/:id', route(async (req, res) => {
     const approval = await store.read('discount_approvals', req.params.id);
     if (!approval || (req.user.role !== 'ADMIN' && approval.requestedBy !== req.user.id)) { return res.sendStatus(404); }
     res.json(approval);
   }));
   app.get('/api/caixa/orders', route(async (req, res) => {
-    const orders = await store.list('orders', 'source', 'PDV');
+    const orders = (await repository.getAllOrders(10000)).filter((order) => ['PDV', 'WEB_CATALOG'].includes(order.source));
     const range = reportRange(req.query);
     const isAdmin = req.user.role === 'ADMIN';
     const canViewPersonalOrder = (order) => isAdmin || order.createdBy?.id === req.user.id || order.receivedBy?.id === req.user.id;
     const canViewOpenOrder = (order) => canViewPersonalOrder(order) || (req.user.role === 'CAIXA' && !order.completedAt && order.status !== 'CANCELLED');
     const openOrders = orders.filter((order) => !order.completedAt && order.status !== 'CANCELLED' &&
       canViewOpenOrder(order));
-    const pendingConfirmation = openOrders.filter((order) => order.status === 'AWAITING_CASHIER');
-    const pendingPayment = openOrders.filter((order) => ['CREATING_PIX', 'AWAITING_PIX'].includes(order.status));
+    const pendingConfirmation = openOrders.filter((order) => order.status === 'AWAITING_CASHIER' || (order.status === 'PENDING' && order.paymentMethod !== 'PIX'));
+    const pendingPayment = openOrders.filter((order) => ['CREATING_PIX', 'AWAITING_PIX'].includes(order.status) || (order.status === 'PENDING' && order.paymentMethod === 'PIX'));
     const history = orders.filter((order) => canViewPersonalOrder(order) && isWithinRange(order.paidAt || order.completedAt || order.createdAt, range));
     const completed = history.filter((order) => order.completedAt && order.status !== 'CANCELLED');
     const confirmed = completed.filter((order) => order.paymentStatus === 'ON_ACCOUNT');
@@ -183,7 +205,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone }) {
       req.user.role === 'ADMIN' || order.createdBy?.id === req.user.id || order.receivedBy?.id === req.user.id ||
       (req.user.role === 'CAIXA' && !order.completedAt && order.status !== 'CANCELLED')
     );
-    if (!order || order.source !== 'PDV' || !canViewOrder) { throw new Error('Comanda não encontrada para este usuário.'); }
+    if (!order || !['PDV', 'WEB_CATALOG'].includes(order.source) || !canViewOrder) { throw new Error('Comanda não encontrada para este usuário.'); }
     return order;
   };
   app.get('/api/caixa/orders/:id', route(async (req, res) => res.json(await findOrder(req))));
@@ -191,15 +213,66 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone }) {
     const existing = await findOrder(req);
     const paymentMethod = String(req.body.paymentMethod || existing.paymentMethod || '').toUpperCase();
     if (paymentMethod === 'PIX') {
+      if (existing.source === 'WEB_CATALOG' && ['CREATING_PIX', 'AWAITING_PIX'].includes(existing.status)) {
+        throw new Error('A cobrança Pix já foi emitida. Confirme pelo Sicredi ou use a confirmação manual após conferir o comprovante.');
+      }
       const order = await service.requestPixAtCashier(existing.id, req.user);
       return res.status(202).json({ success: true, awaitingPayment: true, order, receiptText: formatOrderReceipt(order) });
     }
     const receivedAmount = req.body.receivedAmount === null || req.body.receivedAmount === undefined || req.body.receivedAmount === ''
       ? null : Number(req.body.receivedAmount);
-    const order = await store.receive(existing.id, actor(req.user), null, receivedAmount, paymentMethod, { sendFinalReceipt: true });
+    const order = existing.source === 'PDV'
+      ? await store.receive(existing.id, actor(req.user), null, receivedAmount, paymentMethod, { sendFinalReceipt: true })
+      : await repository.confirmOrderPayment(existing.id, {
+        verifiedVia: 'CAIXA_MANUAL', receivedBy: actor(req.user), paymentMethod,
+        receivedAmount: paymentMethod === 'DINHEIRO' ? (receivedAmount ?? Number(existing.total || 0)) : receivedAmount,
+        changeGiven: receivedAmount === null ? 0 : Math.max(0, receivedAmount - Number(existing.total || 0)),
+      });
+    if (existing.source === 'WEB_CATALOG') {
+      await store.transaction(async (tx) => {
+        const jobId = `${existing.id}-final-receipt`;
+        tx.set('pdv_outbox', jobId, { id: jobId, orderId: existing.id, kind: 'customer-paid', status: 'PENDING', attempts: 0 });
+      });
+    }
     await service.deliver(`${order.id}-final-receipt`);
     const delivery = await store.read('pdv_outbox', `${order.id}-final-receipt`);
     res.json({ success: true, order, receiptText: formatOrderReceipt(order), receiptDelivery: { sent: delivery?.status === 'SENT' && Boolean(order.customerPhone), reason: delivery?.lastError || (order.customerPhone ? '' : 'Sem WhatsApp informado.') } });
+  }));
+  app.post('/api/caixa/orders/:id/confirm-manual-pix', requireCashier, route(async (req, res) => {
+    const existing = await findOrder(req);
+    if (existing.paymentMethod !== 'PIX' || !['CREATING_PIX', 'AWAITING_PIX'].includes(existing.status)) { throw new Error('Este pedido não está aguardando confirmação Pix.'); }
+    if (Number.isFinite(Date.parse(existing.pixExpiresAt || '')) && Date.parse(existing.pixExpiresAt) <= Date.now()) {
+      await service.expirePixOrder(existing.id);
+      throw new Error('Esta cobrança Pix venceu e o estoque está sendo liberado. Confira o histórico do pedido.');
+    }
+    if (req.body?.proofSeen !== true) { throw new Error('Confirme que conferiu o comprovante Pix antes de finalizar.'); }
+    const note = String(req.body?.note || '').trim();
+    if (note.length < 8) { throw new Error('Registre uma observação sobre o comprovante (mínimo 8 caracteres).'); }
+    const receiver = actor(req.user);
+    const verification = {
+      verifiedVia: 'MANUAL_CAIXA_PIX',
+      txid: existing.pixData?.txid,
+      amountMinor: Math.round(Number(existing.total) * 100),
+      endToEndId: String(req.body?.endToEndId || '').trim().slice(0, 80),
+      manualPixProofSeen: true,
+      manualPixNote: note,
+    };
+    const order = existing.source === 'PDV'
+      ? await store.receive(existing.id, receiver, verification)
+      : await repository.confirmOrderPayment(existing.id, {
+        verifiedVia: 'MANUAL_CAIXA_PIX',
+        paymentTransactionId: verification.endToEndId || `MANUAL-${existing.id}`,
+        paymentAmount: Number(existing.total), pixTxid: verification.txid,
+        receivedBy: receiver, manualPixProofSeen: true, manualPixNote: note,
+      });
+    for (const kind of ['customer-paid', 'owner-paid']) {
+      await store.transaction(async (tx) => {
+        const id = `${order.id}-${kind}`;
+        tx.set('pdv_outbox', id, { id, kind, orderId: order.id, status: 'PENDING', attempts: 0 });
+      });
+      await service.deliver(`${order.id}-${kind}`);
+    }
+    res.json({ success: true, order, receiptText: formatOrderReceipt(order) });
   }));
   // This compatibility endpoint only reads persisted status; it cannot confirm payment.
   app.post('/api/caixa/orders/:id/confirm-sicredi-pix', route(async (req, res) => {
@@ -216,6 +289,23 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone }) {
     if (order.paymentMethod === 'PIX') { return res.status(409).json({ error: 'Cobranças Pix exigem cancelamento e conciliação no Sicredi.' }); }
     res.json(await repository.cancelOrder(req.params.id, String(req.body.reason || '')));
   }));
+  app.post('/tasks/expire-pix', async (req, res) => {
+    const secret = process.env.TASK_SECRET || '';
+    if (!secureEqual(req.headers['x-conflora-task-secret'], secret)) return res.sendStatus(401);
+    const orderId = String(req.body?.orderId || '');
+    if (!orderId || orderId.includes('/')) return res.sendStatus(400);
+    try {
+      const order = await store.read('orders', orderId);
+      if (!order || order.status === 'CANCELLED' || order.completedAt || order.paymentTransactionId) return res.sendStatus(200);
+      if (order.paymentMethod !== 'PIX') return res.sendStatus(200);
+      if (Date.parse(order.pixExpiresAt || '') > Date.now()) return res.sendStatus(503);
+      await service.expirePixOrder(orderId);
+      return res.sendStatus(200);
+    } catch (error) {
+      Logger.warn('Falha ao expirar pedido Pix agendado.', { orderId, error: error.message });
+      return res.sendStatus(503);
+    }
+  });
   app.get('/api/caixa/customers/:key/debts', requireCashier, route(async (req, res) => {
     const customer = await store.read('customers', req.params.key);
     if (!customer) { throw new Error('Cliente não cadastrado.'); }
@@ -268,7 +358,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone }) {
     try { await service.retryMessages(); res.sendStatus(200); } catch { res.sendStatus(503); }
   });
   if (process.env.NODE_ENV !== 'test') {
-    const timer = setInterval(() => service.retryMessages().catch((error) => Logger.warn('Fila WhatsApp pendente', { error: error.message })), 30000);
+    const timer = setInterval(() => Promise.all([service.retryMessages(), service.expirePixOrders()]).catch((error) => Logger.warn('Fila PDV pendente', { error: error.message })), 15000);
     timer.unref();
   }
   app.locals.pdv = { service, store };

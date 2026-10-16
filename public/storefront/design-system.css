@@ -445,9 +445,15 @@ cf-card.cf-order-card--selected { border-color: #7dd3fc; background: rgb(224 242
 cf-card.cf-order-card--green { border-color: #6ee7b7; background: rgb(209 250 229 / 72%); }
 cf-card.cf-order-card--red { border-color: #fda4af; background: rgb(255 228 230 / 76%); }
 cf-card.cf-order-card--selected { border-color: #0ea5e9; box-shadow: 0 0 0 3px rgb(14 165 233 / 20%), 0 8px 18px rgb(15 56 30 / 12%); }
+cf-card.cf-order-card--attention { animation: cf-order-arrival 1.35s ease-in-out 5; }
+@keyframes cf-order-arrival {
+  0%, 100% { transform: translateY(0) scale(1); box-shadow: 0 5px 12px rgb(15 56 30 / 9%); }
+  50% { transform: translateY(-4px) scale(1.015); box-shadow: 0 0 0 5px rgb(245 158 11 / 22%), 0 14px 24px rgb(15 56 30 / 22%); }
+}
 
 @media (prefers-reduced-motion: reduce) {
   cf-card[interactive], .cf-button { transition: none; }
   cf-card.cf-order-card { transition: none; }
   cf-card.cf-order-card:hover { transform: none; }
+  cf-card.cf-order-card--attention { animation: none; }
 }

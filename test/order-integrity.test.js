@@ -121,6 +121,67 @@ for (const mode of ['memory', 'transaction']) {
   });
 }
 
+test('web Pix reservation is idempotent, protects stock until payment, then deducts exactly once with cashier audit', async () => {
+  const repository = new FirestoreRepository({ isInMemory: true });
+  // A reservation Pix remains mandatory even with the legacy tracking toggle off.
+  await repository.saveInventorySettings({ stockControlEnabled: false });
+  repository.inMemoryProducts.set('plant', { id: 'plant', name: 'Muda', stockQuantity: 3, reservedQuantity: 0 });
+  const order = await repository.createDirectOrder({
+    id: 'web-pix-reserved', source: 'WEB_CATALOG', status: 'AWAITING_PIX', paymentMethod: 'PIX',
+    total: 20, pixData: { txid: '0123456789ABCDEF0123456789ABCDEF' },
+    items: [{ productId: 'plant', name: 'Muda', price: 10, quantity: 2 }],
+  }, { requirePersistence: false, reserveInventory: true });
+  await repository.createDirectOrder({ ...order }, { reserveInventory: true });
+  assert.equal(order.inventoryReserved, true);
+  assert.equal(repository.inMemoryProducts.get('plant').reservedQuantity, 2);
+  await assert.rejects(repository.createDirectOrder({
+    id: 'web-pix-overbook', source: 'WEB_CATALOG', status: 'AWAITING_PIX', paymentMethod: 'PIX', total: 100,
+    items: [{ productId: 'plant', name: 'Muda', price: 10, quantity: 9 }],
+  }, { reserveInventory: true }), /Estoque disponível insuficiente/);
+  await repository.createDirectOrder({
+    id: 'cash-order-competing', source: 'WEB_CATALOG', status: 'AWAITING_CASHIER', paymentMethod: 'DINHEIRO', total: 20,
+    items: [{ productId: 'plant', name: 'Muda', price: 10, quantity: 2 }],
+  });
+  await assert.rejects(repository.confirmOrderPayment('cash-order-competing', {
+    verifiedVia: 'CAIXA_MANUAL', paymentMethod: 'DINHEIRO', paymentAmount: 20,
+    receivedBy: { id: 'cashier-1', name: 'Caixa', role: 'CAIXA' },
+  }), /Estoque disponível insuficiente/);
+  assert.equal(repository.inMemoryProducts.get('plant').stockQuantity, 3);
+  assert.equal(repository.inMemoryProducts.get('plant').reservedQuantity, 2);
+
+  const receivedBy = { id: 'cashier-1', name: 'Caixa', role: 'CAIXA' };
+  const verified = await repository.confirmOrderPayment(order.id, {
+    verifiedVia: 'MANUAL_CAIXA_PIX', paymentTransactionId: 'MANUAL-web-pix-reserved',
+    paymentAmount: 20, pixTxid: order.pixData.txid, receivedBy,
+    manualPixProofSeen: true, manualPixNote: 'Comprovante conferido no caixa',
+  });
+  const duplicate = await repository.confirmOrderPayment(order.id, {
+    verifiedVia: 'MANUAL_CAIXA_PIX', paymentTransactionId: 'MANUAL-web-pix-reserved',
+    paymentAmount: 20, pixTxid: order.pixData.txid, receivedBy,
+    manualPixProofSeen: true, manualPixNote: 'Comprovante conferido no caixa',
+  });
+  assert.equal(verified.paymentStatus, 'APPROVED');
+  assert.equal(verified.manualPixConfirmedBy.id, 'cashier-1');
+  assert.equal(duplicate.alreadyConfirmed, true);
+  assert.equal(repository.inMemoryProducts.get('plant').stockQuantity, 1);
+  assert.equal(repository.inMemoryProducts.get('plant').reservedQuantity, 0);
+});
+
+test('cancelling an unpaid web Pix releases its stock reservation without changing physical stock', async () => {
+  const repository = new FirestoreRepository({ isInMemory: true });
+  await repository.saveInventorySettings({ stockControlEnabled: false });
+  repository.inMemoryProducts.set('plant', { id: 'plant', name: 'Muda', stockQuantity: 10, reservedQuantity: 2 });
+  await repository.createDirectOrder({
+    id: 'web-pix-expired', source: 'WEB_CATALOG', status: 'AWAITING_PIX', paymentMethod: 'PIX', total: 20,
+    items: [{ productId: 'plant', name: 'Muda', price: 10, quantity: 2 }],
+    inventoryReserved: true, reservedItems: [{ productId: 'plant', quantity: 2 }],
+  });
+  await repository.cancelOrder('web-pix-expired', 'Prazo Pix expirado');
+  assert.equal(repository.inMemoryOrders.get('web-pix-expired').status, 'CANCELLED');
+  assert.equal(repository.inMemoryProducts.get('plant').stockQuantity, 10);
+  assert.equal(repository.inMemoryProducts.get('plant').reservedQuantity, 0);
+});
+
 test('failed commit leaves stock and payment unchanged and allows a retry', async () => {
   const state = setup('transaction');
   state.store.failCommit = true;

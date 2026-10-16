@@ -844,6 +844,15 @@ dialog:not([open]) { display: none; }
 .order-receipt-view { min-width: 0; margin-top: 12px; padding: 14px; border: 1px solid #dce9df; border-radius: 12px; background: #fff; }
 .order-receipt-title { margin: 0 0 8px; color: #173c26; font-size: 14px; }
 .order-receipt-text { margin: 0; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #34463a; font: inherit; font-size: 12px; line-height: 1.6; }
+.order-receipt-pix { display: grid; justify-items: center; gap: 8px; margin: 10px 0 14px; padding: 14px; border: 1px solid #a8dbc0; border-radius: 14px; background: #f0faf4; text-align: center; }
+.order-receipt-pix h4, .order-receipt-pix p { margin: 0; }
+.order-receipt-pix h4 { color: #14532d; font-size: 14px; font-weight: 800; }
+.order-receipt-qr { display: block; width: min(220px, 100%); max-height: 220px; aspect-ratio: 1; object-fit: contain; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; }
+.order-receipt-pix-total { color: #047857; font-size: 18px; font-weight: 900; }
+.order-receipt-copy-label { justify-self: start; width: 100%; color: #334155; font-size: 12px; font-weight: 700; text-align: left; }
+.order-receipt-copy-code { width: 100%; min-height: 64px; resize: vertical; overflow-wrap: anywhere; border: 1px solid #cbd5e1; border-radius: 9px; padding: 8px; background: #fff; color: #334155; font: 11px/1.45 ui-monospace, monospace; }
+.order-receipt-copy-button { width: 100%; min-height: 40px; border: 0; border-radius: 10px; padding: 8px 12px; background: #109e46; color: #fff; font-weight: 800; cursor: pointer; }
+.order-receipt-expiry { color: #64748b; font-size: 11px; }
 #historyLoadSentinel { min-height: 1px; padding: 10px 0; text-align: center; color: #728078; font-size: 12px; }
 @media (max-width: 700px) {
   .history-dialog { width: calc(100vw - 20px); max-height: 86dvh; padding: 16px; }

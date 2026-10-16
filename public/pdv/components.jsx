@@ -1,6 +1,6 @@
 /* Shared PDV components loaded before the sales screen. */
 window.PdvComponents = (() => {
-  const { useState, useEffect } = React;
+  const { useState, useEffect, useRef } = React;
   const money = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   const button = 'cf-button';
   const field = 'w-full p-3 border rounded-xl my-2';
@@ -227,14 +227,18 @@ window.PdvComponents = (() => {
     if (order.completedAt) return 'Confirmado';
     return 'Em andamento';
   }
-  function OrderDetails({ order, onClose, canReceive = false, busy = false, error = '', onReceive }) {
+  function OrderDetails({ order, onClose, canReceive = false, canConfirmManualPix = false, busy = false, error = '', onReceive, onManualPix }) {
     const [paymentMethod, setPaymentMethod] = useState(order.paymentMethod || 'DINHEIRO');
     const [cashAmount, setCashAmount] = useState(Number(order.total || 0).toFixed(2));
     const [copied, setCopied] = useState(false);
+    const [manualPixNote, setManualPixNote] = useState('');
+    const [manualProofSeen, setManualProofSeen] = useState(false);
     useEffect(() => {
       setPaymentMethod(order.paymentMethod || 'DINHEIRO');
       setCashAmount(Number(order.total || 0).toFixed(2));
       setCopied(false);
+      setManualPixNote('');
+      setManualProofSeen(false);
     }, [order.id, order.status, order.paymentMethod]);
     const pixCopyPaste = order.pixData?.pixCopiaECola || order.pixCopiaECola || '';
     const copyPixCode = async () => {
@@ -263,6 +267,12 @@ window.PdvComponents = (() => {
           {order.pixData?.qrCodeBase64 && <img src={order.pixData.qrCodeBase64} alt={`QR Code Pix da comanda ${order.ticketNumber}`} className="mx-auto mt-3 block max-h-48 w-48 rounded-lg bg-white object-contain p-2" />}
           {pixCopyPaste && <><label className="mt-3 block text-xs font-bold text-sky-950">Pix copia e cola<textarea readOnly value={pixCopyPaste} className="mt-1 w-full rounded-xl border border-sky-200 bg-white p-2 text-xs" rows={3} /></label><button type="button" className={button + ' mt-2 w-full'} onClick={copyPixCode}>{copied ? 'Código copiado' : 'Copiar Pix copia e cola'}</button></>}
           {!order.pixData?.qrCodeBase64 && !pixCopyPaste && <p className="mt-2 text-xs text-sky-900">A cobrança está sendo preparada. Atualize em alguns instantes.</p>}
+          {canConfirmManualPix && <div className="mt-4 space-y-2 border-t border-sky-200 pt-3">
+            <p className="text-xs font-bold text-sky-950">O Sicredi ainda não confirmou?</p>
+            <label className="flex items-start gap-2 text-xs text-slate-700"><input type="checkbox" checked={manualProofSeen} onChange={(event) => setManualProofSeen(event.target.checked)} /><span>Conferi no comprovante o valor exato de {money(order.total)} e a conta recebedora da Conflora.</span></label>
+            <label className="block text-xs font-bold text-slate-700">Observação do comprovante<textarea className={field} rows={2} value={manualPixNote} onChange={(event) => setManualPixNote(event.target.value)} placeholder="Ex.: comprovante apresentado no caixa" /></label>
+            <button type="button" className={button + ' w-full'} disabled={busy || !manualProofSeen || manualPixNote.trim().length < 8} onClick={() => onManualPix(order, manualPixNote)}>Confirmar Pix manualmente e finalizar</button>
+          </div>}
         </section>}
         {canReceive && <section className="mt-4 space-y-2 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
           <h3 className="font-black text-emerald-950">Receber no caixa</h3>
@@ -283,10 +293,10 @@ window.PdvComponents = (() => {
       </div>
     </Panel>;
   }
-  function OrderCard({ order, tone, selected, onDetails }) {
+  function OrderCard({ order, tone, selected, attention, onDetails }) {
     const items = (order.items || []).slice(0, 2);
     const extraItems = Math.max(0, (order.items || []).length - items.length);
-    return <cf-card padding="sm" className={`cf-order-card cf-order-card--${tone || 'amber'} ${selected ? 'cf-order-card--selected' : ''}`}>
+    return <cf-card padding="sm" className={`cf-order-card cf-order-card--${tone || 'amber'} ${selected ? 'cf-order-card--selected' : ''} ${attention ? 'cf-order-card--attention' : ''}`}>
       <button type="button" className="w-full cursor-pointer text-left" onClick={() => onDetails(order)} aria-label={`Abrir recibo e detalhes da comanda ${order.ticketNumber}`}>
         <div className="flex items-start justify-between gap-2">
           <span className="text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Comanda #{order.ticketNumber}</span>
@@ -310,7 +320,7 @@ window.PdvComponents = (() => {
       {description && <p className="mt-1 text-[10px] text-slate-500">{description}</p>}
     </cf-card>;
   }
-  function CashierColumn({ title, hint, orders, tone, selectedOrderId, onDetails }) {
+  function CashierColumn({ title, hint, orders, tone, selectedOrderId, pulsedOrderIds, onDetails }) {
     const themes = {
       amber: 'border-amber-300 bg-amber-50 text-amber-950',
       blue: 'border-sky-300 bg-sky-50 text-sky-950',
@@ -323,7 +333,7 @@ window.PdvComponents = (() => {
         <p className="mt-1 text-[10px] opacity-75">{hint}</p>
       </header>
       <div className="max-h-[58vh] space-y-2 overflow-y-auto pr-1">
-        {orders.map((order) => <OrderCard key={order.id} order={order} tone={tone} selected={selectedOrderId === order.id && order.status === 'AWAITING_CASHIER'} onDetails={onDetails} />)}
+        {orders.map((order) => <OrderCard key={order.id} order={order} tone={tone} attention={pulsedOrderIds.has(order.id)} selected={selectedOrderId === order.id && order.status === 'AWAITING_CASHIER'} onDetails={onDetails} />)}
         {!orders.length && <p className="rounded-xl border border-dashed border-slate-300 bg-white/70 p-4 text-center text-xs text-slate-500">Nenhuma comanda nesta etapa.</p>}
       </div>
     </section>;
@@ -337,6 +347,9 @@ window.PdvComponents = (() => {
     const [busy, setBusy] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [refreshing, setRefreshing] = useState(false);
+    const [pulsedOrderIds, setPulsedOrderIds] = useState(() => new Set());
+    const [newOrderNotice, setNewOrderNotice] = useState('');
+    const dataRef = useRef(null);
 
     const refresh = async (silent = false) => {
       if (!silent) setRefreshing(true);
@@ -344,6 +357,19 @@ window.PdvComponents = (() => {
       try {
         const query = new URLSearchParams({ from: dateFrom, to: dateTo });
         const nextData = await api('/api/caixa/orders?' + query.toString());
+        const previous = dataRef.current;
+        if (silent && previous) {
+          const previousIds = new Set([...(previous.pendingConfirmation || []), ...(previous.pendingPayment || [])].map((order) => order.id));
+          const incoming = [...(nextData.pendingConfirmation || []), ...(nextData.pendingPayment || [])].filter((order) => !previousIds.has(order.id));
+          if (incoming.length) {
+            const ids = new Set(incoming.map((order) => order.id));
+            setPulsedOrderIds((current) => new Set([...current, ...ids]));
+            setNewOrderNotice(incoming.length === 1 ? `Nova comanda aguardando ${incoming[0].paymentMethod === 'PIX' ? 'pagamento' : 'confirmação'}: #${incoming[0].ticketNumber}` : `${incoming.length} novas comandas aguardando atendimento`);
+            setTimeout(() => setPulsedOrderIds((current) => new Set([...current].filter((id) => !ids.has(id)))), 9000);
+            setTimeout(() => setNewOrderNotice(''), 9000);
+          }
+        }
+        dataRef.current = nextData;
         setData(nextData);
         setSelectedOrder((current) => {
           if (!current) return current;
@@ -355,8 +381,13 @@ window.PdvComponents = (() => {
     };
     useEffect(() => {
       refresh();
-      const timer = setInterval(() => refresh(true), 20000);
-      return () => clearInterval(timer);
+      const timer = setInterval(() => refresh(true), 15000);
+      const stream = typeof EventSource === 'undefined' ? null : new EventSource('/api/caixa/orders/stream');
+      stream?.addEventListener('orders-changed', () => refresh(true));
+      stream?.addEventListener('stream-fallback', () => refresh(true));
+      const onVisible = () => { if (document.visibilityState === 'visible') refresh(true); };
+      document.addEventListener('visibilitychange', onVisible);
+      return () => { clearInterval(timer); stream?.close(); document.removeEventListener('visibilitychange', onVisible); };
     }, [dateFrom, dateTo]);
 
     const setPeriod = (days) => {
@@ -446,8 +477,9 @@ window.PdvComponents = (() => {
                 <MetricCard label="Fiados quitados por mim" value={money(data.metrics.debtReceipts)} description="Recebimentos no período" />
               </div>
               <p className="mb-2 text-[11px] font-medium text-slate-500">Deslize para o lado no celular para ver as etapas do quadro.</p>
+              {newOrderNotice && <div role="status" className="mb-3 rounded-xl border border-amber-300 bg-amber-100 px-4 py-3 text-sm font-extrabold text-amber-950 shadow-sm" aria-live="polite">🔔 {newOrderNotice}</div>}
               <div className="flex snap-x gap-3 overflow-x-auto pb-3 md:grid md:grid-cols-2 xl:grid-cols-4 md:overflow-visible">
-                {columns.map((column) => <CashierColumn key={column.title} {...column} selectedOrderId={selectedOrder?.id} onDetails={setSelectedOrder} />)}
+                {columns.map((column) => <CashierColumn key={column.title} {...column} pulsedOrderIds={pulsedOrderIds} selectedOrderId={selectedOrder?.id} onDetails={setSelectedOrder} />)}
               </div>
             </>}
 
@@ -486,7 +518,14 @@ window.PdvComponents = (() => {
             </>}
           </>}
       </main>
-      {selectedOrder && <OrderDetails key={`${selectedOrder.id}:${selectedOrder.status}:${selectedOrder.paymentMethod}`} order={selectedOrder} canReceive={user.role !== 'VENDEDOR' && selectedOrder.status === 'AWAITING_CASHIER'} busy={busy} error={error} onReceive={receive} onClose={() => setSelectedOrder(null)} />}
+      {selectedOrder && <OrderDetails key={`${selectedOrder.id}:${selectedOrder.status}:${selectedOrder.paymentMethod}`} order={selectedOrder} canReceive={user.role !== 'VENDEDOR' && selectedOrder.status === 'AWAITING_CASHIER'} canConfirmManualPix={user.role !== 'VENDEDOR' && selectedOrder.paymentMethod === 'PIX' && ['CREATING_PIX', 'AWAITING_PIX'].includes(selectedOrder.status)} busy={busy} error={error} onReceive={receive} onManualPix={async (order, note) => {
+        setBusy(true); setError('');
+        try {
+          const response = await api('/api/caixa/orders/' + order.id + '/confirm-manual-pix', { proofSeen: true, note });
+          setSelectedOrder(response.order || order); await refresh(true);
+        } catch (err) { setError(err.message); }
+        finally { setBusy(false); }
+      }} onClose={() => setSelectedOrder(null)} />}
     </div>;
   }
   function DebtSettlement({ onClose }) {

@@ -7,13 +7,18 @@ function validateOrderConfirmation(order, updates) {
   }
   if (!updates || String(order.paymentMethod).toUpperCase() !== 'PIX') {return;}
   if (PAID_ORDER_STATUSES.has(order.status) && order.paymentTransactionId) {return;}
-  if (
-    updates.verifiedVia !== 'MERCADO_PAGO_WEBHOOK' ||
-    !/^\d+$/.test(updates.paymentTransactionId || '') ||
-    !Number.isFinite(Number(updates.paymentVerifiedAmount)) ||
-    Number(order.total) <= 0 ||
-    Math.round(Number(updates.paymentVerifiedAmount) * 100) !== Math.round(Number(order.total) * 100)
-  ) {
+  const paidAmountMatches = Number.isFinite(Number(updates.paymentVerifiedAmount)) &&
+    Number(order.total) > 0 &&
+    Math.round(Number(updates.paymentVerifiedAmount) * 100) === Math.round(Number(order.total) * 100);
+  const sicrediVerified = updates.verifiedVia === 'SICREDI_PIX_WEBHOOK' &&
+    updates.pixTxid === order.pixData?.txid && /^E[a-zA-Z0-9]{31}$/.test(updates.paymentTransactionId || '') && paidAmountMatches;
+  const manualPixVerified = updates.verifiedVia === 'MANUAL_CAIXA_PIX' &&
+    updates.manualPixProofSeen === true && Boolean(updates.manualPixConfirmedBy?.id) &&
+    ['ADMIN', 'CAIXA'].includes(updates.manualPixConfirmedBy?.role) &&
+    String(updates.manualPixNote || '').trim().length >= 8 && paidAmountMatches;
+  const mercadoPagoVerified = updates.verifiedVia === 'MERCADO_PAGO_WEBHOOK' &&
+    /^\d+$/.test(updates.paymentTransactionId || '') && paidAmountMatches;
+  if (!sicrediVerified && !manualPixVerified && !mercadoPagoVerified) {
     throw new Error('Confirmação PIX exige pagamento verificado com o valor do pedido.');
   }
 }

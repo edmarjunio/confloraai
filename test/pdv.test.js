@@ -69,6 +69,8 @@ test('Pix receipt includes image; bank verification finalizes exactly once under
   assert.match(order.qrCodeBase64, /^data:image\/png;base64,/);
   assert.equal(order.pixCopiaECola, 'pix-code');
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
+  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 2);
+  assert.equal(order.inventoryReserved, true);
   s.pix.checkReceivedPayment = async (endToEndId) => ({ isPaid: true, raw: { txid: order.pixData.txid, endToEndId, chave: 'pix-key', valor: '20.00', devolucoes: [] } });
   await Promise.all(Array.from({ length: 4 }, () => s.service.handlePix(order.pixData.txid, 'E' + '1'.repeat(31))));
   const paid = await s.repository.read('orders', order.id);
@@ -76,7 +78,46 @@ test('Pix receipt includes image; bank verification finalizes exactly once under
   assert.equal(paid.paymentStatus, 'APPROVED');
   assert.equal(paid.verifiedVia, 'SICREDI_PIX_WEBHOOK');
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
+  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 0);
   assert.equal(s.sent.length, 4);
+});
+
+test('Pix generated at the cashier reserves stock and blocks a competing receipt until payment', async () => {
+  const s = setup();
+  const order = await s.service.create(s.input, seller);
+  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity || 0, 0);
+
+  const pixOrder = await s.repository.requestPixAtCashier(order.id, actor(cashier));
+  assert.equal(pixOrder.inventoryReserved, true);
+  assert.ok(pixOrder.pixExpiresAt);
+  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 2);
+
+  const competing = await s.service.create({ ...s.input, requestId: randomUUID(), items: [{ productId: 'plant', quantity: 18 }] }, seller);
+  await s.repository.receive(competing.id, actor(cashier));
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 2);
+  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 2);
+
+  const verified = { txid: pixOrder.pixData.txid, amountMinor: 2000, verifiedVia: 'MANUAL_CAIXA_PIX',
+    manualPixProofSeen: true, manualPixNote: 'Comprovante conferido', endToEndId: '' };
+  const paid = await s.repository.receive(order.id, actor(cashier), verified);
+  assert.equal(paid.status, 'CONFIRMED');
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 0);
+  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 0);
+});
+
+test('Pix expiration cancels the unpaid command and releases held stock without a deduction', async () => {
+  const s = setup();
+  const order = await s.service.create({ ...s.input, paymentMethod: 'PIX', customerId: 'customer' }, seller);
+  await s.repository.transaction(async (tx) => tx.set('orders', order.id, {
+    ...order, pixExpiresAt: new Date(Date.now() - 1000).toISOString(),
+  }));
+
+  assert.equal(await s.service.expirePixOrder(order.id), true);
+  assert.equal(await s.service.expirePixOrder(order.id), false);
+  const expired = await s.repository.read('orders', order.id);
+  assert.equal(expired.status, 'CANCELLED');
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
+  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 0);
 });
 
 test('Pix never trusts webhook amounts, altered bank values or manual confirmation', async () => {
@@ -114,7 +155,7 @@ test('order retries reuse ID; insufficient stock leaves debt and inventory uncha
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
   await assert.rejects(s.service.create({ ...s.input, items: [{ productId: 'plant', quantity: 1 }] }, cashier), /outra venda/);
   const chargeCountBeforeInsufficientOrder = s.chargeCalls.length;
-  await assert.rejects(s.service.create({ ...s.input, requestId: randomUUID(), paymentMethod: 'PIX', customerId: 'customer', items: [{ productId: 'plant', quantity: 100 }] }, seller), /Estoque insuficiente/);
+  await assert.rejects(s.service.create({ ...s.input, requestId: randomUUID(), paymentMethod: 'PIX', customerId: 'customer', items: [{ productId: 'plant', quantity: 100 }] }, seller), /Estoque disponível insuficiente/);
   assert.equal(s.chargeCalls.length, chargeCountBeforeInsufficientOrder);
   assert.equal(s.base.inMemoryCustomers.get('customer').debtBalance, 0);
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
@@ -354,6 +395,62 @@ test('HTTP sale flow sends fixed Pix receipt and QR, confirms by Sicredi webhook
   const duplicateReceive = await receive();
   assert.equal((await duplicateReceive.json()).order.alreadyConfirmed, true);
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 17);
+});
+
+test('cashier can manually confirm a Pix only after recording proof review; audit and stock are atomic', async (t) => {
+  const s = setup();
+  await s.base.saveUser(seller);
+  await s.base.saveUser(cashier);
+  const app = createApp({ messageService: { firestoreRepo: s.base, whatsappClient: s.whatsapp }, sicrediClient: s.pix });
+  const server = app.listen(0); t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const login = async (user) => {
+    const response = await fetch(base + '/api/admin/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: user.id, pin: user.pin }) });
+    return response.headers.get('set-cookie').split(';')[0];
+  };
+  const sellerCookie = await login(seller);
+  const cashierCookie = await login(cashier);
+  const order = await app.locals.pdv.service.create({ ...s.input, paymentMethod: 'PIX' }, seller);
+  const post = (body) => fetch(`${base}/api/caixa/orders/${order.id}/confirm-manual-pix`, {
+    method: 'POST', headers: { cookie: cashierCookie, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  assert.equal((await post({ proofSeen: true, note: 'Comprovante conferido no caixa' })).status, 200);
+  const saved = await s.base.getOrderById(order.id);
+  assert.equal(saved.paymentStatus, 'APPROVED');
+  assert.equal(saved.verifiedVia, 'MANUAL_CAIXA_PIX');
+  assert.equal(saved.manualPixConfirmedBy.id, cashier.id);
+  assert.equal(saved.receivedBy.id, cashier.id);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
+  const duplicate = await post({ proofSeen: true, note: 'Comprovante conferido no caixa' });
+  assert.equal(duplicate.status, 400);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
+  const sellerAttempt = await fetch(`${base}/api/caixa/orders/${order.id}/confirm-manual-pix`, {
+    method: 'POST', headers: { cookie: sellerCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ proofSeen: true, note: 'Comprovante conferido no caixa' }),
+  });
+  assert.equal(sellerAttempt.status, 403);
+});
+
+test('cashier order stream emits a change immediately after a new command is created', async (t) => {
+  const s = setup();
+  await s.base.saveUser(seller);
+  await s.base.saveUser(cashier);
+  const app = createApp({ messageService: { firestoreRepo: s.base, whatsappClient: s.whatsapp }, sicrediClient: s.pix });
+  const server = app.listen(0); t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const login = await fetch(base + '/api/admin/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: cashier.id, pin: cashier.pin }) });
+  const cookie = login.headers.get('set-cookie').split(';')[0];
+  const stream = await fetch(`${base}/api/caixa/orders/stream`, { headers: { cookie } });
+  assert.equal(stream.status, 200);
+  assert.match(stream.headers.get('content-type'), /text\/event-stream/);
+  const reader = stream.body.getReader();
+  await reader.read();
+  const order = await app.locals.pdv.service.create({ ...s.input }, seller);
+  const event = await Promise.race([
+    reader.read(),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Comanda não apareceu no stream em tempo hábil.')), 5000)),
+  ]);
+  assert.match(new TextDecoder().decode(event.value), new RegExp(order.id));
+  await reader.cancel();
 });
 
 test('Cashier board filters history, separates pending stages, and calculates closing totals', async (t) => {

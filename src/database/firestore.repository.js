@@ -1,3 +1,4 @@
+const { randomUUID } = require('node:crypto');
 const { safeUser } = require('../security/web-session');
 const config = require('../config/env');
 const Logger = require('../shared/logger');
@@ -879,6 +880,11 @@ class FirestoreRepository {
     changeGiven = 0,
     paymentTransactionId = '',
     paymentAmount = null,
+    pixTxid = '',
+    receivedBy = null,
+    paymentMethod = '',
+    manualPixProofSeen = false,
+    manualPixNote = '',
   } = {}) {
     const order = await this.getOrderById(orderId);
     if (!order) {
@@ -892,25 +898,44 @@ class FirestoreRepository {
     const updateData = {
       status: 'CONFIRMED',
       paidAt: now,
+      completedAt: now,
       verifiedVia,
       updatedAt: now,
     };
-    if (verifiedVia === 'MERCADO_PAGO_WEBHOOK') {
+    if (paymentMethod) updateData.paymentMethod = String(paymentMethod).toUpperCase();
+    if (verifiedVia === 'CAIXA_MANUAL') {
+      if (!['DINHEIRO', 'DEBITO', 'CREDITO'].includes(updateData.paymentMethod || order.paymentMethod)) {
+        throw new Error('Selecione dinheiro, débito ou crédito para receber no caixa.');
+      }
       updateData.paymentStatus = 'APPROVED';
-      updateData.paymentProvider = 'MERCADO_PAGO';
+      updateData.paymentProvider = 'CAIXA';
+    }
+    if (['MERCADO_PAGO_WEBHOOK', 'SICREDI_PIX_WEBHOOK', 'MANUAL_CAIXA_PIX'].includes(verifiedVia)) {
+      updateData.paymentStatus = 'APPROVED';
+      updateData.paymentProvider = verifiedVia === 'MERCADO_PAGO_WEBHOOK' ? 'MERCADO_PAGO' : 'SICREDI';
       updateData.paymentTransactionId = String(paymentTransactionId);
       updateData.paymentVerifiedAmount = paymentAmount;
+    }
+    if (pixTxid) updateData.pixTxid = String(pixTxid);
+    if (receivedBy) updateData.receivedBy = receivedBy;
+    if (verifiedVia === 'MANUAL_CAIXA_PIX') {
+      updateData.manualPixProofSeen = Boolean(manualPixProofSeen);
+      updateData.manualPixNote = String(manualPixNote).trim().slice(0, 500);
+      updateData.manualPixConfirmedBy = receivedBy;
     }
     if (verifiedVia.includes('PIX') || order.paymentMethod === 'PIX') {
       updateData.pixVerified = true;
     }
     if (typeof receivedAmount === 'number') {
+      if ((updateData.paymentMethod || order.paymentMethod) === 'DINHEIRO' && Math.round(receivedAmount * 100) < Math.round(Number(order.total) * 100)) {
+        throw new Error('Valor recebido em dinheiro menor que o total.');
+      }
       updateData.cashReceived = receivedAmount;
       updateData.changeGiven = changeGiven;
     }
 
     if (
-      verifiedVia === 'MERCADO_PAGO_WEBHOOK' &&
+      ['MERCADO_PAGO_WEBHOOK', 'SICREDI_PIX_WEBHOOK', 'MANUAL_CAIXA_PIX'].includes(verifiedVia) &&
       process.env.NODE_ENV === 'production' &&
       (!this.firestore || this._firestoreClientDisabled)
     ) {
@@ -967,15 +992,37 @@ class FirestoreRepository {
       await this.firestore.runTransaction(async (transaction) => {
         const ref = this.firestore.collection('orders').doc(id);
         const snapshot = await transaction.get(ref);
-        validate(snapshot.exists ? snapshot.data() : null);
-        transaction.update(ref, updates);
+        const order = snapshot.exists ? snapshot.data() : null;
+        validate(order);
+        if (order.status === status) return;
+        const reservations = status === 'CANCELLED' && order.inventoryReserved ? (order.reservedItems || []) : [];
+        const productRefs = reservations.map((item) => this.firestore.collection('products').doc(String(item.productId)));
+        const products = await Promise.all(productRefs.map((productRef) => transaction.get(productRef)));
+        products.forEach((productSnapshot, index) => {
+          if (!productSnapshot.exists) return;
+          const reservedQuantity = Number(productSnapshot.data().reservedQuantity || 0);
+          const releaseQuantity = Number(reservations[index].quantity || 0);
+          transaction.update(productRefs[index], { reservedQuantity: Math.max(0, reservedQuantity - releaseQuantity), updatedAt: updates.updatedAt });
+        });
+        transaction.update(ref, {
+          ...updates,
+          ...(reservations.length ? { inventoryReserved: false, reservationReleasedAt: updates.updatedAt } : {}),
+        });
       });
     } else {
       if (!this.isInMemory || this.firestore) {throw new Error('Firestore indisponível para alterar pedido.');}
       validate(this.inMemoryOrders.get(id));
     }
     const local = this.inMemoryOrders.get(id);
-    if (local) {Object.assign(local, updates);}
+    if (local) {
+      if (local.status !== status && status === 'CANCELLED' && local.inventoryReserved) {
+        for (const item of local.reservedItems || []) {
+          const product = this.inMemoryProducts.get(String(item.productId));
+          if (product) product.reservedQuantity = Math.max(0, Number(product.reservedQuantity || 0) - Number(item.quantity || 0));
+        }
+        Object.assign(local, { ...updates, inventoryReserved: false, reservationReleasedAt: updates.updatedAt });
+      } else { Object.assign(local, updates); }
+    }
     return { success: true, orderId: id, status };
   }
 
@@ -1291,13 +1338,14 @@ class FirestoreRepository {
       try {
         const result = await this.firestore.runTransaction(async (transaction) => {
           let orderRef = null;
+          let orderData = {};
           if (id) {
             orderRef = this.firestore.collection('orders').doc(id);
             const orderSnapshot = await transaction.get(orderRef);
             if (!orderSnapshot.exists) {
               throw new Error('Pedido não encontrado para registrar a baixa de estoque.');
             }
-            const orderData = orderSnapshot.data() || {};
+            orderData = orderSnapshot.data() || {};
             validateOrderConfirmation(orderData, orderUpdates);
             items = Array.isArray(orderData.items) ? orderData.items : [];
             if (
@@ -1325,12 +1373,25 @@ class FirestoreRepository {
               transaction.update(orderRef, {
                 stockDeducted: true,
                 stockDeductedAt: now,
+                inventoryReserved: false,
+                reservationReleasedAt: orderData.inventoryReserved ? now : orderData.reservationReleasedAt || '',
                 ...(orderUpdates || {}),
               });
             }
           };
 
-          if (!stockControlEnabled || items.length === 0) {
+          let hasActiveReservations = false;
+          if (!stockControlEnabled && !orderData.inventoryReserved) {
+            for (const item of items) {
+              if (!item.productId) continue;
+              const productSnapshot = await transaction.get(this.firestore.collection('products').doc(String(item.productId)));
+              if (productSnapshot.exists && Number(productSnapshot.data().reservedQuantity || 0) > 0) {
+                hasActiveReservations = true;
+                break;
+              }
+            }
+          }
+          if ((!stockControlEnabled && !orderData.inventoryReserved && !hasActiveReservations) || items.length === 0) {
             markOrderHandled();
             return {
               success: true,
@@ -1386,10 +1447,21 @@ class FirestoreRepository {
                 : typeof entry.productData.estoque === 'number'
                   ? entry.productData.estoque
                   : 0;
+            const reservedQuantity = Number(entry.productData.reservedQuantity || 0);
+            const ownReservation = orderData.inventoryReserved
+              ? Number((orderData.reservedItems || []).find((item) => String(item.productId) === entry.docRef.id)?.quantity || 0)
+              : 0;
+            const otherReservations = Math.max(0, reservedQuantity - ownReservation);
+            if (currentStock - otherReservations < entry.quantity) {
+              throw new Error(`Estoque disponível insuficiente para ${entry.productData.name || entry.item.name}.`);
+            }
             const newStock = remainingStock(entry.productData, entry.quantity);
             transaction.update(entry.docRef, {
               stockQuantity: newStock,
               estoque: newStock,
+              ...(orderRef && orderData.inventoryReserved ? {
+                reservedQuantity: Math.max(0, Number(entry.productData.reservedQuantity || 0) - Number((orderData.reservedItems || []).find((item) => String(item.productId) === entry.docRef.id)?.quantity || entry.quantity)),
+              } : {}),
               updatedAt: now,
             });
 
@@ -1422,12 +1494,15 @@ class FirestoreRepository {
         });
 
         const localOrder = id ? this.inMemoryOrders.get(id) : null;
+        const reservationMap = new Map((localOrder?.inventoryReserved ? (localOrder.reservedItems || []) : []).map((item) => [String(item.productId), Number(item.quantity || 0)]));
         if (localOrder) {
           if (result.orderData) {
             Object.assign(localOrder, result.orderData);
           } else {
             localOrder.stockDeducted = true;
             localOrder.stockDeductedAt = localOrder.stockDeductedAt || now;
+            localOrder.inventoryReserved = false;
+            localOrder.reservationReleasedAt = localOrder.reservationReleasedAt || (localOrder.reservedItems?.length ? now : '');
             if (orderUpdates && result.newlyConfirmed) {
               Object.assign(localOrder, orderUpdates);
             }
@@ -1438,6 +1513,8 @@ class FirestoreRepository {
           if (product) {
             product.stockQuantity = item.newStock;
             product.estoque = item.newStock;
+            const reserved = reservationMap.get(String(item.productId)) || 0;
+            if (reserved) product.reservedQuantity = Math.max(0, Number(product.reservedQuantity || 0) - reserved);
             this.inMemoryProducts.set(String(item.productId), product);
           }
         }
@@ -1485,9 +1562,15 @@ class FirestoreRepository {
         Object.assign(order, orderUpdates);
         return { success: true, deducted: [], newlyConfirmed: true };
       }
-      if (!stockControlEnabled || items.length === 0) {
+      const hasActiveReservations = !stockControlEnabled && !order.inventoryReserved && items.some((item) => {
+        const product = this.inMemoryProducts.get(String(item.productId || ''));
+        return Number(product?.reservedQuantity || 0) > 0;
+      });
+      if ((!stockControlEnabled && !order.inventoryReserved && !hasActiveReservations) || items.length === 0) {
         order.stockDeducted = true;
         order.stockDeductedAt = now;
+        order.inventoryReserved = false;
+        order.reservationReleasedAt = order.reservationReleasedAt || (order.reservedItems?.length ? now : '');
         if (orderUpdates) {Object.assign(order, orderUpdates);}
         return {
           success: true,
@@ -1517,13 +1600,25 @@ class FirestoreRepository {
       }
       if (!found) {throw new Error(`Produto não encontrado para baixa: ${item.productId || item.name}.`);}
     }
-    for (const { product, quantity } of resolvedItems.values()) {remainingStock(product, quantity);}
+    for (const [productId, { product, quantity }] of resolvedItems) {
+      const reservedQuantity = Number(product.reservedQuantity || 0);
+      const ownReservation = this.inMemoryOrders.get(id)?.inventoryReserved
+        ? Number(this.inMemoryOrders.get(id)?.reservedItems?.find((row) => String(row.productId) === String(productId))?.quantity || 0)
+        : 0;
+      const otherReservations = Math.max(0, reservedQuantity - ownReservation);
+      if (Number(product.stockQuantity ?? product.estoque ?? 0) - otherReservations < quantity) {
+        throw new Error(`Estoque disponível insuficiente para ${product.name || 'produto'}.`);
+      }
+      remainingStock(product, quantity);
+    }
     const deducted = [];
     for (const [productId, { product, quantity }] of resolvedItems) {
         const previousStock = Number(product.stockQuantity ?? product.estoque ?? 0);
         const newStock = remainingStock(product, quantity);
         product.stockQuantity = newStock;
         product.estoque = newStock;
+      const reserved = Number(this.inMemoryOrders.get(id)?.reservedItems?.find((row) => String(row.productId) === String(productId))?.quantity || 0);
+      if (this.inMemoryOrders.get(id)?.inventoryReserved && reserved) product.reservedQuantity = Math.max(0, Number(product.reservedQuantity || 0) - reserved);
         this.inMemoryProducts.set(productId, product);
         deducted.push({
           productId,
@@ -1539,6 +1634,8 @@ class FirestoreRepository {
       const order = this.inMemoryOrders.get(id);
       order.stockDeducted = true;
       order.stockDeductedAt = now;
+      order.inventoryReserved = false;
+      order.reservationReleasedAt = order.reservationReleasedAt || (order.reservedItems?.length ? now : '');
       if (orderUpdates) {Object.assign(order, orderUpdates);}
     }
     return {
@@ -1671,18 +1768,73 @@ class FirestoreRepository {
     return { success: true, duplicate: false, ...movement };
   }
 
-  async createDirectOrder(orderData, { requirePersistence = false } = {}) {
+  async createDirectOrder(orderData, { requirePersistence = false, reserveInventory = false } = {}) {
     const now = new Date().toISOString();
+    const pixTtlSeconds = Math.min(86400, Math.max(300, Number(orderData.pixTtlSeconds || process.env.PIX_PAYMENT_TTL_SECONDS) || 3600));
 
     const dataWithTs = {
       ...orderData,
       status: orderData.status || 'PENDING',
+      ...(String(orderData.paymentMethod || '').toUpperCase() === 'PIX' ? { pixTtlSeconds, pixExpiresAt: orderData.pixExpiresAt || new Date(Date.now() + pixTtlSeconds * 1000).toISOString() } : {}),
       createdAt: now,
       updatedAt: now,
     };
 
     if (requirePersistence && (!this.firestore || this._firestoreClientDisabled)) {
       throw new Error('Não é possível iniciar o PIX sem persistência disponível para o pedido.');
+    }
+
+    if (reserveInventory) {
+      const orderId = String(dataWithTs.id || randomUUID());
+      dataWithTs.id = orderId;
+      if (!this.firestore && this.inMemoryOrders.has(orderId)) return this.inMemoryOrders.get(orderId);
+      const quantities = new Map();
+      for (const item of dataWithTs.items || []) {
+        const productId = String(item.productId || item.id || '');
+        const quantity = Number(item.quantity);
+        if (!productId || !Number.isFinite(quantity) || quantity <= 0) throw new Error('Produto ou quantidade inválida para reservar o estoque.');
+        quantities.set(productId, Number(((quantities.get(productId) || 0) + quantity).toFixed(3)));
+      }
+      if (this.firestore && !this._firestoreClientDisabled) {
+        const ordersCollection = this.firestore.collection('orders');
+        const orderRef = ordersCollection.doc(orderId);
+        const productRefs = [...quantities.keys()].map((productId) => this.firestore.collection('products').doc(productId));
+        const saved = await this.firestore.runTransaction(async (transaction) => {
+          const existingSnapshot = await transaction.get(orderRef);
+          if (existingSnapshot.exists) return { id: orderId, ...existingSnapshot.data() };
+          const productSnapshots = await Promise.all(productRefs.map((ref) => transaction.get(ref)));
+          const updates = [];
+          productSnapshots.forEach((snapshot, index) => {
+            const productId = productRefs[index].id;
+            if (!snapshot.exists) throw new Error(`Produto não encontrado para reservar: ${productId}.`);
+            const product = snapshot.data();
+            const quantity = quantities.get(productId);
+            const stock = Number(product.stockQuantity ?? product.estoque ?? 0);
+            const reserved = Number(product.reservedQuantity || 0);
+            if (stock - reserved < quantity) throw new Error(`Estoque disponível insuficiente para ${product.name || productId}.`);
+            updates.push({ ref: productRefs[index], reservedQuantity: Number((reserved + quantity).toFixed(3)) });
+          });
+          for (const update of updates) transaction.update(update.ref, { reservedQuantity: update.reservedQuantity, updatedAt: now });
+          const savedOrder = { ...dataWithTs, inventoryReserved: true, reservedItems: [...quantities].map(([productId, quantity]) => ({ productId, quantity })) };
+          transaction.create(orderRef, savedOrder);
+          return savedOrder;
+        });
+        this.inMemoryOrders.set(orderId, saved);
+        return saved;
+      }
+      if (requirePersistence || !this.isInMemory) throw new Error('Não foi possível reservar o estoque com segurança.');
+      const products = [...quantities].map(([productId, quantity]) => {
+        const product = this.inMemoryProducts.get(productId);
+        if (!product) throw new Error(`Produto não encontrado para reservar: ${productId}.`);
+        if (Number(product.stockQuantity ?? product.estoque ?? 0) - Number(product.reservedQuantity || 0) < quantity) {
+          throw new Error(`Estoque disponível insuficiente para ${product.name || productId}.`);
+        }
+        return { productId, quantity, product };
+      });
+      for (const { quantity, product } of products) product.reservedQuantity = Number((Number(product.reservedQuantity || 0) + quantity).toFixed(3));
+      const reservedOrder = { ...dataWithTs, inventoryReserved: true, reservedItems: [...quantities].map(([productId, quantity]) => ({ productId, quantity })) };
+      this.inMemoryOrders.set(orderId, reservedOrder);
+      return reservedOrder;
     }
 
     if (this.firestore && !this._firestoreClientDisabled) {
