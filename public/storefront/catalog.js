@@ -8,6 +8,7 @@ import {
 } from "./ui.js";
 import { icon } from "./icons.js";
 import { searchProducts } from "./guided-search.mjs";
+import { buildProductInfoContent } from "./product-info-content.js";
 
 const PRODUCT_HIGHLIGHTS = [
   { label: "Sol Pleno", icon: "☀", tone: "sun", terms: ["sol pleno", "pleno sol"] },
@@ -147,28 +148,8 @@ export function createCatalog(state, add, navigate) {
       onclick: () => dialog.close(),
     }, [icon("x")]);
     const title = element("h2", { text: product.name, title: product.name });
-    const description = product.description || product.descriptionAi || product.descricao_ia;
-    const illumination = product.illumination || product.light || product.iluminacao || product.lighting || product.dicas_iluminacao;
-    const environment = product.environment || product.ambiente_ideal || product.ambienteIdeal || product.habitat;
-    const care = product.careInstructions || product.care || product.cuidados_basicos || product.cuidadosBasicos;
-    const storage = product.storageTips || product.dicas_armazenamento || product.dicasArmazenamento;
-    const feeding = product.feeding || product.alimentacao || product.dieta;
-    const durability = product.durability || product.durabilidade;
-    const likes = product.preferences || product.o_que_gosta || product.oQueGosta || product.gosta_de || product.gostaDe
-      || [illumination, environment].filter(Boolean).join(" ");
-    const avoid = product.dislikes || product.o_que_evitar || product.oQueEvitar || product.nao_gosta || product.naoGosta
-      || (care?.match(/[^.!?]*(?:evite|evitar|nunca|não deixe|nao deixe)[^.!?]*[.!?]?/i)?.[0] || "");
+    const info = buildProductInfoContent(product, categoryLabel(product));
     const specificationEntries = Object.entries(product.specifications || {}).filter(([, value]) => value?.value || typeof value === "string");
-    const informationFields = [
-      ["O que gosta", likes, "leaf", "green"],
-      ["Iluminação", illumination, "sun", "yellow"],
-      ["Onde deixar", environment, "mapPin", "blue"],
-      ["Como cuidar", care, "drop", "green"],
-      ["O que evitar", avoid, "shield", "orange"],
-      ["Alimentação", feeding, "leaf", "green"],
-      ["Conservação", storage, "box", "blue"],
-      ["Durabilidade", durability, "clock", "yellow"],
-    ].filter(([, value]) => value);
     const contentSections = (Array.isArray(product.contentSections) ? product.contentSections : [])
       .filter((section) => section?.title && section?.body);
     const content = [
@@ -184,21 +165,41 @@ export function createCatalog(state, add, navigate) {
         closeButton,
       ]),
       element("div", { class: "product-info-body" }, [
-        ...(description ? [element("section", { class: "product-info-intro" }, [
+        element("section", { class: "product-info-intro" }, [
           element("span", { class: "product-info-eyebrow", text: "ESCOLHA COM CONFIANÇA" }),
-          element("p", { text: description }),
-        ])] : []),
-        ...(informationFields.length ? [element("div", { class: "product-info-facts" }, informationFields.map(([label, value, iconName, tone]) => element("section", { class: `product-info-fact ${tone}` }, [
+          element("p", { text: info.summary }),
+        ]),
+        element("div", { class: "product-info-facts" }, info.facts.map(({ label, value, icon: iconName, tone }) => element("section", { class: `product-info-fact ${tone}` }, [
           element("span", { class: "product-info-fact-icon", "aria-hidden": "true" }, [icon(iconName)]),
           element("div", {}, [
             element("h3", { text: label }),
             element("p", { text: value }),
           ]),
-        ])))] : []),
-        ...contentSections.map((section) => element("section", { class: "product-info-extra" }, [
-          element("h3", { text: section.title }),
-          element("p", { text: section.body }),
-        ])),
+        ]))),
+        element("section", { class: "product-info-preferences" }, [
+          element("h3", { text: info.pairTitle }),
+          element("div", { class: "product-info-preference-grid" }, [
+            element("article", { class: "product-info-preference positive" }, [
+              element("h4", { text: info.likesTitle }),
+              element("p", { text: info.likes }),
+            ]),
+            element("article", { class: "product-info-preference caution" }, [
+              element("h4", { text: info.avoidTitle }),
+              element("p", { text: info.avoid }),
+            ]),
+          ]),
+        ]),
+        element("section", { class: "product-info-tips" }, [
+          element("h3", { text: info.tipsTitle }),
+          element("ul", {}, info.tips.map((tip) => element("li", { text: tip }))),
+        ]),
+        ...(contentSections.length ? [element("details", { class: "product-info-extra-details" }, [
+          element("summary", { text: "Mais detalhes do produto" }),
+          ...contentSections.map((section) => element("section", { class: "product-info-extra" }, [
+            element("h3", { text: section.title }),
+            element("p", { text: section.body }),
+          ])),
+        ])] : []),
         ...(specificationEntries.length ? [element("details", { class: "product-info-specifications" }, [
           element("summary", { text: "Ver especificações" }),
           element("dl", {}, specificationEntries.flatMap(([label, value]) => [
@@ -209,16 +210,13 @@ export function createCatalog(state, add, navigate) {
       ]),
     ];
     if (relatedProducts.length > 1) {
-      content[1].append(element("section", { class: "product-info-variants" }, [
+      content[1].prepend(element("section", { class: "product-info-variants" }, [
         element("h3", { text: "Outras opções disponíveis" }),
         ...relatedProducts.filter((variant) => variant.id !== product.id).map((variant) => element("div", { class: "product-info-variant" }, [
-          element("span", { text: variant.variation || variant.name }),
+          element("span", { text: [variant.name, variant.variation].filter(Boolean).join(" · ") }),
           element("strong", { text: money(variant.price.amountMinor) }),
         ])),
       ]));
-    }
-    if (!description && !informationFields.length && !specificationEntries.length) {
-      content[1].prepend(element("p", { class: "product-info-empty", text: "Fale com nossa equipe para confirmar as recomendações específicas desta variedade." }));
     }
     const minimumQuantity = product.saleUnit?.minimum || 1;
     const unavailable = product.status === "INATIVO" || product.isAvailable === false
@@ -227,7 +225,21 @@ export function createCatalog(state, add, navigate) {
       add(product, minimumQuantity);
       dialog.close();
     } }, unavailable ? [] : [icon("cart")]);
-    content.push(element("footer", { class: "product-info-footer" }, [addButton]));
+    const footerActions = [addButton];
+    const contactPhone = String(state.config?.checkout?.contactPhone || "").replace(/\D/g, "");
+    if (contactPhone.length >= 10 && contactPhone.length <= 15) {
+      const message = encodeURIComponent(`Olá! Gostaria de saber mais sobre ${product.name}.`);
+      footerActions.push(element("a", {
+        class: "cf-button product-info-whatsapp",
+        href: `https://wa.me/${contactPhone}?text=${message}`,
+        target: "_blank",
+        rel: "noopener noreferrer",
+        "aria-label": `Perguntar pelo WhatsApp sobre ${product.name}`,
+      }, [icon("send"), element("span", { text: "Tirar dúvida no WhatsApp" })]));
+    }
+    content.push(element("footer", { class: "product-info-footer" }, [
+      element("div", { class: "product-info-footer-actions" }, footerActions),
+    ]));
     dialog.replaceChildren(...content);
     dialog.onclick = (event) => {
       if (event.target === dialog) dialog.close();

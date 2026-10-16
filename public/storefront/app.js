@@ -159,9 +159,12 @@ function applyConfig() {
   $("#region").textContent = [config.identity?.city, config.identity?.region]
     .filter(Boolean)
     .join(" · ");
-  const logoUrl = config.branding?.logoUrl || "/store-assets/brands/conflora-logo.png";
+  const logoUrl = existingStore
+    ? "/store-assets/brands/conflora-logo.png"
+    : config.branding?.logoUrl || "/store-assets/brands/conflora-logo.png";
   const logo = $("#logo");
   const defaultLogoUrl = "/store-assets/brands/conflora-logo.png";
+  $("#brand").classList.add("has-logo");
   logo.hidden = false;
   logo.onerror = () => {
     if (logo.src !== new URL(defaultLogoUrl, window.location.href).href) {
@@ -172,10 +175,9 @@ function applyConfig() {
     $("#brand").classList.remove("has-logo");
   };
   logo.src = logoUrl;
-  logo.alt = config.identity?.name || "";
+  logo.alt = existingStore ? "Conflora Horta e Viveiro" : config.identity?.name || "";
   $("#storeIcon").href = config.branding?.iconUrl || "data:,";
   $("#brand").href = basePath || "/";
-  $("#brand").classList.add("has-logo");
 
   cart?.configure();
   chat?.configure();
@@ -471,6 +473,10 @@ try {
   }
 } catch (error) {
   $("#storeName").textContent = "Loja Conflora";
+  $("#logo").src = "/store-assets/brands/conflora-logo.png";
+  $("#logo").alt = "Conflora Horta e Viveiro";
+  $("#logo").hidden = false;
+  $("#brand").classList.add("has-logo");
   $("#products").replaceChildren(
     element("p", { text: error.message, class: "error" }),
     element("button", {

@@ -31,6 +31,8 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
   return {
     id: String(item.id),
     name,
+    canonicalName: item.canonicalName || item.canonical_name || name,
+    variation: item.variation || item.variacao || item.variationLabel || item.apresentacao || "",
     description: item.description || item.descriptionAi || "",
     price: {
       amountMinor: Math.round(Number(item.price ?? item.valor_num ?? 0) * 100),
@@ -88,13 +90,24 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
     },
     salesCount: Number(item.salesCount) || 0,
     descriptionAi: item.descriptionAi || item.descricao_ia || "",
+    careInstructions: item.careInstructions || item.care || item.cuidados_basicos || item.cuidadosBasicos || "",
     cuidados_basicos: item.cuidados_basicos || item.cuidadosBasicos || "",
     iluminacao: item.iluminacao || item.iluminação || item.illumination || item.lighting || "",
+    illumination: item.illumination || item.iluminacao || item.iluminação || item.lighting || item.dicas_iluminacao || "",
+    watering: item.watering || item.wateringInstructions || item.rega || item.irrigacao || item.frequencia_rega || "",
     ambiente_ideal: item.ambiente_ideal || item.ambienteIdeal || "",
+    environment: item.environment || item.ambiente_ideal || item.ambienteIdeal || item.habitat || "",
     dicas_armazenamento: item.dicas_armazenamento || item.dicasArmazenamento || "",
+    storageTips: item.storageTips || item.storage || item.dicas_armazenamento || item.dicasArmazenamento || "",
     durabilidade: item.durabilidade || "",
+    durability: item.durability || item.durabilidade || item.validade || "",
     preferences: item.preferences || item.o_que_gosta || item.oQueGosta || item.gosta_de || "",
     dislikes: item.dislikes || item.o_que_evitar || item.oQueEvitar || item.nao_gosta || "",
+    usage: item.usage || item.uso || item.modo_de_uso || item.modoDeUso || "",
+    selectionTips: item.selectionTips || item.dica_escolha || item.dicaEscolha || "",
+    suitability: item.suitability || item.indicacao || item.indicação || item.especie_indicada || "",
+    matureSize: item.matureSize || item.porte_adulto || item.porteAdulto || item.tamanho_adulto || item.tamanhoAdulto || "",
+    precautions: item.precautions || item.precaucoes || item.precauções || item.cuidados_de_uso || "",
     alimentacao: item.alimentacao || item.alimentação || item.feeding || item.dieta || "",
     feeding: item.feeding || item.alimentacao || item.alimentação || item.dieta || "",
   };
@@ -107,6 +120,9 @@ function existingConfig(products, saved, settings = { stockControlEnabled: true 
     const result = structuredClone(saved.config);
     result.branding ||= {};
     result.branding.logoUrl ||= profile.branding.logoUrl;
+    result.checkout ||= structuredClone(profile.checkout);
+    result.checkout.contactPhone ||=
+      process.env.OWNER_WHATSAPP_NUMBER || profile.checkout?.contactPhone || "5564999351616";
     for (const product of activeProducts) {
       if (
         !result.categories.some(
