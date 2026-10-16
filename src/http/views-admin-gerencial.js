@@ -1,5 +1,4 @@
-// Painel Admin Gerencial Conflora — Substituição de Alto Desempenho do Looker Studio
-// Desenvolvido para os donos da empresa com foco em performance, UI/UX limpa e fechamento diário com envio de PDF no WhatsApp.
+// Painel gerencial diário da Conflora, usado para revisão e fechamento do caixa.
 
 function renderAdminGerencialHtml() {
   return `<!DOCTYPE html>
@@ -24,7 +23,7 @@ function renderAdminGerencialHtml() {
     })();
   </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Conflora — Painel Gerencial & Fluxo de Caixa (Looker)</title>
+  <title>Conflora — Resumo do caixa</title>
   <link rel="stylesheet" href="/store-assets/site-header.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -35,18 +34,18 @@ function renderAdminGerencialHtml() {
       --primary-hover: #25783b;
       --primary-light: #dcfce7;
       --primary-dark: #14532d;
-      --pix: #059669;
-      --card: #2563eb;
-      --cash: #d97706;
-      --bg: #f8f9fa;
+      --pix: #2e9348;
+      --card: #71ad7f;
+      --cash: #9cc9a5;
+      --bg: #f4f7f4;
       --surface: #ffffff;
-      --border: #e2e8f0;
+      --border: #e5e7eb;
       --text: #1a1a1a;
-      --muted: #64748b;
+      --muted: #647067;
       --danger: #dc2626;
-      --radius: 12px;
-      --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
-      --shadow: 0 4px 12px rgba(0,0,0,0.06);
+      --radius: 10px;
+      --shadow-sm: 0 1px 3px rgba(31, 55, 37, 0.06);
+      --shadow: 0 2px 8px rgba(31, 55, 37, 0.07);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -57,6 +56,7 @@ function renderAdminGerencialHtml() {
       display: flex;
       flex-direction: column;
       -webkit-tap-highlight-color: transparent;
+      overflow-x: hidden;
     }
     header {
       background: var(--surface);
@@ -69,36 +69,7 @@ function renderAdminGerencialHtml() {
       position: sticky;
       top: 0;
       z-index: 100;
-      box-shadow: var(--shadow-sm);
-    }
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      text-decoration: none;
-      color: var(--text);
-    }
-    .brand-logo {
-      width: 36px;
-      height: 36px;
-      border-radius: 10px;
-      background: var(--primary);
-      color: white;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 800;
-      font-size: 18px;
-    }
-    .brand-title {
-      font-size: 17px;
-      font-weight: 800;
-      letter-spacing: -0.3px;
-    }
-    .brand-sub {
-      font-size: 12px;
-      color: var(--muted);
-      display: block;
+      box-shadow: none;
     }
     .header-actions {
       display: flex;
@@ -120,23 +91,17 @@ function renderAdminGerencialHtml() {
       color: var(--text);
       transition: all 0.15s ease;
     }
-    .btn-action:hover { background: #f1f5f9; }
+    .btn-action:hover { background: #f3f6f3; }
     .btn-action.primary {
       background: var(--primary);
       color: #fff;
       border-color: var(--primary);
     }
     .btn-action.primary:hover { background: var(--primary-hover); }
-    .btn-action.close-day {
-      background: #0f172a;
-      color: #fff;
-      border-color: #0f172a;
-      box-shadow: 0 2px 6px rgba(15,23,42,0.2);
-    }
-    .btn-action.close-day:hover { background: #1e293b; }
+    #btnSendReport[hidden] { display: none; }
 
     .main-container {
-      max-width: 1240px;
+      max-width: 1600px;
       width: 100%;
       margin: 0 auto;
       padding: 20px 16px 40px;
@@ -156,7 +121,7 @@ function renderAdminGerencialHtml() {
       padding: 14px 18px;
       border-radius: var(--radius);
       border: 1px solid var(--border);
-      box-shadow: var(--shadow-sm);
+      box-shadow: none;
     }
     .toolbar-left h1 {
       font-size: 20px;
@@ -181,13 +146,13 @@ function renderAdminGerencialHtml() {
       font-size: 13px;
       font-weight: 600;
       color: var(--text);
-      background: #f8fafc;
+      background: #fff;
     }
 
     /* CARDS DE RESUMO NO TOPO */
     .summary-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 14px;
     }
     .summary-card {
@@ -200,47 +165,28 @@ function renderAdminGerencialHtml() {
       flex-direction: column;
       gap: 6px;
       position: relative;
-      overflow: hidden;
     }
-    .summary-card::before {
-      content: '';
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      height: 4px;
-      background: var(--border);
-    }
-    .summary-card.highlight::before { background: var(--primary); }
-    .summary-card.pix::before { background: var(--pix); }
-    .summary-card.card::before { background: var(--card); }
-    .summary-card.cash::before { background: var(--cash); }
+    .summary-card::before { content: none; }
 
     .summary-label {
-      font-size: 11px;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0;
       color: var(--muted);
       display: flex;
       align-items: center;
       gap: 6px;
     }
     .summary-val {
-      font-size: 24px;
-      font-weight: 900;
-      color: var(--text);
-      letter-spacing: -0.5px;
+      font-size: 25px;
+      font-weight: 700;
+      color: var(--primary);
+      letter-spacing: -0.35px;
     }
-    .summary-sub {
-      font-size: 11.5px;
-      color: var(--muted);
-      font-weight: 500;
-    }
-    .summary-sub strong { color: var(--text); }
-
     /* LAYOUT DE 2 COLUNAS PARA MÉTRICAS DETALHADAS */
     .details-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 18px;
     }
     .panel-card {
@@ -257,12 +203,12 @@ function renderAdminGerencialHtml() {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      border-bottom: 1px solid #f1f5f9;
+      border-bottom: 1px solid #edf1ed;
       padding-bottom: 10px;
     }
     .panel-title {
       font-size: 15px;
-      font-weight: 800;
+      font-weight: 700;
       color: var(--text);
       display: flex;
       align-items: center;
@@ -273,7 +219,7 @@ function renderAdminGerencialHtml() {
       font-weight: 700;
       padding: 3px 8px;
       border-radius: 12px;
-      background: #f1f5f9;
+      background: #f3f7f3;
       color: var(--muted);
     }
 
@@ -293,16 +239,19 @@ function renderAdminGerencialHtml() {
     .payment-bar-seg.pix { background: var(--pix); }
     .payment-bar-seg.card { background: var(--card); }
     .payment-bar-seg.cash { background: var(--cash); }
+    .payment-bar-seg.debit { background: #86b991; }
+    .payment-bar-seg.credit { background: #b2d3b8; }
+    .payment-bar-seg.account { background: #d4e6d7; }
 
     .payment-legend {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
       margin-top: 8px;
     }
     .legend-item {
       padding: 10px;
-      background: #f8fafc;
+      background: #f8fbf8;
       border-radius: 8px;
       border: 1px solid var(--border);
       display: flex;
@@ -345,8 +294,8 @@ function renderAdminGerencialHtml() {
       justify-content: space-between;
       padding: 8px 12px;
       border-radius: 8px;
-      background: #f8fafc;
-      border: 1px solid #f1f5f9;
+      background: #f8fbf8;
+      border: 1px solid #edf1ed;
       gap: 12px;
     }
     .ranking-info {
@@ -365,7 +314,7 @@ function renderAdminGerencialHtml() {
     .ranking-name {
       font-size: 13px;
       font-weight: 700;
-      color: var(--text);
+      color: var(--primary-dark);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -379,95 +328,12 @@ function renderAdminGerencialHtml() {
     }
     .ranking-val {
       font-size: 13.5px;
-      font-weight: 800;
-      color: var(--text);
-    }
-    .ranking-pct {
-      font-size: 11px;
-      font-weight: 600;
+      font-weight: 700;
       color: var(--primary);
     }
-
-    /* BARRAS POR HORÁRIO */
-    .hourly-grid {
-      display: flex;
-      align-items: flex-end;
-      gap: 6px;
-      height: 120px;
-      padding-top: 10px;
-      border-bottom: 1px solid #e2e8f0;
-    }
-    .hourly-col {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 4px;
-      height: 100%;
-      justify-content: flex-end;
-    }
-    .hourly-bar {
-      width: 100%;
-      background: #93c5fd;
-      border-radius: 4px 4px 0 0;
-      transition: height 0.3s ease;
-      min-height: 4px;
-    }
-    .hourly-bar.peak { background: var(--primary); }
-    .hourly-label {
-      font-size: 10px;
-      color: var(--muted);
-      font-weight: 600;
-    }
-
-    /* MODAL DE FECHAMENTO DE CAIXA */
-    .modal-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.6);
-      backdrop-filter: blur(3px);
-      z-index: 1000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 16px;
-    }
-    .modal-overlay.hidden { display: none; }
-    .modal-card {
-      background: #fff;
-      border-radius: 16px;
-      max-width: 480px;
-      width: 100%;
-      padding: 24px;
-      box-shadow: 0 20px 40px rgba(0,0,0,0.25);
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-    .modal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .modal-header h3 { font-size: 18px; font-weight: 800; }
-    .btn-modal-close {
-      background: none; border: none; font-size: 24px; cursor: pointer; color: var(--muted);
-    }
-    .close-summary-box {
-      background: #f8fafc;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    .close-row {
-      display: flex;
-      justify-content: space-between;
-      font-size: 13px;
-    }
-    .close-row strong { font-weight: 800; }
+    .metric-empty { color: var(--muted); font-size: 13px; padding: 10px; }
+    .metric-loading { opacity: 0.6; pointer-events: none; }
+    .report-date-label { font-size: 12px; font-weight: 700; color: var(--muted); }
 
     /* LOADING & SKELETON */
     .loading-spinner {
@@ -497,11 +363,13 @@ function renderAdminGerencialHtml() {
       box-shadow: 0 4px 16px rgba(0,0,0,0.3);
     }
     .toast.hidden { display: none; }
-    @media (max-width: 900px) {
+    @media (max-width: 1000px) {
       header { flex-wrap: wrap; padding: 12px 16px; }
       .header-actions { width: 100%; flex-wrap: wrap; }
-      .header-actions .close-day { flex: 1 1 100%; justify-content: center; }
       .main-container { padding: 14px 14px 28px; gap: 14px; }
+      .summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+    @media (max-width: 760px) {
       .details-grid { grid-template-columns: minmax(0, 1fr); }
       .toolbar { align-items: stretch; }
       .toolbar-right { flex-wrap: wrap; }
@@ -509,22 +377,20 @@ function renderAdminGerencialHtml() {
     }
     @media (max-width: 600px) {
       header { position: static; gap: 10px; }
-      .brand { min-width: 0; }
-      .brand-title { font-size: 15px; }
-      .brand-sub { max-width: 240px; font-size: 10px; line-height: 1.4; }
       .header-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
       .header-actions .btn-action { min-height: 42px; justify-content: center; padding: 8px; font-size: 11px; }
-      .header-actions .close-day { grid-column: 1 / -1; }
-      .main-container { padding: 12px 10px calc(20px + env(safe-area-inset-bottom)); }
+      .header-actions #btnSendReport { grid-column: 1 / -1; }
+      .main-container { width: 100%; min-width: 0; padding: 12px 10px calc(20px + env(safe-area-inset-bottom)); }
       .toolbar { padding: 12px; gap: 10px; }
       .toolbar-left h1 { font-size: 18px; line-height: 1.25; }
       .toolbar-left p { font-size: 12px; line-height: 1.45; }
-      .toolbar-right { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; }
+      .toolbar-right { display: grid; width: 100%; min-width: 0; grid-template-columns: auto minmax(0, 1fr); gap: 8px; }
       .toolbar-right .btn-action { grid-column: 1 / -1; min-height: 42px; justify-content: center; }
-      .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+      .toolbar-right #btnCloseCash { grid-column: 1 / -1; }
+      .summary-grid { width: 100%; min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+      .summary-card, .details-grid, .panel-card { min-width: 0; }
       .summary-card { padding: 12px; }
-      .summary-card.highlight { grid-column: 1 / -1; }
-      .summary-val { font-size: clamp(18px, 6vw, 22px); }
+      .summary-val { font-size: clamp(16px, 5.5vw, 21px); }
       .summary-label { font-size: 10px; line-height: 1.3; }
       .details-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
       .panel-card { padding: 14px; gap: 12px; }
@@ -535,8 +401,6 @@ function renderAdminGerencialHtml() {
       .legend-title { grid-column: 1; }
       .legend-val { grid-column: 2; grid-row: 1 / span 2; }
       .legend-sub { grid-column: 1; }
-      .modal-overlay { align-items: flex-end; padding: 0; }
-      .modal-card { max-height: 90dvh; overflow-y: auto; border-radius: 16px 16px 0 0; padding: 18px 16px calc(20px + env(safe-area-inset-bottom)); }
       .toast { bottom: calc(14px + env(safe-area-inset-bottom)); max-width: calc(100vw - 24px); text-align: center; }
       button, .btn-action { min-height: 42px; }
     }
@@ -550,205 +414,157 @@ function renderAdminGerencialHtml() {
       <img src="/store-assets/brands/conflora-logo.png" alt="" />
       <span><strong>Conflora Horta e Viveiro</strong><small>Mineiros - GO</small></span>
     </a>
-    <span class="conflora-site-header__context">Painel gerencial</span>
+    <span class="conflora-site-header__context">Fechamento diário</span>
 
     <div class="header-actions">
-      <a href="/caixa" class="btn-action">⚡ Ir ao Caixa / PDV</a>
-      <a href="/admin" class="btn-action">⚙️ Admin Completo</a>
-      <button class="btn-action close-day" onclick="openCloseDayModal()">
-        🏁 Fechar Caixa & Enviar PDF (WhatsApp)
-      </button>
+      <a href="/caixa" class="btn-action">Ir ao Caixa / PDV</a>
+      <a href="/admin" class="btn-action">Admin completo</a>
+      <button id="btnSendReport" class="btn-action primary" onclick="sendDailyReport()" hidden>Enviar para Júnior</button>
     </div>
   </header>
 
   <!-- CONTEÚDO PRINCIPAL -->
   <div class="main-container">
 
-    <!-- TOOLBAR COM FILTRO DE DATA -->
+    <!-- DATA DO FECHAMENTO -->
     <div class="toolbar">
       <div class="toolbar-left">
-        <h1>Fluxo de Caixa & Métricas Oficiais</h1>
-        <p>Valores consolidados em tempo real diretamente do Firestore</p>
+        <h1>Resumo do caixa</h1>
+        <p>Vendas, recebimentos e desempenho da equipe na data selecionada.</p>
       </div>
       <div class="toolbar-right">
-        <label for="reportDate" style="font-size:12px; font-weight:700; color:var(--muted);">Data:</label>
+        <label for="reportDate" class="report-date-label">Data:</label>
         <input type="date" id="reportDate" class="date-input" onchange="loadExecutiveMetrics()" />
-        <button class="btn-action primary" onclick="loadExecutiveMetrics()">
-          🔄 Atualizar
-        </button>
+        <button id="btnRefresh" class="btn-action" onclick="loadExecutiveMetrics()">Atualizar</button>
+        <button id="btnCloseCash" class="btn-action" onclick="registerCashClosing()">Registrar fechamento</button>
       </div>
     </div>
 
-    <!-- CARDS DE RESUMO DO DIA (VALORES DO DIA NO TOPO) -->
+    <!-- INDICADORES DO DIA -->
     <div class="summary-grid">
       <div class="summary-card highlight">
-        <div class="summary-label">💰 Fluxo Consolidado</div>
-        <div class="summary-val" id="cardTotal">R$ 0,00</div>
-        <div class="summary-sub"><strong id="cardCount">0</strong> vendas realizadas</div>
+        <div class="summary-label">Recebimento de dívida</div>
+        <div class="summary-val" id="cardDebtReceived">R$ 0,00</div>
       </div>
-
       <div class="summary-card">
-        <div class="summary-label">🎯 Ticket Médio</div>
+        <div class="summary-label">Vendas a receber · Fiado</div>
+        <div class="summary-val" id="cardOnAccount">R$ 0,00</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">Quantidade de vendas</div>
+        <div class="summary-val" id="cardCount">0</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">Ticket médio</div>
         <div class="summary-val" id="cardTicket">R$ 0,00</div>
-        <div class="summary-sub">Média por pedido</div>
       </div>
-
-      <div class="summary-card pix">
-        <div class="summary-label">📱 Vendas no PIX</div>
-        <div class="summary-val" id="cardPix">R$ 0,00</div>
-        <div class="summary-sub"><strong id="cardPixCount">0</strong> comprovantes validados</div>
-      </div>
-
-      <div class="summary-card card">
-        <div class="summary-label">💳 Vendas Cartão</div>
-        <div class="summary-val" id="cardCard">R$ 0,00</div>
-        <div class="summary-sub"><strong id="cardCardCount">0</strong> no débito/crédito</div>
-      </div>
-
       <div class="summary-card cash">
-        <div class="summary-label">💵 Vendas Dinheiro</div>
-        <div class="summary-val" id="cardCash">R$ 0,00</div>
-        <div class="summary-sub"><strong id="cardCashCount">0</strong> recebimentos em espécie</div>
+        <div class="summary-label">Troco + vendas em dinheiro</div>
+        <div class="summary-val" id="cardCashTendered">R$ 0,00</div>
+      </div>
+      <div class="summary-card pix">
+        <div class="summary-label">Pix recebido</div>
+        <div class="summary-val" id="cardPix">R$ 0,00</div>
+      </div>
+      <div class="summary-card card">
+        <div class="summary-label">Cartão de crédito</div>
+        <div class="summary-val" id="cardCredit">R$ 0,00</div>
+      </div>
+      <div class="summary-card card">
+        <div class="summary-label">Cartão de débito</div>
+        <div class="summary-val" id="cardDebit">R$ 0,00</div>
+      </div>
+      <div class="summary-card cash">
+        <div class="summary-label">Troco do dia</div>
+        <div class="summary-val" id="cardChange">R$ 0,00</div>
+      </div>
+      <div class="summary-card cash">
+        <div class="summary-label">Vendas em dinheiro</div>
+        <div class="summary-val" id="cardCashSales">R$ 0,00</div>
+      </div>
+      <div class="summary-card highlight">
+        <div class="summary-label">Total recebido · Vendas</div>
+        <div class="summary-val" id="cardTotalReceived">R$ 0,00</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">Caderno · Vendas + recebimentos</div>
+        <div class="summary-val" id="cardLedger">R$ 0,00</div>
       </div>
     </div>
 
-    <!-- PAINÉIS DETALHADOS -->
+    <!-- COMPOSIÇÃO DOS RECEBIMENTOS E VENDAS POR COLABORADOR -->
     <div class="details-grid">
-
-      <!-- PAINEL 1: FORMAS DE PAGAMENTO -->
       <div class="panel-card">
         <div class="panel-header">
-          <div class="panel-title">💳 Formas de Pagamento</div>
-          <span class="panel-tag">Segmentação do Faturamento</span>
+          <div class="panel-title">Formas de pagamento</div>
+          <span class="panel-tag">Participação nas vendas</span>
         </div>
-
         <div class="payment-bar" id="paymentBar">
-          <div class="payment-bar-seg pix" id="barPix" style="width: 33.3%;"></div>
-          <div class="payment-bar-seg card" id="barCard" style="width: 33.3%;"></div>
-          <div class="payment-bar-seg cash" id="barCash" style="width: 33.4%;"></div>
+          <div class="payment-bar-seg pix" data-method="PIX"></div>
+          <div class="payment-bar-seg cash" data-method="DINHEIRO"></div>
+          <div class="payment-bar-seg debit" data-method="DEBITO"></div>
+          <div class="payment-bar-seg credit" data-method="CREDITO"></div>
+          <div class="payment-bar-seg card" data-method="CARTAO"></div>
+          <div class="payment-bar-seg account" data-method="FIADO"></div>
+          <div class="payment-bar-seg account" data-method="OUTROS"></div>
         </div>
-
         <div class="payment-legend">
-          <div class="legend-item">
-            <div class="legend-title"><span class="legend-dot" style="background:var(--pix);"></span> PIX</div>
-            <div class="legend-val" id="legPixVal">R$ 0,00</div>
-            <div class="legend-sub" id="legPixPct">0% do total</div>
-          </div>
-
-          <div class="legend-item">
-            <div class="legend-title"><span class="legend-dot" style="background:var(--card);"></span> Cartão</div>
-            <div class="legend-val" id="legCardVal">R$ 0,00</div>
-            <div class="legend-sub" id="legCardPct">0% do total</div>
-          </div>
-
-          <div class="legend-item">
-            <div class="legend-title"><span class="legend-dot" style="background:var(--cash);"></span> Dinheiro</div>
-            <div class="legend-val" id="legCashVal">R$ 0,00</div>
-            <div class="legend-sub" id="legCashPct">0% do total</div>
-          </div>
-        </div>
-
-        <!-- HORÁRIO DE PICOS -->
-        <div style="margin-top:12px;">
-          <div style="font-size:12px; font-weight:700; color:var(--muted); margin-bottom:4px;">Fluxo de Vendas por Horário Comercial (08h às 19h)</div>
-          <div class="hourly-grid" id="hourlyChart"></div>
+          <div id="paymentBreakdown" style="display:contents;"></div>
         </div>
       </div>
 
-      <!-- PAINEL 2: VENDAS POR COLABORADOR -->
       <div class="panel-card">
         <div class="panel-header">
-          <div class="panel-title">👥 Vendas por Colaborador</div>
-          <span class="panel-tag">Desempenho da Equipe</span>
+          <div class="panel-title">Vendas por colaborador</div>
+          <span class="panel-tag">Vendedor e recebedor</span>
         </div>
-
-        <div class="ranking-list" id="collaboratorList">
-          <div style="color:var(--muted); font-size:13px; padding:10px;">Carregando colaboradores...</div>
-        </div>
+        <div class="ranking-list" id="collaboratorList"><div class="metric-empty">Carregando equipe...</div></div>
       </div>
-
-      <!-- PAINEL 3: PRODUTOS MAIS VENDIDOS -->
-      <div class="panel-card" style="grid-column: 1 / -1;">
-        <div class="panel-header">
-          <div class="panel-title">🏆 Ranking dos Produtos Mais Vendidos</div>
-          <span class="panel-tag">Itens em Destaque</span>
-        </div>
-
-        <div class="ranking-list" id="topProductsList">
-          <div style="color:var(--muted); font-size:13px; padding:10px;">Carregando ranking de produtos...</div>
-        </div>
-      </div>
-
     </div>
 
-  </div>
-
-  <!-- MODAL DE FECHAMENTO DE CAIXA -->
-  <div id="modalCloseDay" class="modal-overlay hidden">
-    <div class="modal-card">
-      <div class="modal-header">
-        <h3>🏁 Fechar Caixa & Notificar Patrão</h3>
-        <button class="btn-modal-close" onclick="closeCloseDayModal()">✕</button>
-      </div>
-
-      <p style="font-size:13px; color:var(--muted);">
-        Ao confirmar, o sistema gerará o <strong>Relatório Executivo em PDF</strong> com todos os valores do dia e enviará automaticamente via WhatsApp para o número cadastrado da diretoria.
-      </p>
-
-      <div class="close-summary-box">
-        <div class="close-row">
-          <span>Data de Fechamento:</span>
-          <strong id="modalCloseDate">--/--/----</strong>
+    <!-- RANKINGS DE PRODUTO -->
+    <div class="details-grid">
+      <div class="panel-card">
+        <div class="panel-header">
+          <div class="panel-title">Mais vendidos por quantidade</div>
+          <span class="panel-tag">5 produtos</span>
         </div>
-        <div class="close-row">
-          <span>Faturamento Consolidado:</span>
-          <strong id="modalCloseTotal" style="color:var(--primary);">R$ 0,00</strong>
-        </div>
-        <div class="close-row">
-          <span>Total de Vendas:</span>
-          <strong id="modalCloseCount">0 pedidos</strong>
-        </div>
-        <div class="close-row">
-          <span>WhatsApp Destino:</span>
-          <span style="font-size:11.5px; color:var(--muted);" id="modalClosePhone">Número do Patrão (Oficial)</span>
-        </div>
+        <div class="ranking-list" id="topProductsQuantity"><div class="metric-empty">Carregando produtos...</div></div>
       </div>
-
-      <div>
-        <label for="closeOperator" style="display:block; font-size:12px; font-weight:700; color:var(--text); margin-bottom:4px;">
-          Responsável pelo Fechamento:
-        </label>
-        <input type="text" id="closeOperator" value="Administrador" style="width:100%; padding:8px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px;" />
-      </div>
-
-      <div>
-        <label for="closeNotes" style="display:block; font-size:12px; font-weight:700; color:var(--text); margin-bottom:4px;">
-          Observações / Ocorrências do dia (opcional):
-        </label>
-        <textarea id="closeNotes" rows="2" placeholder="Ex: Sem pendências; sangria realizada com sucesso." style="width:100%; padding:8px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px;"></textarea>
-      </div>
-
-      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
-        <button class="btn-action" onclick="closeCloseDayModal()">Cancelar</button>
-        <button id="btnConfirmCloseDay" class="btn-action close-day" onclick="submitCloseDay()">
-          Confirmar Fechamento & Enviar PDF
-        </button>
+      <div class="panel-card">
+        <div class="panel-header">
+          <div class="panel-title">Mais vendidos por valor</div>
+          <span class="panel-tag">5 produtos</span>
+        </div>
+        <div class="ranking-list" id="topProductsValue"><div class="metric-empty">Carregando produtos...</div></div>
       </div>
     </div>
   </div>
 
   <div id="toast" class="toast hidden"></div>
 
-  <!-- SCRIPT GERENCIAL -->
+  <!-- Interações do painel -->
   <script>
-    let currentMetrics = null;
+    document.addEventListener('DOMContentLoaded', initializeDashboard);
 
-    // Inicialização da data
-    document.addEventListener('DOMContentLoaded', () => {
-      const today = new Date().toISOString().slice(0, 10);
-      document.getElementById('reportDate').value = today;
-      loadExecutiveMetrics();
-    });
+    async function initializeDashboard() {
+      const now = new Date();
+      const localToday = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+      document.getElementById('reportDate').value = localToday;
+      try {
+        const response = await fetch('/api/auth/me');
+        const data = await response.json();
+        if (response.ok && data.user && data.user.role === 'ADMIN') {
+          document.getElementById('btnSendReport').hidden = false;
+          await loadExecutiveMetrics();
+          return;
+        }
+        showToast('Painel disponível somente para ADMIN.');
+        document.querySelector('.main-container').innerHTML = '<div class="panel-card"><strong>Acesso restrito</strong><span>Entre com uma conta ADMIN para consultar o fechamento diário.</span></div>';
+      } catch (_) {
+        showToast('Não foi possível validar seu acesso. Entre novamente.');
+      }
+    }
 
     function showToast(msg) {
       const t = document.getElementById('toast');
@@ -757,8 +573,13 @@ function renderAdminGerencialHtml() {
       setTimeout(() => t.classList.add('hidden'), 3500);
     }
 
+    const formatCurrency = (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value || 0));
+    const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
+
     async function loadExecutiveMetrics() {
       const date = document.getElementById('reportDate').value || new Date().toISOString().slice(0, 10);
+      document.querySelector('.main-container').classList.add('metric-loading');
+      document.getElementById('btnRefresh').disabled = true;
       try {
         const res = await fetch('/api/admin/executive-metrics?date=' + encodeURIComponent(date));
         if (res.status === 401 || res.status === 403) {
@@ -766,184 +587,119 @@ function renderAdminGerencialHtml() {
           return;
         }
         const data = await res.json();
-        currentMetrics = data;
+        if (!res.ok) { throw new Error(data.error || 'Não foi possível carregar o resumo.'); }
         renderMetrics(data);
       } catch (err) {
         showToast('Erro ao carregar dados do dia: ' + err.message);
+      } finally {
+        document.querySelector('.main-container').classList.remove('metric-loading');
+        document.getElementById('btnRefresh').disabled = false;
       }
     }
 
     function renderMetrics(m) {
       if (!m) return;
-
-      const fmt = (v) => 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',');
-
-      // Top Cards
-      document.getElementById('cardTotal').textContent = fmt(m.totalRevenue);
       document.getElementById('cardCount').textContent = m.orderCount || 0;
-      document.getElementById('cardTicket').textContent = fmt(m.ticketMedio);
-
-      const pPix = m.byPayment?.PIX || { total: 0, count: 0 };
-      const pCard = m.byPayment?.CARTAO || { total: 0, count: 0 };
-      const pCash = m.byPayment?.DINHEIRO || { total: 0, count: 0 };
-
-      document.getElementById('cardPix').textContent = fmt(pPix.total);
-      document.getElementById('cardPixCount').textContent = pPix.count || 0;
-
-      document.getElementById('cardCard').textContent = fmt(pCard.total);
-      document.getElementById('cardCardCount').textContent = pCard.count || 0;
-
-      document.getElementById('cardCash').textContent = fmt(pCash.total);
-      document.getElementById('cardCashCount').textContent = pCash.count || 0;
-
-      // Barras de Pagamento
-      const total = Number(m.totalRevenue || 0);
-      const pixPct = total > 0 ? Math.round((pPix.total / total) * 100) : 0;
-      const cardPct = total > 0 ? Math.round((pCard.total / total) * 100) : 0;
-      const cashPct = total > 0 ? Math.max(0, 100 - pixPct - cardPct) : 0;
-
-      document.getElementById('barPix').style.width = pixPct + '%';
-      document.getElementById('barCard').style.width = cardPct + '%';
-      document.getElementById('barCash').style.width = cashPct + '%';
-
-      document.getElementById('legPixVal').textContent = fmt(pPix.total);
-      document.getElementById('legPixPct').textContent = pixPct + '% do dia';
-
-      document.getElementById('legCardVal').textContent = fmt(pCard.total);
-      document.getElementById('legCardPct').textContent = cardPct + '% do dia';
-
-      document.getElementById('legCashVal').textContent = fmt(pCash.total);
-      document.getElementById('legCashPct').textContent = cashPct + '% do dia';
-
-      // Gráfico de horários
-      renderHourlyChart(m.hourlyDistribution || []);
-
-      // Colaboradores
+      const values = {
+        cardDebtReceived: m.debtReceived,
+        cardOnAccount: m.onAccountSales,
+        cardTicket: m.ticketMedio,
+        cardCashTendered: m.cashTendered,
+        cardPix: m.byPayment?.PIX?.total,
+        cardCredit: m.byPayment?.CREDITO?.total,
+        cardDebit: m.byPayment?.DEBITO?.total,
+        cardChange: m.changeGiven,
+        cardCashSales: m.cashSales,
+        cardTotalReceived: m.totalReceivedSales,
+        cardLedger: m.ledgerVolume,
+      };
+      Object.entries(values).forEach(([id, value]) => { document.getElementById(id).textContent = formatCurrency(value); });
+      renderPaymentBreakdown(m);
       renderCollaborators(m.byCollaborator || []);
-
-      // Produtos Mais Vendidos
-      renderTopProducts(m.topProducts || []);
+      renderProducts('topProductsQuantity', m.topProductsByQuantity || []);
+      renderProducts('topProductsValue', m.topProductsByValue || []);
     }
 
-    function renderHourlyChart(hours) {
-      const container = document.getElementById('hourlyChart');
-      if (!hours || !hours.length) {
-        container.innerHTML = '<div style="font-size:11px; color:var(--muted); padding:10px;">Sem dados horários registrados hoje.</div>';
-        return;
-      }
-      const maxVal = Math.max(...hours.map(h => h.total || 0), 1);
-      container.innerHTML = hours.map(h => {
-        const heightPct = Math.max(8, Math.round(((h.total || 0) / maxVal) * 100));
-        const isPeak = heightPct > 70;
-        return \`
-          <div class="hourly-col" title="\${h.hour}: R$ \${Number(h.total||0).toFixed(2)} (\${h.count} vendas)">
-            <div class="hourly-bar \${isPeak ? 'peak' : ''}" style="height: \${heightPct}%;"></div>
-            <span class="hourly-label">\${h.hour.slice(0, 2)}h</span>
-          </div>
-        \`;
+    function renderPaymentBreakdown(metrics) {
+      const methods = [
+        ['PIX', 'Pix', 'var(--pix)'], ['DINHEIRO', 'Dinheiro', 'var(--cash)'],
+        ['DEBITO', 'Cartão de débito', '#86b991'], ['CREDITO', 'Cartão de crédito', '#b2d3b8'],
+        ['FIADO', 'Fiado', '#d4e6d7'], ['CARTAO', 'Cartão (não especificado)', 'var(--card)'],
+      ];
+      const payments = metrics.byPayment || {};
+      const total = Number(metrics.totalRevenue || 0);
+      document.querySelectorAll('#paymentBar [data-method]').forEach((bar) => {
+        const amount = Number(payments[bar.dataset.method]?.total || 0);
+        bar.style.width = (total > 0 ? (amount / total) * 100 : 0) + '%';
+      });
+      document.getElementById('paymentBreakdown').innerHTML = methods.map(([key, label, color]) => {
+        const payment = payments[key] || { total: 0, count: 0 };
+        const percent = total > 0 ? Math.round((Number(payment.total || 0) / total) * 100) : 0;
+        return '<div class="legend-item"><div class="legend-title"><span class="legend-dot" style="background:' + color + ';"></span>' + label + '</div><div class="legend-val">' + formatCurrency(payment.total) + '</div><div class="legend-sub">' + (payment.count || 0) + ' venda(s) · ' + percent + '%</div></div>';
       }).join('');
     }
 
     function renderCollaborators(collabs) {
       const container = document.getElementById('collaboratorList');
       if (!collabs.length) {
-        container.innerHTML = '<div style="font-size:13px; color:var(--muted); padding:10px;">Nenhuma venda atribuída à equipe nesta data.</div>';
+        container.innerHTML = '<div class="metric-empty">Nenhum colaborador cadastrado.</div>';
         return;
       }
-      container.innerHTML = collabs.map((c, i) => \`
-        <div class="ranking-row">
-          <div class="ranking-info">
-            <span class="ranking-rank">\${i + 1}º</span>
-            <div>
-              <div class="ranking-name">👤 \${c.name}</div>
-              <div class="ranking-meta">\${c.count} atendimentos concluídos</div>
-            </div>
-          </div>
-          <div class="ranking-values">
-            <div class="ranking-val">R$ \${Number(c.total || 0).toFixed(2).replace('.', ',')}</div>
-            <div class="ranking-pct">\${c.percentage || 0}% do dia</div>
-          </div>
-        </div>
-      \`).join('');
+      container.innerHTML = collabs.map((person, index) => '<div class="ranking-row"><div class="ranking-info"><span class="ranking-rank">' + (index + 1) + 'º</span><div><div class="ranking-name">' + escapeHtml(person.name) + '</div><div class="ranking-meta">' + escapeHtml(person.role) + ' · ' + (person.count || 0) + ' venda(s) · ' + (person.percentage || 0) + '% das vendas · recebeu ' + (person.receivedCount || 0) + ' vez(es)</div></div></div><div class="ranking-values"><div class="ranking-val">' + formatCurrency(person.total) + '</div><div class="ranking-meta">Recebeu ' + formatCurrency(person.receivedTotal) + '</div></div></div>').join('');
     }
 
-    function renderTopProducts(products) {
-      const container = document.getElementById('topProductsList');
+    function renderProducts(containerId, products) {
+      const container = document.getElementById(containerId);
       if (!products.length) {
-        container.innerHTML = '<div style="font-size:13px; color:var(--muted); padding:10px;">Nenhum produto registrado nesta data.</div>';
+        container.innerHTML = '<div class="metric-empty">Nenhum produto vendido nesta data.</div>';
         return;
       }
-      container.innerHTML = products.map((p, i) => \`
-        <div class="ranking-row">
-          <div class="ranking-info">
-            <span class="ranking-rank" style="color:var(--primary);">#\${i + 1}</span>
-            <div>
-              <div class="ranking-name">\${p.name}</div>
-              <div class="ranking-meta">\${p.category || 'Geral'} · \${p.quantity} unidades vendidas</div>
-            </div>
-          </div>
-          <div class="ranking-values">
-            <div class="ranking-val">R$ \${Number(p.revenue || 0).toFixed(2).replace('.', ',')}</div>
-          </div>
-        </div>
-      \`).join('');
+      container.innerHTML = products.map((product, index) => '<div class="ranking-row"><div class="ranking-info"><span class="ranking-rank" style="color:var(--primary);">' + (index + 1) + 'º</span><div><div class="ranking-name">' + escapeHtml(product.name) + '</div><div class="ranking-meta">' + escapeHtml(product.category || 'Geral') + ' · ' + product.quantity + ' unidade(s)</div></div></div><div class="ranking-values"><div class="ranking-val">' + formatCurrency(product.revenue) + '</div></div></div>').join('');
     }
 
-    // FECHAMENTO DE CAIXA
-    function openCloseDayModal() {
-      if (!currentMetrics) {
-        showToast('Aguarde o carregamento dos dados...');
-        return;
-      }
-      const date = document.getElementById('reportDate').value || '';
-      document.getElementById('modalCloseDate').textContent = date.split('-').reverse().join('/');
-      document.getElementById('modalCloseTotal').textContent = 'R$ ' + Number(currentMetrics.totalRevenue || 0).toFixed(2).replace('.', ',');
-      document.getElementById('modalCloseCount').textContent = (currentMetrics.orderCount || 0) + ' vendas';
-      document.getElementById('modalCloseDay').classList.remove('hidden');
-    }
-
-    function closeCloseDayModal() {
-      document.getElementById('modalCloseDay').classList.add('hidden');
-    }
-
-    async function submitCloseDay() {
-      const btn = document.getElementById('btnConfirmCloseDay');
-      const originalText = btn.innerHTML;
-      btn.innerHTML = '<span class="loading-spinner"></span> Fechando e enviando PDF...';
-      btn.disabled = true;
-
-      const date = document.getElementById('reportDate').value;
-      const closedBy = document.getElementById('closeOperator').value;
-      const notes = document.getElementById('closeNotes').value;
-
+    async function sendDailyReport() {
+      const button = document.getElementById('btnSendReport');
+      const originalText = button.innerHTML;
+      button.disabled = true;
+      button.innerHTML = '<span class="loading-spinner"></span> Enviando relatório...';
       try {
-        const res = await fetch('/api/admin/cashier/close-day', {
+        const response = await fetch('/api/admin/executive-metrics/send-whatsapp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ date, closedBy, notes }),
+          body: JSON.stringify({ date: document.getElementById('reportDate').value }),
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Falha ao fechar o caixa');
-
-        closeCloseDayModal();
-        let successMsg = '✅ Caixa fechado com sucesso!';
-        if (data.whatsappSent) {
-          successMsg += ' Relatório enviado no WhatsApp do Patrão!';
-        }
-        showToast(successMsg);
-
-        if (data.pdfUrl) {
-          setTimeout(() => {
-            if (confirm('Deseja abrir o PDF do relatório agora?')) {
-              window.open(data.pdfUrl, '_blank');
-            }
-          }, 800);
-        }
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Falha ao enviar o relatório.');
+        showToast('Relatório enviado para Júnior pelo WhatsApp.');
       } catch (err) {
-        showToast('Erro: ' + err.message);
+        showToast('Não foi possível enviar: ' + err.message);
       } finally {
-        btn.innerHTML = originalText;
-        btn.disabled = false;
+        button.innerHTML = originalText;
+        button.disabled = false;
+      }
+    }
+
+    async function registerCashClosing() {
+      const date = document.getElementById('reportDate').value;
+      if (!date || !window.confirm('Registrar o fechamento do caixa de ' + date.split('-').reverse().join('/') + '?')) return;
+      const button = document.getElementById('btnCloseCash');
+      const originalText = button.innerHTML;
+      button.disabled = true;
+      button.textContent = 'Registrando fechamento...';
+      try {
+        const response = await fetch('/api/admin/cashier/close-day', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ date }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Não foi possível registrar o fechamento.');
+        showToast('Fechamento de ' + date.split('-').reverse().join('/') + ' registrado.');
+      } catch (error) {
+        showToast('Não foi possível registrar: ' + error.message);
+      } finally {
+        button.innerHTML = originalText;
+        button.disabled = false;
       }
     }
   </script>

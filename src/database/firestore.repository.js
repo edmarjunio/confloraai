@@ -6,6 +6,11 @@ const Logger = require('../shared/logger');
 const { productStatus } = require('../catalog/product-status');
 const productImageStorageService = require('../catalog/product-image-storage');
 const {
+  getBusinessDate,
+  getBusinessDateRange,
+  summarizeDailyExecutiveMetrics,
+} = require('../reports/daily-executive-metrics');
+const {
   PAID_ORDER_STATUSES,
   validateOrderConfirmation,
   validateStockQuantity,
@@ -1429,142 +1434,62 @@ class FirestoreRepository {
     };
   }
 
-  /**
-   * DAO Modularizado: Métricas executivas diárias consolidando fluxo de caixa, formas de pagamento,
-   * vendas por colaborador e ranking de produtos mais vendidos com alto desempenho.
-   */
-  async getDailyExecutiveMetrics({ date = new Date().toISOString().slice(0, 10)} = {}) {
-    try {
-      const targetDate = String(date || '').slice(0, 10);
-      const allOrders = await this.getAllOrders(500);
-
-      let totalRevenue = 0;
-      let orderCount = 0;
-      const byPayment = {
-        PIX: { count: 0, total: 0 },
-        CARTAO: { count: 0, total: 0 },
-        DINHEIRO: { count: 0, total: 0 },
-      };
-
-      const collaboratorMap = new Map();
-      const productSalesMap = new Map();
-      const hourlyDistribution = Array.from({ length: 24 }, (_, h) => ({
-        hour: `${String(h).padStart(2, '0')}:00`,
-        count: 0,
-        total: 0,
-      }));
-
-      const targetOrders = [];
-
-      for (const ord of allOrders) {
-        if (!ord || !ord.createdAt) {continue;}
-        const ordDate = ord.createdAt.slice(0, 10);
-        if (ordDate !== targetDate) {continue;}
-
-        const isCompleted = ['CONFIRMED', 'PAID_CONFIRMED', 'DELIVERED', 'COMPLETED'].includes(String(ord.status || '').toUpperCase());
-        if (!isCompleted) {continue;}
-
-        targetOrders.push(ord);
-
-        const val = Number(ord.total || 0);
-        totalRevenue += val;
-        orderCount++;
-
-        // Pagamento
-        let pay = String(ord.paymentMethod || 'DINHEIRO').toUpperCase();
-        if (pay.includes('PIX')) {pay = 'PIX';}
-        else if (pay.includes('CARD') || pay.includes('CARTAO') || pay.includes('DEBITO') || pay.includes('CREDITO')) {pay = 'CARTAO';}
-        else {pay = 'DINHEIRO';}
-
-        if (!byPayment[pay]) {byPayment[pay] = { count: 0, total: 0 };}
-        byPayment[pay].count++;
-        byPayment[pay].total += val;
-
-        // Colaborador
-        const opName = String(ord.operatorName || ord.sellerName || 'Atendimento Loja').trim();
-        const existingCollab = collaboratorMap.get(opName) || { name: opName, count: 0, total: 0 };
-        existingCollab.count++;
-        existingCollab.total += val;
-        collaboratorMap.set(opName, existingCollab);
-
-        // Itens / Produtos mais vendidos
-        const items = Array.isArray(ord.items) ? ord.items : [];
-        for (const item of items) {
-          const itemKey = item.productId || item.id || item.name;
-          if (!itemKey) {continue;}
-          const itemName = item.name || 'Produto';
-          const qty = Number(item.quantity || 1);
-          const itemRev = Number(item.price || 0) * qty;
-
-          const existingProd = productSalesMap.get(itemKey) || {
-            id: itemKey,
-            name: itemName,
-            category: item.category || 'Geral',
-            quantity: 0,
-            revenue: 0,
-          };
-          existingProd.quantity += qty;
-          existingProd.revenue += itemRev;
-          productSalesMap.set(itemKey, existingProd);
+  async getExecutiveOrdersForDate(date) {
+    const range = getBusinessDateRange(date);
+    if (this.firestore && !this._firestoreClientDisabled && !FirestoreRepository._globalClientDisabled) {
+      try {
+        const snapshot = await this.firestore.collection('orders')
+          .where('createdAt', '>=', range.start)
+          .where('createdAt', '<', range.end)
+          .orderBy('createdAt', 'asc')
+          .get();
+        return snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
+      } catch (error) {
+        const errorText = String(error?.message || error?.details || error || '');
+        if (error?.code === 7 || error?.code === '7' || error?.code === 'permission-denied' || errorText.includes('PERMISSION_DENIED')) {
+          this._firestoreClientDisabled = true;
+          FirestoreRepository._globalClientDisabled = true;
         }
-
-        // Distribuição horária
-        try {
-          const hour = new Date(ord.createdAt).getHours();
-          if (hour >= 0 && hour < 24) {
-            hourlyDistribution[hour].count++;
-            hourlyDistribution[hour].total += val;
-          }
-        } catch {}
+        Logger.warn('Falha ao consultar vendas do fechamento por data', { error: errorText });
       }
-
-      // Ranking de colaboradores
-      const byCollaborator = Array.from(collaboratorMap.values())
-        .sort((a, b) => b.total - a.total)
-        .map((c) => ({
-          ...c,
-          percentage: totalRevenue > 0 ? Math.round((c.total / totalRevenue) * 100) : 0,
-        }));
-
-      // Ranking de produtos
-      const topProducts = Array.from(productSalesMap.values())
-        .sort((a, b) => b.quantity - a.quantity || b.revenue - a.revenue)
-        .slice(0, 15);
-
-      const ticketMedio = orderCount > 0 ? totalRevenue / orderCount : 0;
-
-      return {
-        date: targetDate,
-        totalRevenue: Math.round(totalRevenue * 100) / 100,
-        orderCount,
-        ticketMedio: Math.round(ticketMedio * 100) / 100,
-        byPayment,
-        byCollaborator,
-        topProducts,
-        hourlyDistribution: hourlyDistribution.filter((h) => {
-          const hourNum = parseInt(h.hour, 10);
-          return hourNum >= 7 && hourNum <= 20;
-        }),
-        recentOrders: targetOrders.slice(0, 10),
-      };
-    } catch (err) {
-      Logger.error('Erro ao calcular métricas gerenciais diárias', err);
-      return {
-        date: String(date || '').slice(0, 10),
-        totalRevenue: 0,
-        orderCount: 0,
-        ticketMedio: 0,
-        byPayment: {
-          PIX: { count: 0, total: 0 },
-          CARTAO: { count: 0, total: 0 },
-          DINHEIRO: { count: 0, total: 0 },
-        },
-        byCollaborator: [],
-        topProducts: [],
-        hourlyDistribution: [],
-        recentOrders: [],
-      };
     }
+    const orders = await this.getAllOrders(10000);
+    return orders.filter((order) => order.createdAt && getBusinessDate(order.createdAt) === date);
+  }
+
+  async getExecutiveDebtSettlementsForDate(date) {
+    const range = getBusinessDateRange(date);
+    if (this.firestore && !this._firestoreClientDisabled && !FirestoreRepository._globalClientDisabled) {
+      try {
+        const snapshot = await this.firestore.collection('debt_settlements')
+          .where('createdAt', '>=', range.start)
+          .where('createdAt', '<', range.end)
+          .orderBy('createdAt', 'asc')
+          .get();
+        return snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
+      } catch (error) {
+        const errorText = String(error?.message || error?.details || error || '');
+        if (error?.code === 7 || error?.code === '7' || error?.code === 'permission-denied' || errorText.includes('PERMISSION_DENIED')) {
+          this._firestoreClientDisabled = true;
+          FirestoreRepository._globalClientDisabled = true;
+        }
+        Logger.warn('Falha ao consultar recebimentos de dívidas do fechamento', { error: errorText });
+      }
+    }
+    return (this.inMemoryDebtSettlements || []).filter((settlement) =>
+      settlement.createdAt && getBusinessDate(settlement.createdAt) === date
+    );
+  }
+
+  async getDailyExecutiveMetrics({ date = getBusinessDate(new Date()) } = {}) {
+    const targetDate = String(date || '').trim();
+    getBusinessDateRange(targetDate);
+    const [orders, settlements, users] = await Promise.all([
+      this.getExecutiveOrdersForDate(targetDate),
+      this.getExecutiveDebtSettlementsForDate(targetDate),
+      this.getAllUsers(),
+    ]);
+    return summarizeDailyExecutiveMetrics({ date: targetDate, orders, settlements, users });
   }
 
   /**
@@ -1572,6 +1497,16 @@ class FirestoreRepository {
    */
   async closeCashierDay({ date = new Date().toISOString().slice(0, 10), closedBy = 'Administrador', notes = '', notifyOwnerWhatsapp = true, whatsappClient = null } = {}) {
     const metrics = await this.getDailyExecutiveMetrics({ date });
+    const paymentTotals = metrics.byPayment || {};
+    const cardPayment = ['CARTAO', 'DEBITO', 'CREDITO'].reduce((summary, method) => ({
+      count: summary.count + Number(paymentTotals[method]?.count || 0),
+      total: summary.total + Number(paymentTotals[method]?.total || 0),
+    }), { count: 0, total: 0 });
+    const reportMetrics = {
+      ...metrics,
+      byPayment: { ...paymentTotals, CARTAO: cardPayment },
+      topProducts: metrics.topProductsByQuantity || metrics.topProducts || [],
+    };
     const now = new Date().toISOString();
     const closingId = `closing_${date}_${Date.now()}`;
 
@@ -1599,7 +1534,7 @@ class FirestoreRepository {
     const { generateDailyReportPdf } = require('../reports/daily-report-pdf');
     let pdfResult = null;
     try {
-      pdfResult = await generateDailyReportPdf(metrics, {
+      pdfResult = await generateDailyReportPdf(reportMetrics, {
         date,
         closedBy,
         closedAt: new Date().toLocaleTimeString('pt-BR'),
@@ -1615,7 +1550,7 @@ class FirestoreRepository {
       const ownerPhone = process.env.OWNER_WHATSAPP_NUMBER || config.whatsapp?.ownerNumber;
       if (ownerPhone) {
         const cleanPhone = String(ownerPhone).replace(/\D/g, '');
-        const topProdTxt = (metrics.topProducts || []).slice(0, 3)
+        const topProdTxt = reportMetrics.topProducts.slice(0, 3)
           .map((p, i) => `${i + 1}º ${p.name} (${p.quantity} un - R$ ${p.revenue.toFixed(2).replace('.', ',')})`)
           .join('\n');
 
@@ -1627,9 +1562,9 @@ class FirestoreRepository {
           `🛒 *Total de Vendas:* ${metrics.orderCount} pedidos\n` +
           `🎯 *Ticket Médio:* R$ ${metrics.ticketMedio.toFixed(2).replace('.', ',')}\n\n` +
           `💳 *SEGMENTAÇÃO DE PAGAMENTOS:*\n` +
-          `• PIX: R$ ${(metrics.byPayment?.PIX?.total || 0).toFixed(2).replace('.', ',')} (${metrics.byPayment?.PIX?.count || 0}x)\n` +
-          `• Cartão: R$ ${(metrics.byPayment?.CARTAO?.total || 0).toFixed(2).replace('.', ',')} (${metrics.byPayment?.CARTAO?.count || 0}x)\n` +
-          `• Dinheiro: R$ ${(metrics.byPayment?.DINHEIRO?.total || 0).toFixed(2).replace('.', ',')} (${metrics.byPayment?.DINHEIRO?.count || 0}x)\n\n` +
+          `• PIX: R$ ${(reportMetrics.byPayment?.PIX?.total || 0).toFixed(2).replace('.', ',')} (${reportMetrics.byPayment?.PIX?.count || 0}x)\n` +
+          `• Cartão: R$ ${(reportMetrics.byPayment?.CARTAO?.total || 0).toFixed(2).replace('.', ',')} (${reportMetrics.byPayment?.CARTAO?.count || 0}x)\n` +
+          `• Dinheiro: R$ ${(reportMetrics.byPayment?.DINHEIRO?.total || 0).toFixed(2).replace('.', ',')} (${reportMetrics.byPayment?.DINHEIRO?.count || 0}x)\n\n` +
           `🏆 *PRODUTOS MAIS VENDIDOS:*\n${topProdTxt || 'Consulte o relatório'}\n\n` +
           (pdfResult?.publicUrl ? `📄 *Relatório Executivo PDF Completo:* \`${process.env.SERVICE_URL || ''}${pdfResult.publicUrl}\`` : '')
         );

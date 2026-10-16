@@ -23,6 +23,8 @@ const { renderHomeHtml, renderAdminHtml, renderCaixaHtml, renderAdminGerencialHt
 const { MercadoPagoClient, isApprovedPixPayment } = require('../integrations/mercado-pago.client');
 const { SicrediPixClient } = require('../integrations/sicredi-pix.client');
 const { formatOrderReceipt } = require('../orders/receipt.util');
+const { getBusinessDate, isValidReportDate } = require('../reports/daily-executive-metrics');
+const { formatDailyExecutiveReport, normalizeWhatsAppNumber } = require('../reports/daily-executive-report');
 
 const FETCH_SHIM_SCRIPT = `<script>
   (function() {
@@ -2427,24 +2429,53 @@ function createApp({
   // Métricas Executivas Diárias (Substituição de Alta Performance do Looker Studio)
   app.get('/api/admin/executive-metrics', async (req, res) => {
     try {
-      const date = req.query.date || new Date().toISOString().slice(0, 10);
+      const date = req.query.date || getBusinessDate(new Date());
       const metrics = await messageService.firestoreRepo.getDailyExecutiveMetrics({ date });
       res.status(200).json(metrics);
     } catch (err) {
       Logger.error('Erro ao buscar métricas executivas diárias', err);
-      res.status(500).json({ error: err.message });
+      const statusCode = String(err.message || '').startsWith('Data inválida') ? 400 : 500;
+      res.status(statusCode).json({ error: err.message });
+    }
+  });
+
+  // Envio manual do relatório diário para o WhatsApp do Júnior. O endpoint é protegido como ação ADMIN.
+  app.post('/api/admin/executive-metrics/send-whatsapp', async (req, res) => {
+    if (req.user?.role !== 'ADMIN') { return res.status(403).json({ error: 'Somente ADMIN pode enviar o relatório.' }); }
+    const ownerPhone = normalizeWhatsAppNumber(process.env.OWNER_WHATSAPP_NUMBER || config.whatsapp?.ownerNumber);
+    if (!ownerPhone) { return res.status(503).json({ error: 'Configure o WhatsApp do Júnior em OWNER_WHATSAPP_NUMBER.' }); }
+    if (!messageService.whatsappClient?.sendTextMessage) { return res.status(503).json({ error: 'Integração oficial do WhatsApp indisponível.' }); }
+
+    try {
+      const date = String(req.body?.date || getBusinessDate(new Date()));
+      if (!isValidReportDate(date)) { return res.status(400).json({ error: 'Data inválida. Selecione uma data válida.' }); }
+      const metrics = await messageService.firestoreRepo.getDailyExecutiveMetrics({ date });
+      const messages = formatDailyExecutiveReport(metrics);
+      let messagesSent = 0;
+      for (const text of messages) {
+        const result = await messageService.whatsappClient.sendTextMessage(ownerPhone, text);
+        if (result?.mock || !result?.messages?.length) {
+          throw new Error('O WhatsApp não confirmou o envio da mensagem.');
+        }
+        messagesSent++;
+      }
+      return res.status(200).json({ success: true, messagesSent, date });
+    } catch (error) {
+      Logger.error('Falha ao enviar relatório diário ao WhatsApp do Júnior', error);
+      return res.status(502).json({ error: error.message || 'Não foi possível enviar o relatório.' });
     }
   });
 
   // Fechamento de Caixa Diário com PDF e Notificação no WhatsApp do Patrão
   app.post('/api/admin/cashier/close-day', async (req, res) => {
     try {
-      const { date, closedBy, notes } = req.body || {};
+      const { date } = req.body || {};
+      const closingDate = date || getBusinessDate(new Date());
+      if (!isValidReportDate(closingDate)) { return res.status(400).json({ error: 'Data inválida. Selecione uma data válida.' }); }
       const result = await messageService.firestoreRepo.closeCashierDay({
-        date: date || new Date().toISOString().slice(0, 10),
-        closedBy: closedBy || req.user?.name || 'Administrador',
-        notes: notes || '',
-        notifyOwnerWhatsapp: true,
+        date: closingDate,
+        closedBy: req.user?.name || req.user?.email || 'Administrador',
+        notifyOwnerWhatsapp: false,
         whatsappClient: messageService.whatsappClient,
       });
       res.status(200).json(result);

@@ -460,6 +460,11 @@ test('16. Cardápio Digital & Painel Admin: Renderização e elementos essenciai
 
   const managementHtml = renderAdminGerencialHtml();
   assert.match(managementHtml, /class="conflora-site-brand" aria-label="Conflora — página inicial"/);
+  assert.match(managementHtml, /id="cardDebtReceived"/);
+  assert.match(managementHtml, /id="topProductsQuantity"/);
+  assert.match(managementHtml, /id="topProductsValue"/);
+  assert.match(managementHtml, /Enviar para Júnior/);
+  assert.doesNotMatch(managementHtml, /Confirmar Fechamento & Enviar PDF/);
 });
 
 test('17. Firestore Repository: Entrada ágil de estoque, venda balcão e importador de planilha', async () => {
@@ -541,10 +546,14 @@ test('18. Status Dashboard & Google Auth: Diagnóstico de conexões e autentica�
 
   // 3. Teste Google Auth no backend
   const { createApp } = require('../src/http/app');
-  const messageService = { firestoreRepo: repo, catalogRepo: catalog };
+  await repo.saveUser({ id: 'staff-vendedor', name: 'Rose', email: 'rose@conflora.com.br', role: 'VENDEDOR', active: true });
+  const sentReports = [];
+  const whatsappClient = { async sendTextMessage(to, text) { sentReports.push({ to, text }); return { messages: [{ id: 'wamid.report-test' }] }; } };
+  const messageService = { firestoreRepo: repo, catalogRepo: catalog, whatsappClient };
   const identities = {
     admin: { uid: 'google-admin', email: 'edmarjuniob@gmail.com', name: 'Edmar Júnio', picture: 'https://example.com/avatar.jpg', email_verified: true, firebase: { sign_in_provider: 'google.com' } },
     customer: { uid: 'google-customer', email: 'cliente@gmail.com', name: 'Maria Silva', email_verified: true, firebase: { sign_in_provider: 'google.com' } },
+    staff: { uid: 'google-staff', email: 'rose@conflora.com.br', name: 'Rose', email_verified: true, firebase: { sign_in_provider: 'google.com' } },
     unverified: { email: 'edmarjuniob@gmail.com', email_verified: false, firebase: { sign_in_provider: 'google.com' } },
     password: { email: 'edmarjuniob@gmail.com', email_verified: true, firebase: { sign_in_provider: 'password' } },
   };
@@ -568,6 +577,39 @@ test('18. Status Dashboard & Google Auth: Diagnóstico de conexões e autentica�
     assert.strictEqual(adminData.user.role, 'ADMIN');
     assert.strictEqual(adminData.user.name, 'Edmar Júnio');
     assert.strictEqual(adminData.user.picture, identities.admin.picture);
+
+    const previousOwnerNumber = process.env.OWNER_WHATSAPP_NUMBER;
+    process.env.OWNER_WHATSAPP_NUMBER = '5564999351616';
+    try {
+      const adminCookie = adminRes.headers.get('set-cookie').split(';')[0];
+      const reportRes = await fetch(`http://localhost:${port}/api/admin/executive-metrics/send-whatsapp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+        body: JSON.stringify({ date: '2026-10-15' }),
+      });
+      const reportData = await reportRes.json();
+      assert.equal(reportRes.status, 200);
+      assert.equal(reportData.messagesSent, 1);
+      assert.match(sentReports[0].text, /CONFLORA/);
+      assert.equal(sentReports[0].to, '5564999351616');
+
+      const staffRes = await fetch(`http://localhost:${port}/api/auth/google`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken: 'staff' }),
+      });
+      const staffCookie = staffRes.headers.get('set-cookie').split(';')[0];
+      const deniedRes = await fetch(`http://localhost:${port}/api/admin/executive-metrics/send-whatsapp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: staffCookie },
+        body: JSON.stringify({ date: '2026-10-15' }),
+      });
+      assert.equal(deniedRes.status, 403);
+      assert.equal(sentReports.length, 1, 'contas não ADMIN não podem disparar o relatório');
+    } finally {
+      if (previousOwnerNumber === undefined) { delete process.env.OWNER_WHATSAPP_NUMBER; }
+      else { process.env.OWNER_WHATSAPP_NUMBER = previousOwnerNumber; }
+    }
 
     // Customer login (opcional para clientes)
     const custRes = await fetch(`http://localhost:${port}/api/auth/google`, {
