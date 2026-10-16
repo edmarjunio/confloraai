@@ -4,6 +4,13 @@ window.PdvComponents = (() => {
   const money = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   const button = 'cf-button';
   const field = 'w-full p-3 border rounded-xl my-2';
+  function PaymentPartsEditor({ parts, onChange, total, customerId }) {
+    const labels = { PIX: 'Pix Sicredi', DINHEIRO: 'Dinheiro', DEBITO: 'Débito', CREDITO: 'Crédito', FIADO: 'Fiado' };
+    const update = (index, values) => onChange(parts.map((part, current) => current === index ? { ...part, ...values } : part));
+    const sum = parts.reduce((value, part) => value + Math.round(Number(part.amount || 0) * 100), 0);
+    const remaining = (Math.round(total * 100) - sum) / 100;
+    return <section className="my-3 space-y-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3"><strong className="text-xs">Dividir pagamento</strong>{parts.map((part, index) => <div key={index} className="flex items-center gap-2"><select aria-label={`Forma da parcela ${index + 1}`} className="min-w-0 flex-1 rounded-lg border p-2 text-xs" value={part.method} onChange={(event) => update(index, { method: event.target.value })}>{Object.entries(labels).map(([value, label]) => <option key={value} value={value} disabled={(value === 'FIADO' && !customerId) || parts.some((entry, current) => current !== index && entry.method === value)}>{label}</option>)}</select><input aria-label={`Valor da parcela ${index + 1}`} type="number" min="0.01" step="0.01" value={part.amount} onChange={(event) => update(index, { amount: event.target.value })} className="w-24 rounded-lg border p-2 text-xs" /><button type="button" aria-label={`Remover parcela ${index + 1}`} onClick={() => onChange(parts.filter((_, current) => current !== index))}>✕</button></div>)}<p className="text-xs font-bold">{remaining >= 0 ? 'Falta distribuir: ' : 'Excedente: '}{money(Math.abs(remaining))}</p>{parts.length < Object.keys(labels).length && <button type="button" className="text-xs underline" onClick={() => onChange([...parts, { method: Object.keys(labels).find((method) => !parts.some((part) => part.method === method)), amount: Math.max(0, remaining).toFixed(2) }])}>Adicionar forma de pagamento</button>}</section>;
+  }
   function SiteBrand() {
     return <a href="/" aria-label="Ir para a página inicial" className="conflora-site-brand flex min-w-0 items-center gap-3 text-inherit no-underline">
       <img src="/store-assets/brands/conflora-logo.png" alt="Conflora Horta e Viveiro" className="h-10 w-auto max-w-[160px] shrink-0 object-contain" />
@@ -168,8 +175,10 @@ window.PdvComponents = (() => {
           </div>
         </section>
 
+        {current.paymentParts?.length > 1 && <section className="rounded-xl border p-3 text-sm"><h3 className="font-bold">Formas de pagamento</h3>{current.paymentParts.map((part) => <p key={part.method} className="mt-1 flex justify-between"><span>{paymentLabel(part.method)}</span><strong>{money(part.amount)}</strong></p>)}</section>}
         {isPixPending && <section className="rounded-2xl border border-emerald-100 bg-white p-4 text-center">
           <h3 className="text-sm font-extrabold text-slate-800">Pague o valor exato pelo Pix</h3>
+          <p className="mt-2 font-bold">{money(current.pixData.amount || current.total)}</p>
           <div className="mx-auto my-3 flex w-full items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white p-2" style={{ maxWidth: 220, aspectRatio: '1 / 1' }}>
             <img className="block" style={{ width: '100%', height: '100%', maxWidth: 200, maxHeight: 200, objectFit: 'contain' }} src={current.pixData.qrCodeBase64} alt="QR Code Pix Sicredi" />
           </div>
@@ -240,6 +249,8 @@ window.PdvComponents = (() => {
       setManualPixNote('');
       setManualProofSeen(false);
     }, [order.id, order.status, order.paymentMethod]);
+    const [splitPayment, setSplitPayment] = useState(order.paymentParts?.length > 1);
+    const [paymentParts, setPaymentParts] = useState(order.paymentParts?.length > 1 ? order.paymentParts : [{ method: 'DINHEIRO', amount: '' }, { method: 'CREDITO', amount: '' }]);
     const pixCopyPaste = order.pixData?.pixCopiaECola || order.pixCopiaECola || '';
     const copyPixCode = async () => {
       try { await navigator.clipboard.writeText(pixCopyPaste); setCopied(true); }
@@ -257,6 +268,7 @@ window.PdvComponents = (() => {
         <p>Pedido feito por: <strong>{staffLabel(order.createdBy)}</strong></p>
         {order.receivedBy && <p>Recebido por: <strong>{staffLabel(order.receivedBy)}</strong></p>}
         <p>Status da comanda: <strong>{orderStatusLabel(order)}</strong></p>
+        {order.requiresRefund && <p role="alert" className="rounded-lg bg-amber-50 p-3 font-bold text-amber-900">Recebimento parcial de {money(order.refundDue)} pendente de conciliação ou estorno pela loja.</p>}
         <p>Registrado em: {dateTime(order.createdAt)}</p>
         {order.paidAt && <p>Pago em: {dateTime(order.paidAt)}</p>}
         {order.deliveryAddress && <p>Entrega: {order.deliveryAddress}</p>}
@@ -282,11 +294,13 @@ window.PdvComponents = (() => {
               <option value="FIADO" disabled={!order.customerId}>Fiado (cliente cadastrado)</option><option value="SALDO_CLIENTE" disabled={!order.customerId}>Saldo do cliente</option>
             </select>
           </label>
-          {paymentMethod === 'DINHEIRO' && <label className="block text-xs font-bold text-slate-700">Valor recebido em dinheiro (R$)<input className={field} type="number" min={Number(order.total || 0)} step="0.01" value={cashAmount} onChange={(event) => setCashAmount(event.target.value)} /></label>}
+          <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={splitPayment} onChange={(event) => setSplitPayment(event.target.checked)} />Usar mais de uma forma de pagamento</label>
+          {splitPayment && <PaymentPartsEditor parts={paymentParts} onChange={setPaymentParts} total={Number(order.total)} customerId={order.customerId} />}
+          {paymentMethod === 'DINHEIRO' && !splitPayment && <label className="block text-xs font-bold text-slate-700">Valor recebido em dinheiro (R$)<input className={field} type="number" min={Number(order.total || 0)} step="0.01" value={cashAmount} onChange={(event) => setCashAmount(event.target.value)} /></label>}
           {paymentMethod === 'DINHEIRO' && Number(cashAmount) >= Number(order.total || 0) && <p className="text-right text-xs font-bold text-emerald-900">Troco: {money(Number(cashAmount) - Number(order.total || 0))}</p>}
           {!order.customerId && ['FIADO', 'SALDO_CLIENTE'].includes(paymentMethod) && <p className="text-xs text-amber-900">Selecione um cliente cadastrado antes de receber em fiado ou usar saldo.</p>}
           {error && <p role="alert" className="rounded-lg bg-red-50 p-2 text-xs text-red-800">{error}</p>}
-          <button type="button" className={button + ' w-full'} disabled={busy || (paymentMethod === 'DINHEIRO' && Number(cashAmount) < Number(order.total || 0)) || (['FIADO', 'SALDO_CLIENTE'].includes(paymentMethod) && !order.customerId)} onClick={() => onReceive(order, paymentMethod, paymentMethod === 'DINHEIRO' ? cashAmount : null)}>
+          <button type="button" className={button + ' w-full'} disabled={busy || (!splitPayment && paymentMethod === 'DINHEIRO' && Number(cashAmount) < Number(order.total || 0)) || (!splitPayment && ['FIADO', 'SALDO_CLIENTE'].includes(paymentMethod) && !order.customerId)} onClick={() => onReceive(order, splitPayment ? 'MISTO' : paymentMethod, !splitPayment && paymentMethod === 'DINHEIRO' ? cashAmount : null, splitPayment ? paymentParts.map((part) => ({ ...part, amount: Number(part.amount) })) : undefined)}>
             {busy ? 'Processando…' : paymentMethod === 'PIX' ? 'Gerar QR Code Pix' : 'Confirmar pagamento e finalizar'}
           </button>
         </section>}
@@ -394,12 +408,13 @@ window.PdvComponents = (() => {
       setDateTo(today);
       setDateFrom(days === 0 ? today : dateOffset(today, -(days - 1)));
     };
-    const receive = async (order, paymentMethod, receivedAmount) => {
+    const receive = async (order, paymentMethod, receivedAmount, paymentParts) => {
       setError('');
       setBusy(true);
       try {
         const response = await api('/api/caixa/orders/' + order.id + '/confirm', {
           paymentMethod,
+          paymentParts,
           receivedAmount: receivedAmount === null || receivedAmount === undefined || receivedAmount === '' ? null : Number(String(receivedAmount).replace(',', '.')),
         });
         setSelectedOrder(response.order || order);
@@ -417,16 +432,18 @@ window.PdvComponents = (() => {
     const title = view === 'orders' ? 'Comandas' : view === 'history' ? 'Histórico de vendas' : 'Relatório';
     const reportOrders = data ? data.history.filter((order) => user.role === 'ADMIN'
       || (user.role === 'VENDEDOR' ? order.createdBy?.id === user.id : order.receivedBy?.id === user.id)) : [];
-    const reportPaidOrders = reportOrders.filter((order) => order.paymentStatus === 'APPROVED' && (order.paidAt || order.completedAt));
-    const reportCashOrders = reportPaidOrders.filter((order) => order.paymentMethod !== 'SALDO_CLIENTE');
-    const reportCreditUsedTotal = reportPaidOrders.filter((order) => order.paymentMethod === 'SALDO_CLIENTE').reduce((sum, order) => sum + Number(order.total || 0), 0);
-    const reportSalesTotal = reportCashOrders.reduce((sum, order) => sum + Number(order.total || 0), 0);
+    const reportPaidOrders = reportOrders.filter((order) => (order.paymentStatus === 'APPROVED' || order.paymentStatus === 'ON_ACCOUNT') && (order.paidAt || order.completedAt));
+    const methodAmount = (order, method) => (order.paymentParts || [{ method: order.paymentMethod, amount: order.total }]).filter((part) => part.method === method).reduce((sum, part) => sum + Number(part.amount || 0), 0);
+    const cashAmount = (order) => ['PIX', 'DINHEIRO', 'CREDITO', 'DEBITO'].reduce((sum, method) => sum + methodAmount(order, method), 0);
+    const reportCashOrders = reportPaidOrders.filter((order) => cashAmount(order) > 0);
+    const reportCreditUsedTotal = reportPaidOrders.reduce((sum, order) => sum + methodAmount(order, 'SALDO_CLIENTE'), 0);
+    const reportSalesTotal = reportCashOrders.reduce((sum, order) => sum + cashAmount(order), 0);
     const reportDebtSettlements = (data?.debtHistory || []).filter((item) => (item.entryType || item.type) === 'QUITACAO_FIADO');
     const reportAdvanceCredits = (data?.debtHistory || []).filter((item) => (item.entryType || item.type) === 'CREDITO_CLIENTE');
     const reportDebtTotal = reportDebtSettlements.reduce((sum, item) => sum + Number(item.amount || 0), 0);
     const reportAdvanceTotal = reportAdvanceCredits.reduce((sum, item) => sum + Number(item.amount || 0), 0);
     const reportPaymentTotals = Object.fromEntries(['PIX', 'DINHEIRO', 'CREDITO', 'DEBITO', 'SALDO_CLIENTE'].map((method) => [method,
-      reportPaidOrders.filter((order) => order.paymentMethod === method).reduce((sum, order) => sum + Number(order.total || 0), 0),
+      reportPaidOrders.reduce((sum, order) => sum + methodAmount(order, method), 0),
     ]));
     const topProducts = (rows, metric) => {
       const products = new Map();
@@ -541,5 +558,5 @@ window.PdvComponents = (() => {
     const amountInvalid = !Number.isFinite(Number(amount)) || Number(amount) <= 0 || (!isCreditEntry && Number(amount) > balance);
     return <Panel title="Receber pagamento do cliente" onClose={onClose}>{error && <p role="alert" className="text-red-700">{error}</p>}{result ? <div><p>Recebimento registrado: {money(result.amount)}</p><p>Saldo devedor: {money(result.newBalance)}</p><p>Crédito disponível: {money(result.newCreditBalance)}</p></div> : <><label>Buscar cliente cadastrado<input className={field} value={query} onChange={(e) => setQuery(e.target.value)} /></label><div className="max-h-36 overflow-auto">{customers.map((row) => <button className="block w-full border-b p-2 text-left" key={row.id} onClick={() => select(row)}>{row.name} · {row.phone || 'Sem telefone'}</button>)}</div>{customer && <><p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm font-bold">{customer.name}<span className="mt-1 block text-xs font-medium text-amber-800">Saldo devedor: {money(balance)}</span><span className="block text-xs font-medium text-emerald-800">Crédito disponível: {money(creditBalance)}</span></p><label>Tipo de lançamento<select className={field} value={entryType} onChange={(event) => setEntryType(event.target.value)}><option value="QUITACAO_FIADO">Receber pagamento de dívida</option><option value="CREDITO_CLIENTE">Adicionar crédito antecipado</option></select></label><label>Valor recebido<input className={field} type="number" min="0.01" max={isCreditEntry ? undefined : balance} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></label><select aria-label="Forma de recebimento" className={field} value={method} onChange={(e) => setMethod(e.target.value)}><option value="DINHEIRO">Dinheiro</option><option value="DEBITO">Cartão de débito</option><option value="CREDITO">Cartão de crédito</option></select><button className={button} disabled={busy || amountInvalid || (!isCreditEntry && balance <= 0)} onClick={submit}>{busy ? 'Registrando…' : isCreditEntry ? 'Registrar crédito recebido' : 'Confirmar recebimento'}</button></>}</>}</Panel>;
   }
-  return { SiteBrand, Loading, Login, Receipt, CashierQueue, DebtSettlement, DiscountApproval, ProductInformation, WeightPrompt, handleProductImageError };
+  return { SiteBrand, Loading, Login, Receipt, CashierQueue, DebtSettlement, DiscountApproval, ProductInformation, WeightPrompt, handleProductImageError, PaymentPartsEditor };
 })();

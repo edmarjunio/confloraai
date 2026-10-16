@@ -144,7 +144,7 @@ test("main URL shows the new layout and uses existing customer accounts, catalog
   await expect(page.locator("#receipt .order-receipt-text")).toContainText("Cliente Nova Vitrine");
   const checkoutReceipt = await page.locator("#receipt .order-receipt-text").innerText();
   await page.locator("#cartCloseButton").click();
-  await page.locator("#historyButton").click();
+  await page.locator("#customerAccountShortcut").click();
   await expect(page.locator("#historyList")).toContainText("Planta Teste");
   const historyOrder = page.locator(".history-order-details").first();
   await historyOrder.locator("summary").click();
@@ -204,6 +204,13 @@ test("main mobile product, bottom sheet and conversational cards follow the appr
   await page.locator("#chatInput").fill("Planta Teste");
   await page.locator("#chatForm").evaluate((form) => form.requestSubmit());
   await expect(page.locator("#chatMessages .guided-results-grid render-product-card").first()).toBeVisible();
+  const compactCard = page.locator('#chatMessages .guided-results-grid render-product-card').first();
+  await expect(compactCard).toHaveAttribute('variant', 'cashier');
+  expect((await compactCard.boundingBox()).height).toBeLessThan(130);
+  await compactCard.locator('[data-action="add"]').click();
+  await expect(page.getByRole('button', { name: 'Manter filtro atual', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Manter filtro atual', exact: true }).click();
+  await expect(compactCard).toBeVisible();
   await page.screenshot({ path: "test-results/new-main-mobile-chat.png" });
   const width = await page.locator("html").evaluate((node) => ({
     scroll: node.scrollWidth,

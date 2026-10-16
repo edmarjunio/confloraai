@@ -10,6 +10,23 @@ const { formatDailyExecutiveReport, normalizeWhatsAppNumber } = require('../src/
 
 const reportDate = '2026-10-15';
 
+test('pagamento combinado separa dinheiro, cartão e fiado nos relatórios sem duplicar a venda', () => {
+  const orders = [{ id: 'mixed-sale', createdAt: reportDate + 'T12:00:00-03:00', completedAt: reportDate + 'T12:00:00-03:00', status: 'CONFIRMED', paymentStatus: 'ON_ACCOUNT', paymentMethod: 'MISTO', total: 20, cashReceived: 10, changeGiven: 5, createdBy: { id: 'seller', name: 'Vendedor' }, receivedBy: { id: 'cashier', name: 'Caixa' }, items: [{ productId: 'plant', name: 'Muda', quantity: 2, price: 10 }], paymentParts: [{ method: 'DINHEIRO', amount: 5 }, { method: 'CREDITO', amount: 10 }, { method: 'FIADO', amount: 5 }] }];
+  const daily = summarizeDailyExecutiveMetrics({ date: reportDate, orders });
+  assert.equal(daily.orderCount, 1);
+  assert.equal(daily.totalRevenue, 20);
+  assert.equal(daily.totalReceivedSales, 15);
+  assert.equal(daily.onAccountSales, 5);
+  assert.equal(daily.byPayment.DINHEIRO.total, 5);
+  assert.equal(daily.byPayment.CREDITO.total, 10);
+  assert.equal(daily.byCollaborator.find((row) => row.id === 'cashier').receivedTotal, 15);
+  const { summarizeExecutivePeriod } = require('../src/reports/period-executive-metrics');
+  const { current } = summarizeExecutivePeriod({ from: reportDate, to: reportDate, orders });
+  assert.equal(current.sales, 20);
+  assert.equal(current.receivedSales, 15);
+  assert.equal(current.onAccountSales, 5);
+});
+
 test('métricas diárias usam o fuso de Mineiros e separam venda, recebimento e fiado', () => {
   const metrics = summarizeDailyExecutiveMetrics({
     date: reportDate,

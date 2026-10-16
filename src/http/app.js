@@ -995,7 +995,16 @@ async function sendCustomerOrderReceipt(whatsappClient, phone, receiptText) {
 }
 
 async function prepareSicrediCheckoutOrder({ app, sicrediClient, taskQueueClient, order }) {
-  if (order.paymentMethod !== 'PIX') return { order, receiptDelivery: { sent: false, reason: '' } };
+  if (order.paymentMethod !== 'PIX') {
+    const id = `${order.id}-receipt`;
+    await app.locals.pdv.store.transaction(async (tx) => {
+      if (await tx.get('pdv_outbox', id)) return;
+      tx.set('pdv_outbox', id, { id, orderId: order.id, kind: 'receipt', status: 'PENDING', attempts: 0 });
+    });
+    await app.locals.pdv.service.deliver(id);
+    const job = await app.locals.pdv.store.read('pdv_outbox', id);
+    return { order, receiptDelivery: { sent: job?.status === 'SENT' && !job.skipped, reason: job?.lastError || '' } };
+  }
   if (order.pixProvider !== 'SICREDI' || !order.pixData?.txid) {
     return { order, receiptDelivery: { sent: false, reason: 'Pedido Pix anterior à integração Sicredi; não gere uma nova cobrança.' } };
   }
@@ -1642,7 +1651,7 @@ function createApp({
       }, { requirePersistence: resolvedPaymentMethod === 'PIX', reserveInventory: resolvedPaymentMethod === 'PIX' });
 
       let receiptDelivery = { sent: false, reason: 'Envio não solicitado.' };
-      if (resolvedPaymentMethod === 'PIX') {
+      if (order.source === 'WEB_CATALOG') {
         const prepared = await prepareSicrediCheckoutOrder({ app, sicrediClient: sicrediPixClient, taskQueueClient, order });
         order = prepared.order;
         receiptDelivery = prepared.receiptDelivery;
@@ -1727,8 +1736,11 @@ function createApp({
     try {
       if (!req.user) {return res.status(401).json({ error: 'Entre na sua conta.' });}
       const limit = Math.max(1, Math.min(30, Number.parseInt(req.query.limit, 10) || 12));
+      const profiles = req.user.email ? await messageService.firestoreRepo.findCustomerProfilesByEmail(req.user.email) : [];
+      if (profiles.length > 1) { return res.status(409).json({ success: false, error: 'Há mais de um cadastro vinculado a este e-mail. Peça à equipe para corrigir o vínculo.' }); }
       const data = await messageService.firestoreRepo.getCustomerOrderHistoryPage({
         customerId: req.user.id,
+        customerIds: profiles.map((profile) => profile.id),
         customerEmail: req.user.email,
         cursor: String(req.query.cursor || '').slice(0, 180),
         limit,
@@ -1788,6 +1800,7 @@ function createApp({
         customerName: profile.name || req.user.name || 'Cliente',
         balance: Number(ledger.balance || 0),
         creditBalance: Number(profile.creditBalance || 0),
+        supportPhone: String(config.whatsapp.ownerNumber || '').replace(/\D/g, ''),
         transactions,
       });
     } catch (error) {

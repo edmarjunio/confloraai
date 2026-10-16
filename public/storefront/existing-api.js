@@ -56,6 +56,9 @@ export function createExistingApi() {
     if (route === "/customer/ledger") {
       return request("/api/customer/ledger", options);
     }
+    if (route.startsWith('/customer/debt-pix')) {
+      return request('/api' + route, options);
+    }
     if (route.startsWith("/customer/orders")) {
       const query = route.slice("/customer/orders".length);
       return request(`/api/customer/orders${query}`);

@@ -37,6 +37,91 @@ function setup() {
   return { base, repository, service, sent, input, pix, whatsapp, chargeCalls };
 }
 
+test('deferred Pix creates only a command; mixed receipts allocate amounts, debt and stock once', async () => {
+  const s = setup();
+  const order = await s.service.create({ ...s.input, paymentMethod: 'PIX', deferToCashier: true }, cashier);
+  assert.equal(order.status, 'AWAITING_CASHIER');
+  assert.equal(order.pixData, null);
+  assert.equal(s.chargeCalls.length, 0);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
+  const parts = [{ method: 'DINHEIRO', amount: 5 }, { method: 'CREDITO', amount: 10 }, { method: 'FIADO', amount: 5 }];
+  const mixed = await s.service.create({ ...s.input, requestId: randomUUID(), customerId: 'customer', paymentParts: parts }, cashier);
+  assert.equal(mixed.paymentMethod, 'MISTO');
+  assert.equal(mixed.paymentStatus, 'ON_ACCOUNT');
+  assert.equal(s.base.inMemoryCustomers.get('customer').debtBalance, 5);
+  assert.equal(mixed.paymentParts.length, 3);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
+  await s.repository.receive(mixed.id, actor(cashier));
+  assert.equal(s.base.inMemoryCustomers.get('customer').debtBalance, 5);
+  await assert.rejects(s.service.create({ ...s.input, requestId: randomUUID(), paymentParts: [{ method: 'DINHEIRO', amount: 1 }] }, cashier), /soma/);
+});
+
+test('mixed Pix charges only the Pix share and finalizes the full sale after bank verification', async () => {
+  const s = setup();
+  const order = await s.service.create({ ...s.input, paymentParts: [{ method: 'DINHEIRO', amount: 8 }, { method: 'PIX', amount: 12 }] }, cashier);
+  assert.equal(s.chargeCalls[0].amount, 12);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
+  s.pix.checkReceivedPayment = async (endToEndId) => ({ isPaid: true, raw: { txid: order.pixData.txid, endToEndId, chave: 'pix-key', valor: '12.00' } });
+  await s.service.handlePix(order.pixData.txid, 'E' + '2'.repeat(31));
+  assert.equal((await s.repository.read('orders', order.id)).paymentStatus, 'APPROVED');
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
+});
+
+test('customer debt Pix applies once, validates Sicredi, isolates accounts and preserves concurrent surplus as credit', async () => {
+  const s = setup();
+  const { CustomerDebtPixService } = require('../src/orders/customer-debt-pix.service');
+  const user = { id: 'client-login', email: 'client@example.com', name: 'Cliente' };
+  Object.assign(s.base.inMemoryCustomers.get('customer'), { email: user.email, debtBalance: 20 });
+  const service = new CustomerDebtPixService({ store: s.repository, pix: s.pix, pdv: s.service });
+  s.service.debtPix = service;
+  const charge = await service.create({ requestId: randomUUID(), amount: 20 }, user);
+  await assert.rejects(service.read(charge.id, { id: 'other', email: user.email }), /não encontrada/);
+  s.base.inMemoryCustomers.get('customer').debtBalance = 5;
+  s.pix.checkReceivedPayment = async (endToEndId) => ({ isPaid: true, raw: { txid: charge.txid, endToEndId, chave: 'wrong', valor: '20' } });
+  await assert.rejects(s.service.handlePix(charge.txid, 'E' + '3'.repeat(31)), /divergente/);
+  assert.equal(s.base.inMemoryCustomers.get('customer').debtBalance, 5);
+  s.pix.checkReceivedPayment = async (endToEndId) => ({ isPaid: true, raw: { txid: charge.txid, endToEndId, chave: 'pix-key', valor: '20' } });
+  await Promise.all([s.service.handlePix(charge.txid, 'E' + '3'.repeat(31)), s.service.handlePix(charge.txid, 'E' + '3'.repeat(31))]);
+  assert.equal(s.base.inMemoryCustomers.get('customer').debtBalance, 0);
+  assert.equal(s.base.inMemoryCustomers.get('customer').creditBalance, 15);
+  assert.equal(s.base.inMemoryDebtSettlements.length, 1);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
+  assert.equal(s.sent.length, 2);
+});
+
+test('HTTP autonomous debt payment updates the logged-in customer through the official webhook only', async (t) => {
+  const s = setup();
+  const previous = process.env.SICREDI_WEBHOOK_SECRET;
+  const secret = 'debt-pix-test-secret-01234567890123456789';
+  process.env.SICREDI_WEBHOOK_SECRET = secret;
+  t.after(() => { if (previous === undefined) delete process.env.SICREDI_WEBHOOK_SECRET; else process.env.SICREDI_WEBHOOK_SECRET = previous; });
+  const app = createApp({ messageService: { firestoreRepo: s.base, whatsappClient: s.whatsapp }, sicrediClient: s.pix });
+  const server = app.listen(0); t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const post = (path, body, cookie = '') => fetch(base + path, { method: 'POST', headers: { 'Content-Type': 'application/json', cookie }, body: JSON.stringify(body) });
+  assert.equal((await post('/api/customer/debt-pix', { amount: 20 })).status, 401);
+  await post('/api/auth/register', { email: 'debt@test.com', name: 'Cliente dívida', password: 'senha123' });
+  const login = await post('/api/auth/login', { email: 'debt@test.com', password: 'senha123' });
+  const cookie = login.headers.get('set-cookie').split(';')[0];
+  Object.assign(s.base.inMemoryCustomers.get('customer'), { email: 'debt@test.com', debtBalance: 20 });
+  const response = await post('/api/customer/debt-pix', { requestId: randomUUID(), amount: 20, customerKey: 'forged-customer' }, cookie);
+  const { charge } = await response.json();
+  assert.ok(charge?.pixData);
+  assert.equal(charge.customerKey, 'customer');
+  assert.equal(s.base.inMemoryCustomers.get('customer').debtBalance, 20);
+  const endToEndId = 'E' + '4'.repeat(31);
+  s.pix.checkReceivedPayment = async () => ({ isPaid: true, raw: { txid: charge.txid, endToEndId, chave: 'pix-key', valor: '20' } });
+  assert.equal((await post('/webhooks/sicredi-pix', { pix: [{ txid: charge.txid, endToEndId }] })).status, 401);
+  const webhook = () => post('/webhooks/sicredi-pix/' + secret + '/pix', { pix: [{ txid: charge.txid, endToEndId }] });
+  assert.equal((await webhook()).status, 200);
+  assert.equal((await webhook()).status, 200);
+  const ledger = await (await fetch(base + '/api/customer/ledger', { headers: { cookie } })).json();
+  assert.equal(ledger.balance, 0);
+  assert.equal(ledger.transactions.length, 1);
+  assert.equal(ledger.transactions[0].paymentMethod, 'PIX');
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
+});
+
 test('seller creates a pending order; cashier receives once and attribution survives', async () => {
   const s = setup();
   const order = await s.service.create({ ...s.input, sellerName: 'Forged', receivedBy: actor(cashier) }, seller);
@@ -60,9 +145,9 @@ test('Pix receipt includes image; bank verification finalizes exactly once under
   const s = setup();
   const order = await s.service.create({ ...s.input, paymentMethod: 'PIX', customerId: 'customer' }, seller);
   assert.equal(s.sent.length, 2);
-  assert.match(s.sent[0].text, /Valor exato: \*R\$\s20,00\* \(Sem alteração de valor\)/);
-  assert.match(s.sent[0].text, /PIX COPIA E COLA/);
-  assert.match(s.sent[0].text, /pix-code/);
+  assert.match(s.sent[0].text, /CONFLORA \| HORTA E VIVEIRO/);
+  assert.match(s.sent[0].text, /Aguardamos a confirmação do pagamento via Pix/);
+  assert.match(s.sent[1].caption, /PIX COPIA E COLA:\npix-code/);
   assert.ok(s.sent[1].image);
   assert.equal(s.sent[1].imageBase64, 'aGVsbG8=');
   assert.match(s.sent[1].caption, /R\$\s20,00/);

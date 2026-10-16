@@ -1,5 +1,7 @@
 const { createHash } = require('node:crypto');
 const { formatOrderReceipt, money } = require('./receipt.util');
+const { normalizePaymentParts, partAmount } = require('./payment-parts');
+const { formatCustomerOrderMessage } = require('./customer-order-message');
 
 const ORDER_PAYMENT_METHODS = new Set(['DINHEIRO', 'DEBITO', 'CREDITO', 'FIADO', 'SALDO_CLIENTE']);
 function actor(user) {
@@ -51,6 +53,8 @@ class PdvService {
       customerCpf: input.customerCpf,
       deliveryAddress: input.deliveryAddress,
       notes: input.notes,
+      deferToCashier: input.deferToCashier === true,
+      paymentParts: input.paymentParts,
     };
     const requestHash = createHash('sha256').update(JSON.stringify(requestPayload)).digest('hex');
     const previous = await this.repository.read('orders', id);
@@ -58,8 +62,8 @@ class PdvService {
       if (previous.createdBy?.id !== user.id || previous.requestHash !== requestHash) { throw new Error('Esta operação já pertence a outra venda.'); }
       return this.finishCreation(await this.preparePix(previous), user, approvedDiscount);
     }
-    const paymentMethod = String(input.paymentMethod || '').toUpperCase();
-    if (paymentMethod !== 'PIX' && !ORDER_PAYMENT_METHODS.has(paymentMethod)) { throw new Error('Forma de pagamento inválida.'); }
+    let paymentMethod = String(input.paymentMethod || '').toUpperCase();
+    if (paymentMethod !== 'PIX' && paymentMethod !== 'MISTO' && !ORDER_PAYMENT_METHODS.has(paymentMethod)) { throw new Error('Forma de pagamento inválida.'); }
     if (paymentMethod === 'SALDO_CLIENTE' && !['ADMIN', 'CAIXA'].includes(user.role)) { throw new Error('Somente o caixa pode usar o crédito disponível do cliente.'); }
     if (!Array.isArray(input.items) || !input.items.length || input.items.length > 150) { throw new Error('Adicione os produtos à comanda.'); }
     const products = new Map((await this.repository.repository.getAllProducts()).map((product) => [String(product.id), product]));
@@ -96,12 +100,19 @@ class PdvService {
     const discountMinor = Math.round(subtotalMinor * discountPercent / 100);
     const total = (subtotalMinor - discountMinor + Math.round(freightValue * 100)) / 100;
     if (total <= 0 || !Number.isSafeInteger(Math.round(total * 100))) { throw new Error('Valor total inválido.'); }
-    const cashTendered = paymentMethod === 'DINHEIRO' && user.role !== 'VENDEDOR' ? Number(input.cashReceived ?? total) : null;
-    if (cashTendered !== null && (!Number.isFinite(cashTendered) || Math.round(cashTendered * 100) < Math.round(total * 100))) { throw new Error('Valor recebido em dinheiro menor que o total.'); }
+    const paymentParts = normalizePaymentParts(input.paymentParts, paymentMethod, total);
+    const amountFor = (method) => paymentParts.find((part) => part.method === method)?.amount || 0;
+    const hasPix = amountFor('PIX') > 0;
+    paymentMethod = hasPix ? 'PIX' : paymentParts.length > 1 ? 'MISTO' : paymentParts[0].method;
+    const deferToCashier = input.deferToCashier === true || (user.role === 'VENDEDOR' && paymentParts.some((part) => part.method !== 'PIX'));
+    const cashTendered = amountFor('DINHEIRO') && !deferToCashier ? Number(input.cashReceived ?? amountFor('DINHEIRO')) : null;
+    if (cashTendered !== null && (!Number.isFinite(cashTendered) || Math.round(cashTendered * 100) < Math.round(amountFor('DINHEIRO') * 100))) { throw new Error('Valor recebido em dinheiro menor que o total.'); }
     const customerId = String(input.customerId || '');
     if (customerId.includes('/')) { throw new Error('Cliente inválido.'); }
     const customer = customerId ? await this.repository.read('customers', customerId) : null;
-    if ((customerId || ['FIADO', 'SALDO_CLIENTE'].includes(paymentMethod)) && !customer) { throw new Error('Selecione um cliente cadastrado para o fiado ou uso de crédito.'); }
+    if ((customerId || amountFor('FIADO') || amountFor('SALDO_CLIENTE')) && !customer) { throw new Error('Selecione um cliente cadastrado para o fiado ou uso de crédito.'); }
+    if (amountFor('SALDO_CLIENTE') && Math.round(Number(customer?.creditBalance || 0) * 100) < Math.round(amountFor('SALDO_CLIENTE') * 100)) throw new Error('Crédito disponível insuficiente.');
+    if (hasPix && amountFor('SALDO_CLIENTE')) throw new Error('Use o saldo do cliente com dinheiro ou cartão. A combinação de saldo com Pix ainda não está disponível.');
     if (paymentMethod === 'SALDO_CLIENTE' && Math.round(Number(customer?.creditBalance || 0) * 100) < Math.round(total * 100)) { throw new Error('O crédito disponível do cliente não cobre o valor total da venda.'); }
     const phone = normalizePhone(input.customerPhone || customer?.phone || customer?.phoneDigits);
     if (discountPercent > 5 && user.role !== 'ADMIN' && !approvedDiscount) {
@@ -119,7 +130,7 @@ class PdvService {
       return { approvalRequired: true, approval };
     }
     const ticketNumber = id.replace(/-/g, '').slice(0, 10).toUpperCase();
-    const pixData = paymentMethod === 'PIX' ? { txid: id.replace(/-/g, '').toUpperCase(), provider: 'SICREDI' } : null;
+    const pixData = hasPix && !deferToCashier ? { txid: id.replace(/-/g, '').toUpperCase(), provider: 'SICREDI' } : null;
     const order = await this.repository.create({
       id, requestHash, source: 'PDV', ticketNumber, items, subtotal: subtotalMinor / 100,
       discountPercent, discountAmount: discountMinor / 100, freightValue, total,
@@ -128,6 +139,8 @@ class PdvService {
       createdBy, sellerName: createdBy.name, sellerEmail: createdBy.email, operatorId: user.id, operatorName: createdBy.name, operatorEmail: createdBy.email,
       receivedBy: null, paymentMethod, paymentStatus: 'PENDING', status: pixData ? 'CREATING_PIX' : 'AWAITING_CASHIER',
       cashTendered,
+      paymentParts: paymentParts.map((part) => ({ ...part, ...(hasPix && !deferToCashier && ['DINHEIRO', 'DEBITO', 'CREDITO'].includes(part.method) ? { status: 'RECEIVED_AT_CASHIER', receivedBy: createdBy } : {}) })), deferToCashier,
+      ...(hasPix && !deferToCashier && paymentParts.length > 1 ? { mixedReceivedBy: createdBy } : {}),
       pixData, pixCopiaECola: pixData?.pixCopiaECola || '',
       ...(pixData ? { pixTtlSeconds: Math.min(86400, Math.max(300, Number(process.env.PIX_PAYMENT_TTL_SECONDS) || 3600)), pixExpiresAt: new Date(Date.now() + Math.min(86400, Math.max(300, Number(process.env.PIX_PAYMENT_TTL_SECONDS) || 3600)) * 1000).toISOString() } : {}),
       createdAt: new Date().toISOString(),
@@ -156,6 +169,13 @@ class PdvService {
     const expiresAt = Date.parse(order.pixExpiresAt || '');
     if (!Number.isFinite(expiresAt) || expiresAt > Date.now()) return false;
     await this.repository.repository.cancelOrder(order.id, 'Prazo de pagamento Pix expirado');
+    const partialReceived = (order.paymentParts || []).filter((part) => part.status === 'RECEIVED_AT_CASHIER').reduce((sum, part) => sum + Math.round(part.amount * 100), 0) / 100;
+    if (partialReceived > 0) {
+      await this.repository.transaction(async (tx) => {
+        const current = await tx.get('orders', order.id);
+        if (current?.status === 'CANCELLED') tx.set('orders', order.id, { ...current, paymentStatus: 'PARTIAL_RECONCILIATION', requiresRefund: true, refundDue: partialReceived });
+      });
+    }
     return true;
   }
 
@@ -167,14 +187,14 @@ class PdvService {
   }
 
   async preparePix(order) {
-    if (order.paymentMethod !== 'PIX' || order.pixData?.pixCopiaECola) { return order; }
-    const charge = await this.pix.createCharge({ amount: order.total, txid: order.pixData.txid, ticketNumber: order.ticketNumber,
+    if (order.paymentMethod !== 'PIX' || !order.pixData || order.pixData.pixCopiaECola) { return order; }
+    const charge = await this.pix.createCharge({ amount: partAmount(order, 'PIX'), txid: order.pixData.txid, ticketNumber: order.ticketNumber,
       expiresInSeconds: Number(order.pixTtlSeconds || order.pixData?.expiresInSeconds) || 3600 });
     return this.repository.attachCharge(order.id, charge);
   }
 
-  async requestPixAtCashier(orderId, user) {
-    let order = await this.repository.requestPixAtCashier(orderId, actor(user));
+  async requestPixAtCashier(orderId, user, paymentParts) {
+    let order = await this.repository.requestPixAtCashier(orderId, actor(user), paymentParts);
     await this.schedulePixExpiration(order);
     order = await this.preparePix(order);
     await this.deliver(`${order.id}-receipt`);
@@ -182,7 +202,7 @@ class PdvService {
   }
 
   async finishCreation(order, user, deferReceipt = false) {
-    if (!deferReceipt && order.paymentMethod !== 'PIX' && ['ADMIN', 'CAIXA'].includes(user.role)) { order = await this.repository.receive(order.id, actor(user)); }
+    if (!deferReceipt && !order.deferToCashier && order.paymentMethod !== 'PIX' && ['ADMIN', 'CAIXA'].includes(user.role)) { order = await this.repository.receive(order.id, actor(user)); }
     await this.deliver(`${order.id}-receipt`);
     const delivery = await this.repository.read('pdv_outbox', `${order.id}-receipt`);
     return { ...order, receiptText: formatOrderReceipt(order), qrCodeBase64: order.pixData?.qrCodeBase64 || '', receiptDelivery: { sent: delivery?.status === 'SENT' && Boolean(order.customerPhone), reason: delivery?.lastError || (order.customerPhone ? '' : 'Sem WhatsApp informado.') } };
@@ -190,6 +210,7 @@ class PdvService {
 
   async handlePix(txid, endToEndId) {
     if (!/^[a-zA-Z0-9]{26,35}$/.test(txid) || !/^E[a-zA-Z0-9]{31}$/.test(endToEndId || '')) { throw new Error('Identificador Pix inválido.'); }
+    if (await this.debtPix?.handlePix(txid, endToEndId)) return true;
     const orders = await this.repository.list('orders', 'pixData.txid', txid);
     // Memory collections use flat filtering; production query targets the exact txid.
     const order = orders[0];
@@ -198,7 +219,7 @@ class PdvService {
       const status = await this.pix.checkReceivedPayment(endToEndId);
       if (!status.isPaid) { return false; }
       const payment = status.raw;
-      if (payment.txid !== txid || payment.endToEndId !== endToEndId || payment.chave !== this.pix.pixKey || Math.round(Number(payment.valor) * 100) !== Math.round(order.total * 100) || (payment.devolucoes || []).length) { throw new Error('Pagamento Sicredi divergente. Verifique a conciliação.'); }
+      if (payment.txid !== txid || payment.endToEndId !== endToEndId || payment.chave !== this.pix.pixKey || Math.round(Number(payment.valor) * 100) !== Math.round(partAmount(order, 'PIX') * 100) || (payment.devolucoes || []).length) { throw new Error('Pagamento Sicredi divergente. Verifique a conciliação.'); }
       if (order.status === 'CANCELLED' || (Date.parse(order.pixExpiresAt || '') > 0 && Date.parse(order.pixExpiresAt) <= Date.now())) {
         const eventId = `${txid}-${endToEndId}`;
         await this.repository.transaction(async (tx) => {
@@ -248,14 +269,17 @@ class PdvService {
     try {
       const order = job.orderId ? await this.repository.read('orders', job.orderId) : null;
       const settlement = job.settlementId ? await this.repository.read('debt_settlements', job.settlementId) : null;
-      const phone = normalizePhone(job.kind === 'owner-paid' ? this.ownerPhone : (order?.customerPhone || settlement?.customerPhone));
-      if (!phone && job.kind === 'owner-paid') { throw new Error('WhatsApp da horta não configurado.'); }
+      const isOwner = ['owner-paid', 'owner-debt-paid'].includes(job.kind);
+      const phone = normalizePhone(isOwner ? this.ownerPhone : (order?.customerPhone || settlement?.customerPhone));
+      if (!phone && isOwner) { throw new Error('WhatsApp da horta não configurado.'); }
       if (!phone) { await this.repository.updateMessage(id, { status: 'SENT', skipped: true, leaseUntil: 0 }); return; }
       let text;
-      if (job.kind === 'receipt' || job.kind === 'customer-paid' || job.kind === 'pix-charge') { text = formatOrderReceipt(order); }
+      if (job.kind === 'receipt' || job.kind === 'customer-paid' || job.kind === 'pix-charge') {
+        text = !order.completedAt && !order.paidAt && job.kind !== 'customer-paid' ? formatCustomerOrderMessage(order) : formatOrderReceipt(order);
+      }
       else if (settlement?.entryType === 'CREDITO_CLIENTE') { text = `CONFLORA — CRÉDITO DO CLIENTE\nCliente: ${settlement.customerName}\nValor recebido: ${money(settlement.amount)}\nCrédito disponível: ${money(settlement.newCreditBalance)}\nRecebido por: ${settlement.receivedBy.name}\nForma: ${settlement.paymentMethod}`; }
-      else if (settlement) { text = `CONFLORA — QUITAÇÃO DE FIADO\nCliente: ${settlement.customerName}\nValor: ${money(settlement.amount)}\nSaldo devedor: ${money(settlement.newBalance)}\nRecebido por: ${settlement.receivedBy.name}\nForma: ${settlement.paymentMethod}`; }
-      else { text = `CONFLORA — PIX CONFIRMADO\nPedido #${order.ticketNumber}\nCliente: ${order.customerName}\nValor: ${money(order.total)}\nPedido feito por: ${order.createdBy.name}\nRecebido por: ${order.receivedBy.name}\nPedido pago e finalizado. Estoque atualizado.`; }
+      else if (settlement) { text = `CONFLORA — QUITAÇÃO DE FIADO\nCliente: ${settlement.customerName}\nValor: ${money(settlement.amount)}\nSaldo devedor: ${money(settlement.newBalance)}${settlement.excessCredit ? '\nExcedente registrado como crédito: ' + money(settlement.excessCredit) : ''}\nRecebido por: ${settlement.receivedBy.name}\nForma: ${settlement.paymentMethod}`; }
+      else { text = `CONFLORA — PIX CONFIRMADO\nPedido #${order.ticketNumber}\nCliente: ${order.customerName}\nTotal da venda: ${money(order.total)}\nValor Pix: ${money(partAmount(order, 'PIX'))}\nPedido feito por: ${order.createdBy.name}\nRecebido por: ${order.receivedBy.name}\nPedido finalizado. Estoque atualizado.`; }
       const chunks = messageChunks(text, this.whatsapp.sendPdvText ? 900 : 3500);
       for (let index = job.textChunksSent || 0; index < chunks.length; index++) {
         const send = this.whatsapp.sendPdvText || this.whatsapp.sendTextMessage;
@@ -263,9 +287,9 @@ class PdvService {
         if (result?.mock || !result?.messages?.[0]?.id) { throw new Error('WhatsApp não confirmou o envio.'); }
         await this.repository.updateMessage(id, { textChunksSent: index + 1, leaseUntil: Date.now() + 120000 });
       }
-      if (['receipt', 'pix-charge'].includes(job.kind) && order.pixData && !order.paidAt && !job.qrSent) {
-        const image = Buffer.from(order.pixData.qrCodeBase64.split(',')[1], 'base64');
-        const result = await this.whatsapp.sendImageBuffer(phone, image, `Pix pedido #${order.ticketNumber} — ${money(order.total)}`);
+      if (['receipt', 'pix-charge'].includes(job.kind) && order.pixData && !order.completedAt && !order.paidAt && !job.qrSent) {
+      const image = Buffer.from(order.pixData.qrCodeBase64.split(',')[1], 'base64');
+        const result = await this.whatsapp.sendImageBuffer(phone, image, `Pix pedido #${order.ticketNumber} — ${money(order.pixData.amount || order.total)}\n\nPIX COPIA E COLA:\n${order.pixData.pixCopiaECola}`);
         if (!result?.messages?.[0]?.id) { throw new Error('WhatsApp não confirmou o QR Code.'); }
         await this.repository.updateMessage(id, { qrSent: true });
       }

@@ -109,10 +109,16 @@ function updateHeaderActions() {
   const isLoggedIn = Boolean(state.user);
   const allowedCashierRoles = ["ADMIN", "CAIXA", "VENDEDOR"];
   const identity = $("#headerAccountIdentity");
-  const historyButton = $("#historyButton");
 
   identity.hidden = !isLoggedIn;
-  historyButton.hidden = !isLoggedIn || !existingStore;
+  $("#customerAccountShortcut").hidden = !isLoggedIn || !existingStore || allowedCashierRoles.includes(role);
+  $('#customerDebtBadge').hidden = true;
+  if (isLoggedIn && existingStore && role === 'CLIENTE') {
+    const userId = state.user.id;
+    state.api('/customer/ledger').then((ledger) => {
+      if (state.user?.id === userId) updateDebtBadge(ledger.balance);
+    }).catch(() => {});
+  }
   $("#accountButton").hidden = isLoggedIn;
   $("#adminSettingsButton").hidden = role !== "ADMIN";
   cashierShortcut.hidden = !allowedCashierRoles.includes(role);
@@ -318,14 +324,8 @@ async function account() {
       content.append(element("button", {
         type: "button",
         class: "primary account-history-action",
-        text: "Histórico de compras",
+        text: "Minha conta: saldo e histórico",
         onclick: () => { $("#accountDialog").close(); openPurchaseHistory(); },
-      }));
-      content.append(element("button", {
-        type: "button",
-        class: "account-secondary-action",
-        text: "Consultar saldo e compras fiadas",
-        onclick: () => { $("#accountDialog").close(); openCustomerLedger(); },
       }));
     }
   } else {
@@ -438,16 +438,17 @@ $("#googleAccountButton").addEventListener("click", async () => {
 const historyDialog = $("#historyDialog");
 const historyList = $("#historyList");
 const historySentinel = $("#historyLoadSentinel");
-const historyState = { buffer: [], cursor: "", hasMore: false, loading: false, failed: false };
+const historyState = { buffer: [], cursor: "", hasMore: false, loading: false, failed: false, loaded: false };
 
 function renderPurchase(order) {
-  const createdAt = order.createdAt ? new Date(order.createdAt).toLocaleString("pt-BR") : "Data não informada";
+  const createdAt = order.createdAt ? new Date(order.createdAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "Data não informada";
   const items = Array.isArray(order.items) ? order.items : [];
   const total = Number.isFinite(order.totalMinor) ? order.totalMinor : Math.round(Number(order.total || 0) * 100);
   const details = element("details", { class: "history-order-details" }, [
     element("summary", { text: "Ver detalhes da compra" }),
     element("div", { class: "history-order-meta" }, [
       element("span", { text: `Pagamento: ${order.paymentMethod || "Não informado"}` }),
+      element("span", { text: order.paymentStatus === "ON_ACCOUNT" ? "Compra fiada — saldo registrado na conta" : order.paidAt ? `Pago em: ${new Date(order.paidAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}` : "Pagamento ainda não confirmado" }),
       element("span", { text: `Entrega: ${order.fulfillment === "delivery" ? "Endereço" : order.fulfillment === "pickup" ? "Retirada" : order.deliveryAddress || "Não informado"}` }),
       ...(order.serviceArea ? [element("span", { text: `Região: ${order.serviceArea}` })] : []),
       ...(order.deliveryAddress || order.address ? [element("span", { text: `Endereço: ${order.deliveryAddress || order.address}` })] : []),
@@ -458,7 +459,7 @@ function renderPurchase(order) {
   return element("article", { class: "history-order-card" }, [
     element("div", { class: "history-order-summary" }, [
       element("div", {}, [
-        element("strong", { text: `Pedido #${String(order.id || "").slice(-8).toUpperCase()}` }),
+        element("strong", { text: `Pedido #${order.ticketNumber || String(order.id || "").slice(-8).toUpperCase()}` }),
         element("span", { class: "muted", text: createdAt }),
       ]),
       element("div", { class: "history-order-total" }, [
@@ -482,7 +483,7 @@ function renderHistoryBatch() {
 }
 
 async function loadHistoryPage() {
-  if (historyState.loading || !historyState.hasMore && historyState.cursor) return;
+  if (historyState.loading || (!historyState.hasMore && historyState.loaded)) return;
   historyState.loading = true;
   historySentinel.textContent = "Carregando mais compras…";
   try {
@@ -492,6 +493,7 @@ async function loadHistoryPage() {
     historyState.buffer.push(...(page.orders || []));
     historyState.cursor = page.nextCursor || "";
     historyState.hasMore = Boolean(page.hasMore);
+    historyState.loaded = true;
     historyState.failed = false;
     if (!historyState.buffer.length && historyState.hasMore) {
       historyState.loading = false;
@@ -519,14 +521,16 @@ function openPurchaseHistory() {
   historyState.hasMore = false;
   historyState.loading = false;
   historyState.failed = false;
-  historyList.replaceChildren(historySentinel);
+  historyState.loaded = false;
+  historyList.replaceChildren(ledgerContent, element("h3", { class: "ledger-section-title", text: "Histórico de compras" }), historySentinel);
   historySentinel.textContent = "Carregando suas compras…";
   openDialog(historyDialog);
+  loadCustomerLedger();
   if (!historyState.observer && typeof IntersectionObserver === "function") {
     historyState.observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting) && !historyState.loading && !historyState.failed) {
         if (historyState.buffer.length) renderHistoryBatch();
-        else if (historyState.hasMore || !historyState.cursor) loadHistoryPage();
+        else if (historyState.hasMore || !historyState.loaded) loadHistoryPage();
       }
     }, { root: historyList, rootMargin: "140px" });
     historyState.observer.observe(historySentinel);
@@ -534,10 +538,67 @@ function openPurchaseHistory() {
   loadHistoryPage();
 }
 
-const ledgerDialog = $("#ledgerDialog");
 const ledgerContent = $("#ledgerContent");
+function updateDebtBadge(balance) {
+  const badge = $('#customerDebtBadge');
+  badge.hidden = !(Number(balance) > 0);
+  badge.textContent = Number(balance) > 0 ? `Deve ${money(Math.round(Number(balance) * 100))}` : '';
+}
+let debtPixTimer;
+historyDialog.addEventListener('close', () => clearTimeout(debtPixTimer));
+
+function renderDebtPayment(ledger) {
+  const section = element('section', { class: 'ledger-payment' });
+  if (Number(ledger.balance) > 0) {
+    const amount = element('input', { type: 'number', min: '0.01', max: String(ledger.balance), step: '0.01', value: Number(ledger.balance).toFixed(2), 'aria-label': 'Valor da dívida a pagar' });
+    const status = element('p', { role: 'status', class: 'muted' });
+    const result = element('div');
+    let operation;
+    const poll = async (id) => {
+      if (!historyDialog.open || !state.user) return;
+      try {
+        const { charge } = await state.api('/customer/debt-pix/' + id);
+        if (charge.status === 'PAID') {
+          status.textContent = 'Pagamento confirmado pelo Sicredi. Seu saldo foi atualizado.';
+          clearTimeout(debtPixTimer);
+          await loadCustomerLedger();
+          ledgerContent.prepend(element('p', { class: 'ledger-balance ledger-balance--clear', role: 'status', text: 'Pagamento confirmado! Dívida atualizada automaticamente.' }));
+          return;
+        }
+      } catch { status.textContent = 'Aguardando confirmação. Você pode reabrir Minha conta para conferir o saldo.'; }
+      debtPixTimer = setTimeout(() => poll(id), 5000);
+    };
+    const pay = element('button', { type: 'button', class: 'primary', text: 'Pagar dívida com Pix', onclick: async () => {
+      const value = Number(amount.value);
+      if (!Number.isFinite(value) || value <= 0 || value > Number(ledger.balance)) { status.textContent = 'Informe um valor entre R$ 0,01 e o saldo devedor.'; return; }
+      pay.disabled = true;
+      amount.disabled = true;
+      if (!operation || operation.amount !== value) operation = { amount: value, requestId: crypto.randomUUID() };
+      status.textContent = 'Gerando cobrança Sicredi…';
+      try {
+        const { charge } = await state.api('/customer/debt-pix', { method: 'POST', body: operation });
+        if (charge.status === 'PAID') { await poll(charge.id); return; }
+        result.replaceChildren(element('img', { src: charge.pixData.qrCodeBase64, alt: 'QR Code Pix para pagamento da dívida', width: '220', height: '220' }), element('textarea', { readonly: '', 'aria-label': 'Pix copia e cola da dívida', text: charge.pixData.pixCopiaECola }), element('button', { type: 'button', class: 'quiet', text: 'Copiar Pix', onclick: () => navigator.clipboard.writeText(charge.pixData.pixCopiaECola).then(() => { status.textContent = 'Pix copiado. Aguardando pagamento.'; }).catch(() => { status.textContent = 'Selecione e copie o código acima.'; }) }));
+        status.textContent = 'Pague pelo seu banco. A baixa será automática após a confirmação do Sicredi.';
+        poll(charge.id);
+      } catch (error) {
+        status.textContent = error.message;
+        pay.disabled = false;
+        amount.disabled = false;
+      }
+    } });
+    section.append(element('label', { text: 'Quanto deseja pagar? (R$)' }, [amount]), pay, status, result);
+  }
+  const phone = String(ledger.supportPhone || state.config?.checkout?.contactPhone || '').replace(/\D/g, '');
+  section.append(element('p', { class: 'muted', text: 'Encontrou algo errado no saldo ou em uma compra?' }));
+  if (/^\d{10,15}$/.test(phone)) section.append(element('a', { class: 'quiet', text: 'Falar com a loja', href: `https://wa.me/${phone.length <= 11 ? '55' + phone : phone}?text=${encodeURIComponent('Olá! Preciso de ajuda para conferir minha conta e histórico na Conflora.')}`, target: '_blank', rel: 'noopener noreferrer' }));
+  else section.append(element('p', { class: 'muted', text: 'Peça a um representante da loja para conferir seu cadastro e as movimentações.' }));
+  ledgerContent.append(section);
+}
 
 function renderCustomerLedger(ledger) {
+  updateDebtBadge(ledger.balance);
+  clearTimeout(debtPixTimer);
   ledgerContent.replaceChildren();
   const balance = Number(ledger.balance || 0);
   const balanceTitle = balance > 0 ? "Saldo devedor" : balance < 0 ? "Crédito a seu favor" : "Saldo quitado";
@@ -548,11 +609,12 @@ function renderCustomerLedger(ledger) {
     element("span", { class: "ledger-balance-value", text: money(Math.abs(Math.round(balance * 100))) }),
   ]));
   const creditBalance = Number(ledger.creditBalance || 0);
-  ledgerContent.append(element("section", { class: `ledger-balance ${creditBalance > 0 ? "ledger-balance--credit" : "ledger-balance--clear"}` }, [
+  if (creditBalance > 0) ledgerContent.append(element("section", { class: 'ledger-balance ledger-balance--credit' }, [
     element("span", { class: "muted", text: "Valores recebidos antecipadamente" }),
     element("strong", { text: creditBalance > 0 ? "Crédito a seu favor" : "Crédito disponível" }),
     element("span", { class: "ledger-balance-value", text: money(Math.max(0, Math.round(creditBalance * 100))) }),
   ]));
+  renderDebtPayment(ledger);
 
   const transactions = [...(ledger.transactions || [])].sort((left, right) =>
     String(right.createdAt || "").localeCompare(String(left.createdAt || "")),
@@ -569,7 +631,7 @@ function renderCustomerLedger(ledger) {
     const amount = Math.abs(Math.round(Number(transaction.amount || 0) * 100));
     const title = isDebt ? "Compra fiada" : isCredit ? "Crédito recebido" : isCreditUse ? "Crédito usado em compra" : "Recebimento de fiado";
     const prefix = isDebt || isCredit ? "+ " : "− ";
-    const date = transaction.createdAt ? new Date(transaction.createdAt).toLocaleString("pt-BR") : "Data não informada";
+    const date = transaction.createdAt ? new Date(transaction.createdAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "Data não informada";
     const meta = [date, transaction.paymentMethod, transaction.ticketNumber ? `Venda #${transaction.ticketNumber}` : transaction.orderId ? `Pedido #${String(transaction.orderId).slice(-8).toUpperCase()}` : "", transaction.receivedBy ? `Atendido por ${transaction.receivedBy}` : ""]
       .filter(Boolean).join(" · ");
     const card = element("article", { class: "ledger-transaction" }, [
@@ -578,6 +640,9 @@ function renderCustomerLedger(ledger) {
     ]);
     if (transaction.items?.length) {
       card.append(element("span", { class: "ledger-transaction-items", text: transaction.items.map((item) => `${item.quantity} ${item.unit || "UN"} · ${item.name}`).join(" · ") }));
+    }
+    if (transaction.type === "QUITACAO_FIADO") {
+      card.append(element("span", { class: "muted", text: `Saldo devedor após o pagamento: ${money(Math.round(Number(transaction.newBalance || 0) * 100))}` }));
     }
     if (transaction.receiptText) {
       card.append(element("details", { class: "ledger-receipt" }, [
@@ -589,13 +654,12 @@ function renderCustomerLedger(ledger) {
   }
 }
 
-async function openCustomerLedger() {
+async function loadCustomerLedger() {
   if (!state.user) {
     notify("Entre na sua conta para consultar seu saldo.");
     return;
   }
   ledgerContent.replaceChildren(element("p", { class: "muted", text: "Carregando seu saldo…" }));
-  openDialog(ledgerDialog);
   try {
     renderCustomerLedger(await state.api("/customer/ledger"));
   } catch (error) {
@@ -603,7 +667,7 @@ async function openCustomerLedger() {
     if (error.status === 404) {
       ledgerContent.append(element("p", { class: "muted", text: "Para vincular sua conta, informe ao caixa o mesmo e-mail usado no seu login. A equipe consegue atualizar o cadastro na tela do caixa." }));
     } else {
-      ledgerContent.append(element("button", { type: "button", class: "quiet", text: "Tentar novamente", onclick: openCustomerLedger }));
+      ledgerContent.append(element("button", { type: "button", class: "quiet", text: "Tentar novamente", onclick: loadCustomerLedger }));
     }
   }
 }
@@ -672,7 +736,7 @@ $("#accountButton").addEventListener("click", () =>
 $("#headerAccountIdentity").addEventListener("click", () =>
   account().catch((error) => notify(error.message)),
 );
-$("#historyButton").addEventListener("click", openPurchaseHistory);
+$("#customerAccountShortcut").addEventListener("click", openPurchaseHistory);
 $("#historyCloseButton").addEventListener("click", () => historyDialog.close());
 historyDialog.addEventListener("click", (event) => { if (event.target === historyDialog) historyDialog.close(); });
 

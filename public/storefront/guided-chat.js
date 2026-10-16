@@ -46,7 +46,7 @@ export function createGuidedChat(state, catalog) {
     for (const section of product.contentSections || []) {
       say(`${section.title}: ${section.body}`);
     }
-    messages.append(catalog.card(product, true));
+    messages.append(catalog.card(product, { chat: true }));
     say(
       "Essas são as informações cadastradas pela loja. Você pode adicionar à sacola ou buscar outro produto.",
     );
@@ -85,12 +85,6 @@ export function createGuidedChat(state, catalog) {
         },
       }, [icon("x")]),
     ]);
-    const searchInput = element("input", {
-      type: "search",
-      class: "guided-results-search",
-      placeholder: "Pesquisar produto nesta seleção…",
-      "aria-label": "Pesquisar produto nesta seleção",
-    });
     const grid = element("div", { class: "guided-results-grid" });
     const empty = element("p", {
       class: "guided-results-empty",
@@ -104,7 +98,7 @@ export function createGuidedChat(state, catalog) {
     });
     const panel = element("section", { class: "guided-results" }, [
       toolbar,
-      searchInput,
+      element('p', { class: 'muted', text: 'Procura algum produto específico nesta categoria? Digite o nome no campo do chat abaixo.' }),
       grid,
       empty,
       more,
@@ -118,32 +112,40 @@ export function createGuidedChat(state, catalog) {
     let matchingProducts = availableProducts;
     let visibleCount = 0;
     const renderProducts = () => {
-      const query = normalize(searchInput.value);
-      matchingProducts = availableProducts.filter((product) =>
-        !query || normalize(product.name).includes(query),
-      );
+      matchingProducts = availableProducts;
       visibleCount = Math.min(24, matchingProducts.length);
       grid.replaceChildren(
-        ...matchingProducts.slice(0, visibleCount).map((product) => catalog.card(product)),
+        ...matchingProducts.slice(0, visibleCount).map((product) => catalog.card(product, { chat: true })),
       );
       count.textContent = `${matchingProducts.length} ${matchingProducts.length === 1 ? "produto" : "produtos"}`;
       empty.hidden = matchingProducts.length > 0;
       more.hidden = matchingProducts.length <= visibleCount;
       more.textContent = `Mostrar mais produtos (${matchingProducts.length - visibleCount})`;
     };
-    searchInput.addEventListener("input", renderProducts);
     more.addEventListener("click", () => {
       const previousCount = visibleCount;
       visibleCount = Math.min(visibleCount + 24, matchingProducts.length);
       grid.append(
-        ...matchingProducts.slice(previousCount, visibleCount).map((product) => catalog.card(product)),
+        ...matchingProducts.slice(previousCount, visibleCount).map((product) => catalog.card(product, { chat: true })),
       );
       more.hidden = matchingProducts.length <= visibleCount;
       more.textContent = `Mostrar mais produtos (${matchingProducts.length - visibleCount})`;
     });
     renderProducts();
-    messages.scrollTop = messages.scrollHeight;
+    panel.scrollIntoView({ block: 'start' });
   }
+  messages.addEventListener('chat-product-added', (event) => {
+    messages.querySelector('.chat-next-search')?.remove();
+    const actions = element('div', { class: 'suggestions chat-next-search' }, [
+      element('p', { text: `${event.detail.product.name} adicionado. Quer pesquisar outro produto ou manter esta seleção?` }),
+      element('button', { text: 'Limpar e pesquisar outro', onclick: () => {
+        path = []; selected = null; messages.replaceChildren(); clearResults(); browse(); $('#chatInput').focus();
+      } }),
+      element('button', { text: 'Manter filtro atual', onclick: () => { actions.remove(); $('#chatInput').focus(); } }),
+    ]);
+    messages.append(actions);
+    messages.scrollTop = messages.scrollHeight;
+  });
   function browse() {
     clearResults();
     selected = null;

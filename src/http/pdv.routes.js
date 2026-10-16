@@ -3,7 +3,8 @@ const { PdvRepository } = require('../orders/pdv.repository');
 const { PdvService, actor, requestId, normalizePhone } = require('../orders/pdv.service');
 const { formatOrderReceipt } = require('../orders/receipt.util');
 const Logger = require('../shared/logger');
-const { setInterval } = require('node:timers');
+const { setInterval, clearInterval } = require('node:timers');
+const { normalizePaymentParts, partAmount } = require('../orders/payment-parts');
 
 function secureEqual(left, right) {
   const a = Buffer.from(left || ''); const b = Buffer.from(right || '');
@@ -46,10 +47,12 @@ function paymentTotals(orders, settlements) {
   const methods = ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO', 'SALDO_CLIENTE'];
   const totals = Object.fromEntries(methods.map((method) => [method, { sales: 0, debt: 0, count: 0, debtCount: 0 }]));
   for (const order of orders) {
-    const row = totals[order.paymentMethod];
-    if (!row) { continue; }
-    row.sales += Number(order.total || 0);
-    row.count += 1;
+    for (const part of order.paymentParts || [{ method: order.paymentMethod, amount: order.total }]) {
+      const row = totals[part.method];
+      if (!row) continue;
+      row.sales += Number(part.amount || 0);
+      row.count += 1;
+    }
   }
   for (const settlement of settlements) {
     const row = totals[settlement.paymentMethod];
@@ -64,10 +67,16 @@ function paymentTotals(orders, settlements) {
 function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueueClient }) {
   const store = new PdvRepository(repository);
   const service = new PdvService({ repository: store, pix, whatsapp, ownerPhone, taskQueueClient });
+  const { CustomerDebtPixService } = require('../orders/customer-debt-pix.service');
+  const debtPix = new CustomerDebtPixService({ store, pix, pdv: service });
+  service.debtPix = debtPix;
   const route = (handler) => async (req, res) => {
     try { await handler(req, res); }
     catch (error) { Logger.warn('Operação PDV não concluída', { error: error.message }); res.status(400).json({ error: error.message }); }
   };
+  const requireCustomer = (req, res, next) => req.user ? next() : res.status(401).json({ error: 'Entre na sua conta.' });
+  app.post('/api/customer/debt-pix', requireCustomer, route(async (req, res) => res.json({ success: true, charge: await debtPix.create(req.body, req.user) })));
+  app.get('/api/customer/debt-pix/:id', requireCustomer, route(async (req, res) => res.json({ success: true, charge: await debtPix.read(req.params.id, req.user) })));
   app.use('/api/caixa', requireStaff);
 
   app.get('/api/caixa/favorites', route(async (req, res) => {
@@ -164,22 +173,22 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     const allSettlements = [...new Map(settlementGroups.flat().map((row) => [row.id, row])).values()];
     const debtHistory = allSettlements.filter((row) => ['QUITACAO_FIADO', 'CREDITO_CLIENTE'].includes(row.entryType || row.type || 'QUITACAO_FIADO') && (isAdmin || row.receivedBy?.id === req.user.id) && isWithinRange(row.createdAt, range));
     const mySales = completed.filter((order) => order.createdBy?.id === req.user.id);
-    const myReceipts = paid.filter((order) => order.receivedBy?.id === req.user.id);
+    const myReceipts = completed.filter((order) => order.receivedBy?.id === req.user.id);
     const myDebtReceipts = debtHistory.filter((row) => row.receivedBy?.id === req.user.id);
-    const closingOrders = isAdmin ? paid : paid.filter((order) => order.receivedBy?.id === req.user.id);
+    const receivedOrders = completed.filter((order) => order.paymentStatus === 'APPROVED' || order.paymentParts?.some((part) => ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO'].includes(part.method)));
+    const closingOrders = isAdmin ? receivedOrders : receivedOrders.filter((order) => order.receivedBy?.id === req.user.id);
     const closingSettlements = isAdmin ? debtHistory : myDebtReceipts;
     const byPayment = paymentTotals(closingOrders, closingSettlements);
     const sum = (rows, field) => rows.reduce((total, row) => total + Number(row[field] || 0), 0);
-    const cashReceivedOrders = closingOrders.filter((order) => order.paymentMethod !== 'SALDO_CLIENTE');
-    const creditUsedOrders = closingOrders.filter((order) => order.paymentMethod === 'SALDO_CLIENTE');
+    const receivedTotal = (rows) => rows.reduce((sum, order) => sum + ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO'].reduce((amount, method) => amount + partAmount(order, method), 0), 0);
     const closing = {
       orderCount: closingOrders.length,
       debtSettlementCount: closingSettlements.length,
-      salesReceived: sum(cashReceivedOrders, 'total'),
-      customerCreditUsed: sum(creditUsedOrders, 'total'),
+      salesReceived: receivedTotal(closingOrders),
+      customerCreditUsed: closingOrders.reduce((sum, order) => sum + partAmount(order, 'SALDO_CLIENTE'), 0),
       debtReceived: sum(closingSettlements, 'amount'),
-      totalReceived: sum(cashReceivedOrders, 'total') + sum(closingSettlements, 'amount'),
-      confirmedDebt: sum(isAdmin ? confirmed : confirmed.filter((order) => order.createdBy?.id === req.user.id || order.receivedBy?.id === req.user.id), 'total'),
+      totalReceived: receivedTotal(closingOrders) + sum(closingSettlements, 'amount'),
+      confirmedDebt: (isAdmin ? confirmed : confirmed.filter((order) => order.createdBy?.id === req.user.id || order.receivedBy?.id === req.user.id)).reduce((sum, order) => sum + partAmount(order, 'FIADO'), 0),
       byPayment,
     };
     res.json({
@@ -192,7 +201,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
       debtHistory: debtHistory.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))),
       metrics: {
         sales: sum(mySales, 'total'),
-        receipts: sum(myReceipts, 'total'),
+        receipts: receivedTotal(myReceipts),
         debtReceipts: sum(myDebtReceipts, 'amount'),
         orderCount: mySales.length,
       },
@@ -211,18 +220,20 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
   app.get('/api/caixa/orders/:id', route(async (req, res) => res.json(await findOrder(req))));
   app.post('/api/caixa/orders/:id/confirm', requireCashier, route(async (req, res) => {
     const existing = await findOrder(req);
-    const paymentMethod = String(req.body.paymentMethod || existing.paymentMethod || '').toUpperCase();
+    const parts = normalizePaymentParts(req.body.paymentParts, req.body.paymentMethod || existing.paymentMethod, existing.total);
+    if (existing.source !== 'PDV' && parts.length > 1) throw new Error('Divida o pagamento pelo PDV para preservar as parcelas da comanda.');
+    const paymentMethod = parts.some((part) => part.method === 'PIX') ? 'PIX' : parts.length > 1 ? 'MISTO' : parts[0].method;
     if (paymentMethod === 'PIX') {
       if (existing.source === 'WEB_CATALOG' && ['CREATING_PIX', 'AWAITING_PIX'].includes(existing.status)) {
         throw new Error('A cobrança Pix já foi emitida. Confirme pelo Sicredi ou use a confirmação manual após conferir o comprovante.');
       }
-      const order = await service.requestPixAtCashier(existing.id, req.user);
+      const order = await service.requestPixAtCashier(existing.id, req.user, parts);
       return res.status(202).json({ success: true, awaitingPayment: true, order, receiptText: formatOrderReceipt(order) });
     }
     const receivedAmount = req.body.receivedAmount === null || req.body.receivedAmount === undefined || req.body.receivedAmount === ''
       ? null : Number(req.body.receivedAmount);
     const order = existing.source === 'PDV'
-      ? await store.receive(existing.id, actor(req.user), null, receivedAmount, paymentMethod, { sendFinalReceipt: true })
+      ? await store.receive(existing.id, actor(req.user), null, receivedAmount, paymentMethod, { sendFinalReceipt: true, requestedParts: parts })
       : await repository.confirmOrderPayment(existing.id, {
         verifiedVia: 'CAIXA_MANUAL', receivedBy: actor(req.user), paymentMethod,
         receivedAmount: paymentMethod === 'DINHEIRO' ? (receivedAmount ?? Number(existing.total || 0)) : receivedAmount,

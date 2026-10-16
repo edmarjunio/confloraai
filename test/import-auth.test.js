@@ -41,6 +41,31 @@ async function appContext(t) {
   return { repo, base, request, login };
 }
 
+test('minha conta exige login e reúne vendas do cadastro financeiro sem expor outro cliente', async (t) => {
+  const { repo, request } = await appContext(t);
+  assert.equal((await request('/api/customer/ledger')).status, 401);
+  assert.equal((await request('/api/customer/orders')).status, 401);
+  await request('/api/auth/register', { email: 'conta@test.com', name: 'Cliente Conta', password: 'senha123' });
+  const login = await request('/api/auth/login', { email: 'conta@test.com', password: 'senha123' });
+  const cookie = login.headers.get('set-cookie').split(';')[0];
+  await repo.saveCustomerProfile('5564999991122', { name: 'Cliente Conta', email: 'conta@test.com', debtBalance: 75, creditBalance: 10 });
+  await repo.createDirectOrder({ id: 'pdv-linked', customerId: '5564999991122', customerName: 'Cliente Conta', paymentMethod: 'FIADO', paymentStatus: 'ON_ACCOUNT', total: 100, items: [] });
+  await repo.createDirectOrder({ id: 'private-other', customerId: 'other-customer', customerEmail: 'other@test.com', total: 999, items: [] });
+  repo.inMemoryCustomerDebts = [{ id: 'debt-1', customerKey: '5564999991122', orderId: 'pdv-linked', type: 'DEBITO_FIADO', amount: 100, createdAt: '2026-10-15T12:00:00Z' }];
+  repo.inMemoryDebtSettlements = [
+    { id: 'payment-1', customerKey: '5564999991122', type: 'QUITACAO_FIADO', amount: 25, paymentMethod: 'DINHEIRO', receivedBy: { name: 'Caixa' }, newBalance: 75, createdAt: '2026-10-16T12:00:00Z' },
+    { id: 'private-debt', customerKey: 'other-customer', type: 'QUITACAO_FIADO', amount: 999 },
+  ];
+  const history = await (await request('/api/customer/orders?customerId=other-customer', undefined, cookie)).json();
+  assert.deepEqual(history.orders.map((order) => order.id), ['pdv-linked']);
+  const ledger = await (await request('/api/customer/ledger?customerId=other-customer', undefined, cookie)).json();
+  assert.equal(ledger.balance, 75);
+  assert.equal(ledger.creditBalance, 10);
+  assert.equal(ledger.transactions.length, 2);
+  assert.ok(ledger.transactions.some((entry) => entry.type === 'QUITACAO_FIADO' && entry.amount === 25 && entry.receivedBy === 'Caixa'));
+  assert.ok(ledger.transactions.some((entry) => entry.type === 'DEBITO_FIADO' && entry.receiptText.includes('Cliente Conta')));
+});
+
 test("store branding settings require admin, validate data, persist and reject stale updates", async (t) => {
   const { request, login } = await appContext(t);
   assert.equal((await request('/api/storefront/admin/config')).status,401);

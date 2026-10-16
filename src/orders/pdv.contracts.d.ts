@@ -1,9 +1,11 @@
-export type PaymentMethod = 'PIX' | 'DINHEIRO' | 'DEBITO' | 'CREDITO' | 'FIADO';
+export type PaymentMethod = 'PIX' | 'DINHEIRO' | 'DEBITO' | 'CREDITO' | 'FIADO' | 'SALDO_CLIENTE' | 'MISTO';
 export interface StaffActor { id: string; name: string; role: 'ADMIN' | 'CAIXA' | 'VENDEDOR'; }
 export interface SaleInput {
   requestId: string;
   items: Array<{ productId: string; quantity: number }>;
   paymentMethod: PaymentMethod;
+  paymentParts?: Array<{ method: Exclude<PaymentMethod, 'MISTO'>; amount: number }>;
+  deferToCashier?: boolean;
   customerId?: string;
   customerName?: string;
   customerPhone?: string;

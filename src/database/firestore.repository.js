@@ -3679,21 +3679,22 @@ class FirestoreRepository {
     };
   }
 
-  async getCustomerOrderHistoryPage({ customerId = '', customerEmail = '', cursor = '', limit = 12 } = {}) {
+  async getCustomerOrderHistoryPage({ customerId = '', customerIds = [], customerEmail = '', cursor = '', limit = 12 } = {}) {
     const cleanId = String(customerId || '').trim();
+    const linkedIds = new Set([cleanId, ...customerIds.map((id) => String(id).trim())].filter(Boolean));
     const cleanEmail = String(customerEmail || '').trim().toLowerCase();
     const pageSize = Math.max(1, Math.min(30, Number(limit) || 12));
     const matches = (order) => Boolean(
-      (cleanId && String(order.customerId || '') === cleanId) ||
+      linkedIds.has(String(order.customerId || '')) ||
       (cleanEmail && String(order.customerEmail || '').trim().toLowerCase() === cleanEmail),
     );
-    if (!cleanId && !cleanEmail) return { orders: [], nextCursor: null, hasMore: false };
+    if (!linkedIds.size && !cleanEmail) return { orders: [], nextCursor: null, hasMore: false };
 
     if (this.firestore && !this._firestoreClientDisabled && !FirestoreRepository._globalClientDisabled) {
       try {
         const collection = this.firestore.collection('orders');
         const identityQueries = [
-          ...(cleanId ? [collection.where('customerId', '==', cleanId)] : []),
+          ...[...linkedIds].map((id) => collection.where('customerId', '==', id)),
           ...(cleanEmail ? [collection.where('customerEmail', '==', cleanEmail)] : []),
         ];
         const cursorSnapshot = cursor ? await collection.doc(cursor).get() : null;

@@ -161,7 +161,7 @@ test('Cliente: compra, recibo e detalhes do histórico usam o mesmo comprovante'
     hasMore: false, nextCursor: null,
   } }));
   await page.locator('#cartCloseButton').click();
-  await page.locator('#historyButton').click();
+  await page.locator('#customerAccountShortcut').click();
   await expect(page.locator('#historyList')).toContainText('Pedido #');
   const orderDetails = page.locator('.history-order-details').first();
   await orderDetails.locator('summary').click();
