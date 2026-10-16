@@ -1070,7 +1070,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                 <PdvComponents.SiteBrand />
 
                 {/* Search fills the available space; quantity stays beside the user controls. */}
-                <div className="order-4 flex min-w-0 w-full flex-1 items-center sm:order-2 sm:w-auto">
+                <div className="order-4 flex w-full basis-full flex-none items-center sm:order-2 sm:w-auto sm:min-w-0 sm:flex-1 sm:basis-0">
                   <div className="relative flex-1">
                     <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
@@ -1300,7 +1300,13 @@ const { useState, useEffect, useRef, useMemo } = React;
 
               {/* RIGHT SECTION (1/3 - 4 Columns): Real-Time Cashier Receipt Panel */}
               {deviceView !== 'mobile-preview' && (
-                <aside className="hidden md:block md:col-span-4 sticky top-4 h-[calc(100vh-240px)] min-h-[360px]">
+                <aside
+                  className="fixed top-16 z-30 hidden h-[calc(100dvh-5rem)] min-h-0 lg:block"
+                  style={{
+                    right: 'max(calc((100vw - 1600px) / 2), 16px)',
+                    width: 'min(calc((100vw - 48px) / 3), 520px)',
+                  }}
+                >
                   {renderCashierPanel()}
                 </aside>
               )}
