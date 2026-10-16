@@ -93,6 +93,7 @@ class PdvRepository {
         throw new Error('Pix exige confirmação do Sicredi com identificador e valor exatos.');
       }
       if (order.paymentMethod !== 'PIX' && !['ADMIN', 'CAIXA'].includes(receiver?.role)) { throw new Error('Somente o caixa pode receber esta comanda.'); }
+      if (order.paymentMethod !== 'PIX' && order.assignedCashier?.id && receiver.role !== 'ADMIN' && order.assignedCashier.id !== receiver.id) { throw new Error('Esta comanda foi encaminhada para outro caixa.'); }
       const tendered = cashReceived ?? order.cashTendered ?? order.total;
       if (order.paymentMethod === 'DINHEIRO' && (!Number.isFinite(tendered) || Math.round(tendered * 100) < Math.round(order.total * 100))) { throw new Error('Valor recebido em dinheiro menor que o total.'); }
       const now = new Date().toISOString();
@@ -115,7 +116,7 @@ class PdvRepository {
         tx.set('stock_movements', `${order.id}-${id}`, { productId: id, productName: product.name, orderId, quantityDeducted: quantity, previousStock: stock + quantity, newStock: stock, type: 'SALE_PDV', createdAt: now });
       }
       const receivedBy = order.paymentMethod === 'PIX' ? order.createdBy : receiver;
-      const completed = { ...order, receivedBy, cashierName: receivedBy.name, status: 'CONFIRMED',
+      const completed = { ...order, receivedBy, cashierName: receivedBy.name, cashierEmail: receivedBy.email || '', status: 'CONFIRMED',
         paymentStatus: onAccount ? 'ON_ACCOUNT' : 'APPROVED', paidAt: onAccount ? null : now,
         completedAt: now, stockDeducted: true, stockDeductedAt: order.stockDeductedAt || now,
         verifiedVia: verification ? 'SICREDI_PIX_WEBHOOK' : 'CAIXA', updatedAt: now,

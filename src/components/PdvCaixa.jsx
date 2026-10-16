@@ -4,7 +4,6 @@ import {
   Plus,
   Minus,
   X,
-  ScanBarcode,
   ShoppingBag,
   Sparkles,
   Check,
@@ -230,7 +229,7 @@ export default function PdvCaixa() {
 
   // Mobile Bottom Sheet mode: 'collapsed' | 'peek' (tempo real) | 'expanded'
   const [mobileSheetMode, setMobileSheetMode] = useState('peek');
-  const [activeModal, setActiveModal] = useState(null); // 'pay' | 'discount' | 'freight' | 'scanner' | 'receipt' | 'customer'
+  const [activeModal, setActiveModal] = useState(null); // 'pay' | 'discount' | 'freight' | 'receipt' | 'customer'
   const [paymentMethod, setPaymentMethod] = useState('pix');
   const [cashReceived, setCashReceived] = useState('');
 
@@ -829,7 +828,7 @@ const renderCashierPanel = () => (
             </div>
             <p className="text-sm font-semibold text-slate-700">Caixa livre</p>
             <p className="text-xs text-slate-400 max-w-[210px] mt-1">
-              Toque nos produtos ao lado ou bipe o código de barras para iniciar a venda.
+              Toque nos produtos do catálogo para iniciar a venda.
             </p>
           </div>
         ) : (
@@ -1113,14 +1112,6 @@ const renderCashierPanel = () => (
 
             {/* Right Status Actions */}
             <div className="flex items-center gap-2 order-2 sm:order-3">
-              <button
-                onClick={() => setActiveModal('scanner')}
-                className="p-2 rounded-full bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 transition border border-slate-200"
-                title="Ler Código de Barras / QR Code"
-              >
-                <ScanBarcode className="w-4 h-4" />
-              </button>
-
               <div className="hidden xl:flex items-center gap-1.5 text-[11px] text-slate-500 pl-2">
                 <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-slate-700 font-semibold">
                   F2 Pagar
@@ -1273,16 +1264,7 @@ const renderCashierPanel = () => (
               })}
             </div>
 
-            {/* Bottom-left Scanner & Tip */}
-            <div className="pt-2 flex items-center justify-between">
-              <button
-                onClick={() => setActiveModal('scanner')}
-                className="w-10 h-10 rounded-full bg-[#0F381E] hover:bg-[#19532e] text-white shadow-sm flex items-center justify-center transition active:scale-95"
-                title="Escanear código de barras (Câmera / Leitor)"
-              >
-                <ScanBarcode className="w-4 h-4" />
-              </button>
-
+          <div className="pt-2 flex items-center justify-between">
               <p className="text-[11px] text-slate-400 hidden sm:block">
                 Toque nos cartões para lançar direto no recibo ao lado.
               </p>
@@ -1747,49 +1729,6 @@ const renderCashierPanel = () => (
                 className="w-full py-3 rounded-xl bg-[#0F381E] text-white font-bold text-sm"
               >
                 Salvar Frete
-              </button>
-            </div>
-          )}
-
-          {/* MODAL: SCANNER SIMULATOR */}
-          {activeModal === 'scanner' && (
-            <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-xl text-center">
-              <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center mx-auto mb-3">
-                <ScanBarcode className="w-7 h-7" />
-              </div>
-              <h3 className="text-lg font-extrabold text-slate-900">
-                Leitor de Código / Câmera
-              </h3>
-              <p className="text-xs text-slate-500 mt-1 mb-4">
-                Simule a leitura de um código de barras para testar a adição rápida ao caixa:
-              </p>
-
-              <div className="space-y-2 mb-4 text-left max-h-48 overflow-y-auto">
-                {products.slice(0, 5).map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => {
-                      addToCart(p);
-                      setActiveModal(null);
-                    }}
-                    className="w-full p-2.5 rounded-xl border border-slate-200 hover:border-emerald-600 hover:bg-emerald-50/40 flex items-center justify-between text-xs transition"
-                  >
-                    <div>
-                      <span className="font-bold text-slate-800 block">{p.name}</span>
-                      <span className="font-mono text-[10px] text-slate-400">
-                        EAN: {p.sku}
-                      </span>
-                    </div>
-                    <span className="font-bold text-emerald-700">{formatBRL(p.price)}</span>
-                  </button>
-                ))}
-              </div>
-
-              <button
-                onClick={() => setActiveModal(null)}
-                className="w-full py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600"
-              >
-                Fechar Leitor
               </button>
             </div>
           )}

@@ -21,12 +21,6 @@ const { useState, useEffect, useRef, useMemo } = React;
     const Plus = (p) => <IconBase {...p}><path d="M5 12h14"/><path d="M12 5v14"/></IconBase>;
     const Minus = (p) => <IconBase {...p}><path d="M5 12h14"/></IconBase>;
     const X = (p) => <IconBase {...p}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></IconBase>;
-    const ScanBarcode = (p) => (
-      <IconBase {...p}>
-        <path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
-        <path d="M7 8v8"/><path d="M12 8v8"/><path d="M17 8v8"/>
-      </IconBase>
-    );
     const ShoppingBag = (p) => (
       <IconBase {...p}>
         <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>
@@ -151,6 +145,8 @@ const { useState, useEffect, useRef, useMemo } = React;
 
       const [products, setProducts] = useState([]);
       const [visibleCount, setVisibleCount] = useState(60);
+      const loadMoreRef = useRef(null);
+      const imagePreloadRef = useRef({ queue: [], started: new Set(), inFlight: new Set(), active: 0 });
       // Aba inicial deve ser 'todas', enquanto a primeira aba visual é ( FAVORITOS )
       const [selectedCategory, setSelectedCategory] = useState('todas');
       const [searchQuery, setSearchQuery] = useState('');
@@ -186,13 +182,15 @@ const { useState, useEffect, useRef, useMemo } = React;
 
       // Mobile Bottom Sheet mode: 'collapsed' | 'peek' (tempo real) | 'expanded'
       const [mobileSheetMode, setMobileSheetMode] = useState('peek');
-      const [activeModal, setActiveModal] = useState(null); // 'pay' | 'discount' | 'freight' | 'scanner' | 'receipt' | 'customer' | 'debt_settle'
+      const [activeModal, setActiveModal] = useState(null); // 'pay' | 'discount' | 'freight' | 'receipt' | 'customer' | 'debt_settle'
       const [paymentMethod, setPaymentMethod] = useState('pix');
       const [cashReceived, setCashReceived] = useState('');
 
       // Gestão de Vendedor e Caixa
       const [currentUser, setCurrentUser] = useState(null);
       const [authReady, setAuthReady] = useState(false);
+      const [cashiers, setCashiers] = useState([]);
+      const [targetCashierId, setTargetCashierId] = useState('');
       const [customerId, setCustomerId] = useState('');
       const operationRef = useRef(null);
       const [sellerName, setSellerName] = useState('');
@@ -210,8 +208,19 @@ const { useState, useEffect, useRef, useMemo } = React;
       }, []);
       useEffect(() => {
         if (!currentUser) return;
-        setSellerName(currentUser.name);
-        setCashierName(currentUser.role === 'VENDEDOR' ? 'Aguardando caixa' : currentUser.name);
+        const staffName = currentUser.name?.trim() || currentUser.email || 'Colaborador';
+        setSellerName(staffName);
+        setCashierName(currentUser.role === 'VENDEDOR' ? 'Aguardando caixa' : staffName);
+        if (currentUser.role === 'VENDEDOR') {
+          fetch('/api/caixa/cashiers').then((res) => { if (!res.ok) throw new Error('Não foi possível carregar os caixas.'); return res.json(); }).then((rows) => {
+            const availableCashiers = Array.isArray(rows) ? rows : [];
+            setCashiers(availableCashiers);
+            if (availableCashiers.length === 1) {
+              setTargetCashierId(availableCashiers[0].id);
+              setCashierName(availableCashiers[0].name?.trim() || availableCashiers[0].email || 'Caixa');
+            }
+          }).catch(() => setCashiers([]));
+        }
         fetch('/api/caixa/products').then((res) => { if (!res.ok) throw new Error('Não foi possível carregar produtos.'); return res.json(); }).then((rows) => {
           setProducts(rows.map((item) => ({ ...item, sku: item.sku || item.id, category: (item.category || 'geral').toLowerCase(), categoryName: item.category || 'Geral', stock: item.stock + ' ' + item.unit, isShortcut: false, image: item.imageUrl || '/storefront/placeholder.svg' })));
         }).catch((error) => alert(error.message));
@@ -415,6 +424,45 @@ const { useState, useEffect, useRef, useMemo } = React;
         });
       }, [products, selectedCategory, searchQuery]);
 
+      useEffect(() => {
+        if (typeof IntersectionObserver === 'undefined' || !loadMoreRef.current) return undefined;
+        const observer = new IntersectionObserver((entries) => {
+          if (entries.some((entry) => entry.isIntersecting)) {
+            setVisibleCount((count) => Math.min(count + 60, filteredProducts.length));
+          }
+        }, { rootMargin: '700px 0px' });
+        observer.observe(loadMoreRef.current);
+        return () => observer.disconnect();
+      }, [filteredProducts.length]);
+
+      useEffect(() => {
+        const scheduler = imagePreloadRef.current;
+        const upcomingImages = new Set(filteredProducts.slice(visibleCount, visibleCount + 60).map((product) => product.image).filter(Boolean));
+        scheduler.queue = scheduler.queue.filter((imageUrl) => upcomingImages.has(imageUrl));
+        for (const imageUrl of upcomingImages) {
+          if (imageUrl && !scheduler.started.has(imageUrl)) {
+            scheduler.started.add(imageUrl);
+            scheduler.queue.push(imageUrl);
+          }
+        }
+        const startNext = () => {
+          if (scheduler.active >= 5 || !scheduler.queue.length) return;
+          const imageUrl = scheduler.queue.shift();
+          scheduler.active += 1;
+          const image = new Image();
+          image.fetchPriority = 'low';
+          scheduler.inFlight.add(image);
+          image.onload = image.onerror = () => {
+            scheduler.inFlight.delete(image);
+            scheduler.active -= 1;
+            startNext();
+          };
+          image.src = imageUrl;
+          startNext();
+        };
+        while (scheduler.active < 5 && scheduler.queue.length) startNext();
+      }, [filteredProducts, visibleCount]);
+
       const addToCart = (product, customQty = null) => {
         const qtyToAdd = customQty !== null ? customQty : Math.max(1, Number(defaultMultiplier) || 1);
         setCart((prev) => {
@@ -457,6 +505,11 @@ const { useState, useEffect, useRef, useMemo } = React;
 
       const handleCompleteSale = async () => {
         if (cart.length === 0 || isSubmittingSale || !currentUser) return;
+        const requiresCashier = currentUser.role === 'VENDEDOR' && paymentMethod !== 'pix';
+        if (requiresCashier && !targetCashierId) {
+          alert('Selecione o caixa que receberá esta comanda.');
+          return;
+        }
         setIsSubmittingSale(true);
         const isDelivery = orderType === 'DELIVERY';
 
@@ -468,7 +521,7 @@ const { useState, useEffect, useRef, useMemo } = React;
         else if (paymentMethod === 'cartao') normalizedPayMethod = 'CARTAO';
         else normalizedPayMethod = 'DINHEIRO';
 
-        const payload = { items: cart.map(i => ({ productId: String(i.id), quantity: i.quantity })), discountPercent, paymentMethod: normalizedPayMethod, freightValue: isDelivery ? Number(freightValue) || 0 : 0, orderType, cashReceived: paymentMethod === 'dinheiro' && cashReceived !== '' ? Number(cashReceived) : null, customerId, customerName, customerPhone, customerCpf, deliveryAddress: customerAddress, notes: customerNotes };
+        const payload = { items: cart.map(i => ({ productId: String(i.id), quantity: i.quantity })), discountPercent, paymentMethod: normalizedPayMethod, freightValue: isDelivery ? Number(freightValue) || 0 : 0, orderType, cashReceived: paymentMethod === 'dinheiro' && cashReceived !== '' ? Number(cashReceived) : null, customerId, customerName, customerPhone, customerCpf, deliveryAddress: customerAddress, notes: customerNotes, ...(requiresCashier ? { targetCashierId } : {}) };
         const fingerprint = JSON.stringify(payload);
         if (!operationRef.current || operationRef.current.fingerprint !== fingerprint) operationRef.current = { fingerprint, id: crypto.randomUUID() };
         try {
@@ -814,7 +867,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                 </div>
                 <p className="text-sm font-semibold text-slate-700">Caixa livre</p>
                 <p className="text-xs text-slate-400 max-w-[210px] mt-1">
-                  Toque nos produtos ao lado ou bipe o código de barras para iniciar a venda.
+                  Toque nos produtos do catálogo para iniciar a venda.
                 </p>
               </div>
             ) : (
@@ -1056,14 +1109,6 @@ const { useState, useEffect, useRef, useMemo } = React;
 
                 {/* Right Status Actions */}
                 <div className="flex items-center gap-2 order-2 sm:order-3">
-                  <button
-                    onClick={() => setActiveModal('scanner')}
-                    className="p-2 rounded-full bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 transition border border-slate-200"
-                    title="Ler Código de Barras / QR Code"
-                  >
-                    <ScanBarcode className="w-4 h-4" />
-                  </button>
-
                   <div className="hidden xl:flex items-center gap-1.5 text-[11px] text-slate-500 pl-2">
                     <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-slate-700 font-semibold">
                       F2 Pagar
@@ -1204,21 +1249,14 @@ const { useState, useEffect, useRef, useMemo } = React;
                   })}
                 </div>
 
-                {/* Bottom-left Scanner & Tip */}
-                <div className="pt-2 flex items-center justify-between">
-                  <button
-                    onClick={() => setActiveModal('scanner')}
-                    className="w-10 h-10 rounded-full bg-[#0F381E] hover:bg-[#19532e] text-white shadow-sm flex items-center justify-center transition active:scale-95"
-                    title="Escanear código de barras (Câmera / Leitor)"
-                  >
-                    <ScanBarcode className="w-4 h-4" />
-                  </button>
-
+                <div ref={loadMoreRef} className="min-h-5 pt-2 text-center text-[11px] text-slate-400" aria-live="polite">
+                  {filteredProducts.length > visibleCount && (typeof IntersectionObserver === 'undefined'
+                    ? <button className="rounded-xl border bg-white px-4 py-2" onClick={() => setVisibleCount((count) => Math.min(count + 60, filteredProducts.length))}>Carregar mais produtos</button>
+                    : 'Carregando próximos produtos…')}
                   <p className="text-[11px] text-slate-400 hidden sm:block">
                     Toque nos cartões para lançar direto no recibo ao lado.
                   </p>
                 </div>
-              {filteredProducts.length > visibleCount && <button className="p-3 rounded-xl bg-white border md:col-span-8" onClick={() => setVisibleCount((count) => count + 60)}>Mostrar mais produtos</button>}
               </section>
 
               {/* RIGHT SECTION (1/3 - 4 Columns): Real-Time Cashier Receipt Panel */}
@@ -1462,7 +1500,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                   <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                     <div>
                       <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full">
-                        Fechamento de Caixa • F2
+                        {currentUser.role === 'VENDEDOR' ? 'Venda • F2' : 'Fechamento de Caixa • F2'}
                       </span>
                       <h3 className="text-xl font-extrabold text-slate-900 mt-1">
                         Finalizar Pagamento
@@ -1536,6 +1574,27 @@ const { useState, useEffect, useRef, useMemo } = React;
                     })}
                   </div>
 
+                  {currentUser.role === 'VENDEDOR' && paymentMethod !== 'pix' && (
+                    <label className="block mb-3 text-xs font-bold text-slate-600">
+                      Encaminhar para o caixa
+                      <select
+                        required
+                        value={targetCashierId}
+                        onChange={(event) => {
+                          const id = event.target.value;
+                          const selectedCashier = cashiers.find((cashier) => cashier.id === id);
+                          setTargetCashierId(id);
+                          setCashierName(selectedCashier?.name?.trim() || selectedCashier?.email || 'Aguardando caixa');
+                        }}
+                        className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+                      >
+                        <option value="">Selecione um caixa</option>
+                        {cashiers.map((cashier) => <option key={cashier.id} value={cashier.id}>{cashier.name?.trim() || cashier.email || 'Caixa'}{cashier.name?.trim() && cashier.email ? ` · ${cashier.email}` : ''}</option>)}
+                      </select>
+                      {!cashiers.length && <span className="mt-1 block font-medium text-rose-700">Nenhum caixa ativo cadastrado.</span>}
+                    </label>
+                  )}
+
                   {/* Vendedor e Caixa Responsáveis */}
                   <div className="grid grid-cols-2 gap-2 mb-3 p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs">
                     <div>
@@ -1552,11 +1611,11 @@ const { useState, useEffect, useRef, useMemo } = React;
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold text-slate-500 uppercase">
-                        Recebido no Caixa por:
+                        {currentUser.role === 'VENDEDOR' && paymentMethod === 'pix' ? 'Recebido por (Pix Sicredi):' : 'Recebido no Caixa por:'}
                       </label>
                       <input
                         type="text"
-                        value={cashierName}
+                        value={currentUser.role === 'VENDEDOR' && paymentMethod === 'pix' ? sellerName : cashierName}
                         readOnly
                         placeholder="Nome do operador de caixa"
                         className="w-full mt-1 px-2.5 py-1 text-xs font-bold border border-slate-300 rounded-lg bg-white focus:outline-none focus:border-emerald-600"
@@ -1576,7 +1635,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                     </div>
                   )}
 
-                  {paymentMethod === 'dinheiro' && (
+                  {paymentMethod === 'dinheiro' && currentUser.role !== 'VENDEDOR' && (
                     <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 mb-4 space-y-2">
                       <div className="flex items-center justify-between">
                         <label className="text-xs font-semibold text-slate-600">
@@ -1607,12 +1666,12 @@ const { useState, useEffect, useRef, useMemo } = React;
                       Voltar
                     </button>
                     <button
-                      disabled={isSubmittingSale}
+                      disabled={isSubmittingSale || (currentUser.role === 'VENDEDOR' && paymentMethod !== 'pix' && !targetCashierId)}
                       onClick={handleCompleteSale}
                       className="w-2/3 py-3 rounded-xl bg-[#109E46] hover:bg-[#0d853a] text-white font-bold text-sm flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 active:scale-98"
                     >
                       <Check className="w-4 h-4" />
-                      <span>{isSubmittingSale ? 'Processando...' : 'Confirmar Venda'}</span>
+                      <span>{isSubmittingSale ? 'Processando...' : currentUser.role === 'VENDEDOR' && paymentMethod !== 'pix' ? 'Enviar comanda ao caixa' : paymentMethod === 'pix' ? 'Gerar Pix Sicredi' : 'Confirmar Venda'}</span>
                     </button>
                   </div>
                 </div>
@@ -1716,49 +1775,6 @@ const { useState, useEffect, useRef, useMemo } = React;
                     className="w-full py-3 rounded-xl bg-[#0F381E] text-white font-bold text-sm"
                   >
                     Salvar Frete
-                  </button>
-                </div>
-              )}
-
-              {/* MODAL: SCANNER SIMULATOR */}
-              {activeModal === 'scanner' && (
-                <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-xl text-center">
-                  <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center mx-auto mb-3">
-                    <ScanBarcode className="w-7 h-7" />
-                  </div>
-                  <h3 className="text-lg font-extrabold text-slate-900">
-                    Leitor de Código / Câmera
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-1 mb-4">
-                    Simule a leitura de um código de barras para testar a adição rápida ao caixa:
-                  </p>
-
-                  <div className="space-y-2 mb-4 text-left max-h-48 overflow-y-auto">
-                    {products.slice(0, 5).map((p) => (
-                      <button
-                        key={p.id}
-                        onClick={() => {
-                          addToCart(p);
-                          setActiveModal(null);
-                        }}
-                        className="w-full p-2.5 rounded-xl border border-slate-200 hover:border-emerald-600 hover:bg-emerald-50/40 flex items-center justify-between text-xs transition"
-                      >
-                        <div>
-                          <span className="font-bold text-slate-800 block">{p.name}</span>
-                          <span className="font-mono text-[10px] text-slate-400">
-                            EAN: {p.sku}
-                          </span>
-                        </div>
-                        <span className="font-bold text-emerald-700">{formatBRL(p.price)}</span>
-                      </button>
-                    ))}
-                  </div>
-
-                  <button
-                    onClick={() => setActiveModal(null)}
-                    className="w-full py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600"
-                  >
-                    Fechar Leitor
                   </button>
                 </div>
               )}

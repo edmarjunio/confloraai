@@ -89,6 +89,11 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone }) {
     if (order.approvalRequired) { return res.status(202).json({ success: true, ...order }); }
     res.json({ success: true, order, receiptDelivery: order.receiptDelivery });
   }));
+  app.get('/api/caixa/cashiers', route(async (_req, res) => {
+    const users = await repository.getAllUsers();
+    res.json(users.filter((user) => user.active !== false && user.role === 'CAIXA')
+      .map((user) => ({ id: user.id, name: user.name, email: String(user.email || '').trim().toLowerCase(), role: user.role })));
+  }));
   app.get('/api/caixa/discount-approvals/:id', route(async (req, res) => {
     const approval = await store.read('discount_approvals', req.params.id);
     if (!approval || (req.user.role !== 'ADMIN' && approval.requestedBy !== req.user.id)) { return res.sendStatus(404); }
@@ -98,10 +103,9 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone }) {
     const orders = await store.list('orders', 'source', 'PDV');
     const range = reportRange(req.query);
     const isAdmin = req.user.role === 'ADMIN';
-    const isCashier = ['ADMIN', 'CAIXA'].includes(req.user.role);
-    const canViewOrder = (order) => isAdmin || order.createdBy?.id === req.user.id || order.receivedBy?.id === req.user.id;
+    const canViewOrder = (order) => isAdmin || order.createdBy?.id === req.user.id || order.receivedBy?.id === req.user.id || order.assignedCashier?.id === req.user.id;
     const openOrders = orders.filter((order) => !order.completedAt && order.status !== 'CANCELLED' &&
-      (isAdmin || order.createdBy?.id === req.user.id || (isCashier && ['AWAITING_CASHIER', 'CREATING_PIX', 'AWAITING_PIX'].includes(order.status))));
+      canViewOrder(order));
     const pendingConfirmation = openOrders.filter((order) => order.status === 'AWAITING_CASHIER');
     const pendingPayment = openOrders.filter((order) => ['CREATING_PIX', 'AWAITING_PIX'].includes(order.status));
     const history = orders.filter((order) => canViewOrder(order) && isWithinRange(order.paidAt || order.completedAt || order.createdAt, range));
@@ -145,7 +149,8 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone }) {
   }));
   const findOrder = async (req) => {
     const order = await store.read('orders', req.params.id);
-    if (!order || order.source !== 'PDV' || (req.user.role === 'VENDEDOR' && order.createdBy.id !== req.user.id)) { throw new Error('Comanda não encontrada para este usuário.'); }
+    const canViewOrder = order && (req.user.role === 'ADMIN' || order.createdBy?.id === req.user.id || order.receivedBy?.id === req.user.id || order.assignedCashier?.id === req.user.id);
+    if (!order || order.source !== 'PDV' || !canViewOrder) { throw new Error('Comanda não encontrada para este usuário.'); }
     return order;
   };
   app.get('/api/caixa/orders/:id', route(async (req, res) => res.json(await findOrder(req))));
