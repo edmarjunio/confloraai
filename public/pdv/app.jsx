@@ -27,6 +27,7 @@ const { useState, useEffect, useRef, useMemo } = React;
       </IconBase>
     );
     const Check = (p) => <IconBase {...p}><polyline points="20 6 9 17 4 12"/></IconBase>;
+    const Info = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></IconBase>;
     const ChevronDown = (p) => <IconBase {...p}><path d="m6 9 6 6 6-6"/></IconBase>;
     const Percent = (p) => (
       <IconBase {...p}>
@@ -122,7 +123,7 @@ const { useState, useEffect, useRef, useMemo } = React;
     );
 
     const CATEGORIES = [
-      { id: 'atalhos', label: '( FAVORITOS )', icon: '⭐' },
+      { id: 'atalhos', label: 'FAVORITOS', icon: '⭐' },
       { id: 'todas', label: 'Todos os Produtos', icon: '🌿' },
       { id: 'plantas', label: 'Plantas e Mudas', icon: '🌱' },
       { id: 'horta', label: 'Horta', icon: '🥬' },
@@ -144,10 +145,11 @@ const { useState, useEffect, useRef, useMemo } = React;
       const deviceView = 'responsive';
 
       const [products, setProducts] = useState([]);
+      const [infoProduct, setInfoProduct] = useState(null);
       const [visibleCount, setVisibleCount] = useState(60);
       const loadMoreRef = useRef(null);
       const imagePreloadRef = useRef({ queue: [], started: new Set(), inFlight: new Set(), active: 0 });
-      // Aba inicial deve ser 'todas', enquanto a primeira aba visual é ( FAVORITOS )
+      // Aba inicial deve ser 'todas', enquanto a primeira aba visual é FAVORITOS.
       const [selectedCategory, setSelectedCategory] = useState('todas');
       const [searchQuery, setSearchQuery] = useState('');
       useEffect(() => setVisibleCount(60), [selectedCategory, searchQuery]);
@@ -205,7 +207,25 @@ const { useState, useEffect, useRef, useMemo } = React;
       useEffect(() => {
         if (!currentUser) return;
         fetch('/api/caixa/products').then((res) => { if (!res.ok) throw new Error('Não foi possível carregar produtos.'); return res.json(); }).then((rows) => {
-          setProducts(rows.map((item) => ({ ...item, sku: item.sku || item.id, category: (item.category || 'geral').toLowerCase(), categoryName: item.category || 'Geral', stock: item.stock + ' ' + item.unit, isShortcut: false, image: item.imageUrl || '/storefront/placeholder.svg' })));
+          setProducts(rows.map((item) => {
+            const images = (Array.isArray(item.images) ? item.images : [])
+              .map((entry) => (typeof entry === 'string' ? entry : entry?.url || entry?.imageUrl || ''))
+              .filter(Boolean);
+            const imageCandidates = [...new Set([item.imageUrl, ...images, item.imagePathCache].filter(Boolean))];
+            const image = imageCandidates[0] || '/storefront/placeholder.svg';
+            return {
+              ...item,
+              sku: String(item.sku || item.id || ''),
+              category: (item.category || 'geral').toLowerCase(),
+              categoryName: [item.category || 'Geral', item.subcategory].filter(Boolean).join(' · '),
+              description: item.descriptionAi || item.descricao_ia || '',
+              searchTags: item.tagsAi || item.tags_ia || '',
+              stock: item.stock + ' ' + item.unit,
+              isShortcut: false,
+              imageCandidates,
+              image,
+            };
+          }));
         }).catch((error) => alert(error.message));
       }, [currentUser]);
 
@@ -381,13 +401,15 @@ const { useState, useEffect, useRef, useMemo } = React;
           } else if (e.key === 'F9') {
             e.preventDefault();
             setActiveModal('freight');
+          } else if (e.key === 'Escape' && infoProduct) {
+            setInfoProduct(null);
           } else if (e.key === 'Escape') {
             setActiveModal(null);
           }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-      }, [cart.length]);
+      }, [cart.length, infoProduct]);
 
       const filteredProducts = useMemo(() => {
         return products.filter((product) => {
@@ -398,10 +420,12 @@ const { useState, useEffect, useRef, useMemo } = React;
               ? product.isShortcut
               : product.category === selectedCategory;
 
-          const matchesSearch =
-            product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            product.sku.includes(searchQuery) ||
-            product.categoryName.toLowerCase().includes(searchQuery.toLowerCase());
+          const normalizedQuery = searchQuery.trim().toLowerCase();
+          const searchText = [product.name, product.sku, product.categoryName, product.description, product.searchTags]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase();
+          const matchesSearch = !normalizedQuery || searchText.includes(normalizedQuery);
 
           return matchesCategory && matchesSearch;
         });
@@ -1013,7 +1037,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="O que você procura? (Nome, código ou categoria)..."
+                      placeholder="Nome, categoria ou descrição (Ex.: plantas de sombra, plantas para jardim, flores, e etc)"
                       className="w-full pl-9 pr-8 py-2 bg-slate-100/90 hover:bg-slate-100 focus:bg-white rounded-full text-xs sm:text-sm text-slate-800 placeholder-slate-400 border border-slate-200 focus:border-emerald-600 focus:outline-none transition"
                     />
                     {searchQuery && (
@@ -1116,7 +1140,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                     <h2 className="text-sm sm:text-base font-bold text-slate-800 flex items-center gap-1">
                       {selectedCategory === 'atalhos' ? (
                         <>
-                          <span>( FAVORITOS )</span>
+                          <span>FAVORITOS</span>
                           <ChevronDown className="w-4 h-4 text-emerald-700" />
                         </>
                       ) : (
@@ -1162,10 +1186,20 @@ const { useState, useEffect, useRef, useMemo } = React;
                         <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-lg overflow-hidden bg-slate-50 border border-slate-100 shrink-0 flex items-center justify-center">
                           <img
                             src={product.image}
+                            data-image-index="0"
                             alt={product.name}
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                             onError={(e) => {
-                              e.target.src = 'https://placehold.co/100x100/e2e8f0/1e293b?text=Item';
+                              const imageElement = e.currentTarget;
+                              const nextImageIndex = Number(imageElement.dataset.imageIndex || 0) + 1;
+                              const nextImage = product.imageCandidates[nextImageIndex];
+                              if (nextImage) {
+                                imageElement.dataset.imageIndex = String(nextImageIndex);
+                                imageElement.src = nextImage;
+                                return;
+                              }
+                              const fallback = '/storefront/placeholder.svg';
+                              if (!imageElement.src.endsWith(fallback)) imageElement.src = fallback;
                             }}
                           />
                         </div>
@@ -1176,18 +1210,31 @@ const { useState, useEffect, useRef, useMemo } = React;
                             <h3 className="text-xs font-bold text-slate-800 leading-tight line-clamp-2">
                               {product.name}
                             </h3>
-                            <button
-                              onClick={(e) => toggleShortcut(product.id, e)}
-                              title="Fixar/Desafixar dos Meus Atalhos"
-                              className={"p-0.5 rounded-full shrink-0 transition " + (product.isShortcut
-                                ? 'text-amber-400 hover:text-amber-500'
-                                : 'text-slate-200 hover:text-slate-400')}
-                            >
-                              <Star
-                                className="w-3 h-3"
-                                fill={product.isShortcut ? 'currentColor' : 'none'}
-                              />
-                            </button>
+                            <div className="flex shrink-0 items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); setInfoProduct(product); }}
+                                aria-label={`Informações de ${product.name}`}
+                                title={`Informações de ${product.name}`}
+                                className="rounded-full p-0.5 text-slate-400 transition hover:bg-emerald-50 hover:text-emerald-700"
+                              >
+                                <Info className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => toggleShortcut(product.id, e)}
+                                title="Fixar/Desafixar dos Meus Atalhos"
+                                aria-label={`${product.isShortcut ? 'Remover dos' : 'Adicionar aos'} favoritos: ${product.name}`}
+                                className={"p-0.5 rounded-full transition " + (product.isShortcut
+                                  ? 'text-amber-400 hover:text-amber-500'
+                                  : 'text-slate-200 hover:text-slate-400')}
+                              >
+                                <Star
+                                  className="w-3 h-3"
+                                  fill={product.isShortcut ? 'currentColor' : 'none'}
+                                />
+                              </button>
+                            </div>
                           </div>
 
                           <div className="mt-1.5 flex items-center justify-between gap-1">
@@ -1231,6 +1278,7 @@ const { useState, useEffect, useRef, useMemo } = React;
           </div>
 
           {/* MODALS */}
+          {infoProduct && <PdvComponents.ProductInformation product={infoProduct} onClose={() => setInfoProduct(null)} />}
           {activeModal && !['queue', 'debt_settle', 'approval'].includes(activeModal) && (
             <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
               {/* MODAL: IDENTIFICAR / ADICIONAR CLIENTE */}

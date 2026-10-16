@@ -14,7 +14,10 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
       price: 2,
       stock: 20,
       unit: 'UN',
-      imageUrl: '/storefront/placeholder.svg',
+      imageUrl: index === 129 ? '' : '/storefront/placeholder.svg',
+      images: index === 129 ? ['data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='] : [],
+      descriptionAi: index === 129 ? 'Plantas de sombra para jardim.' : '',
+      details: index === 129 ? [{ label: 'Cuidados', value: 'Manter em local protegido.' }] : [],
     }));
     await route.fulfill({ response, json: [...additions, ...existing] });
   });
@@ -26,6 +29,7 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
   await page.getByRole('button', { name: 'Entrar', exact: true }).click();
   await expect(page.getByRole('link', { name: 'Ir para a página inicial' }).first()).toHaveAttribute('href', '/');
   await expect(page.getByRole('button', { name: 'Comandas e caixa' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /FAVORITOS/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /Escanear|Leitor de Código/i })).toHaveCount(0);
   await expect(page.getByText('Computador (2/3 + 1/3)')).toHaveCount(0);
   await expect(page.getByText('Tela 2/3 e 1/3')).toHaveCount(0);
@@ -36,7 +40,15 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
   }
   await expect(page.getByText('Produto Carregamento 130', { exact: true })).toBeVisible();
   await page.evaluate(() => window.scrollTo(0, 0));
-  await page.getByPlaceholder('O que você procura? (Nome, código ou categoria)...').fill('Planta Teste');
+  const search = page.getByPlaceholder('Nome, categoria ou descrição (Ex.: plantas de sombra, plantas para jardim, flores, e etc)');
+  await expect(page.getByAltText('Produto Carregamento 130')).toHaveAttribute('src', 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=');
+  await page.getByRole('button', { name: 'Informações de Produto Carregamento 130' }).click();
+  const productInformation = page.getByRole('dialog', { name: 'Informações de Produto Carregamento 130' });
+  await expect(productInformation.getByText('Manter em local protegido.')).toBeVisible();
+  await productInformation.getByRole('button', { name: 'Fechar informações' }).click();
+  await search.fill('Plantas de sombra');
+  await expect(page.getByText('Produto Carregamento 130', { exact: true })).toBeVisible();
+  await search.fill('Planta Teste');
   await page.getByText('Planta Teste', { exact: true }).click();
   await page.keyboard.press('F2');
   await page.getByRole('button', { name: 'Dinheiro', exact: true }).click();
@@ -44,7 +56,7 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
   await expect(page.getByRole('dialog', { name: 'Venda finalizada', exact: true })).toBeVisible();
   await expect(page.getByRole('dialog').getByText('Pagamento confirmado', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Nova venda', exact: true }).click();
-  await page.getByPlaceholder('O que você procura? (Nome, código ou categoria)...').fill('');
+  await search.fill('');
   await page.getByRole('button', { name: 'Comandas e caixa' }).click();
   await expect(page.getByRole('dialog', { name: 'Comandas e fechamento' })).toBeVisible();
   for (const column of ['ESPERANDO CONFIRMAÇÃO', 'ESPERANDO PAGAMENTO', 'CONFIRMADOS', 'PAGOS / FINALIZADOS']) {

@@ -2,6 +2,7 @@ const { randomUUID } = require('node:crypto');
 const { createWebSessions, safeUser } = require('../security/web-session');
 const { readProductWorkbook } = require('../catalog/spreadsheet-import');
 const { rankProductSales } = require('../catalog/product-sales');
+const { getCashierProductDetails } = require('../catalog/cashier-product-details');
 let expressModule = null;
 function getExpress() {
   if (!expressModule) {
@@ -1747,15 +1748,29 @@ function createApp({
       const products = await messageService.firestoreRepo.getAllProducts();
       const active = products
         .filter((p) => p.status !== 'INATIVO' && p.isAvailable !== false)
-        .map((p) => ({
-          id: p.id,
-          name: p.name || p.descricao || 'Produto',
-          price: Number(p.price || p.valor_num || 0),
-          stock: Number(p.stockQuantity ?? p.estoque ?? 0),
-          unit: p.unit || p.unidade || 'UN',
-          category: p.category || p.categoria || 'Geral',
-          imageUrl: p.imageUrl || p.imageurl || '',
-        }));
+        .map((p) => {
+          const images = (Array.isArray(p.images) ? p.images : [])
+            .map((image) => (typeof image === 'string' ? image : image?.url || image?.imageUrl || ''))
+            .filter(Boolean);
+          const imageCandidates = [...new Set([p.imageUrl, p.imageurl, ...images, p.imagePathCache].filter(Boolean))];
+          const imageUrl = imageCandidates[0] || '';
+
+          return {
+            id: p.id,
+            name: p.name || p.descricao || 'Produto',
+            price: Number(p.price || p.valor_num || 0),
+            stock: Number(p.stockQuantity ?? p.estoque ?? 0),
+            unit: p.unit || p.unidade || 'UN',
+            category: p.category || p.categoria || 'Geral',
+            subcategory: p.subcategory || p.subcategoria || '',
+            imageUrl,
+            images: imageCandidates,
+            imagePathCache: p.imagePathCache || '',
+            descriptionAi: p.descriptionAi || p.descricao_ia || '',
+            tagsAi: p.tagsAi || p.tags_ia || '',
+            details: getCashierProductDetails(p),
+          };
+        });
       res.status(200).json(active);
     } catch (err) {
       res.status(500).json({ error: err.message });

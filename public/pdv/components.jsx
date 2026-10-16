@@ -28,6 +28,50 @@ window.PdvComponents = (() => {
   function Panel({ title, onClose, children }) {
     return <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"><section role="dialog" aria-modal="true" aria-label={title} className="bg-white rounded-3xl p-6 w-full max-w-xl max-h-[90vh] overflow-auto"><div className="flex justify-between gap-4 mb-4"><h2 className="font-bold text-xl">{title}</h2><button onClick={onClose} aria-label="Fechar">✕</button></div>{children}</section></div>;
   }
+  function ProductInformation({ product, onClose }) {
+    const details = Array.isArray(product.details) ? product.details : [];
+    const imageUrl = product.image || product.imageUrl || '/storefront/placeholder.svg';
+
+    return <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section role="dialog" aria-modal="true" aria-label={`Informações de ${product.name}`} className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-3xl border border-slate-100 bg-white p-5 shadow-2xl sm:p-6">
+        <header className="mb-4 flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <img
+              src={imageUrl}
+              data-image-index="0"
+              alt=""
+              className="h-16 w-16 shrink-0 rounded-2xl border border-slate-100 bg-slate-50 object-cover"
+              onError={(event) => {
+                const imageElement = event.currentTarget;
+                const imageCandidates = product.imageCandidates || [];
+                const nextImageIndex = Number(imageElement.dataset.imageIndex || 0) + 1;
+                const nextImage = imageCandidates[nextImageIndex];
+                if (nextImage) {
+                  imageElement.dataset.imageIndex = String(nextImageIndex);
+                  imageElement.src = nextImage;
+                  return;
+                }
+                if (!imageElement.src.endsWith('/storefront/placeholder.svg')) imageElement.src = '/storefront/placeholder.svg';
+              }}
+            />
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">{product.categoryName || product.category || 'Produto'}</p>
+              <h2 className="text-lg font-black leading-tight text-[#0F381E]">{product.name}</h2>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Fechar informações" className="rounded-full p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800">✕</button>
+        </header>
+        <div className="space-y-3">
+          {details.map((detail) => <section key={detail.label} className="rounded-2xl border border-emerald-100 bg-[#F4F6F5] p-3.5">
+            <h3 className="text-xs font-extrabold uppercase tracking-wide text-emerald-800">{detail.label}</h3>
+            <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-slate-700">{detail.value}</p>
+          </section>)}
+          {!details.length && <p className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">Ainda não há informações adicionais cadastradas para este produto.</p>}
+        </div>
+        <button type="button" onClick={onClose} className="mt-5 w-full rounded-xl bg-[#0F381E] px-4 py-3 text-sm font-bold text-white hover:bg-emerald-800">Fechar</button>
+      </section>
+    </div>;
+  }
   function Login({ onLogin }) {
     const [users, setUsers] = useState([]); const [userId, setUserId] = useState(''); const [pin, setPin] = useState(''); const [error, setError] = useState('');
     useEffect(() => { api('/api/admin/auth/users').then(setUsers).catch((err) => setError(err.message)); }, []);
@@ -286,5 +330,5 @@ window.PdvComponents = (() => {
     };
     return <Panel title="Receber dívida de fiado" onClose={onClose}>{error && <p role="alert" className="text-red-700">{error}</p>}{result ? <div><p>Recebimento registrado: {money(result.amount)}</p><p>Saldo restante: {money(result.newBalance)}</p></div> : <><label>Buscar cliente<input className={field} value={query} onChange={(e) => setQuery(e.target.value)} /></label><div className="max-h-36 overflow-auto">{customers.map((row) => <button className="block w-full text-left border-b p-2" key={row.id} onClick={() => select(row)}>{row.name} · {row.phone || 'Sem telefone'}</button>)}</div>{customer && <><p className="mt-3 font-bold">{customer.name} · Dívida: {money(balance)}</p><label>Valor a receber<input className={field} type="number" min="0.01" max={balance} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></label><select className={field} value={method} onChange={(e) => setMethod(e.target.value)}><option value="DINHEIRO">Dinheiro</option><option value="DEBITO">Cartão de débito</option><option value="CREDITO">Cartão de crédito</option></select><button className={button} disabled={busy || Number(amount) <= 0 || Number(amount) > balance} onClick={submit}>{busy ? 'Registrando…' : 'Confirmar recebimento'}</button></>}</>}</Panel>;
   }
-  return { SiteBrand, Loading, Login, Receipt, CashierQueue, DebtSettlement, DiscountApproval };
+  return { SiteBrand, Loading, Login, Receipt, CashierQueue, DebtSettlement, DiscountApproval, ProductInformation };
 })();
