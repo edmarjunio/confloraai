@@ -52,6 +52,10 @@ module.exports = [
       globals: {
         document: "readonly",
         window: "readonly",
+        HTMLElement: "readonly",
+        CustomEvent: "readonly",
+        customElements: "readonly",
+        IntersectionObserver: "readonly",
         navigator: "readonly",
         location: "readonly",
         history: "readonly",
@@ -72,6 +76,10 @@ module.exports = [
       globals: {
         document: "readonly",
         window: "readonly",
+        HTMLElement: "readonly",
+        CustomEvent: "readonly",
+        customElements: "readonly",
+        IntersectionObserver: "readonly",
         navigator: "readonly",
         location: "readonly",
         history: "readonly",
@@ -81,6 +89,15 @@ module.exports = [
         AbortController: "readonly",
         requestAnimationFrame: "readonly",
         cancelAnimationFrame: "readonly",
+      },
+    },
+  },
+  {
+    files: ["test/browser/**/*.js"],
+    languageOptions: {
+      globals: {
+        window: "readonly",
+        document: "readonly",
       },
     },
   },

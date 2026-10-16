@@ -1,5 +1,4 @@
 const { test, expect } = require("@playwright/test");
-const path = require("node:path");
 const errors = new WeakMap();
 test.beforeEach(async ({ page }) => {
   const list = [];

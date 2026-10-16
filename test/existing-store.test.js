@@ -50,7 +50,8 @@ test("existing catalogue maps photos, specifications and categories without expo
   });
   assert.equal(product.price.amountMinor, 600);
   assert.equal(product.imageUrl, "/api/images/photo-1");
-  assert.equal(product.images.length, 1);
+  assert.equal(product.images.length, 2);
+  assert.equal(product.images[1], "/api/images/photo-2");
   assert.equal(product.specifications.light.value, "Sol");
   assert.equal(product.specifications.invalid, undefined);
   assert.equal(product.supplierCost, undefined);
@@ -73,6 +74,23 @@ test("main catalogue uses a thematic photo only when a product has no registered
   });
   assert.equal(registered.imageUrl, "/api/images/avocado-real");
   assert.equal(registered.imageIsIllustrative, false);
+});
+
+test("Storage paths remain usable and missing photos do not create fake product-id requests", () => {
+  const stored = toProduct({
+    id: "stored-plant",
+    name: "Samambaia",
+    category: "Plantas / Mudas",
+    imagePath: "products/stored-plant/main.jpg",
+    imagePaths: ["products/stored-plant/main.jpg", "products/stored-plant/detail.jpg"],
+  });
+  assert.equal(stored.imageUrl, "products/stored-plant/main.jpg");
+  assert.deepEqual(stored.images, ["products/stored-plant/main.jpg", "products/stored-plant/detail.jpg"]);
+  assert.equal(stored.imageIsIllustrative, false);
+
+  const missing = toProduct({ id: "without-photo", name: "Abiu Amarelo", category: "Frutífera" });
+  assert.ok(!missing.imageUrl.includes("/api/images/without-photo"));
+  assert.equal(missing.imageIsIllustrative, true);
 });
 
 test("untracked stock allows zero-stock sales but never inactive products", async () => {

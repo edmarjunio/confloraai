@@ -19,24 +19,27 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
   const photo = (value) =>
     typeof value === "string" &&
     (/^https:\/\/(?:firebasestorage|storage)\.googleapis\.com\//.test(value) ||
-      /^\/api\/images\//.test(value))
+      /^\/api\/images\//.test(value) ||
+      /^gs:\/\/[a-z0-9._-]+\/products\/[a-z0-9_-]+\/[a-z0-9._-]+$/i.test(value) ||
+      /^products\/[a-z0-9_-]+\/[a-z0-9._-]+$/i.test(value))
       ? value
       : "";
   const images = (Array.isArray(item.images) ? item.images : [])
     .map((image) => ({
-      url: photo(typeof image === "string" ? image : image.url || image.imageUrl || image.src || image.downloadURL),
+      url: photo(typeof image === "string" ? image : image.url || image.imageUrl || image.src || image.downloadURL || image.storagePath || image.fullPath || image.path),
       alt: name,
     }))
     .filter((image, index, all) => image.url && all.findIndex((candidate) => candidate.url === image.url) === index);
-  const registeredImage = photo(item.imageUrl || item.imageurl || item.imagePathCache || item.imageURL) || images[0]?.url || "";
+  const primaryImage = photo(item.imageUrl || item.imageurl || item.imagePathCache || item.imageURL || item.imagePath || item.storagePath);
+  const imagePaths = Array.isArray(item.imagePaths) ? item.imagePaths.map((imagePath) => photo(imagePath)).filter(Boolean) : [];
+  const registeredImages = [...new Set([primaryImage, ...images.map((image) => image.url), ...imagePaths].filter(Boolean))];
+  const registeredImage = registeredImages[0] || "";
   const imageFileId = String(item.imageFileId || item.image_file_id || "").trim();
-  const imageProxyId = imageFileId || String(item.id || "").trim();
-  const storageImageProxy = imageProxyId
-    ? `/api/images/${encodeURIComponent(imageProxyId)}`
+  const storageImageProxy = imageFileId
+    ? `/api/images/${encodeURIComponent(imageFileId)}`
     : "";
   const imageCandidates = [...new Set([
-    ...images.map((image) => image.url),
-    registeredImage,
+    ...registeredImages,
     storageImageProxy,
   ].filter(Boolean))];
   return {
@@ -50,7 +53,7 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
       currency: "BRL",
     },
     imageUrl: imageCandidates[0] || resolveHdProductImage(name, category, subcategory),
-    imageIsIllustrative: !registeredImage && !storageImageProxy,
+    imageIsIllustrative: !registeredImage,
     imageFallbackUrl: "/store-assets/placeholder.svg",
     images: imageCandidates,
     imageFileId,

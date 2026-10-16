@@ -98,7 +98,7 @@ const config = Object.freeze({
     clientSecret: (process.env.SICREDI_CLIENT_SECRET || '').trim(),
     certificate: process.env.SICREDI_CERT_PEM || '',
     privateKey: process.env.SICREDI_KEY_PEM || '',
-    pixKey: process.env.SICREDI_PIX_KEY || process.env.PIX_KEY || '64999351616',
+    pixKey: (process.env.SICREDI_PIX_KEY || '').trim(),
     beneficiario: process.env.SICREDI_BENEFICIARIO || process.env.PIX_TITULAR || 'Conflora Horta e Viveiro',
     cidade: process.env.SICREDI_CIDADE || 'Mineiros',
     webhookSecret: (process.env.SICREDI_WEBHOOK_SECRET || '').trim(),

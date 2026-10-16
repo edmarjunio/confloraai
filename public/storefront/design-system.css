@@ -245,9 +245,14 @@ render-product-card.cf-pdv-product-card {
 }
 .cf-pdv-product-card.is-selected .cf-shared-pdv-overlay { left: 18px; }
 .cf-shared-pdv-overlay .cf-product-category-tag,
-.cf-shared-pdv-overlay render-category-tag {
+.cf-shared-pdv-overlay render-category-tag,
+.product-photo > render-category-tag .cf-product-category-tag,
+.card-img-wrapper > render-category-tag .cf-product-category-tag {
+  box-sizing: border-box;
   max-width: calc(100% - 48px);
   flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .cf-shared-pdv-content {
   display: flex;

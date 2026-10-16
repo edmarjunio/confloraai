@@ -44,6 +44,15 @@
     return "";
   };
 
+  const normalizeCategoryText = (value) => value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLocaleLowerCase("pt-BR");
+  const CANONICAL_CATEGORIES = new Set([
+    "frutífera", "horta", "hortifrutti", "outros", "pets", "plantas / mudas",
+  ].map(normalizeCategoryText));
+
   // ============================================================================
   // 3. RESOLUÇÃO DE IMAGENS (FIREBASE STORAGE & FIRESTORE)
   // ============================================================================
@@ -175,6 +184,7 @@
       ...(Array.isArray(p.fotos) ? p.fotos : []),
       ...(Array.isArray(p.imagens) ? p.imagens : []),
       ...(Array.isArray(p.imageCandidates) ? p.imageCandidates : []),
+      ...(Array.isArray(p.imagePaths) ? p.imagePaths : []),
     ];
 
     const fieldSources = [
@@ -182,24 +192,25 @@
       p.imageUrl,
       p.imageurl,
       p.image_url,
+      p.imageURL,
       p.downloadURL,
       p.downloadUrl,
       p.foto,
       p.fotoUrl,
       p.foto_url,
+      p.photoUrl,
       p.imagem,
       p.imagemUrl,
       p.imagem_url,
       p.urlImagem,
       p.url_imagem,
-      p.photoUrl,
       p.photoURL,
       p.thumbnail,
       p.thumb,
       p.capa,
       p.imagePathCache,
-      p.storagePath,
       p.imagePath,
+      p.storagePath,
       p.fullPath,
     ];
 
@@ -208,13 +219,7 @@
       .flatMap((raw) => expandImageSource(raw, p))
       .filter(isAllowedImageSource);
 
-    const proxyId = firstNonEmptyString(
-      p.imageFileId,
-      p.image_file_id,
-      p.id,
-      p.productId,
-      p.sku,
-    );
+    const proxyId = firstNonEmptyString(p.imageFileId, p.image_file_id);
     const proxyFallback = proxyId
       ? `/api/images/${encodeURIComponent(proxyId)}`
       : "";
@@ -229,12 +234,26 @@
   // ============================================================================
   // 4. ADAPTER DE DOMÍNIO (NORMALIZAÇÃO CANÔNICA DO PRODUTO)
   // ============================================================================
-  const getCategory = (product) =>
-    firstNonEmptyString(
+  const getCategory = (product) => {
+    const category = firstNonEmptyString(
       product?.categoryName,
       product?.category,
       product?.categoria,
     );
+    const subcategory = firstNonEmptyString(
+      product?.subcategoryName,
+      product?.subcategory,
+      product?.subcategoria,
+    );
+    if (!category || CANONICAL_CATEGORIES.has(normalizeCategoryText(category)) || !subcategory) return category;
+
+    const categoryParts = category.split(/\s*(?:\/|\||>)\s*/);
+    const lastPart = categoryParts.at(-1) || "";
+    if (categoryParts.length > 1 && normalizeCategoryText(lastPart) === normalizeCategoryText(subcategory)) {
+      return categoryParts.slice(0, -1).join(" / ").trim();
+    }
+    return category;
+  };
 
   const getName = (product) =>
     firstNonEmptyString(

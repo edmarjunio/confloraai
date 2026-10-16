@@ -16,19 +16,27 @@ function getExpress() {
 }
 
 function getProductImageCandidates(product = {}) {
-  const images = (Array.isArray(product.images) ? product.images : [])
-    .map((image) => (typeof image === 'string' ? image : image?.url || image?.imageUrl || image?.src || image?.downloadURL || ''))
+  const images = [
+    ...(Array.isArray(product.images) ? product.images : []),
+    ...(Array.isArray(product.imagePaths) ? product.imagePaths : []),
+    product.imageUrl,
+    product.imageurl,
+    product.imageURL,
+    product.image_url,
+    product.imagePathCache,
+    product.imagePath,
+    product.storagePath,
+    product.photoUrl,
+    product.fotoUrl,
+  ]
+    .map((image) => (typeof image === 'string' ? image : image?.url || image?.imageUrl || image?.src || image?.downloadURL || image?.storagePath || image?.fullPath || image?.path || ''))
     .filter(Boolean);
   const registeredImages = [...new Set([
     ...images,
-    product.imageUrl,
-    product.imageurl,
-    product.imagePathCache,
   ].filter(isRenderableProductImageUrl))];
   const imageFileId = String(product.imageFileId || product.image_file_id || '').trim();
-  const imageProxyId = imageFileId || String(product.id || product.productId || '').trim();
-  const storageImageProxy = imageProxyId
-    ? `/api/images/${encodeURIComponent(imageProxyId)}`
+  const storageImageProxy = imageFileId
+    ? `/api/images/${encodeURIComponent(imageFileId)}`
     : '';
   if (registeredImages.length) {
     return [...new Set([...registeredImages, storageImageProxy].filter(Boolean))];
@@ -46,10 +54,15 @@ function getProductImageCandidates(product = {}) {
 }
 
 function isRenderableProductImageUrl(value) {
-  return typeof value === 'string' && (
+  if (typeof value !== 'string') return false;
+  const source = value.trim();
+  return Boolean(source) && (
     /^https:\/\/(?:firebasestorage|storage)\.googleapis\.com\//i.test(value.trim()) ||
+    /^https:\/\/images\.unsplash\.com\//i.test(source) ||
     /^\/api\/images\//i.test(value.trim()) ||
-    /^\/store-assets\//i.test(value.trim())
+    /^\/store-assets\//i.test(value.trim()) ||
+    /^gs:\/\/[a-z0-9._-]+\/products\/[a-z0-9_-]+\/[a-z0-9._-]+$/i.test(source) ||
+    /^products\/[a-z0-9_-]+\/[a-z0-9._-]+$/i.test(source)
   );
 }
 
@@ -1386,6 +1399,14 @@ function createApp({
     try {
       const { id } = req.params;
       const photo = await messageService.firestoreRepo.getProductPhoto(id);
+      if (messageService.firestoreRepo.isInMemory && photo?.data) {
+        const contentType = /^image\/(?:jpeg|png|webp|gif|avif)$/i.test(photo.contentType || '')
+          ? photo.contentType
+          : 'image/jpeg';
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        res.setHeader('Content-Type', contentType);
+        return res.status(200).send(Buffer.from(photo.data, 'base64'));
+      }
       if (photo?.imageUrl && photo.imageUrl !== `/api/images/${id}`) {
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
         return res.redirect(302, photo.imageUrl);
@@ -2617,6 +2638,8 @@ function createApp({
 
 module.exports = {
   createApp,
+  getProductImageCandidates,
+  getCashierProductImageCandidates,
   renderHomeHtml,
   renderAdminHtml,
   renderWhatsAppSimulatorHtml,

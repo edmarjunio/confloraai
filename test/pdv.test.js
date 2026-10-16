@@ -151,6 +151,20 @@ test('Sicredi creates a fixed-amount charge; payment is verified by end-to-end I
   await assert.rejects(editableCharge.createCharge({ amount: 20, txid: 'B'.repeat(32) }), /cobrança fixa/);
 });
 
+test('Sicredi webhook registration accepts HTTPS only and uses the configured Pix key', async () => {
+  const requests = [];
+  const client = new SicrediPixClient({ clientId: 'id', clientSecret: 'secret', certificate: 'cert', privateKey: 'key', pixKey: 'pix', request: async (url, options) => {
+    requests.push({ url, options });
+    if (url.includes('/oauth/token')) return { access_token: 'token', expires_in: 3600 };
+    return {};
+  } });
+  await client.registerWebhook('https://conflora.example/webhooks/sicredi-pix/secret');
+  assert.ok(requests[1].url.endsWith('/api/v2/webhook/pix'));
+  assert.equal(requests[1].options.method, 'PUT');
+  assert.deepEqual(JSON.parse(requests[1].options.body), { webhookURL: 'https://conflora.example/webhooks/sicredi-pix/secret' });
+  await assert.rejects(client.registerWebhook('http://conflora.example/webhook'), /HTTPS/);
+});
+
 test('Firestore transaction rolls back stock, debt and order together on failed commit', async () => {
   const s = setup();
   const order = await s.service.create({ ...s.input, paymentMethod: 'FIADO', customerId: 'customer' }, seller);
@@ -208,6 +222,24 @@ test('HTTP requires real login, isolates staff and refuses manual/forged Pix', a
   assert.equal((await post(`/api/caixa/orders/${order.id}/confirm-sicredi-pix`, {}, cookie)).status, 202);
   assert.equal((await post('/webhooks/sicredi-pix', { pix: [{ txid: order.pixData.txid, valor: 20 }] })).status, 401);
   assert.equal((await post('/api/caixa/debts/settle', { amount: 1 }, cookie)).status, 403);
+});
+
+test('Sicredi callback secret route authenticates before it accepts bank events', async (t) => {
+  const originalSecret = process.env.SICREDI_WEBHOOK_SECRET;
+  process.env.SICREDI_WEBHOOK_SECRET = 'a'.repeat(48);
+  t.after(() => {
+    if (originalSecret === undefined) delete process.env.SICREDI_WEBHOOK_SECRET;
+    else process.env.SICREDI_WEBHOOK_SECRET = originalSecret;
+  });
+  const s = setup();
+  const app = createApp({ messageService: { firestoreRepo: s.base, whatsappClient: s.whatsapp }, sicrediClient: s.pix });
+  const server = app.listen(0); t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const payload = JSON.stringify({ pix: [] });
+  const valid = await fetch(`${base}/webhooks/sicredi-pix/${process.env.SICREDI_WEBHOOK_SECRET}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload });
+  assert.equal(valid.status, 200);
+  const invalid = await fetch(`${base}/webhooks/sicredi-pix/${'b'.repeat(48)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload });
+  assert.equal(invalid.status, 401);
 });
 
 test('Cashier board filters history, separates pending stages, and calculates closing totals', async (t) => {

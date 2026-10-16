@@ -126,6 +126,23 @@ export function createCatalog(state, add, navigate) {
     return true;
   }
 
+  function favorite(product) {
+    const isFavorite = favorites.has(product.id);
+    const button = element("button", {
+      type: "button",
+      class: "favorite",
+      "aria-label": isFavorite ? "Remover dos curtidos" : "Adicionar aos curtidos",
+      "aria-pressed": String(isFavorite),
+      onclick: () => {
+        if (!toggleFavorite(product)) return;
+        const nowFavorite = favorites.has(product.id);
+        button.setAttribute("aria-pressed", String(nowFavorite));
+        button.setAttribute("aria-label", nowFavorite ? "Remover dos curtidos" : "Adicionar aos curtidos");
+      },
+    }, [icon("heart")]);
+    return button;
+  }
+
   function openProductInformation(product) {
     state.trackEvent?.("view_item", {
       productId: product.id,

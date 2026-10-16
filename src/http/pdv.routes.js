@@ -212,12 +212,14 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone }) {
     res.json({ success: true, ...result });
   }));
 
-  app.post(['/webhooks/sicredi-pix', '/webhooks/sicredi-pix/pix', '/api/webhooks/sicredi-pix', '/api/webhooks/sicredi-pix/pix'], async (req, res) => {
+  app.post(['/webhooks/sicredi-pix', '/webhooks/sicredi-pix/pix', '/api/webhooks/sicredi-pix', '/api/webhooks/sicredi-pix/pix', '/webhooks/sicredi-pix/:secret', '/webhooks/sicredi-pix/:secret/pix'], async (req, res) => {
     // Gateway must validate the Sicredi client certificate and replace this header.
     const gatewayVerified = secureEqual(req.headers['x-sicredi-gateway-secret'], process.env.SICREDI_WEBHOOK_GATEWAY_SECRET);
     const certificate = req.socket.getPeerCertificate?.();
     const directlyVerified = req.socket.authorized && secureEqual(certificate?.fingerprint256, process.env.SICREDI_WEBHOOK_CERT_FINGERPRINT);
-    if (!gatewayVerified && !directlyVerified) { return res.sendStatus(401); }
+    const webhookSecret = process.env.SICREDI_WEBHOOK_SECRET || '';
+    const secretRouteVerified = webhookSecret.length >= 32 && secureEqual(req.params.secret, webhookSecret);
+    if (!gatewayVerified && !directlyVerified && !secretRouteVerified) { return res.sendStatus(401); }
     if (!Array.isArray(req.body?.pix) || req.body.pix.length > 100) { return res.sendStatus(400); }
     try {
       for (const entry of req.body.pix) {

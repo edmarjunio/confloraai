@@ -30,13 +30,6 @@ function getCashierProductDetails(product = {}) {
     const avoid = care.match(/[^.!?]*(?:evite|evitar|nunca|não deixe|nao deixe)[^.!?]*[.!?]?/i)?.[0]?.trim();
     if (avoid) result.push({ label: 'O que evitar', value: avoid });
   }
-  if (!result.some((field) => field.label === 'O que gosta')) {
-    const preferences = result
-      .filter((field) => ['Iluminação', 'Ambiente ideal'].includes(field.label))
-      .map((field) => field.value)
-      .join(' ');
-    if (preferences) result.push({ label: 'O que gosta', value: preferences });
-  }
   return result;
 }
 
