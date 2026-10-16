@@ -39,7 +39,7 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
   await expect(page.getByRole('button', { name: '🌱 Plantas', exact: true })).toBeVisible();
   await expect(page.getByText('ITEM', { exact: true })).toHaveCount(0);
   const shortcutLabels = await page.locator('header nav[aria-label="Ações do caixa por atalho"] button').allTextContents();
-  expect(shortcutLabels.map((label) => label.trim().slice(0, 2))).toEqual(['F1', 'F2', 'F3', 'F4', 'F9']);
+  expect(shortcutLabels.map((label) => label.trim().slice(0, 2))).toEqual(['F1', 'F2', 'F3', 'F4', 'F8', 'F9']);
   await expect(page.getByRole('button', { name: /Escanear|Leitor de Código/i })).toHaveCount(0);
   await expect(page.getByText('Computador (2/3 + 1/3)')).toHaveCount(0);
   await expect(page.getByText('Tela 2/3 e 1/3')).toHaveCount(0);
@@ -61,15 +61,15 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
   await expect(page.getByAltText('Produto Carregamento 129')).toHaveAttribute('src', /data:image\/svg\+xml/);
   await search.fill('Planta Teste');
   await page.getByText('Planta Teste', { exact: true }).click();
-  await page.keyboard.press('F2');
+  await page.keyboard.press('F1');
   await page.getByRole('button', { name: 'Dinheiro', exact: true }).click();
   await page.getByRole('button', { name: 'Confirmar Venda', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Venda finalizada', exact: true })).toBeVisible();
   await expect(page.getByRole('dialog').getByText('Pagamento confirmado', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Nova venda', exact: true }).click();
   await search.fill('');
-  await page.keyboard.press('F4');
-  await expect(page.getByRole('dialog', { name: 'Comandas e fechamento' })).toBeVisible();
+  await page.keyboard.press('F2');
+  await expect(page.getByRole('heading', { name: 'Comandas', exact: true })).toBeVisible();
   for (const column of ['ESPERANDO CONFIRMAÇÃO', 'ESPERANDO PAGAMENTO', 'CONFIRMADOS', 'PAGOS / FINALIZADOS']) {
     await expect(page.getByRole('region', { name: column })).toBeVisible();
   }
@@ -78,12 +78,13 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: 'test-results/pdv-board-mobile.png' });
   await page.setViewportSize({ width: 1280, height: 720 });
-  await page.getByRole('button', { name: 'Histórico', exact: true }).click();
+  await page.getByRole('button', { name: /Voltar ao caixa/ }).click();
+  await page.keyboard.press('F9');
   await expect(page.getByRole('heading', { name: 'Histórico de vendas' })).toBeVisible();
-  await page.getByRole('button', { name: 'Fechamento', exact: true }).click();
-  await expect(page.getByRole('heading', { name: /Resumo para fechamento/ })).toBeVisible();
-  await page.getByRole('button', { name: 'Fechar', exact: true }).click();
-  await page.keyboard.press('F1');
+  await page.getByRole('button', { name: /Voltar ao caixa/ }).click();
+  await page.keyboard.press('F3');
+  await expect(page.getByRole('heading', { name: 'Relatório', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Receber dívida', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Receber dívida de fiado' })).toBeVisible();
   await page.getByRole('button', { name: 'Fechar', exact: true }).click();
   await page.evaluate(() => window.scrollTo(0, 0));

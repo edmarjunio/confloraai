@@ -223,6 +223,7 @@ const { useState, useEffect, useRef, useMemo } = React;
       // Mobile Bottom Sheet mode: 'collapsed' | 'peek' (tempo real) | 'expanded'
       const [mobileSheetMode, setMobileSheetMode] = useState('peek');
       const [activeModal, setActiveModal] = useState(null); // 'pay' | 'discount' | 'freight' | 'receipt' | 'customer' | 'debt_settle'
+      const [cashierPage, setCashierPage] = useState(null);
       const [paymentMethod, setPaymentMethod] = useState('pix');
       const [cashReceived, setCashReceived] = useState('');
 
@@ -431,21 +432,25 @@ const { useState, useEffect, useRef, useMemo } = React;
 
       useEffect(() => {
         const handleKeyDown = (e) => {
+          if (e.target instanceof HTMLElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
           if (e.key === 'F1') {
             e.preventDefault();
-            if (currentUser && currentUser.role !== 'VENDEDOR') setActiveModal('debt_settle');
+            if (cart.length > 0) setActiveModal('pay');
           } else if (e.key === 'F2') {
             e.preventDefault();
-            if (cart.length > 0) setActiveModal('pay');
+            setCashierPage('orders');
           } else if (e.key === 'F3') {
             e.preventDefault();
-            setActiveModal('discount');
+            setCashierPage('report');
           } else if (e.key === 'F4') {
             e.preventDefault();
-            setActiveModal('queue');
-          } else if (e.key === 'F9') {
+            setActiveModal('discount');
+          } else if (e.key === 'F8') {
             e.preventDefault();
             setActiveModal('freight');
+          } else if (e.key === 'F9') {
+            e.preventDefault();
+            setCashierPage('history');
           } else if (e.key === 'Escape' && infoProduct) {
             setInfoProduct(null);
           } else if (e.key === 'Escape') {
@@ -1003,7 +1008,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                 onClick={() => setActiveModal('discount')}
                 className="font-semibold text-rose-500 hover:text-rose-600 transition truncate text-right"
               >
-                {discountPercent}% (F3) : - {formatBRL(discountAmount)}
+                {discountPercent}% (F4) : - {formatBRL(discountAmount)}
               </button>
             </div>
 
@@ -1026,12 +1031,12 @@ const { useState, useEffect, useRef, useMemo } = React;
                 onClick={() => setActiveModal('freight')}
                 className="font-semibold text-slate-800 hover:text-emerald-700 transition truncate text-right"
               >
-                (F9) : {formatBRL(freightValue)}
+                (F8) : {formatBRL(freightValue)}
               </button>
             </div>
           </div>
 
-          {/* Bottom Action Bar: PAGAR - F2 + Total */}
+          {/* Bottom Action Bar: PAGAR - F1 + Total */}
           <div className="p-4 bg-white border-t border-slate-200 flex items-center justify-between gap-3">
             <button
               disabled={cart.length === 0}
@@ -1040,7 +1045,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                 ? 'bg-[#109E46] hover:bg-[#0d853a] text-white shadow-emerald-600/20 active:scale-[0.98]'
                 : 'bg-slate-100 text-slate-400 cursor-not-allowed')}
             >
-              <span>PAGAR - F2</span>
+              <span>PAGAR - F1</span>
               <ArrowRight className="w-4 h-4" />
             </button>
 
@@ -1058,6 +1063,7 @@ const { useState, useEffect, useRef, useMemo } = React;
 
       if (!authReady) return <PdvComponents.Loading />;
       if (!currentUser) return <PdvComponents.Login onLogin={setCurrentUser} />;
+      if (cashierPage) return <PdvComponents.CashierQueue user={currentUser} view={cashierPage} onBack={() => setCashierPage(null)} onDebt={() => { setCashierPage(null); setActiveModal('debt_settle'); }} />;
       return (
         <div className="min-h-screen bg-[#F4F6F5] text-slate-800 flex flex-col font-sans select-none">
           {/* Main Responsive Wrapper (Full width or Mobile Frame simulator) */}
@@ -1067,7 +1073,6 @@ const { useState, useEffect, useRef, useMemo } = React;
               : 'w-full')}
           >
             {activeModal === 'approval' && <PdvComponents.DiscountApproval approval={discountApproval} onClose={() => setActiveModal(null)} onOrder={(order) => { setCompletedOrder(order); setActiveModal('receipt'); }} />}
-            {activeModal === 'queue' && <PdvComponents.CashierQueue user={currentUser} onClose={() => setActiveModal(null)} />}
             {activeModal === 'debt_settle' && <PdvComponents.DebtSettlement onClose={() => setActiveModal(null)} />}
             {/* Com Flora Standard Website Header adapted for POS */}
             <header className="conflora-site-header sticky top-0 z-20 !flex-col !items-stretch">
@@ -1148,11 +1153,12 @@ const { useState, useEffect, useRef, useMemo } = React;
               </div>
 
               <nav className="mx-auto mt-3 flex min-w-0 w-full max-w-[1600px] flex-wrap items-center gap-2 border-t border-slate-100 pt-3" aria-label="Ações do caixa por atalho">
-                {currentUser.role !== 'VENDEDOR' && <button type="button" className={shortcutButtonClass} onClick={() => setActiveModal('debt_settle')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F1</kbd><span>Receber dívida</span></button>}
-                <button type="button" className={shortcutButtonClass} disabled={cart.length === 0} onClick={() => setActiveModal('pay')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F2</kbd><span>Pagar</span></button>
-                <button type="button" className={shortcutButtonClass} onClick={() => setActiveModal('discount')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F3</kbd><span>Desconto</span></button>
-                <button type="button" className={shortcutButtonClass} onClick={() => setActiveModal('queue')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F4</kbd><span>Comandas e caixa</span></button>
-                <button type="button" className={shortcutButtonClass} onClick={() => setActiveModal('freight')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F9</kbd><span>Entrega</span></button>
+                <button type="button" className={shortcutButtonClass} disabled={cart.length === 0} onClick={() => setActiveModal('pay')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F1</kbd><span>Pagar</span></button>
+                <button type="button" className={shortcutButtonClass} onClick={() => setCashierPage('orders')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F2</kbd><span>Comandas</span></button>
+                <button type="button" className={shortcutButtonClass} onClick={() => setCashierPage('report')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F3</kbd><span>Relatório</span></button>
+                <button type="button" className={shortcutButtonClass} onClick={() => setActiveModal('discount')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F4</kbd><span>Desconto</span></button>
+                <button type="button" className={shortcutButtonClass} onClick={() => setActiveModal('freight')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F8</kbd><span>Entrega</span></button>
+                <button type="button" className={shortcutButtonClass} onClick={() => setCashierPage('history')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F9</kbd><span>Histórico</span></button>
               </nav>
 
               {/* Com Flora Category Pills Row */}
@@ -1582,13 +1588,13 @@ const { useState, useEffect, useRef, useMemo } = React;
                 </div>
               )}
 
-              {/* MODAL: PAGAR - F2 */}
+              {/* MODAL: PAGAR - F1 */}
               {activeModal === 'pay' && (
                 <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
                   <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                     <div>
                       <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full">
-                        {currentUser.role === 'VENDEDOR' ? 'Venda • F2' : 'Fechamento de Caixa • F2'}
+                        {currentUser.role === 'VENDEDOR' ? 'Venda • F1' : 'Fechamento de Caixa • F1'}
                       </span>
                       <h3 className="text-xl font-extrabold text-slate-900 mt-1">
                         Finalizar Pagamento
@@ -1731,12 +1737,12 @@ const { useState, useEffect, useRef, useMemo } = React;
                 </div>
               )}
 
-              {/* MODAL: DESCONTO - F3 */}
+              {/* MODAL: DESCONTO - F4 */}
               {activeModal === 'discount' && (
                 <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-xl">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-extrabold text-slate-900">
-                      Aplicar Desconto (F3)
+                      Aplicar Desconto (F4)
                     </h3>
                     <button
                       onClick={() => setActiveModal(null)}
@@ -1783,12 +1789,12 @@ const { useState, useEffect, useRef, useMemo } = React;
                 </div>
               )}
 
-              {/* MODAL: FRETE - F9 */}
+              {/* MODAL: ENTREGA - F8 */}
               {activeModal === 'freight' && (
                 <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-xl">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-extrabold text-slate-900">
-                      Taxa de entrega (F9)
+                      Taxa de entrega (F8)
                     </h3>
                     <button
                       onClick={() => setActiveModal(null)}

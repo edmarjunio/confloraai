@@ -148,7 +148,10 @@ window.PdvComponents = (() => {
         {Number(order.freightValue) > 0 && <p>Entrega: {money(order.freightValue)}</p>}
         <p className="text-lg font-black text-emerald-900">Total: {money(order.total)}</p>
         <p>Pedido feito por: <strong>{staffLabel(order.createdBy)}</strong></p>
+        {order.receivedBy && <p>Recebido por: <strong>{staffLabel(order.receivedBy)}</strong></p>}
+        <p>Status da comanda: <strong>{orderStatusLabel(order)}</strong></p>
         <p>Registrado em: {dateTime(order.createdAt)}</p>
+        {order.paidAt && <p>Pago em: {dateTime(order.paidAt)}</p>}
         {order.deliveryAddress && <p>Entrega: {order.deliveryAddress}</p>}
         {order.notes && <p>Observação: {order.notes}</p>}
       </div>
@@ -192,11 +195,10 @@ window.PdvComponents = (() => {
       </div>
     </section>;
   }
-  function CashierQueue({ user, onClose }) {
+  function CashierQueue({ user, view, onBack, onDebt }) {
     const today = dateInSaoPaulo();
-    const [dateFrom, setDateFrom] = useState(today);
+    const [dateFrom, setDateFrom] = useState(view === 'history' || view === 'report' ? '2000-01-01' : today);
     const [dateTo, setDateTo] = useState(today);
-    const [view, setView] = useState('board');
     const [data, setData] = useState(null);
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
@@ -234,36 +236,45 @@ window.PdvComponents = (() => {
       finally { setBusy(false); }
     };
 
-    const tabs = [
-      { id: 'board', label: 'Quadro do dia' },
-      { id: 'history', label: 'Histórico' },
-      { id: 'closing', label: 'Fechamento' },
-    ];
     const columns = data ? [
       { title: 'ESPERANDO CONFIRMAÇÃO', hint: 'Comandas aguardando recebimento no caixa', orders: data.pendingConfirmation, tone: 'amber' },
       { title: 'ESPERANDO PAGAMENTO', hint: 'Pix aguardando confirmação do Sicredi', orders: data.pendingPayment, tone: 'blue' },
       { title: 'CONFIRMADOS', hint: 'Fiados registrados, aguardando quitação', orders: data.confirmed, tone: 'violet' },
       { title: 'PAGOS / FINALIZADOS', hint: 'Pagamentos recebidos e pedidos concluídos', orders: data.paid, tone: 'green' },
     ] : [];
-    const closingRows = data ? Object.entries(data.closing.byPayment) : [];
+    const title = view === 'orders' ? 'Comandas' : view === 'history' ? 'Histórico de vendas' : 'Relatório';
+    const reportOrders = data ? data.history.filter((order) => user.role === 'ADMIN'
+      || (user.role === 'VENDEDOR' ? order.createdBy?.id === user.id : order.receivedBy?.id === user.id)) : [];
+    const reportPaidOrders = reportOrders.filter((order) => order.paymentStatus === 'APPROVED' && (order.paidAt || order.completedAt));
+    const reportSalesTotal = reportPaidOrders.reduce((sum, order) => sum + Number(order.total || 0), 0);
+    const reportDebtTotal = (data?.debtHistory || []).reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const reportPaymentTotals = Object.fromEntries(['PIX', 'DINHEIRO', 'CREDITO', 'DEBITO'].map((method) => [method,
+      reportPaidOrders.filter((order) => order.paymentMethod === method).reduce((sum, order) => sum + Number(order.total || 0), 0),
+    ]));
+    const topProducts = (rows, metric) => {
+      const products = new Map();
+      rows.forEach((order) => (order.items || []).forEach((item) => {
+        const key = String(item.productId || item.name || 'produto');
+        const current = products.get(key) || { name: item.name || 'Produto', quantity: 0, total: 0 };
+        current.quantity += Number(item.quantity || 0);
+        current.total += Number(item.subtotalMinor || 0) / 100 || Number(item.price || 0) * Number(item.quantity || 0);
+        products.set(key, current);
+      }));
+      return [...products.values()].sort((a, b) => b[metric] - a[metric]).slice(0, 5);
+    };
+    const mostByQuantity = data ? topProducts(reportOrders, 'quantity') : [];
+    const mostByValue = data ? topProducts(reportOrders, 'total') : [];
 
-    return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-0 sm:p-4">
-      <section role="dialog" aria-modal="true" aria-label="Comandas e fechamento" className="flex h-full max-h-[96vh] w-full max-w-[1600px] flex-col overflow-hidden rounded-none bg-[#F4F6F5] text-slate-800 shadow-2xl sm:rounded-3xl">
-        <header className="shrink-0 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
-          <div className="flex items-center justify-between gap-3">
-            <div><h2 className="text-lg font-black text-[#0F381E] sm:text-xl">Comandas e fechamento</h2><p className="text-xs text-slate-500">Acompanhe recebimentos, vendas e movimento do caixa.</p></div>
-            <div className="flex items-center gap-2">
-              <button className={button} disabled={refreshing} onClick={() => refresh()}>{refreshing ? 'Atualizando…' : 'Atualizar'}</button>
-              <button onClick={onClose} aria-label="Fechar" className="rounded-full p-2 text-xl leading-none text-slate-500 hover:bg-slate-100">✕</button>
-            </div>
-          </div>
-          <nav className="mt-3 flex gap-2 overflow-x-auto" aria-label="Seções de comandas">
-            {tabs.map((tab) => <button key={tab.id} aria-pressed={view === tab.id} onClick={() => setView(tab.id)} className={`shrink-0 rounded-xl px-3 py-2 text-xs font-bold transition ${view === tab.id ? 'bg-[#109E46] text-white shadow-sm' : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-emerald-50'}`}>{tab.label}</button>)}
-          </nav>
+    return <div className="min-h-screen bg-[#F4F6F5] font-sans text-slate-800">
+      <header className="conflora-site-header !flex-col !items-stretch border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
+        <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-col items-start gap-2"><SiteBrand /><button type="button" onClick={onBack} className="rounded-lg px-2 py-1 text-xs font-bold text-emerald-800 hover:bg-emerald-50">← Voltar ao caixa</button></div>
+          <div className="flex items-center gap-2"><h1 className="mr-2 text-lg font-black text-[#0F381E]">{title}</h1>{view === 'report' && user.role !== 'VENDEDOR' && <button className={button} onClick={onDebt}>Receber dívida</button>}<button className={button} disabled={refreshing} onClick={() => refresh()} aria-label="Atualizar">{refreshing ? 'Atualizando…' : '↻ Atualizar'}</button></div>
+        </div>
         </header>
 
-        <div className="shrink-0 border-b border-slate-200 bg-white/80 px-4 py-3 sm:px-6">
-          <div className="flex flex-wrap items-end gap-2">
+      <div className="shrink-0 border-b border-slate-200 bg-white/80 px-4 py-3 sm:px-6">
+          <div className="mx-auto flex max-w-[1600px] flex-wrap items-end gap-2">
             <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
               {[{ days: 0, label: 'Hoje' }, { days: 7, label: '7 dias' }, { days: 30, label: '30 dias' }].map((option) => <button key={option.days} className="rounded-lg px-3 py-2 text-xs font-bold text-slate-600 hover:bg-white" onClick={() => setPeriod(option.days)}>{option.label}</button>)}
             </div>
@@ -275,11 +286,11 @@ window.PdvComponents = (() => {
           </div>
         </div>
 
-        <main className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-5">
+      <main className="mx-auto min-h-[calc(100vh-130px)] w-full max-w-[1600px] overflow-y-auto p-3 sm:p-5">
           {error && <p role="alert" className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
           {!data && !error && <p className="rounded-xl bg-white p-6 text-center text-sm text-slate-500">Carregando comandas…</p>}
           {data && <>
-            {view === 'board' && <>
+            {view === 'orders' && <>
               <div className="mb-3 grid grid-cols-3 gap-1.5 sm:mb-4 sm:gap-2">
                 <div className="rounded-2xl border border-emerald-100 bg-white p-2 sm:p-3"><p className="text-[8px] font-bold uppercase leading-3 tracking-wide text-slate-500 sm:text-[10px] sm:leading-normal">Vendas atribuídas a mim</p><p className="mt-1 whitespace-nowrap text-sm font-black text-[#0F381E] sm:text-lg">{money(data.metrics.sales)}</p><p className="text-[9px] text-slate-500 sm:text-[10px]">{data.metrics.orderCount} comanda(s)</p></div>
                 <div className="rounded-2xl border border-emerald-100 bg-white p-2 sm:p-3"><p className="text-[8px] font-bold uppercase leading-3 tracking-wide text-slate-500 sm:text-[10px] sm:leading-normal">Recebido por mim</p><p className="mt-1 whitespace-nowrap text-sm font-black text-[#0F381E] sm:text-lg">{money(data.metrics.receipts)}</p><p className="hidden text-[10px] text-slate-500 sm:block">Vendas pagas no período</p></div>
@@ -300,26 +311,30 @@ window.PdvComponents = (() => {
                 <table className="w-full min-w-[760px] text-left text-sm"><thead className="bg-slate-100 text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="p-3">Data</th><th className="p-3">Comanda / cliente</th><th className="p-3">Status</th><th className="p-3">Pagamento</th><th className="p-3">Pedido por</th><th className="p-3 text-right">Total</th></tr></thead><tbody className="divide-y divide-slate-100">{data.history.map((order) => <tr key={order.id} className="hover:bg-emerald-50/50"><td className="p-3 text-xs text-slate-500">{dateTime(order.paidAt || order.completedAt || order.createdAt)}</td><td className="p-3"><button className="font-bold text-[#0F381E] hover:underline" onClick={() => setSelectedOrder(order)}>#{order.ticketNumber} · {order.customerName || 'Cliente Balcão'}</button></td><td className="p-3">{orderStatusLabel(order)}</td><td className="p-3">{paymentLabel(order.paymentMethod)}</td><td className="p-3">{staffLabel(order.createdBy)}</td><td className="p-3 text-right font-bold">{money(order.total)}</td></tr>)}</tbody></table>
               </div>
               {!data.history.length && <p className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">Nenhuma venda encontrada neste período.</p>}
-              <section className="mt-6"><h3 className="mb-2 font-black text-[#0F381E]">Quitações de fiado</h3><div className="space-y-2">{data.debtHistory.map((item) => <article key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3 text-sm"><div><strong>{item.customerName}</strong><p className="text-xs text-slate-500">{dateTime(item.createdAt)} · {paymentLabel(item.paymentMethod)}</p></div><strong className="text-[#0F381E]">{money(item.amount)}</strong></article>)}{!data.debtHistory.length && <p className="text-xs text-slate-500">Nenhuma quitação registrada neste período.</p>}</div></section>
             </>}
 
-            {view === 'closing' && <>
-              <h3 className="mb-3 font-black text-[#0F381E]">Resumo para fechamento · {dateFrom === dateTo ? dateFrom : `${dateFrom} a ${dateTo}`}</h3>
+            {view === 'report' && <>
+              <h3 className="mb-3 font-black text-[#0F381E]">Relatório · {dateFrom === dateTo ? dateFrom : `${dateFrom} a ${dateTo}`}</h3>
               <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-                <div className="rounded-2xl border border-emerald-100 bg-white p-4"><p className="text-[10px] font-bold uppercase text-slate-500">Recebido em vendas</p><p className="mt-1 text-xl font-black text-[#0F381E]">{money(data.closing.salesReceived)}</p><p className="text-[10px] text-slate-500">{data.closing.orderCount} venda(s) pagas</p></div>
-                <div className="rounded-2xl border border-emerald-100 bg-white p-4"><p className="text-[10px] font-bold uppercase text-slate-500">Quitações de fiado</p><p className="mt-1 text-xl font-black text-[#0F381E]">{money(data.closing.debtReceived)}</p><p className="text-[10px] text-slate-500">{data.closing.debtSettlementCount} recebimento(s)</p></div>
-                <div className="rounded-2xl border border-emerald-100 bg-white p-4"><p className="text-[10px] font-bold uppercase text-slate-500">Total recebido</p><p className="mt-1 text-xl font-black text-[#0F381E]">{money(data.closing.totalReceived)}</p><p className="text-[10px] text-slate-500">Vendas pagas + dívidas quitadas</p></div>
+                <div className="rounded-2xl border border-emerald-100 bg-white p-4"><p className="text-[10px] font-bold uppercase text-slate-500">Recebido em vendas</p><p className="mt-1 text-xl font-black text-[#0F381E]">{money(reportSalesTotal)}</p><p className="text-[10px] text-slate-500">{reportPaidOrders.length} venda(s) pagas</p></div>
+                <div className="rounded-2xl border border-emerald-100 bg-white p-4"><p className="text-[10px] font-bold uppercase text-slate-500">Quitações de fiado</p><p className="mt-1 text-xl font-black text-[#0F381E]">{money(reportDebtTotal)}</p><p className="text-[10px] text-slate-500">{data.debtHistory.length} recebimento(s)</p></div>
+                <div className="rounded-2xl border border-emerald-100 bg-white p-4"><p className="text-[10px] font-bold uppercase text-slate-500">Total recebido</p><p className="mt-1 text-xl font-black text-[#0F381E]">{money(reportSalesTotal + reportDebtTotal)}</p><p className="text-[10px] text-slate-500">Vendas pagas + dívidas quitadas</p></div>
                 <div className="rounded-2xl border border-violet-100 bg-white p-4"><p className="text-[10px] font-bold uppercase text-slate-500">Fiado lançado</p><p className="mt-1 text-xl font-black text-violet-900">{money(data.closing.confirmedDebt)}</p><p className="text-[10px] text-slate-500">Não incluído no total recebido</p></div>
+                <div className="rounded-2xl border border-emerald-100 bg-white p-4"><p className="text-[10px] font-bold uppercase text-slate-500">Quantidade de vendas</p><p className="mt-1 text-xl font-black text-[#0F381E]">{reportOrders.length}</p></div>
+                <div className="rounded-2xl border border-emerald-100 bg-white p-4"><p className="text-[10px] font-bold uppercase text-slate-500">Ticket médio</p><p className="mt-1 text-xl font-black text-[#0F381E]">{money(reportOrders.length ? reportOrders.reduce((sum, order) => sum + Number(order.total || 0), 0) / reportOrders.length : 0)}</p></div>
+                {['PIX', 'DINHEIRO', 'CREDITO', 'DEBITO'].map((method) => <div key={method} className="rounded-2xl border border-emerald-100 bg-white p-4"><p className="text-[10px] font-bold uppercase text-slate-500">{paymentLabel(method)}</p><p className="mt-1 text-xl font-black text-[#0F381E]">{money(reportPaymentTotals[method])}</p></div>)}
               </div>
               <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white">
                 <h4 className="border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-700">Conferência por forma de pagamento</h4>
-                <div className="divide-y divide-slate-100">{closingRows.map(([method, totals]) => <div key={method} className="grid grid-cols-2 items-center gap-2 px-4 py-3 text-xs sm:grid-cols-[1fr_auto_auto_auto] sm:gap-3"><strong>{paymentLabel(method)}</strong><span className="text-right font-bold text-[#0F381E] sm:order-last">{money(totals.total)}</span><span className="text-slate-500">Vendas {money(totals.sales)}</span><span className="text-right text-slate-500 sm:text-left">Fiado quitado {money(totals.debt)}</span></div>)}</div>
+                <div className="divide-y divide-slate-100">{['PIX', 'DINHEIRO', 'CREDITO', 'DEBITO'].map((method) => <div key={method} className="grid grid-cols-2 items-center gap-2 px-4 py-3 text-xs sm:grid-cols-[1fr_auto_auto_auto] sm:gap-3"><strong>{paymentLabel(method)}</strong><span className="text-right font-bold text-[#0F381E] sm:order-last">{money(reportPaymentTotals[method])}</span><span className="text-slate-500">Vendas confirmadas</span><span className="text-right text-slate-500 sm:text-left">Fiado quitado {money(data.closing.byPayment[method]?.debt || 0)}</span></div>)}</div>
               </section>
-              <p className="mt-3 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-950">O resumo considera os recebimentos vinculados ao usuário conectado. Administradores veem o consolidado da equipe. Fiados registrados aparecem separados até serem quitados.</p>
+              <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                {[{ title: '5 mais vendidos em quantidade', rows: mostByQuantity }, { title: '5 maiores vendas em valor', rows: mostByValue }].map((group) => <section key={group.title} className="rounded-2xl border border-slate-200 bg-white p-4"><h4 className="mb-3 font-bold text-[#0F381E]">{group.title}</h4>{group.rows.length ? <ol className="space-y-2">{group.rows.map((product, index) => <li key={product.name} className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2 text-sm"><span>{index + 1}. {product.name} <small className="text-slate-500">({product.quantity} un.)</small></span><strong>{money(product.total)}</strong></li>)}</ol> : <p className="text-sm text-slate-500">Sem itens vendidos no período.</p>}</section>)}
+              </div>
+              <p className="mt-3 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-950">{user.role === 'ADMIN' ? 'Visão consolidada de todos os colaboradores.' : `Dados vinculados a ${staffLabel({ name: user.name, email: user.email })}.`}</p>
             </>}
           </>}
-        </main>
-      </section>
+      </main>
       {selectedOrder && <OrderDetails order={selectedOrder} onClose={() => setSelectedOrder(null)} />}
     </div>;
   }
