@@ -103,14 +103,64 @@ window.PdvComponents = (() => {
       return () => clearInterval(timer);
     }, [current.status, order.id]);
     const pending = !current.completedAt;
+    const isPixPending = current.status === 'AWAITING_PIX' && Boolean(current.pixData);
+    const receiptSent = current.receiptDelivery?.sent || order.receiptDelivery?.sent;
     return <Panel title={pending ? 'Pedido registrado' : current.paymentStatus === 'ON_ACCOUNT' ? 'Fiado registrado' : 'Venda finalizada'} onClose={onNewOrder}>
-      <p>Comanda #{current.ticketNumber} · {current.customerName}</p>
-      <p className="my-2 font-semibold">{current.status === 'AWAITING_PIX' ? 'Aguardando pagamento Pix' : current.status === 'AWAITING_CASHIER' ? 'Comanda enviada para a fila do caixa' : current.paymentStatus === 'ON_ACCOUNT' ? 'Saldo lançado na conta do cliente' : 'Pagamento confirmado'}</p>
-      <ul className="divide-y">{current.items.map((item, index) => <li className="py-2 flex justify-between gap-3" key={index}><span title={item.name}>{item.quantity} {item.unit} · {item.name}</span><span>{money(item.subtotalMinor / 100)}</span></li>)}</ul>
-      <p className="mt-3">Subtotal: {money(current.subtotal)}</p><p>Desconto: {money(current.discountAmount)}</p><p>Entrega: {money(current.freightValue)}</p><p className="text-xl font-bold my-3">Total: {money(current.total)}</p>
-      <p>Pedido feito por: <strong>{staffLabel(current.createdBy)}</strong></p>
-      {current.status === 'AWAITING_PIX' && current.pixData && <div className="my-4 text-center"><img className="mx-auto w-56" src={current.pixData.qrCodeBase64} alt="QR Code Pix Sicredi" /><label>Pix copia e cola<textarea readOnly className={field} value={current.pixData.pixCopiaECola} /></label><button className={button} onClick={() => navigator.clipboard.writeText(current.pixData.pixCopiaECola).then(() => setCopyStatus('Copiado!')).catch(() => setCopyStatus('Selecione e copie o código acima.'))}>Copiar Pix</button><p role="status">{copyStatus}</p><p className="mt-2 text-sm">Valor fixo. A confirmação aparecerá automaticamente após o aviso do Sicredi.</p></div>}
-      <p className="my-4 text-sm">{!current.customerPhone ? 'Sem WhatsApp informado.' : order.receiptDelivery?.sent ? 'Recibo enviado ao WhatsApp.' : 'Recibo na fila de envio ao WhatsApp.'}</p><button onClick={onNewOrder} className={button}>Nova venda</button>
+      <div className="space-y-4">
+        <section className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-bold uppercase tracking-wide text-emerald-800">Comprovante de venda</p>
+              <p className="mt-1 text-lg font-black text-slate-900">Pedido #{current.ticketNumber}</p>
+              <p className="truncate text-sm text-slate-600">{current.customerName}</p>
+            </div>
+            <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-emerald-800">
+              {isPixPending ? 'Pix pendente' : current.paymentStatus === 'ON_ACCOUNT' ? 'Fiado registrado' : pending ? 'Aguardando caixa' : 'Pago'}
+            </span>
+          </div>
+          <p className="mt-3 text-sm font-semibold text-slate-700">
+            {isPixPending ? 'Aguardando pagamento Pix' : current.status === 'AWAITING_CASHIER' ? 'Comanda enviada para a fila do caixa' : current.paymentStatus === 'ON_ACCOUNT' ? 'Saldo lançado na conta do cliente' : 'Pagamento confirmado'}
+          </p>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-4">
+          <h3 className="text-sm font-extrabold text-slate-800">Itens da venda</h3>
+          <ul className="mt-2 divide-y divide-slate-100">
+            {current.items.map((item, index) => {
+              const lineTotal = Number(item.subtotalMinor ?? Math.round(Number(item.price || 0) * Number(item.quantity || 0) * 100)) / 100;
+              return <li className="flex min-w-0 items-start justify-between gap-3 py-2.5" key={index}>
+                <span className="min-w-0 text-sm text-slate-700"><strong className="mr-1 text-emerald-800">{item.quantity} {item.unit || 'un.'}</strong><span>{item.name}</span></span>
+                <strong className="shrink-0 text-sm text-slate-900">{money(lineTotal)}</strong>
+              </li>;
+            })}
+          </ul>
+          <div className="mt-2 space-y-1 border-t border-slate-100 pt-3 text-sm">
+            <div className="flex justify-between gap-3 text-slate-600"><span>Subtotal</span><span>{money(current.subtotal)}</span></div>
+            {Number(current.discountAmount) > 0 && <div className="flex justify-between gap-3 text-slate-600"><span>Desconto</span><span>− {money(current.discountAmount)}</span></div>}
+            {Number(current.freightValue) > 0 && <div className="flex justify-between gap-3 text-slate-600"><span>Entrega</span><span>{money(current.freightValue)}</span></div>}
+            <div className="flex justify-between gap-3 pt-1 text-base font-black text-slate-900"><span>Total</span><span className="text-emerald-800">{money(current.total)}</span></div>
+          </div>
+        </section>
+
+        {isPixPending && <section className="rounded-2xl border border-emerald-100 bg-white p-4 text-center">
+          <h3 className="text-sm font-extrabold text-slate-800">Pague o valor exato pelo Pix</h3>
+          <div className="mx-auto my-3 flex w-full items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white p-2" style={{ maxWidth: 220, aspectRatio: '1 / 1' }}>
+            <img className="block" style={{ width: '100%', height: '100%', maxWidth: 200, maxHeight: 200, objectFit: 'contain' }} src={current.pixData.qrCodeBase64} alt="QR Code Pix Sicredi" />
+          </div>
+          <label className="block text-left text-xs font-bold text-slate-600">Pix Copia e Cola
+            <textarea readOnly className={field + ' min-h-20 resize-y break-all'} value={current.pixData.pixCopiaECola} />
+          </label>
+          <button className={button + ' w-full'} onClick={() => navigator.clipboard.writeText(current.pixData.pixCopiaECola).then(() => setCopyStatus('Copiado!')).catch(() => setCopyStatus('Selecione e copie o código acima.'))}>Copiar Pix</button>
+          <p role="status" className="mt-2 text-sm text-emerald-800">{copyStatus}</p>
+          <p className="mt-2 text-xs text-slate-500">O valor é fixo. A venda será confirmada automaticamente após a validação do pagamento pelo Sicredi.</p>
+        </section>}
+
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+          <span>Pedido feito por <strong className="text-slate-700">{staffLabel(current.createdBy)}</strong></span>
+          <span>{!current.customerPhone ? 'Sem WhatsApp informado' : receiptSent ? 'Recibo enviado ao WhatsApp' : 'Recibo na fila de envio ao WhatsApp'}</span>
+        </div>
+        <button onClick={onNewOrder} className={button + ' w-full'}>{pending ? 'Voltar ao caixa' : 'Nova venda'}</button>
+      </div>
     </Panel>;
   }
   function DiscountApproval({ approval, onOrder, onClose }) {

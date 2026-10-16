@@ -81,32 +81,6 @@ cf-card.cf-card--product[interactive]:hover,
   box-shadow: var(--cf-product-shadow);
 }
 .cf-pdv-product-card:hover { box-shadow: var(--cf-product-shadow-hover); }
-.cf-pdv-info-action {
-  position: relative;
-  z-index: 1;
-}
-.cf-pdv-product-overlay {
-  position: absolute !important;
-  top: 4px !important;
-  right: 10px !important;
-  left: 10px !important;
-  z-index: 20 !important;
-  display: flex !important;
-  flex-flow: row nowrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 18px;
-  visibility: visible !important;
-  opacity: 1 !important;
-  pointer-events: none;
-}
-.cf-pdv-category-label {
-  max-width: calc(100% - 48px) !important;
-  flex: 0 1 auto;
-  visibility: visible !important;
-  opacity: 1 !important;
-}
 .cf-pdv-cart-image {
   display: block !important;
   width: 44px !important;
@@ -116,29 +90,34 @@ cf-card.cf-card--product[interactive]:hover,
   flex: 0 0 44px !important;
   overflow: hidden;
 }
-.cf-pdv-cart-image img {
+.cf-pdv-cart-image-frame {
+  position: relative;
   display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  width: 44px !important;
+  height: 44px !important;
+  min-width: 44px !important;
+  min-height: 44px !important;
+  flex: 0 0 44px !important;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
 }
-.cf-pdv-info-action {
-  display: inline-flex !important;
-  width: auto !important;
+.cf-pdv-cart-image-frame render-image {
+  position: absolute !important;
+  inset: 0 !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
   min-width: 0 !important;
-  margin-left: auto !important;
-  flex: 0 0 auto !important;
-  align-items: center;
-  justify-content: center;
-  padding: 3px 6px;
-  font-size: 8px;
-  font-weight: 800;
-  line-height: 1;
-  pointer-events: auto;
-  white-space: nowrap;
-  background: rgb(255 255 255 / 92%);
-  visibility: visible !important;
-  opacity: 1 !important;
+  min-height: 0 !important;
+}
+.cf-pdv-cart-image-frame .cf-pdv-cart-image {
+  display: block;
+  width: 44px !important;
+  height: 44px !important;
+  max-width: none;
+  object-fit: cover;
 }
 .cf-product-category-tag {
   display: inline-flex;
@@ -171,15 +150,6 @@ cf-card.cf-card--product[interactive]:hover,
   cursor: pointer;
 }
 .cf-product-info-button:hover { background: #fff; color: var(--cf-green-dark); }
-.cf-product-info-button.cf-pdv-info-action { border-radius: 999px; }
-.cf-product-info-button.cf-pdv-info-action {
-  display: inline-flex;
-  width: auto;
-  min-width: 0;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-}
 .cf-product-actions {
   position: absolute;
   top: 7px;
@@ -221,7 +191,7 @@ cf-card.cf-card--product[interactive]:hover,
 render-product-card.cf-pdv-product-card {
   display: block !important;
   min-width: 0;
-  padding: 20px 8px 8px;
+  padding: 8px;
   cursor: pointer;
   transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
 }
@@ -230,22 +200,6 @@ render-product-card.cf-pdv-product-card {
   box-shadow: 0 0 0 2px rgb(16 158 70 / 20%), var(--cf-product-shadow);
 }
 .cf-pdv-product-card:hover { box-shadow: var(--cf-product-shadow-hover); }
-.cf-shared-pdv-overlay {
-  position: absolute;
-  z-index: 20;
-  top: 4px;
-  right: 10px;
-  left: 10px;
-  display: flex;
-  min-height: 18px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  pointer-events: none;
-}
-.cf-pdv-product-card.is-selected .cf-shared-pdv-overlay { left: 18px; }
-.cf-shared-pdv-overlay .cf-product-category-tag,
-.cf-shared-pdv-overlay render-category-tag,
 .product-photo > render-category-tag .cf-product-category-tag,
 .card-img-wrapper > render-category-tag .cf-product-category-tag {
   box-sizing: border-box;
@@ -258,13 +212,13 @@ render-product-card.cf-pdv-product-card {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
 }
 .cf-shared-pdv-thumbnail {
-  width: 56px;
-  height: 56px;
-  min-width: 56px;
-  flex: 0 0 56px;
+  width: 52px;
+  height: 52px;
+  min-width: 52px;
+  flex: 0 0 52px;
   overflow: hidden;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
@@ -283,28 +237,48 @@ render-product-card.cf-pdv-product-card {
 .cf-shared-pdv-details {
   display: flex;
   min-width: 0;
-  min-height: 52px;
+  min-height: 60px;
   flex: 1;
   flex-direction: column;
-  justify-content: space-between;
-  padding: 8px 4px 0;
+  justify-content: center;
+  gap: 3px;
+  padding: 0;
 }
 .cf-shared-pdv-details h3 {
+  display: -webkit-box;
   min-width: 0;
   margin: 0;
   color: #1e293b;
   font-size: 12px;
   font-weight: 700;
   line-height: 1.2;
+  overflow: hidden;
   overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.cf-pdv-inline-category {
+  display: block !important;
+  min-width: 0;
+  max-width: 100%;
+  line-height: 1;
+}
+.cf-pdv-inline-category .cf-product-category-tag {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 16px;
+  padding: 2px 6px;
+  font-size: 8px;
+  line-height: 1.1;
 }
 .cf-shared-pdv-price-row {
   display: flex;
   min-width: 0;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 4px;
-  margin-top: 5px;
+  margin-top: 0;
 }
 .cf-shared-pdv-price-row strong {
   color: #047857;
@@ -327,7 +301,26 @@ render-product-card.cf-pdv-product-card {
 }
 .cf-shared-pdv-favorite svg { width: 16px; height: 16px; }
 .cf-shared-pdv-favorite.is-favorite { color: #ef4444; }
-.cf-shared-pdv-info-action { pointer-events: auto; }
+.cf-pdv-card-actions {
+  display: flex;
+  flex: 0 0 26px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+.cf-pdv-info-button {
+  width: 25px;
+  height: 25px;
+  padding: 4px;
+}
+.cf-pdv-info-button svg { width: 15px; height: 15px; }
+.cf-pdv-card-actions .cf-shared-pdv-favorite {
+  width: 25px;
+  height: 25px;
+  flex-basis: 25px;
+}
+.cf-pdv-card-actions .cf-shared-pdv-favorite.is-favorite { color: #e3a008; }
 .cf-shared-store-price {
   display: flex;
   align-items: baseline;

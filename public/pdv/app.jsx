@@ -1050,13 +1050,15 @@ const { useState, useEffect, useRef, useMemo } = React;
                   className="py-3 px-2 flex items-center justify-between gap-3 group hover:bg-slate-50/80 rounded-xl transition-colors"
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <render-image
-                      src={item.image}
-                      image-candidates={JSON.stringify(item.imageCandidates || [])}
-                      fallback-src={item.imageFallbackUrl || '/store-assets/placeholder.svg'}
-                      alt={item.name}
-                      className="cf-pdv-cart-image w-11 h-11 rounded-xl object-cover border border-slate-200 bg-slate-50 shrink-0"
-                    />
+                    <span className="cf-pdv-cart-image-frame" aria-hidden="true">
+                      <render-image
+                        src={item.image}
+                        image-candidates={JSON.stringify(item.imageCandidates || [])}
+                        fallback-src={item.imageFallbackUrl || '/store-assets/placeholder.svg'}
+                        alt={item.name}
+                        className="cf-pdv-cart-image"
+                      />
+                    </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <span className="text-xs font-extrabold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-md">

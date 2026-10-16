@@ -18,6 +18,8 @@
   const ICONS = Object.freeze({
     heart: (filled, extraClass = "") =>
       `<svg${extraClass ? ` class="${extraClass}"` : ""} viewBox="0 0 24 24" aria-hidden="true" fill="${filled ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z"/></svg>`,
+    star: (filled) =>
+      `<svg viewBox="0 0 24 24" aria-hidden="true" fill="${filled ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.75 5.58 6.16.9-4.46 4.35 1.05 6.14L12 17.07l-5.5 2.9 1.05-6.14L3.1 9.48l6.15-.9L12 3Z"/></svg>`,
     info: `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>`,
     cart: `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></svg>`,
   });
@@ -347,7 +349,6 @@
       saleUnitLabel: p.saleUnit?.label
         ? `por ${p.saleUnit.label}`
         : "preço atual",
-      highlights: Array.isArray(p.productHighlights) ? p.productHighlights : [],
       cartControlsHtml: p.cartControlsHtml || "",
       images,
       primaryImage: images[0] || fallbackImage,
@@ -554,18 +555,16 @@
 
       this.innerHTML = `
         ${quantity > 0 ? `<span aria-label="${quantity} no carrinho" class="cf-pdv-quantity-badge">${quantity}</span>` : ""}
-        <div class="cf-shared-pdv-overlay">
-          ${vm.category ? `<render-category-tag category="${escapeHtml(vm.category)}" class="cf-pdv-category-label"></render-category-tag>` : ""}
-          <button type="button" data-action="info" class="cf-product-info-button cf-pdv-info-action" aria-label="Informações de ${safeName}" title="Informações de ${safeName}">INFO</button>
-        </div>
         <div class="cf-shared-pdv-content">
           <div class="cf-shared-pdv-thumbnail">${this.buildImageHtml(vm, "cf-shared-pdv-image")}</div>
           <div class="cf-shared-pdv-details">
             <h3 title="${safeName}">${safeName}</h3>
-            <div class="cf-shared-pdv-price-row">
-              <strong>${vm.formattedPrice}</strong>
-              <button type="button" data-action="favorite" aria-pressed="${favorite}" aria-label="${favLabel}: ${safeName}" title="${favLabel}" class="cf-shared-pdv-favorite ${favorite ? "is-favorite" : ""}">${ICONS.heart(favorite)}</button>
-            </div>
+            ${vm.category ? `<render-category-tag category="${escapeHtml(vm.category)}" class="cf-pdv-inline-category"></render-category-tag>` : ""}
+            <div class="cf-shared-pdv-price-row"><strong>${vm.formattedPrice}</strong></div>
+          </div>
+          <div class="cf-pdv-card-actions">
+            <button type="button" data-action="info" class="cf-product-info-button cf-pdv-info-button" aria-label="Informações de ${safeName}" title="Informações de ${safeName}">${ICONS.info}</button>
+            <button type="button" data-action="favorite" aria-pressed="${favorite}" aria-label="${favLabel}: ${safeName}" title="${favLabel}" class="cf-shared-pdv-favorite ${favorite ? "is-favorite" : ""}">${ICONS.star(favorite)}</button>
           </div>
         </div>`;
     }
@@ -612,17 +611,7 @@
       this.removeAttribute("tabindex");
       this.removeAttribute("aria-label");
 
-      const highlightsHtml = vm.highlights.length
-        ? `<div class="product-feature-tags" aria-label="Características do produto">${vm.highlights
-            .map(
-              (h) =>
-                `<span class="product-feature-tag ${escapeHtml(h.tone)}">${escapeHtml(h.icon)} ${escapeHtml(h.label)}</span>`,
-            )
-            .join("")}</div>`
-        : "";
-
       this.innerHTML = `
-        ${highlightsHtml}
         ${vm.isUnavailable && vm.isInactive ? `<span class="badge-inactive">⚠️ INATIVO - Indisponível</span>` : ""}
         <button type="button" class="product-photo" aria-label="Ver ${safeName}" data-action="open">
           ${this.buildImageHtml(vm, "product-card-image")}

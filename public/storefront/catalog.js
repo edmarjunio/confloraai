@@ -10,18 +10,6 @@ import { icon } from "./icons.js";
 import { searchProducts } from "./guided-search.mjs";
 import { buildProductInfoContent } from "./product-info-content.js";
 
-const PRODUCT_HIGHLIGHTS = [
-  { label: "Sol Pleno", icon: "☀", tone: "sun", terms: ["sol pleno", "pleno sol"] },
-  { label: "Meia Sombra", icon: "◐", tone: "shade", terms: ["meia sombra", "luz indireta"] },
-  { label: "Sombra", icon: "☾", tone: "shade", terms: ["sombra"] },
-  { label: "Irrigado", icon: "💧", tone: "water", terms: ["irrigado", "solo umido", "solo humido"] },
-  { label: "Aquático", icon: "💧", tone: "water", terms: ["aquatico", "aquatica"] },
-  { label: "Ave Exótica", icon: "✦", tone: "pet", terms: ["ave exotica", "ave ornamental"] },
-  { label: "Pet Friendly", icon: "🐾", tone: "pet", terms: ["pet friendly", "seguro para pets"] },
-  { label: "Frutífera", icon: "●", tone: "fruit", terms: ["frutifera", "frutifero"] },
-  { label: "Florífera", icon: "✿", tone: "flower", terms: ["florifera", "florifero", "flores ornamentais"] },
-];
-
 function normalizeProductText(value) {
   return String(value || "")
     .normalize("NFD")
@@ -29,31 +17,6 @@ function normalizeProductText(value) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
-}
-
-function getProductHighlights(product) {
-  const specificationText = Object.values(product.specifications || {})
-    .flatMap((specification) => [specification?.label, specification?.value])
-    .filter(Boolean);
-  const sourceText = normalizeProductText([
-    product.name,
-    product.categoryName,
-    product.description,
-    product.descriptionAi,
-    product.descricao_ia,
-    ...(Array.isArray(product.tags) ? product.tags : []),
-    ...(Array.isArray(product.searchAliases) ? product.searchAliases : []),
-    product.ambiente_ideal,
-    product.cuidados_basicos,
-    ...specificationText,
-  ].join(" "));
-
-  return PRODUCT_HIGHLIGHTS.filter((highlight) => {
-    if (highlight.label === "Sombra" && sourceText.includes("meia sombra")) {
-      return false;
-    }
-    return highlight.terms.some((term) => sourceText.includes(term));
-  }).slice(0, 2);
 }
 
 export function createCatalog(state, add, navigate) {
@@ -353,12 +316,10 @@ export function createCatalog(state, add, navigate) {
       product.stock?.tracked &&
       product.stock.quantity < (product.saleUnit?.minimum || 1);
     const unavailable = isInactive || outOfStock;
-    const highlights = !compact && !isInactive ? getProductHighlights(product) : [];
     const category = categoryLabel(product);
     const cardProduct = {
       ...product,
       categoryName: category,
-      productHighlights: highlights,
       unavailable,
     };
     const card = element("render-product-card", {
