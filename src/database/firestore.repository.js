@@ -8,6 +8,7 @@ const {
   getBusinessDateRange,
   summarizeDailyExecutiveMetrics,
 } = require('../reports/daily-executive-metrics');
+const { getPreviousPeriod, summarizeExecutivePeriod } = require('../reports/period-executive-metrics');
 const {
   PAID_ORDER_STATUSES,
   validateOrderConfirmation,
@@ -1065,6 +1066,52 @@ class FirestoreRepository {
     return summarizeDailyExecutiveMetrics({ date: targetDate, orders, settlements, users });
   }
 
+  async getExecutiveRecordsForRange(collectionName, from, to) {
+    const start = getBusinessDateRange(from).start;
+    const end = getBusinessDateRange(to).end;
+    if (this.firestore && !this._firestoreClientDisabled && !FirestoreRepository._globalClientDisabled) {
+      const records = [];
+      try {
+        const baseQuery = this.firestore.collection(collectionName)
+          .where('createdAt', '>=', start)
+          .where('createdAt', '<', end)
+          .orderBy('createdAt', 'asc');
+        let lastDocument = null;
+        while (true) {
+          let pageQuery = baseQuery.limit(1000);
+          if (lastDocument) { pageQuery = pageQuery.startAfter(lastDocument); }
+          const page = await pageQuery.get();
+          if (page.empty) { break; }
+          records.push(...page.docs.map((document) => ({ id: document.id, ...document.data() })));
+          lastDocument = page.docs[page.docs.length - 1];
+          if (page.size < 1000) { break; }
+        }
+        return records;
+      } catch (error) {
+        Logger.warn('Falha ao consultar o painel de vendas por período', { collectionName, error: error.message });
+        throw new Error('Não foi possível consultar todos os registros deste período.');
+      }
+    }
+    if (this.firestore) { throw new Error('Firestore indisponível; o painel não exibirá dados parciais.'); }
+    if (!this.isInMemory) { throw new Error('Banco de dados indisponível para o painel de vendas.'); }
+    const records = collectionName === 'orders'
+      ? Array.from(this.inMemoryOrders.values())
+      : (this.inMemoryDebtSettlements || []);
+    return records.filter((record) => {
+      const businessDate = getBusinessDate(record.createdAt);
+      return businessDate >= from && businessDate <= to;
+    });
+  }
+
+  async getExecutivePeriodMetrics({ from, to }) {
+    const range = getPreviousPeriod({ from: String(from || '').trim(), to: String(to || '').trim() });
+    const [orders, settlements] = await Promise.all([
+      this.getExecutiveRecordsForRange('orders', range.previousFrom, range.to),
+      this.getExecutiveRecordsForRange('debt_settlements', range.previousFrom, range.to),
+    ]);
+    return summarizeExecutivePeriod({ from: range.from, to: range.to, orders, settlements });
+  }
+
   /**
    * Finaliza o caixa do dia, gera o PDF executivo e envia resumo + PDF pro WhatsApp do patrão.
    */
@@ -1954,11 +2001,13 @@ class FirestoreRepository {
         id: profile.id || key,
         name: String(profile.name || profile.customerName || 'Cliente'),
         phone: customerPhone,
+        email: String(profile.email || '').trim().toLowerCase(),
         cpfCnpj: profile.cpfCnpj || '',
         address: profile.address || profile.deliveryAddress || '',
         deliveryAddress: profile.deliveryAddress || profile.address || '',
         notes: profile.notes || '',
         debtBalance: Number(profile.debtBalance || 0),
+        creditBalance: Number(profile.creditBalance || 0),
       });
     };
 
@@ -2000,6 +2049,31 @@ class FirestoreRepository {
     }
 
     return Array.from(customers.values()).slice(0, Math.min(20, Math.max(1, limit)));
+  }
+
+  async findCustomerProfilesByEmail(email) {
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    if (!normalizedEmail) { return []; }
+    if (this.firestore) {
+      if (this._firestoreClientDisabled || FirestoreRepository._globalClientDisabled) {
+        throw new Error('Firestore indisponível para validar o vínculo do cliente.');
+      }
+      try {
+        const snapshot = await this.firestore.collection('customers')
+          .where('email', '==', normalizedEmail)
+          .limit(3)
+          .get();
+        return snapshot.docs.map((document) => ({ ...document.data(), id: document.id }));
+      } catch (error) {
+        Logger.warn('Falha ao localizar cadastro financeiro do cliente', { error: error.message });
+        throw new Error('Não foi possível validar o vínculo da conta do cliente.');
+      }
+    }
+    if (!this.isInMemory) { throw new Error('Banco de dados indisponível para validar o vínculo do cliente.'); }
+    return Array.from(this.inMemoryCustomers.entries())
+      .filter(([, profile]) => String(profile.email || '').trim().toLowerCase() === normalizedEmail)
+      .slice(0, 3)
+      .map(([id, profile]) => ({ ...profile, id: profile.id || id }));
   }
 
   async saveCustomerProfile(phone, profileData) {
@@ -2141,7 +2215,10 @@ class FirestoreRepository {
     let balance = 0;
     let transactions = [];
 
-    if (this.firestore && !this._firestoreClientDisabled) {
+    if (this.firestore) {
+      if (this._firestoreClientDisabled || FirestoreRepository._globalClientDisabled) {
+        throw new Error('Firestore indisponível; extrato financeiro indisponível.');
+      }
       try {
         const custDoc = await this.firestore.collection('customers').doc(key).get();
         if (custDoc.exists) {
@@ -2155,8 +2232,11 @@ class FirestoreRepository {
         return { customerKey: key, balance, transactions };
       } catch (err) {
         Logger.warn('Erro ao buscar dívidas do cliente no Firestore', { error: err.message });
+        throw new Error('Não foi possível carregar o extrato financeiro deste cliente.');
       }
     }
+
+    if (!this.isInMemory) { throw new Error('Banco de dados indisponível para consultar o extrato financeiro.'); }
 
     const cust = this.inMemoryCustomers.get(key);
     balance = Number(cust?.debtBalance || 0);

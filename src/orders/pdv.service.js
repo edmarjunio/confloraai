@@ -2,7 +2,7 @@ const { createHash } = require('node:crypto');
 const { formatOrderReceipt, money } = require('./receipt.util');
 const { remainingStock } = require('./order-integrity');
 
-const CASH_METHODS = new Set(['DINHEIRO', 'DEBITO', 'CREDITO', 'FIADO']);
+const ORDER_PAYMENT_METHODS = new Set(['DINHEIRO', 'DEBITO', 'CREDITO', 'FIADO', 'SALDO_CLIENTE']);
 function actor(user) {
   const email = String(user?.email || '').trim().toLowerCase();
   const name = String(user?.name || '').trim() || email || String(user?.id || 'Colaborador');
@@ -60,7 +60,8 @@ class PdvService {
       return this.finishCreation(await this.preparePix(previous), user, approvedDiscount);
     }
     const paymentMethod = String(input.paymentMethod || '').toUpperCase();
-    if (paymentMethod !== 'PIX' && !CASH_METHODS.has(paymentMethod)) { throw new Error('Forma de pagamento inválida.'); }
+    if (paymentMethod !== 'PIX' && !ORDER_PAYMENT_METHODS.has(paymentMethod)) { throw new Error('Forma de pagamento inválida.'); }
+    if (paymentMethod === 'SALDO_CLIENTE' && !['ADMIN', 'CAIXA'].includes(user.role)) { throw new Error('Somente o caixa pode usar o crédito disponível do cliente.'); }
     if (!Array.isArray(input.items) || !input.items.length || input.items.length > 150) { throw new Error('Adicione os produtos à comanda.'); }
     const products = new Map((await this.repository.repository.getAllProducts()).map((product) => [String(product.id), product]));
     const items = input.items.map((item) => {
@@ -89,7 +90,8 @@ class PdvService {
     const customerId = String(input.customerId || '');
     if (customerId.includes('/')) { throw new Error('Cliente inválido.'); }
     const customer = customerId ? await this.repository.read('customers', customerId) : null;
-    if ((customerId || paymentMethod === 'FIADO') && !customer) { throw new Error('Selecione um cliente cadastrado para o fiado.'); }
+    if ((customerId || ['FIADO', 'SALDO_CLIENTE'].includes(paymentMethod)) && !customer) { throw new Error('Selecione um cliente cadastrado para o fiado ou uso de crédito.'); }
+    if (paymentMethod === 'SALDO_CLIENTE' && Math.round(Number(customer?.creditBalance || 0) * 100) < Math.round(total * 100)) { throw new Error('O crédito disponível do cliente não cobre o valor total da venda.'); }
     const phone = normalizePhone(input.customerPhone || customer?.phone || customer?.phoneDigits);
     if (discountPercent > 5 && user.role !== 'ADMIN' && !approvedDiscount) {
       const approval = await this.repository.transaction(async (tx) => {
@@ -171,6 +173,7 @@ class PdvService {
       if (!phone) { await this.repository.updateMessage(id, { status: 'SENT', skipped: true, leaseUntil: 0 }); return; }
       let text;
       if (job.kind === 'receipt' || job.kind === 'customer-paid') { text = formatOrderReceipt(order); }
+      else if (settlement?.entryType === 'CREDITO_CLIENTE') { text = `CONFLORA — CRÉDITO DO CLIENTE\nCliente: ${settlement.customerName}\nValor recebido: ${money(settlement.amount)}\nCrédito disponível: ${money(settlement.newCreditBalance)}\nRecebido por: ${settlement.receivedBy.name}\nForma: ${settlement.paymentMethod}`; }
       else if (settlement) { text = `CONFLORA — QUITAÇÃO DE FIADO\nCliente: ${settlement.customerName}\nValor: ${money(settlement.amount)}\nSaldo devedor: ${money(settlement.newBalance)}\nRecebido por: ${settlement.receivedBy.name}\nForma: ${settlement.paymentMethod}`; }
       else { text = `CONFLORA — PIX CONFIRMADO\nPedido #${order.ticketNumber}\nCliente: ${order.customerName}\nValor: ${money(order.total)}\nPedido feito por: ${order.createdBy.name}\nRecebido por: ${order.receivedBy.name}\nPedido pago e finalizado. Estoque atualizado.`; }
       const chunks = messageChunks(text, this.whatsapp.sendPdvText ? 900 : 3500);
@@ -209,4 +212,4 @@ class PdvService {
   }
 }
 
-module.exports = { PdvService, actor, normalizePhone, requestId, CASH_METHODS };
+module.exports = { PdvService, actor, normalizePhone, requestId, ORDER_PAYMENT_METHODS };

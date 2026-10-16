@@ -1,6 +1,6 @@
 const { timingSafeEqual, randomUUID } = require('node:crypto');
 const { PdvRepository } = require('../orders/pdv.repository');
-const { PdvService, actor, requestId, normalizePhone, CASH_METHODS } = require('../orders/pdv.service');
+const { PdvService, actor, requestId, normalizePhone } = require('../orders/pdv.service');
 const { formatOrderReceipt } = require('../orders/receipt.util');
 const Logger = require('../shared/logger');
 const { setInterval } = require('node:timers');
@@ -43,7 +43,7 @@ function isWithinRange(value, range) {
 }
 
 function paymentTotals(orders, settlements) {
-  const methods = ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO'];
+  const methods = ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO', 'SALDO_CLIENTE'];
   const totals = Object.fromEntries(methods.map((method) => [method, { sales: 0, debt: 0, count: 0, debtCount: 0 }]));
   for (const order of orders) {
     const row = totals[order.paymentMethod];
@@ -94,10 +94,17 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone }) {
     const name = String(req.body.name || '').trim().slice(0, 100);
     if (!name) { throw new Error('Informe o nome do cliente.'); }
     const phone = normalizePhone(req.body.phone);
+    const email = String(req.body.email || '').trim().toLowerCase();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { throw new Error('Informe um e-mail válido para vincular a conta do cliente.'); }
     const id = phone || randomUUID();
+    if (email) {
+      const matches = await repository.findCustomerProfilesByEmail(email);
+      if (matches.some((profile) => String(profile.id) !== id)) { throw new Error('Este e-mail já está vinculado a outro cadastro de cliente.'); }
+    }
     const customer = await store.transaction(async (tx) => {
       const previous = await tx.get('customers', id);
-      const saved = { ...previous, id, name, phone, phoneDigits: phone, cpfCnpj: String(req.body.cpfCnpj || '').slice(0, 30), address: String(req.body.address || '').slice(0, 250), notes: String(req.body.notes || '').slice(0, 250), updatedAt: new Date().toISOString() };
+      const nameSearch = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+      const saved = { ...previous, id, name, nameSearch, phone, phoneDigits: phone, email, cpfCnpj: String(req.body.cpfCnpj || '').slice(0, 30), address: String(req.body.address || '').slice(0, 250), notes: String(req.body.notes || '').slice(0, 250), updatedAt: new Date().toISOString() };
       tx.set('customers', id, saved);
       return saved;
     });
@@ -128,8 +135,12 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone }) {
     const completed = history.filter((order) => order.completedAt && order.status !== 'CANCELLED');
     const confirmed = completed.filter((order) => order.paymentStatus === 'ON_ACCOUNT');
     const paid = completed.filter((order) => order.paymentStatus === 'APPROVED' && (order.paidAt || order.completedAt));
-    const allSettlements = await store.list('debt_settlements', 'type', 'QUITACAO_FIADO');
-    const debtHistory = allSettlements.filter((row) => (isAdmin || row.receivedBy?.id === req.user.id) && isWithinRange(row.createdAt, range));
+    const settlementGroups = await Promise.all([
+      store.list('debt_settlements', 'type', 'QUITACAO_FIADO'),
+      store.list('debt_settlements', 'type', 'CREDITO_CLIENTE'),
+    ]);
+    const allSettlements = [...new Map(settlementGroups.flat().map((row) => [row.id, row])).values()];
+    const debtHistory = allSettlements.filter((row) => ['QUITACAO_FIADO', 'CREDITO_CLIENTE'].includes(row.entryType || row.type || 'QUITACAO_FIADO') && (isAdmin || row.receivedBy?.id === req.user.id) && isWithinRange(row.createdAt, range));
     const mySales = completed.filter((order) => order.createdBy?.id === req.user.id);
     const myReceipts = paid.filter((order) => order.receivedBy?.id === req.user.id);
     const myDebtReceipts = debtHistory.filter((row) => row.receivedBy?.id === req.user.id);
@@ -137,12 +148,15 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone }) {
     const closingSettlements = isAdmin ? debtHistory : myDebtReceipts;
     const byPayment = paymentTotals(closingOrders, closingSettlements);
     const sum = (rows, field) => rows.reduce((total, row) => total + Number(row[field] || 0), 0);
+    const cashReceivedOrders = closingOrders.filter((order) => order.paymentMethod !== 'SALDO_CLIENTE');
+    const creditUsedOrders = closingOrders.filter((order) => order.paymentMethod === 'SALDO_CLIENTE');
     const closing = {
       orderCount: closingOrders.length,
       debtSettlementCount: closingSettlements.length,
-      salesReceived: sum(closingOrders, 'total'),
+      salesReceived: sum(cashReceivedOrders, 'total'),
+      customerCreditUsed: sum(creditUsedOrders, 'total'),
       debtReceived: sum(closingSettlements, 'amount'),
-      totalReceived: sum(closingOrders, 'total') + sum(closingSettlements, 'amount'),
+      totalReceived: sum(cashReceivedOrders, 'total') + sum(closingSettlements, 'amount'),
       confirmedDebt: sum(isAdmin ? confirmed : confirmed.filter((order) => order.createdBy?.id === req.user.id || order.receivedBy?.id === req.user.id), 'total'),
       byPayment,
     };
@@ -199,15 +213,17 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone }) {
     if (!customer) { throw new Error('Cliente não cadastrado.'); }
     const debts = await store.list('customer_debts', 'customerKey', req.params.key);
     const payments = await store.list('debt_settlements', 'customerKey', req.params.key);
-    res.json({ success: true, balance: Number(customer.debtBalance || 0), transactions: [...debts, ...payments] });
+    res.json({ success: true, balance: Number(customer.debtBalance || 0), creditBalance: Number(customer.creditBalance || 0), transactions: [...debts, ...payments] });
   }));
   app.post('/api/caixa/debts/settle', requireCashier, route(async (req, res) => {
     const amount = Number(req.body.amount);
     const paymentMethod = String(req.body.paymentMethod || '').toUpperCase();
-    if (!Number.isFinite(amount) || amount <= 0 || !CASH_METHODS.has(paymentMethod) || paymentMethod === 'FIADO') { throw new Error('Use dinheiro, débito ou crédito para quitar a dívida no caixa.'); }
+    if (!Number.isFinite(amount) || amount <= 0 || !['DINHEIRO', 'DEBITO', 'CREDITO'].includes(paymentMethod)) { throw new Error('Use dinheiro, débito ou crédito para receber o pagamento no caixa.'); }
     const customerKey = String(req.body.customerKey || '');
     if (!customerKey || customerKey.includes('/')) { throw new Error('Selecione o cliente cadastrado.'); }
-    const result = await store.settle({ id: requestId(req.body.requestId), customerKey, amount: Math.round(amount * 100) / 100, paymentMethod, notes: String(req.body.notes || '').slice(0, 500), receivedBy: actor(req.user) });
+    const entryType = String(req.body.entryType || 'QUITACAO_FIADO').toUpperCase();
+    if (!['QUITACAO_FIADO', 'CREDITO_CLIENTE'].includes(entryType)) { throw new Error('Tipo de recebimento inválido.'); }
+    const result = await store.settle({ id: requestId(req.body.requestId), customerKey, amount: Math.round(amount * 100) / 100, paymentMethod, notes: String(req.body.notes || '').slice(0, 500), receivedBy: actor(req.user), entryType });
     await service.deliver(result.id);
     res.json({ success: true, ...result });
   }));

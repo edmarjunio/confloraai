@@ -231,6 +231,23 @@ function renderAdminGerencialHtml() {
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 18px;
     }
+    .period-analytics { gap: 16px; }
+    .period-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
+    .period-presets { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+    .period-presets button, .period-refresh { min-height: 40px; }
+    .period-date { display: grid; gap: 4px; color: var(--muted); font-size: 10px; font-weight: 750; text-transform: uppercase; }
+    .period-date input { min-height: 40px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; color: var(--text); font: inherit; font-size: 12px; text-transform: none; }
+    .period-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .period-metric { min-width: 0; padding: 13px 15px; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
+    .period-metric span, .period-metric small { display: block; color: var(--muted); font-size: 11px; }
+    .period-metric strong { display: block; margin: 5px 0; color: var(--primary); font-size: clamp(18px, 2vw, 24px); overflow-wrap: anywhere; }
+    .period-insight { padding: 13px; border: 1px solid #dce9df; border-radius: 10px; background: #f7fbf8; color: #173c26; }
+    .period-list { display: grid; gap: 8px; }
+    .period-row { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(70px, 1.7fr) auto; align-items: center; gap: 9px; font-size: 11px; }
+    .period-row-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .period-bar-track { height: 8px; overflow: hidden; border-radius: 999px; background: #edf2ee; }
+    .period-bar-fill { height: 100%; border-radius: inherit; background: var(--primary); }
+    .period-empty { color: var(--muted); font-size: 12px; }
     .panel-card {
       background: #fff;
       border-radius: var(--radius);
@@ -433,6 +450,14 @@ function renderAdminGerencialHtml() {
       .summary-val { font-size: clamp(16px, 5.5vw, 21px); }
       .summary-label { font-size: 10px; line-height: 1.3; }
       .details-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+      .period-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+      .period-metric { padding: 11px; }
+      .period-controls { align-items: stretch; }
+      .period-presets { width: 100%; }
+      .period-presets button { flex: 1; }
+      .period-date { flex: 1; min-width: 130px; }
+      .period-refresh { width: 100%; justify-content: center; }
+      .period-row { grid-template-columns: minmax(92px, 1fr) minmax(48px, 1fr) auto; gap: 6px; }
       .panel-card { padding: 14px; gap: 12px; }
       .panel-header { align-items: flex-start; gap: 8px; flex-wrap: wrap; }
       .panel-title { font-size: 14px; }
@@ -485,11 +510,49 @@ function renderAdminGerencialHtml() {
       </div>
     </div>
 
+    <section class="panel-card period-analytics" aria-labelledby="periodAnalyticsTitle">
+      <div class="panel-header">
+        <div class="panel-title" id="periodAnalyticsTitle">Acompanhamento de vendas</div>
+        <span class="panel-tag">Vendas do caixa e do catálogo</span>
+      </div>
+      <div class="period-controls">
+        <div class="period-presets" role="group" aria-label="Períodos rápidos">
+          <button type="button" class="btn-action" onclick="setPeriodPreset('week')">7 dias</button>
+          <button type="button" class="btn-action" onclick="setPeriodPreset('month')">Este mês</button>
+          <button type="button" class="btn-action" onclick="setPeriodPreset('year')">Este ano</button>
+        </div>
+        <label class="period-date">De<input type="date" id="periodFrom" aria-label="Data inicial do acompanhamento" onchange="loadPeriodMetrics()" /></label>
+        <label class="period-date">Até<input type="date" id="periodTo" aria-label="Data final do acompanhamento" onchange="loadPeriodMetrics()" /></label>
+        <button type="button" id="periodRefresh" class="btn-action primary period-refresh" onclick="loadPeriodMetrics()">Atualizar período</button>
+      </div>
+      <p id="periodStatus" class="period-empty" role="status">Selecione um período para carregar as vendas.</p>
+      <div class="period-summary-grid">
+        <article class="period-metric"><span>Vendas registradas</span><strong id="periodSales">R$ 0,00</strong><small id="periodSalesChange">—</small></article>
+        <article class="period-metric"><span>Dinheiro recebido</span><strong id="periodReceived">R$ 0,00</strong><small id="periodReceivedChange">—</small></article>
+        <article class="period-metric"><span>Fiado a receber</span><strong id="periodOnAccount">R$ 0,00</strong><small id="periodOnAccountChange">—</small></article>
+        <article class="period-metric"><span>Crédito antecipado recebido</span><strong id="periodAdvanceCredit">R$ 0,00</strong><small id="periodAdvanceCreditChange">—</small></article>
+        <article class="period-metric"><span>Vendas</span><strong id="periodOrders">0</strong><small id="periodOrdersChange">—</small></article>
+        <article class="period-metric"><span>Ticket médio</span><strong id="periodTicket">R$ 0,00</strong><small id="periodTicketChange">—</small></article>
+      </div>
+      <div class="details-grid">
+        <section class="period-insight"><div class="panel-title">Dia da semana com maior faturamento</div><strong id="periodStrongestWeekday">—</strong><p id="periodWeekdayNote" class="period-empty">Compara os dias da semana no período selecionado.</p></section>
+        <section class="panel-card"><div class="panel-title">Vendas e recebimentos por forma</div><div id="periodPayments" class="period-list"><span class="period-empty">Aguardando dados…</span></div></section>
+      </div>
+      <div class="details-grid">
+        <section class="panel-card"><div class="panel-title">Produtos mais vendidos</div><div id="periodProducts" class="period-list"><span class="period-empty">Aguardando dados…</span></div></section>
+        <section class="panel-card"><div class="panel-title">Movimento por dia</div><div id="periodDaily" class="period-list"><span class="period-empty">Aguardando dados…</span></div></section>
+      </div>
+    </section>
+
     <!-- INDICADORES DO DIA -->
     <div class="summary-grid">
       <div class="summary-card highlight">
         <div class="summary-label">Recebimento de dívida</div>
         <div class="summary-val" id="cardDebtReceived">R$ 0,00</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">Crédito antecipado recebido</div>
+        <div class="summary-val" id="cardAdvanceCredit">R$ 0,00</div>
       </div>
       <div class="summary-card">
         <div class="summary-label">Vendas a receber · Fiado</div>
@@ -551,6 +614,7 @@ function renderAdminGerencialHtml() {
           <div class="payment-bar-seg credit" data-method="CREDITO"></div>
           <div class="payment-bar-seg card" data-method="CARTAO"></div>
           <div class="payment-bar-seg account" data-method="FIADO"></div>
+          <div class="payment-bar-seg account" data-method="SALDO_CLIENTE"></div>
           <div class="payment-bar-seg account" data-method="OUTROS"></div>
         </div>
         <div class="payment-legend">
@@ -595,13 +659,14 @@ function renderAdminGerencialHtml() {
 
     async function initializeDashboard() {
       document.getElementById('reportDate').value = getBusinessToday();
+      setPeriodPreset('month', false);
       updateDateButtonLabel();
       try {
         const response = await fetch('/api/auth/me');
         const data = await response.json();
         if (response.ok && data.user && data.user.role === 'ADMIN') {
           document.getElementById('btnSendReport').hidden = false;
-          await loadExecutiveMetrics();
+          await Promise.all([loadExecutiveMetrics(), loadPeriodMetrics()]);
           return;
         }
         showToast('Painel disponível somente para ADMIN.');
@@ -622,6 +687,129 @@ function renderAdminGerencialHtml() {
     function formatReportDate(date) {
       const parts = String(date || '').split('-');
       return parts.length === 3 ? parts[2] + '/' + parts[1] + '/' + parts[0] : 'HOJE';
+    }
+
+    function addCalendarDays(date, amount) {
+      const [year, month, day] = date.split('-').map(Number);
+      const value = new Date(Date.UTC(year, month - 1, day + amount, 12));
+      return value.toISOString().slice(0, 10);
+    }
+
+    function setPeriodPreset(period, refresh = true) {
+      const today = getBusinessToday();
+      const [year, month] = today.split('-');
+      const from = period === 'week' ? addCalendarDays(today, -6)
+        : period === 'year' ? year + '-01-01'
+          : year + '-' + month + '-01';
+      document.getElementById('periodFrom').value = from;
+      document.getElementById('periodTo').value = today;
+      if (refresh) loadPeriodMetrics();
+    }
+
+    function comparisonText(change, unit = '') {
+      if (!change) return 'Comparação indisponível';
+      if (change.percent === null) return change.absolute > 0 ? 'Acima do período anterior, sem base comparável' : 'Sem vendas no período anterior';
+      const arrow = change.absolute > 0 ? '▲ ' : change.absolute < 0 ? '▼ ' : '';
+      const value = unit === 'vendas'
+        ? Math.abs(change.absolute) + ' ' + unit
+        : formatCurrency(Math.abs(change.absolute));
+      return arrow + (change.absolute > 0 ? '+' : change.absolute < 0 ? '−' : '') + Math.abs(change.percent).toLocaleString('pt-BR') + '% · ' + value + ' vs período anterior';
+    }
+
+    function renderPeriodMetrics(result) {
+      const current = result.current || {};
+      const comparison = result.comparison || {};
+      document.getElementById('periodSales').textContent = formatCurrency(current.sales);
+      document.getElementById('periodReceived').textContent = formatCurrency(current.totalCashIn);
+      document.getElementById('periodOnAccount').textContent = formatCurrency(current.onAccountSales);
+      document.getElementById('periodAdvanceCredit').textContent = formatCurrency(current.advanceCreditReceived);
+      document.getElementById('periodOrders').textContent = Number(current.orderCount || 0).toLocaleString('pt-BR');
+      document.getElementById('periodTicket').textContent = formatCurrency(current.averageTicket);
+      document.getElementById('periodSalesChange').textContent = comparisonText(comparison.sales);
+      document.getElementById('periodReceivedChange').textContent = comparisonText(comparison.totalCashIn);
+      document.getElementById('periodOnAccountChange').textContent = comparisonText(comparison.onAccountSales);
+      document.getElementById('periodAdvanceCreditChange').textContent = comparisonText(comparison.advanceCreditReceived);
+      document.getElementById('periodOrdersChange').textContent = comparisonText(comparison.orderCount, 'vendas');
+      document.getElementById('periodTicketChange').textContent = comparisonText(comparison.averageTicket);
+      const rangeText = result.range.from === result.range.to
+        ? formatReportDate(result.range.from)
+        : formatReportDate(result.range.from) + ' a ' + formatReportDate(result.range.to);
+      const previousText = formatReportDate(result.range.previousFrom) + ' a ' + formatReportDate(result.range.previousTo);
+      document.getElementById('periodStatus').textContent = rangeText + ' · comparação com ' + previousText;
+
+      const strongest = current.strongestWeekday;
+      document.getElementById('periodStrongestWeekday').textContent = strongest?.name || 'Sem vendas neste período';
+      document.getElementById('periodWeekdayNote').textContent = strongest
+        ? 'Média de ' + formatCurrency(strongest.averageSales) + ' por ocorrência · ' + strongest.sampleDays + ' dia(s) · ' + strongest.orderCount + ' venda(s). Inclui fiado.'
+        : 'Compara os dias da semana no período selecionado.';
+
+      const methods = [
+        ['PIX', 'Pix'], ['DINHEIRO', 'Dinheiro'], ['DEBITO', 'Débito'],
+        ['CREDITO', 'Crédito'], ['CARTAO', 'Cartão'], ['FIADO', 'Fiado'], ['SALDO_CLIENTE', 'Saldo do cliente'], ['OUTROS', 'Outros'],
+      ];
+      const paymentRows = methods.map(([key, label]) => ({ key, label, ...(current.byPayment?.[key] || {}) }))
+        .filter((payment) => Number(payment.sales || 0) > 0 || Number(payment.receipts || 0) > 0);
+      document.getElementById('periodPayments').innerHTML = paymentRows.length
+        ? paymentRows.map((payment) => '<div class="period-row"><span class="period-row-label">' + payment.label + '</span><span class="period-row-label">Vendas ' + formatCurrency(payment.sales) + ' · recebimentos ' + formatCurrency(payment.receipts) + '</span><strong>' + (payment.orderCount || 0) + ' venda(s)</strong></div>').join('')
+        : '<span class="period-empty">Nenhuma venda ou recebimento no período.</span>';
+
+      const products = current.topProducts || [];
+      const maxQuantity = Math.max(1, ...products.map((product) => Number(product.quantity || 0)));
+      document.getElementById('periodProducts').innerHTML = products.length
+        ? products.map((product) => '<div class="period-row"><span class="period-row-label" title="' + escapeHtml(product.name) + '">' + escapeHtml(product.name) + '</span><span class="period-bar-track"><span class="period-bar-fill" style="display:block;width:' + Math.min(100, Number(product.quantity || 0) / maxQuantity * 100) + '%"></span></span><strong>' + product.quantity + ' un. · ' + formatCurrency(product.revenue) + '</strong></div>').join('')
+        : '<span class="period-empty">Nenhum produto vendido neste período.</span>';
+
+      let series = Array.isArray(current.daily) ? current.daily : [];
+      if (series.length > 31) {
+        const grouped = new Map();
+        for (const day of series) {
+          const date = new Date(day.date + 'T12:00:00.000Z');
+          let key;
+          let label;
+          if (series.length <= 120) {
+            const weekday = (date.getUTCDay() + 6) % 7;
+            const start = addCalendarDays(day.date, -weekday);
+            key = start;
+            label = 'Semana de ' + formatReportDate(start);
+          } else {
+            key = day.date.slice(0, 7);
+            label = key.split('-').reverse().join('/');
+          }
+          const group = grouped.get(key) || { label, sales: 0, orderCount: 0 };
+          group.sales += Number(day.sales || 0);
+          group.orderCount += Number(day.orderCount || 0);
+          grouped.set(key, group);
+        }
+        series = [...grouped.values()];
+      } else {
+        series = series.map((day) => ({ ...day, label: formatReportDate(day.date) }));
+      }
+      const maxSales = Math.max(1, ...series.map((day) => Number(day.sales || 0)));
+      document.getElementById('periodDaily').innerHTML = series.length
+        ? series.map((day) => '<div class="period-row"><span class="period-row-label">' + escapeHtml(day.label) + '</span><span class="period-bar-track"><span class="period-bar-fill" style="display:block;width:' + Math.min(100, Number(day.sales || 0) / maxSales * 100) + '%"></span></span><strong>' + formatCurrency(day.sales) + '</strong></div>').join('')
+        : '<span class="period-empty">Sem dados para exibir.</span>';
+    }
+
+    async function loadPeriodMetrics() {
+      const from = document.getElementById('periodFrom').value;
+      const to = document.getElementById('periodTo').value;
+      if (!from || !to || from > to) {
+        document.getElementById('periodStatus').textContent = 'Selecione um intervalo de datas válido.';
+        return;
+      }
+      const button = document.getElementById('periodRefresh');
+      button.disabled = true;
+      document.getElementById('periodStatus').textContent = 'Carregando vendas e recebimentos…';
+      try {
+        const response = await fetch('/api/admin/executive-period-metrics?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to));
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Não foi possível carregar o período.');
+        renderPeriodMetrics(data);
+      } catch (error) {
+        document.getElementById('periodStatus').textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
     }
 
     function updateDateButtonLabel() {
@@ -704,6 +892,7 @@ function renderAdminGerencialHtml() {
       document.getElementById('cardCount').textContent = m.orderCount || 0;
       const values = {
         cardDebtReceived: m.debtReceived,
+        cardAdvanceCredit: m.advanceCreditReceived,
         cardOnAccount: m.onAccountSales,
         cardTicket: m.ticketMedio,
         cardCashTendered: m.cashTendered,
@@ -726,7 +915,8 @@ function renderAdminGerencialHtml() {
       const methods = [
         ['PIX', 'Pix', 'var(--pix)'], ['DINHEIRO', 'Dinheiro', 'var(--cash)'],
         ['DEBITO', 'Cartão de débito', '#86b991'], ['CREDITO', 'Cartão de crédito', '#b2d3b8'],
-        ['FIADO', 'Fiado', '#d4e6d7'], ['CARTAO', 'Cartão (não especificado)', 'var(--card)'],
+        ['FIADO', 'Fiado', '#d4e6d7'], ['SALDO_CLIENTE', 'Saldo do cliente', '#a9c6eb'],
+        ['CARTAO', 'Cartão (não especificado)', 'var(--card)'],
       ];
       const payments = metrics.byPayment || {};
       const total = Number(metrics.totalRevenue || 0);

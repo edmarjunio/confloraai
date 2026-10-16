@@ -38,6 +38,7 @@ function getBusinessDateRange(date) {
 function normalizePaymentMethod(order) {
   const rawMethod = String(order.paymentMethod || '').toUpperCase();
   if (rawMethod.includes('PIX')) { return 'PIX'; }
+  if (rawMethod.includes('SALDO_CLIENTE')) { return 'SALDO_CLIENTE'; }
   if (rawMethod.includes('FIADO') || order.paymentStatus === 'ON_ACCOUNT') { return 'FIADO'; }
   if (rawMethod.includes('DEBIT')) { return 'DEBITO'; }
   if (rawMethod.includes('CREDIT')) { return 'CREDITO'; }
@@ -78,7 +79,7 @@ function summarizeDailyExecutiveMetrics({ date, orders = [], settlements = [], u
   );
   const dailySettlements = settlements.filter((settlement) =>
     settlement?.createdAt && getBusinessDate(settlement.createdAt) === date &&
-    (!settlement.type || settlement.type === 'QUITACAO_FIADO')
+    ['QUITACAO_FIADO', 'CREDITO_CLIENTE'].includes(settlement.entryType || settlement.type || 'QUITACAO_FIADO')
   );
 
   let totalRevenueMinor = 0;
@@ -88,6 +89,7 @@ function summarizeDailyExecutiveMetrics({ date, orders = [], settlements = [], u
   let cashTenderedMinor = 0;
   let changeMinor = 0;
   let debtReceivedMinor = 0;
+  let advanceCreditMinor = 0;
   const byPayment = new Map();
   const collaborators = new Map();
   const products = new Map();
@@ -114,7 +116,7 @@ function summarizeDailyExecutiveMetrics({ date, orders = [], settlements = [], u
 
     totalRevenueMinor += orderMinor;
     if (isOnAccount) { onAccountSalesMinor += orderMinor; }
-    if (isPaid) { totalReceivedSalesMinor += orderMinor; }
+    if (isPaid && paymentMethod !== 'SALDO_CLIENTE') { totalReceivedSalesMinor += orderMinor; }
 
     const payment = byPayment.get(paymentMethod) || { method: paymentMethod, count: 0, totalMinor: 0 };
     if (isOnAccount || isPaid) { payment.count++; }
@@ -137,7 +139,7 @@ function summarizeDailyExecutiveMetrics({ date, orders = [], settlements = [], u
     seller.salesTotalMinor += orderMinor;
 
     const receiver = order.receivedBy || (paymentMethod === 'PIX' ? creator : null);
-    if (receiver && isPaid) {
+    if (receiver && isPaid && paymentMethod !== 'SALDO_CLIENTE') {
       const cashier = getCollaborator(receiver, receiver.id, receiver.name || order.cashierName, receiver.role);
       cashier.receivedCount++;
       cashier.receivedTotalMinor += orderMinor;
@@ -165,7 +167,8 @@ function summarizeDailyExecutiveMetrics({ date, orders = [], settlements = [], u
 
   for (const settlement of dailySettlements) {
     const amountMinor = currencyToMinor(settlement.amount);
-    debtReceivedMinor += amountMinor;
+    if ((settlement.entryType || settlement.type) === 'CREDITO_CLIENTE') { advanceCreditMinor += amountMinor; }
+    else { debtReceivedMinor += amountMinor; }
     const actor = settlement.receivedBy || { id: settlement.receivedById, name: settlement.operatorName };
     if (actor.id || actor.name) {
       const receiver = getCollaborator(actor, actor.id, actor.name || settlement.operatorName, actor.role);
@@ -197,7 +200,7 @@ function summarizeDailyExecutiveMetrics({ date, orders = [], settlements = [], u
     }))
     .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, 'pt-BR'));
 
-  const paymentOrder = ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO', 'CARTAO', 'FIADO', 'OUTROS'];
+  const paymentOrder = ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO', 'CARTAO', 'FIADO', 'SALDO_CLIENTE', 'OUTROS'];
   const payments = Object.fromEntries(paymentOrder.map((method) => {
     const row = byPayment.get(method) || { count: 0, totalMinor: 0 };
     return [method, { count: row.count, total: minorToCurrency(row.totalMinor) }];
@@ -210,12 +213,13 @@ function summarizeDailyExecutiveMetrics({ date, orders = [], settlements = [], u
     orderCount: dailyOrders.length,
     ticketMedio: Math.round(ticketMedio * 100) / 100,
     debtReceived: minorToCurrency(debtReceivedMinor),
+    advanceCreditReceived: minorToCurrency(advanceCreditMinor),
     onAccountSales: minorToCurrency(onAccountSalesMinor),
     cashSales: minorToCurrency(cashSalesMinor),
     cashTendered: minorToCurrency(cashTenderedMinor),
     changeGiven: minorToCurrency(changeMinor),
     totalReceivedSales: minorToCurrency(totalReceivedSalesMinor),
-    ledgerVolume: minorToCurrency(onAccountSalesMinor + debtReceivedMinor),
+    ledgerVolume: minorToCurrency(onAccountSalesMinor + debtReceivedMinor + advanceCreditMinor),
     byPayment: payments,
     byCollaborator,
     topProductsByQuantity,

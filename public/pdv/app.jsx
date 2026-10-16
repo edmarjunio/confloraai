@@ -237,6 +237,7 @@ const { useState, useEffect, useRef, useMemo } = React;
       // Customer Modal Form & Search state
       const [tempCustomerName, setTempCustomerName] = useState('');
       const [tempCustomerPhone, setTempCustomerPhone] = useState('');
+      const [tempCustomerEmail, setTempCustomerEmail] = useState('');
       const [tempCustomerCpf, setTempCustomerCpf] = useState('');
       const [tempCustomerAddress, setTempCustomerAddress] = useState('');
       const [tempCustomerNotes, setTempCustomerNotes] = useState('');
@@ -260,6 +261,7 @@ const { useState, useEffect, useRef, useMemo } = React;
       const [currentUser, setCurrentUser] = useState(null);
       const [authReady, setAuthReady] = useState(false);
       const [customerId, setCustomerId] = useState('');
+      const [customerCreditBalance, setCustomerCreditBalance] = useState(0);
       const operationRef = useRef(null);
       const [completedOrder, setCompletedOrder] = useState(null);
       const [discountApproval, setDiscountApproval] = useState(null);
@@ -370,6 +372,7 @@ const { useState, useEffect, useRef, useMemo } = React;
       const openCustomerModal = () => {
         setTempCustomerName(customerName === 'Cliente Balcão' ? '' : customerName);
         setTempCustomerPhone(customerPhone);
+        setTempCustomerEmail(customerId ? tempCustomerEmail : '');
         setTempCustomerCpf(customerCpf);
         setTempCustomerAddress(customerAddress);
         setTempCustomerNotes(customerNotes);
@@ -406,14 +409,18 @@ const { useState, useEffect, useRef, useMemo } = React;
 
       const selectCustomerFromList = (cust) => {
         setCustomerId(cust.id);
+        setCustomerCreditBalance(Number(cust.creditBalance || 0));
         const name = cust.name || 'Cliente';
         const phone = cust.phone || '';
+        const email = cust.email || '';
         const address = cust.address || cust.deliveryAddress || '';
         const cpf = cust.cpfCnpj || '';
         const notes = cust.notes || '';
 
         setCustomerName(name);
         setCustomerPhone(phone);
+        setTempCustomerPhone(phone);
+        setTempCustomerEmail(email);
         setCustomerAddress(address);
         setCustomerCpf(cpf);
         setCustomerNotes(notes);
@@ -425,6 +432,8 @@ const { useState, useEffect, useRef, useMemo } = React;
 
       const handleQuickPurchaseCustomer = () => {
         setCustomerId('');
+        setCustomerCreditBalance(0);
+        setTempCustomerEmail('');
         const name = tempCustomerName.trim() || 'Cliente Balcão';
         setCustomerName(name);
         if (tempCustomerPhone) setCustomerPhone(tempCustomerPhone.trim());
@@ -453,6 +462,7 @@ const { useState, useEffect, useRef, useMemo } = React;
             body: JSON.stringify({
               name,
               phone: tempCustomerPhone.trim(),
+              email: tempCustomerEmail.trim(),
               cpfCnpj: tempCustomerCpf.trim(),
               address: tempCustomerAddress.trim(),
               deliveryAddress: tempCustomerAddress.trim(),
@@ -460,28 +470,27 @@ const { useState, useEffect, useRef, useMemo } = React;
             })
           });
 
+          const saved = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            setCustomerNotification(saved.error || 'Não foi possível salvar o cadastro do cliente.');
+            setIsSavingCustomer(false);
+            return;
+          }
           setCustomerName(name);
           setCustomerPhone(tempCustomerPhone.trim());
           setCustomerAddress(tempCustomerAddress.trim());
           setCustomerCpf(tempCustomerCpf.trim());
           setCustomerNotes(tempCustomerNotes.trim());
-
-          if (res.ok) {
-            const saved = await res.json();
-            setCustomerId(saved.customer.id);
-            setCustomerNotification('Cliente "' + name + '" cadastrado na base para futuras compras! ✅');
-          } else {
-            setCustomerNotification('Cliente aplicado ao pedido!');
-          }
+          setCustomerId(saved.customer.id);
+          setCustomerCreditBalance(Number(saved.customer.creditBalance || 0));
+          setTempCustomerEmail(saved.customer.email || tempCustomerEmail.trim());
+          setCustomerNotification('Cliente "' + name + '" cadastrado na base para futuras compras! ✅');
           setTimeout(() => {
             setActiveModal(null);
             setIsSavingCustomer(false);
           }, 700);
-        } catch (_) {
-          setCustomerName(name);
-          setCustomerPhone(tempCustomerPhone.trim());
-          setCustomerAddress(tempCustomerAddress.trim());
-          setActiveModal(null);
+        } catch (error) {
+          setCustomerNotification(error.message || 'Falha de conexão ao salvar o cliente.');
           setIsSavingCustomer(false);
         }
       };
@@ -493,7 +502,7 @@ const { useState, useEffect, useRef, useMemo } = React;
           return;
         }
         const hasAdditionalData = Boolean(
-          tempCustomerPhone.trim() || tempCustomerAddress.trim() || tempCustomerCpf.trim()
+          tempCustomerPhone.trim() || tempCustomerEmail.trim() || tempCustomerAddress.trim() || tempCustomerCpf.trim()
         );
 
         if (hasAdditionalData) {
@@ -688,6 +697,7 @@ const { useState, useEffect, useRef, useMemo } = React;
         if (paymentMethod === 'pix') normalizedPayMethod = 'PIX';
         else if (paymentMethod === 'debito') normalizedPayMethod = 'DEBITO';
         else if (paymentMethod === 'credito') normalizedPayMethod = 'CREDITO';
+        else if (paymentMethod === 'credito_cliente') normalizedPayMethod = 'SALDO_CLIENTE';
         else if (paymentMethod === 'fiado') normalizedPayMethod = 'FIADO';
         else if (paymentMethod === 'cartao') normalizedPayMethod = 'CARTAO';
         else normalizedPayMethod = 'DINHEIRO';
@@ -722,6 +732,8 @@ const { useState, useEffect, useRef, useMemo } = React;
       const handleNewOrder = () => {
         operationRef.current = null;
         setCustomerId('');
+        setCustomerCreditBalance(0);
+        setTempCustomerEmail('');
         setCompletedOrder(null);
         setCart([]);
         setDiscountPercent(0);
@@ -1284,7 +1296,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                 </div>
               </div>
 
-              <nav className="mx-auto mt-3 grid w-full max-w-[1600px] grid-cols-3 gap-2 border-t border-slate-100 pt-3 sm:gap-3 lg:mx-0 lg:w-2/3" aria-label="Ações do caixa por atalho">
+              <nav className="cashier-command-nav mx-auto mt-3 mb-4 grid w-full max-w-[1600px] grid-cols-3 gap-2 border-t border-slate-100 pt-3 sm:gap-3 lg:mx-0 lg:w-2/3" aria-label="Ações do caixa por atalho">
                 <button type="button" className={shortcutButtonClass} disabled={cart.length === 0} onClick={() => setActiveModal('pay')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F1</kbd><span>Pagar</span></button>
                 <button type="button" className={shortcutButtonClass} onClick={() => setCashierPage('orders')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F2</kbd><span>Comandas</span></button>
                 <button type="button" className={shortcutButtonClass} onClick={() => setCashierPage('report')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F3</kbd><span>Relatório</span></button>
@@ -1294,7 +1306,7 @@ const { useState, useEffect, useRef, useMemo } = React;
               </nav>
 
               {/* Com Flora Category Pills Row */}
-              <div className="mx-auto mt-2.5 flex min-w-0 w-full max-w-[1600px] items-center justify-between gap-3 lg:mx-0 lg:w-2/3">
+              <div className="mx-auto flex min-w-0 w-full max-w-[1600px] items-center justify-between gap-3 lg:mx-0 lg:w-2/3">
                 <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
                   {categoryTabs.map((cat) => {
                     const isActive = selectedCategory === cat.id;
@@ -1575,6 +1587,22 @@ const { useState, useEffect, useRef, useMemo } = React;
                         </div>
                       </div>
 
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          E-mail da conta do cliente:
+                        </label>
+                        <input
+                          type="email"
+                          value={tempCustomerEmail}
+                          onChange={(e) => setTempCustomerEmail(e.target.value)}
+                          placeholder="cliente@email.com"
+                          className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-600 focus:outline-none text-slate-800"
+                        />
+                        <span className="mt-0.5 block text-[10px] text-slate-400">
+                          Vincula o cadastro ao login do cliente para consultar saldo e movimentações.
+                        </span>
+                      </div>
+
                       {/* Endereço de Entrega */}
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
@@ -1704,6 +1732,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                         Cliente • {orderType === 'DELIVERY' ? '🛵 Pedido para Entrega' : '🏪 Balcão'}
                       </span>
                       <span className="font-bold text-slate-800 truncate block">{customerName || 'Cliente Balcão'}</span>
+                      {customerCreditBalance > 0 && <span className="text-[11px] font-semibold text-emerald-700 block">Crédito disponível: {formatBRL(customerCreditBalance)}</span>}
                       {orderType === 'DELIVERY' && customerAddress && (
                         <span className="text-[11px] text-emerald-700 truncate block">📍 {customerAddress}</span>
                       )}
@@ -1719,21 +1748,26 @@ const { useState, useEffect, useRef, useMemo } = React;
                   <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
                     Forma de Pagamento
                   </p>
-                  <div className="grid grid-cols-5 gap-1.5 mb-3">
+                  <div className="grid grid-cols-3 gap-1.5 mb-3 sm:grid-cols-6">
                     {[
                       { id: 'pix', label: 'PIX Sicredi', icon: QrCode },
                       { id: 'debito', label: 'Débito', icon: CreditCard },
                       { id: 'credito', label: 'Crédito', icon: CreditCard },
                       { id: 'dinheiro', label: 'Dinheiro', icon: Banknote },
                       { id: 'fiado', label: 'Fiado', icon: User },
+                      ...(currentUser.role !== 'VENDEDOR' && customerId && customerCreditBalance > 0
+                        ? [{ id: 'credito_cliente', label: 'Saldo cliente', icon: CreditCard, disabled: customerCreditBalance < finalTotal }]
+                        : []),
                     ].map((method) => {
                       const Icon = method.icon;
                       const active = paymentMethod === method.id;
                       return (
                         <button
                           key={method.id}
+                          disabled={method.disabled}
+                          title={method.id === 'credito_cliente' ? `Disponível: ${formatBRL(customerCreditBalance)}. O saldo precisa cobrir a venda completa.` : undefined}
                           onClick={() => setPaymentMethod(method.id)}
-                          className={"p-2 rounded-xl border text-[11px] font-bold flex flex-col items-center gap-1 transition " + (active
+                          className={"p-2 rounded-xl border text-[11px] font-bold flex flex-col items-center gap-1 transition disabled:cursor-not-allowed disabled:opacity-45 " + (active
                             ? 'border-[#109E46] bg-emerald-50 text-[#0F381E] ring-2 ring-emerald-500/20'
                             : 'border-slate-200 text-slate-600 hover:bg-slate-50')}
                         >
@@ -1762,6 +1796,12 @@ const { useState, useEffect, useRef, useMemo } = React;
                   {paymentMethod === 'fiado' && (
                     <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-medium mb-3">
                       ⚠️ <strong>Venda Fiada:</strong> O valor de {formatBRL(finalTotal)} será registrado no saldo devedor de <strong>{customerName}</strong>.
+                    </div>
+                  )}
+
+                  {paymentMethod === 'credito_cliente' && (
+                    <div className="p-2.5 rounded-xl bg-sky-50 border border-sky-200 text-sky-900 text-xs font-medium mb-3">
+                      O caixa usará <strong>{formatBRL(finalTotal)}</strong> do crédito disponível de <strong>{formatBRL(customerCreditBalance)}</strong>. O saldo precisa cobrir toda a venda.
                     </div>
                   )}
 
@@ -1802,12 +1842,12 @@ const { useState, useEffect, useRef, useMemo } = React;
                       Voltar
                     </button>
                     <button
-                      disabled={isSubmittingSale}
+                      disabled={isSubmittingSale || (paymentMethod === 'credito_cliente' && customerCreditBalance < finalTotal)}
                       onClick={handleCompleteSale}
                       className={primaryActionButtonClass + ' w-2/3 px-4 py-3 text-sm active:scale-98'}
                     >
                       <Check className="w-4 h-4" />
-                      <span>{isSubmittingSale ? 'Processando...' : currentUser.role === 'VENDEDOR' && paymentMethod !== 'pix' ? 'Enviar comanda ao caixa' : paymentMethod === 'pix' ? 'Gerar Pix Sicredi' : customerId ? 'Finalizar venda' : customerName && customerName !== 'Cliente Balcão' ? 'Adicionar cliente e finalizar venda' : 'Finalizar venda'}</span>
+                      <span>{isSubmittingSale ? 'Processando...' : currentUser.role === 'VENDEDOR' && paymentMethod !== 'pix' ? 'Enviar comanda ao caixa' : paymentMethod === 'pix' ? 'Gerar Pix Sicredi' : paymentMethod === 'credito_cliente' ? 'Usar saldo do cliente' : customerId ? 'Finalizar venda' : customerName && customerName !== 'Cliente Balcão' ? 'Adicionar cliente e finalizar venda' : 'Finalizar venda'}</span>
                     </button>
                   </div>
                 </div>

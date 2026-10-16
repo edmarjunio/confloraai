@@ -801,6 +801,24 @@ dialog:not([open]) { display: none; }
 .history-order-details summary { cursor: pointer; font-weight: 750; }
 .history-order-meta { display: grid; gap: 6px; margin-top: 9px; }
 .history-order-meta span { overflow-wrap: anywhere; }
+.ledger-balance { display: grid; gap: 5px; margin: 8px 0 18px; padding: 18px; border: 1px solid #dce9df; border-radius: 15px; background: #f7fbf8; }
+.ledger-balance > strong { color: #34463a; font-size: 13px; }
+.ledger-balance-value { color: #173c26; font-size: clamp(24px, 5vw, 32px); font-weight: 850; }
+.ledger-balance--debt { border-color: #f3d7b1; background: #fffaf3; }
+.ledger-balance--debt .ledger-balance-value, .ledger-amount--debt { color: #b45309; }
+.ledger-balance--credit { border-color: #c9e7d1; background: #f2fbf4; }
+.ledger-balance--credit .ledger-balance-value, .ledger-amount--credit { color: #087c3a; }
+.ledger-balance--clear .ledger-balance-value { color: #087c3a; }
+.ledger-section-title { margin: 4px 0; color: #173c26; font-size: 14px; font-weight: 800; }
+.ledger-transaction { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 8px 12px; margin: 8px 0; padding: 13px; border: 1px solid #e3ebe5; border-radius: 13px; background: #fff; }
+.ledger-transaction > div { display: grid; min-width: 0; gap: 4px; }
+.ledger-transaction .muted { font-size: 11px; overflow-wrap: anywhere; }
+.ledger-transaction > strong { flex: 0 0 auto; font-size: 13px; }
+.ledger-transaction-items, .ledger-receipt { grid-column: 1 / -1; }
+.ledger-transaction-items { color: #496050; font-size: 12px; line-height: 1.5; }
+.ledger-receipt { border-top: 1px solid #e6eee8; padding-top: 8px; }
+.ledger-receipt summary { color: #087b3b; cursor: pointer; font-size: 12px; font-weight: 700; }
+.ledger-receipt pre { max-height: none; margin: 8px 0 0; padding: 12px; border-radius: 10px; background: #f5f8f5; color: #314236; overflow-wrap: anywhere; white-space: pre-wrap; font: inherit; font-size: 12px; line-height: 1.5; }
 .order-receipt-view { min-width: 0; margin-top: 12px; padding: 14px; border: 1px solid #dce9df; border-radius: 12px; background: #fff; }
 .order-receipt-title { margin: 0 0 8px; color: #173c26; font-size: 14px; }
 .order-receipt-text { margin: 0; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #34463a; font: inherit; font-size: 12px; line-height: 1.6; }

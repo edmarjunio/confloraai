@@ -32,7 +32,18 @@ class PdvRepository {
         get: async (collection, id) => structuredClone(mapFor(collection).get(id) || null),
         set: (collection, id, value) => writes.push([collection, id, structuredClone(value)]),
       });
-      for (const [collection, id, value] of writes) { mapFor(collection).set(id, value); }
+      for (const [collection, id, value] of writes) {
+        mapFor(collection).set(id, value);
+        const mirrorField = collection === 'customer_debts'
+          ? 'inMemoryCustomerDebts'
+          : collection === 'debt_settlements' ? 'inMemoryDebtSettlements' : '';
+        if (mirrorField) {
+          const entries = repo[mirrorField] || (repo[mirrorField] = []);
+          const existingIndex = entries.findIndex((entry) => String(entry.id) === String(id));
+          if (existingIndex >= 0) { entries[existingIndex] = structuredClone(value); }
+          else { entries.push(structuredClone(value)); }
+        }
+      }
       return result;
     });
     this.queue = operation.catch(() => {});
@@ -110,8 +121,12 @@ class PdvRepository {
         }
       }
       const onAccount = order.paymentMethod === 'FIADO';
-      const customer = onAccount ? await tx.get('customers', order.customerId) : null;
-      if (onAccount && !customer) { throw new Error('Fiado exige cliente cadastrado.'); }
+      const usingCredit = order.paymentMethod === 'SALDO_CLIENTE';
+      const customer = onAccount || usingCredit ? await tx.get('customers', order.customerId) : null;
+      if ((onAccount || usingCredit) && !customer) { throw new Error('Fiado ou uso de crédito exige cliente cadastrado.'); }
+      const creditMinor = Math.round(Number(customer?.creditBalance || 0) * 100);
+      const totalMinor = Math.round(Number(order.total) * 100);
+      if (usingCredit && creditMinor < totalMinor) { throw new Error('O crédito disponível foi alterado e não cobre mais o total. Atualize o saldo antes de confirmar.'); }
       // No transaction reads after this point.
       for (const { id, quantity, product, stock } of products) {
         tx.set('products', id, { ...product, stockQuantity: stock, estoque: stock, updatedAt: now });
@@ -128,6 +143,16 @@ class PdvRepository {
         tx.set('customers', order.customerId, { ...customer, debtBalance: (Math.round(Number(customer.debtBalance || 0) * 100) + Math.round(order.total * 100)) / 100, updatedAt: now });
         tx.set('customer_debts', order.id, { id: order.id, orderId, customerKey: order.customerId, customerName: order.customerName, amount: order.total, type: 'DEBITO_FIADO', createdBy: order.createdBy, receivedBy, createdAt: now });
       }
+      if (usingCredit) {
+        const newCreditBalance = (creditMinor - totalMinor) / 100;
+        tx.set('customers', order.customerId, { ...customer, creditBalance: newCreditBalance, updatedAt: now });
+        tx.set('debt_settlements', `credit-use-${order.id}`, {
+          id: `credit-use-${order.id}`, orderId, customerKey: order.customerId,
+          customerName: order.customerName, amount: order.total, paymentMethod: 'SALDO_CLIENTE',
+          entryType: 'USO_CREDITO', type: 'USO_CREDITO', newCreditBalance,
+          receivedBy, notes: 'Crédito do cliente utilizado em uma venda.', createdAt: now,
+        });
+      }
       tx.set('orders', order.id, completed);
       if (verification) {
         for (const kind of ['customer-paid', 'owner-paid']) {
@@ -139,20 +164,25 @@ class PdvRepository {
     });
   }
 
-  async settle({ id, customerKey, amount, paymentMethod, notes, receivedBy }) {
+  async settle({ id, customerKey, amount, paymentMethod, notes, receivedBy, entryType = 'QUITACAO_FIADO' }) {
     return this.transaction(async (tx) => {
       const previous = await tx.get('debt_settlements', id);
       if (previous) {
-        if (previous.customerKey !== customerKey || previous.amount !== amount || previous.paymentMethod !== paymentMethod || previous.receivedBy.id !== receivedBy.id) { throw new Error('Identificador de quitação já utilizado.'); }
+        if (previous.customerKey !== customerKey || previous.amount !== amount || previous.paymentMethod !== paymentMethod || previous.entryType !== entryType || previous.receivedBy.id !== receivedBy.id) { throw new Error('Identificador de recebimento já utilizado.'); }
         return previous;
       }
       const customer = await tx.get('customers', customerKey);
       const balanceMinor = Math.round(Number(customer?.debtBalance || 0) * 100);
       const amountMinor = Math.round(amount * 100);
-      if (!customer || amountMinor <= 0 || amountMinor > balanceMinor) { throw new Error('Valor maior que a dívida ou cliente não cadastrado.'); }
+      if (!customer || amountMinor <= 0 || !['QUITACAO_FIADO', 'CREDITO_CLIENTE'].includes(entryType)) { throw new Error('Recebimento inválido ou cliente não cadastrado.'); }
+      if (entryType === 'QUITACAO_FIADO' && amountMinor > balanceMinor) { throw new Error('O valor recebido não pode ser maior que a dívida atual.'); }
       const now = new Date().toISOString();
-      const settlement = { id, customerKey, customerName: customer.name, customerPhone: customer.phone || '', amount, paymentMethod, notes, receivedBy, operatorName: receivedBy.name, newBalance: (balanceMinor - amountMinor) / 100, type: 'QUITACAO_FIADO', createdAt: now };
-      tx.set('customers', customerKey, { ...customer, debtBalance: settlement.newBalance, updatedAt: now });
+      const newBalance = entryType === 'QUITACAO_FIADO' ? (balanceMinor - amountMinor) / 100 : Number(customer.debtBalance || 0);
+      const newCreditBalance = entryType === 'CREDITO_CLIENTE'
+        ? (Math.round(Number(customer.creditBalance || 0) * 100) + amountMinor) / 100
+        : Number(customer.creditBalance || 0);
+      const settlement = { id, customerKey, customerName: customer.name, customerPhone: customer.phone || '', amount, paymentMethod, notes, receivedBy, operatorName: receivedBy.name, newBalance, newCreditBalance, entryType, type: entryType, createdAt: now };
+      tx.set('customers', customerKey, { ...customer, debtBalance: newBalance, creditBalance: newCreditBalance, updatedAt: now });
       tx.set('debt_settlements', id, settlement);
       tx.set('pdv_outbox', id, { id, settlementId: id, kind: 'debt-receipt', status: 'PENDING', attempts: 0 });
       return settlement;

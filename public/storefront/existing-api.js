@@ -15,9 +15,10 @@ export function createExistingApi() {
     }
     const data = await readJsonResponse(response);
     if (!response.ok || data.success === false) {
-      throw new Error(
-        data.error || data.message || "Não foi possível concluir.",
-      );
+      const error = new Error(data.error || data.message || "Não foi possível concluir.");
+      error.status = response.status;
+      error.code = data.code || "";
+      throw error;
     }
     return data;
   }
@@ -51,6 +52,9 @@ export function createExistingApi() {
     }
     if (route === "/favorites") {
       return request("/api/customer/favorites", options);
+    }
+    if (route === "/customer/ledger") {
+      return request("/api/customer/ledger", options);
     }
     if (route.startsWith("/customer/orders")) {
       const query = route.slice("/customer/orders".length);

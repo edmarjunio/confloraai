@@ -1725,6 +1725,56 @@ function createApp({
     }
   });
 
+  app.get('/api/customer/ledger', async (req, res) => {
+    if (!req.user) { return res.status(401).json({ success: false, error: 'Entre na sua conta para consultar seu saldo.' }); }
+    const email = String(req.user.email || '').trim().toLowerCase();
+    if (!email) { return res.status(400).json({ success: false, error: 'Sua conta não possui e-mail para vincular ao cadastro do cliente.' }); }
+    try {
+      const profiles = await messageService.firestoreRepo.findCustomerProfilesByEmail(email);
+      if (profiles.length > 1) { return res.status(409).json({ success: false, error: 'Há mais de um cadastro vinculado a este e-mail. Peça à equipe para corrigir o vínculo.' }); }
+      if (!profiles.length) { return res.status(404).json({ success: false, linked: false, error: 'Seu cadastro ainda não está vinculado a este e-mail. Peça ao caixa para atualizar seu cadastro.' }); }
+      const profile = profiles[0];
+      const ledger = await messageService.firestoreRepo.getCustomerDebts(profile.id);
+      const transactions = await Promise.all((ledger.transactions || []).map(async (entry) => {
+        const isDebtPurchase = entry.type === 'DEBITO_FIADO';
+        const order = isDebtPurchase && entry.orderId
+          ? await messageService.firestoreRepo.getOrderById(entry.orderId)
+          : null;
+        const safeOrder = order && String(order.customerId || '') === String(profile.id)
+          ? {
+            ticketNumber: order.ticketNumber || '',
+            items: (Array.isArray(order.items) ? order.items : []).map((item) => ({
+              name: String(item.name || 'Produto'), quantity: Number(item.quantity || 0),
+              unit: String(item.unit || 'UN'), subtotal: Number(item.subtotalMinor || 0) / 100,
+            })),
+            receiptText: order.receiptText || formatOrderReceipt(order),
+          }
+          : null;
+        return {
+          id: String(entry.id || ''), orderId: String(entry.orderId || ''),
+          customerName: String(entry.customerName || profile.name || ''),
+          amount: Number(entry.amount || 0), paymentMethod: String(entry.paymentMethod || ''),
+          entryType: String(entry.entryType || entry.type || ''), type: String(entry.type || ''),
+          createdAt: entry.createdAt || '', newBalance: Number(entry.newBalance || 0),
+          newCreditBalance: Number(entry.newCreditBalance || 0),
+          receivedBy: String(entry.receivedBy?.name || entry.operatorName || ''),
+          ticketNumber: safeOrder?.ticketNumber || '', items: safeOrder?.items || [],
+          receiptText: safeOrder?.receiptText || '',
+        };
+      }));
+      return res.status(200).json({
+        success: true,
+        customerName: profile.name || req.user.name || 'Cliente',
+        balance: Number(ledger.balance || 0),
+        creditBalance: Number(profile.creditBalance || 0),
+        transactions,
+      });
+    } catch (error) {
+      Logger.error('Erro ao consultar saldo do cliente', error);
+      return res.status(503).json({ success: false, error: 'Não foi possível carregar seu saldo neste momento.' });
+    }
+  });
+
   app.get('/api/customer/favorites', async (req, res) => {
     try {
       if (!req.user) {return res.status(401).json({ error: 'Entre na sua conta.' });}
@@ -2682,6 +2732,20 @@ function createApp({
       Logger.error('Erro ao buscar métricas executivas diárias', err);
       const statusCode = String(err.message || '').startsWith('Data inválida') ? 400 : 500;
       res.status(statusCode).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/admin/executive-period-metrics', async (req, res) => {
+    try {
+      const metrics = await messageService.firestoreRepo.getExecutivePeriodMetrics({
+        from: String(req.query.from || ''),
+        to: String(req.query.to || ''),
+      });
+      res.status(200).json(metrics);
+    } catch (err) {
+      Logger.error('Erro ao buscar métricas executivas por período', err);
+      const statusCode = /período máximo|período inválido|datas válidas/i.test(String(err.message || '')) ? 400 : 503;
+      res.status(statusCode).json({ error: err.message || 'Não foi possível consultar o período.' });
     }
   });
 

@@ -321,6 +321,12 @@ async function account() {
         text: "Histórico de compras",
         onclick: () => { $("#accountDialog").close(); openPurchaseHistory(); },
       }));
+      content.append(element("button", {
+        type: "button",
+        class: "account-secondary-action",
+        text: "Consultar saldo e compras fiadas",
+        onclick: () => { $("#accountDialog").close(); openCustomerLedger(); },
+      }));
     }
   } else {
     $("#accountTitle").textContent = "Entrar na sua conta";
@@ -526,6 +532,80 @@ function openPurchaseHistory() {
     historyState.observer.observe(historySentinel);
   }
   loadHistoryPage();
+}
+
+const ledgerDialog = $("#ledgerDialog");
+const ledgerContent = $("#ledgerContent");
+
+function renderCustomerLedger(ledger) {
+  ledgerContent.replaceChildren();
+  const balance = Number(ledger.balance || 0);
+  const balanceTitle = balance > 0 ? "Saldo devedor" : balance < 0 ? "Crédito a seu favor" : "Saldo quitado";
+  const balanceTone = balance > 0 ? "ledger-balance--debt" : balance < 0 ? "ledger-balance--credit" : "ledger-balance--clear";
+  ledgerContent.append(element("section", { class: `ledger-balance ${balanceTone}` }, [
+    element("span", { class: "muted", text: `Olá, ${ledger.customerName || state.user?.name || "cliente"}` }),
+    element("strong", { text: balanceTitle }),
+    element("span", { class: "ledger-balance-value", text: money(Math.abs(Math.round(balance * 100))) }),
+  ]));
+  const creditBalance = Number(ledger.creditBalance || 0);
+  ledgerContent.append(element("section", { class: `ledger-balance ${creditBalance > 0 ? "ledger-balance--credit" : "ledger-balance--clear"}` }, [
+    element("span", { class: "muted", text: "Valores recebidos antecipadamente" }),
+    element("strong", { text: creditBalance > 0 ? "Crédito a seu favor" : "Crédito disponível" }),
+    element("span", { class: "ledger-balance-value", text: money(Math.max(0, Math.round(creditBalance * 100))) }),
+  ]));
+
+  const transactions = [...(ledger.transactions || [])].sort((left, right) =>
+    String(right.createdAt || "").localeCompare(String(left.createdAt || "")),
+  );
+  ledgerContent.append(element("h3", { class: "ledger-section-title", text: "Movimentações" }));
+  if (!transactions.length) {
+    ledgerContent.append(element("p", { class: "muted", text: "Ainda não há compras fiadas ou recebimentos vinculados a este cadastro." }));
+    return;
+  }
+  for (const transaction of transactions) {
+    const isDebt = transaction.type === "DEBITO_FIADO";
+    const isCredit = transaction.entryType === "CREDITO_CLIENTE" || transaction.type === "CREDITO_CLIENTE";
+    const isCreditUse = transaction.entryType === "USO_CREDITO" || transaction.type === "USO_CREDITO";
+    const amount = Math.abs(Math.round(Number(transaction.amount || 0) * 100));
+    const title = isDebt ? "Compra fiada" : isCredit ? "Crédito recebido" : isCreditUse ? "Crédito usado em compra" : "Recebimento de fiado";
+    const prefix = isDebt || isCredit ? "+ " : "− ";
+    const date = transaction.createdAt ? new Date(transaction.createdAt).toLocaleString("pt-BR") : "Data não informada";
+    const meta = [date, transaction.paymentMethod, transaction.ticketNumber ? `Venda #${transaction.ticketNumber}` : transaction.orderId ? `Pedido #${String(transaction.orderId).slice(-8).toUpperCase()}` : "", transaction.receivedBy ? `Atendido por ${transaction.receivedBy}` : ""]
+      .filter(Boolean).join(" · ");
+    const card = element("article", { class: "ledger-transaction" }, [
+      element("div", {}, [element("strong", { text: title }), element("span", { class: "muted", text: meta })]),
+      element("strong", { class: isDebt ? "ledger-amount--debt" : isCreditUse ? "ledger-amount--debt" : "ledger-amount--credit", text: prefix + money(amount) }),
+    ]);
+    if (transaction.items?.length) {
+      card.append(element("span", { class: "ledger-transaction-items", text: transaction.items.map((item) => `${item.quantity} ${item.unit || "UN"} · ${item.name}`).join(" · ") }));
+    }
+    if (transaction.receiptText) {
+      card.append(element("details", { class: "ledger-receipt" }, [
+        element("summary", { text: "Ver recibo da compra" }),
+        element("pre", { text: transaction.receiptText }),
+      ]));
+    }
+    ledgerContent.append(card);
+  }
+}
+
+async function openCustomerLedger() {
+  if (!state.user) {
+    notify("Entre na sua conta para consultar seu saldo.");
+    return;
+  }
+  ledgerContent.replaceChildren(element("p", { class: "muted", text: "Carregando seu saldo…" }));
+  openDialog(ledgerDialog);
+  try {
+    renderCustomerLedger(await state.api("/customer/ledger"));
+  } catch (error) {
+    ledgerContent.replaceChildren(element("p", { class: "error", role: "alert", text: error.message }));
+    if (error.status === 404) {
+      ledgerContent.append(element("p", { class: "muted", text: "Para vincular sua conta, informe ao caixa o mesmo e-mail usado no seu login. A equipe consegue atualizar o cadastro na tela do caixa." }));
+    } else {
+      ledgerContent.append(element("button", { type: "button", class: "quiet", text: "Tentar novamente", onclick: openCustomerLedger }));
+    }
+  }
 }
 
 // Global modal triggers and shortcuts

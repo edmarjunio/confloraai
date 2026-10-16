@@ -359,6 +359,20 @@
       </div>
     </dialog>
 
+    <dialog id="ledgerDialog" class="history-dialog" aria-labelledby="ledgerTitle">
+      <div class="dialog-header history-dialog-header">
+        <div>
+          <span class="product-info-eyebrow">SUA CONTA CONFLORA</span>
+          <h2 id="ledgerTitle">Saldo e movimentações</h2>
+          <p class="muted">Acompanhe compras fiadas e recebimentos vinculados ao seu cadastro.</p>
+        </div>
+        <button id="ledgerCloseButton" class="product-info-close" type="button" data-close aria-label="Fechar saldo" title="Fechar"><span data-icon="x" aria-hidden="true"></span></button>
+      </div>
+      <div id="ledgerContent" class="history-list" tabindex="0" aria-live="polite">
+        <p class="muted">Carregando seu saldo…</p>
+      </div>
+    </dialog>
+
     <dialog
       id="productEntryDialog"
       class="drawer product-entry-drawer"
