@@ -1,4 +1,5 @@
 import { $, element, openDialog, money } from "./ui.js";
+import { icon } from "./icons.js";
 import {
   normalize,
   scopedProducts,
@@ -10,6 +11,7 @@ export function createGuidedChat(state, catalog) {
   const messages = $("#chatMessages");
   let path = [];
   let selected = null;
+  let activeResults = null;
   const pool = () =>
     scopedProducts(state.products, state.config.categories, path);
   const say = (text, role = "assistant") => {
@@ -50,47 +52,100 @@ export function createGuidedChat(state, catalog) {
     );
     messages.scrollTop = messages.scrollHeight;
   }
+  function clearResults() {
+    activeResults?.remove();
+    activeResults = null;
+    $("#chatDialog").classList.remove("has-product-results");
+  }
   function results(products) {
+    clearResults();
     selected = null;
-    say(
-      `${products.length} produto(s) encontrado(s). Toque em “Sobre este produto” para consultar os detalhes ou digite um nome para filtrar.`,
-    );
-    const list = element("div", { class: "guided-results" });
-    let offset = 0;
-    const more = element("button", { class: "guided-more" });
-    function page() {
-      for (const product of products.slice(offset, offset + 6)) {
-        list.append(
-          catalog.card(product, true),
-          element("button", {
-            class: "guided-detail",
-            text: "Sobre este produto",
-            "aria-label": `Sobre ${product.name}`,
-            onclick: () => details(product),
-          }),
-        );
-      }
-      offset += 6;
-      more.hidden = offset >= products.length;
-      more.textContent = `Mostrar mais (${Math.max(0, products.length - offset)})`;
-    }
-    more.addEventListener("click", page);
-    messages.append(list, more);
-    page();
-    buttons([
-      [
-        "Não, quero outra opção",
-        () => {
+    $("#chatDialog").classList.add("has-product-results");
+
+    const count = element("span", { class: "guided-results-count" });
+    const toolbar = element("div", { class: "guided-results-toolbar" }, [
+      element("div", { class: "guided-results-heading" }, [
+        element("strong", {
+          class: "guided-results-title",
+          text: path.length ? path.join(" · ") : "Produtos encontrados",
+        }),
+        count,
+      ]),
+      element("button", {
+        type: "button",
+        class: "guided-clear-filters",
+        "aria-label": "Limpar filtros e escolher outra categoria",
+        title: "Limpar filtros",
+        onclick: () => {
+          path = [];
           selected = null;
-          say(
-            "Me conte mais: digite outro nome ou use Voltar para escolher uma categoria.",
-          );
-          $("#chatInput").focus();
+          messages.replaceChildren();
+          clearResults();
+          browse();
         },
-      ],
+      }, [icon("x")]),
     ]);
+    const searchInput = element("input", {
+      type: "search",
+      class: "guided-results-search",
+      placeholder: "Pesquisar produto nesta seleção…",
+      "aria-label": "Pesquisar produto nesta seleção",
+    });
+    const grid = element("div", { class: "guided-results-grid" });
+    const empty = element("p", {
+      class: "guided-results-empty",
+      text: "Nenhum produto encontrado nesta seleção.",
+      hidden: "",
+    });
+    const more = element("button", {
+      type: "button",
+      class: "guided-more",
+      hidden: "",
+    });
+    const panel = element("section", { class: "guided-results" }, [
+      toolbar,
+      searchInput,
+      grid,
+      empty,
+      more,
+    ]);
+    activeResults = panel;
+    messages.append(panel);
+
+    const availableProducts = [...products].sort((left, right) =>
+      left.name.localeCompare(right.name, "pt-BR"),
+    );
+    let matchingProducts = availableProducts;
+    let visibleCount = 0;
+    const renderProducts = () => {
+      const query = normalize(searchInput.value);
+      matchingProducts = availableProducts.filter((product) =>
+        !query || normalize(product.name).includes(query),
+      );
+      visibleCount = Math.min(24, matchingProducts.length);
+      grid.replaceChildren(
+        ...matchingProducts.slice(0, visibleCount).map((product) => catalog.card(product)),
+      );
+      count.textContent = `${matchingProducts.length} ${matchingProducts.length === 1 ? "produto" : "produtos"}`;
+      empty.hidden = matchingProducts.length > 0;
+      more.hidden = matchingProducts.length <= visibleCount;
+      more.textContent = `Mostrar mais produtos (${matchingProducts.length - visibleCount})`;
+    };
+    searchInput.addEventListener("input", renderProducts);
+    more.addEventListener("click", () => {
+      const previousCount = visibleCount;
+      visibleCount = Math.min(visibleCount + 24, matchingProducts.length);
+      grid.append(
+        ...matchingProducts.slice(previousCount, visibleCount).map((product) => catalog.card(product)),
+      );
+      more.hidden = matchingProducts.length <= visibleCount;
+      more.textContent = `Mostrar mais produtos (${matchingProducts.length - visibleCount})`;
+    });
+    renderProducts();
+    messages.scrollTop = messages.scrollHeight;
   }
   function browse() {
+    clearResults();
     selected = null;
     const choices = nextChoices(state.products, state.config.categories, path);
     say(

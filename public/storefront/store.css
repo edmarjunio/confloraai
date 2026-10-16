@@ -2487,8 +2487,22 @@ dialog .toast {
   }
 }
 .guided-choices { flex-wrap: wrap; overflow: visible; padding: 8px 0; }
-.guided-results { display: grid; gap: 6px; min-width: 0; }
-.guided-detail, .guided-more { margin: 0 0 12px; padding: 10px; border: 1px solid var(--primary-color); border-radius: 10px; background: white; color: var(--text-color); }
+.guided-results { display: grid; gap: 12px; min-width: 0; }
+.guided-results-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.guided-results-heading { display: grid; min-width: 0; gap: 3px; }
+.guided-results-title { overflow-wrap: anywhere; color: #183c29; font-size: 15px; font-weight: 800; }
+.guided-results-count { color: #64748b; font-size: 11px; }
+.guided-clear-filters { display: grid; width: 36px; height: 36px; flex: 0 0 auto; place-items: center; padding: 0; border: 0; border-radius: 50%; background: #dc2626; color: #fff; box-shadow: 0 3px 9px rgb(127 29 29 / 24%); cursor: pointer; transition: transform 150ms ease, box-shadow 150ms ease, background-color 150ms ease; }
+.guided-clear-filters:hover { transform: translateY(-2px); background: #b91c1c; box-shadow: 0 6px 14px rgb(127 29 29 / 30%); }
+.guided-clear-filters:focus-visible { outline: 3px solid rgb(220 38 38 / 28%); outline-offset: 2px; }
+.guided-clear-filters .icon { width: 18px; height: 18px; }
+.guided-results-search { width: 100%; min-height: 40px; padding: 8px 13px; border: 1px solid #d9e2dc; border-radius: 999px; background: #fff; color: var(--text-color); font-size: 13px; }
+.guided-results-search:focus { outline: 2px solid rgb(16 158 70 / 18%); border-color: var(--primary-color); }
+.guided-results-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; gap: 12px; min-width: 0; }
+.guided-results-grid > render-product-card { min-width: 0; }
+.guided-results-empty { padding: 18px; border: 1px dashed #d3dfd6; border-radius: 12px; color: #64748b; text-align: center; }
+.guided-more { justify-self: center; margin: 0 0 8px; padding: 10px 16px; border: 1px solid var(--primary-color); border-radius: 999px; background: white; color: var(--text-color); cursor: pointer; }
+.guided-more:hover { background: #f0fdf4; }
 .messages .bubble { white-space: pre-line; overflow-wrap: anywhere; }
 
 /* HEADER ACTION BUTTONS */
@@ -2506,6 +2520,20 @@ dialog .toast {
 }
 .action-caixa-btn:hover {
   background: #d1fae5 !important;
+}
+
+@media (min-width: 761px) {
+  .chat-drawer.has-product-results[open] { width: min(1120px, calc(100vw - 44px)); }
+}
+@media (max-width: 900px) and (min-width: 761px) {
+  .guided-results-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .chat-drawer.has-product-results[open] { width: min(820px, calc(100vw - 44px)); }
+}
+@media (max-width: 760px) {
+  .guided-results-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+}
+@media (max-width: 460px) {
+  .guided-results-grid { grid-template-columns: 1fr; }
 }
 .action-entry-btn {
   border: 1px solid #cbd5e1 !important;

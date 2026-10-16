@@ -45,6 +45,7 @@
   }).format(price);
 
   const heartIcon = (filled) => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="${filled ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z"/></svg>`;
+  const infoIcon = `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>`;
   const cartIcon = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></svg>`;
 
   class RenderProductCard extends HTMLElement {
@@ -206,7 +207,7 @@
         </button>
         ${!compact ? `<div class="cf-product-actions product-card-actions">
           <button type="button" class="favorite" data-action="favorite" aria-label="Favoritar ${escapeHtml(name)}" aria-pressed="${favorite}">${heartIcon(favorite).replace("<svg", '<svg class="icon"')}</button>
-          <button type="button" class="cf-product-info-button product-information-button cf-pdv-info-action" data-action="info" aria-label="Informações de ${escapeHtml(name)}" title="Informações de ${escapeHtml(name)}">INFO</button>
+          <button type="button" class="cf-product-info-button product-information-button" data-action="info" aria-label="Informações de ${escapeHtml(name)}" title="Informações de ${escapeHtml(name)}">${infoIcon}</button>
         </div>` : ""}
         <div class="product-content">
           <button type="button" class="product-name" title="${escapeHtml(name)}" data-action="open">${escapeHtml(name)}</button>

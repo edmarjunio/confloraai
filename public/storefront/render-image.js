@@ -58,6 +58,8 @@
         this.style.minWidth = "0";
         this.style.minHeight = "0";
         this.style.overflow = "hidden";
+        this.style.background = "linear-gradient(110deg, #f0f2f1 8%, #f8faf8 18%, #f0f2f1 33%)";
+        this.setAttribute("aria-busy", "true");
 
         const image = document.createElement("img");
         image.alt = this.getAttribute("alt") || "";
@@ -71,15 +73,30 @@
         image.style.minHeight = "0";
         image.style.objectFit = "cover";
         image.style.objectPosition = "center";
+        image.style.opacity = "0";
+        image.style.transition = "opacity 280ms ease-out";
         image.dataset.sourceIndex = "0";
+        image.addEventListener("load", () => {
+          image.style.opacity = "1";
+          this.removeAttribute("aria-busy");
+        });
         image.src = sources[0] || "/store-assets/placeholder.svg";
         image.addEventListener("error", () => {
           const nextIndex = Number(image.dataset.sourceIndex || 0) + 1;
-          if (nextIndex >= sources.length) return;
+          if (nextIndex >= sources.length) {
+            this.removeAttribute("aria-busy");
+            return;
+          }
           image.dataset.sourceIndex = String(nextIndex);
           image.src = sources[nextIndex];
         });
         this.append(image);
+        if (image.complete && image.naturalWidth > 0) {
+          requestAnimationFrame(() => {
+            image.style.opacity = "1";
+            this.removeAttribute("aria-busy");
+          });
+        }
       }
     }
 
