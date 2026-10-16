@@ -38,7 +38,7 @@ class MessageService {
   }
 
   /**
-   * Pipeline principal de atendimento com IA e suporte a fotos do Google Drive.
+   * Pipeline principal de atendimento com IA e envio de fotos do Firebase Storage.
    *
    * @param {Object} input
    * @param {string} input.phone
@@ -192,7 +192,7 @@ class MessageService {
       }
     }
 
-    // CENÁRIO 5: Pedido de Fotos do Google Drive
+    // CENÁRIO 5: Pedido de fotos cadastradas no Firebase Storage
     if (!reply && routingResult.intent === INTENTS.REQUEST_PHOTOS) {
       const targetProducts = [];
 

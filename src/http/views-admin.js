@@ -79,7 +79,6 @@ function renderAdminHtml(storeConfig) {
       <button class="nav-btn" id="tabBtn-price" onclick="showTab('price')">Preços</button>
       <button class="nav-btn" id="tabBtn-products" onclick="showTab('products')">Produtos</button>
       <button class="nav-btn" id="tabBtn-team" onclick="showTab('team')">Equipe</button>
-      <button class="nav-btn" id="tabBtn-import" onclick="showTab('import')">Importação</button>
       <button class="nav-btn" id="tabBtn-notifs" onclick="showTab('notifs')">Notificações</button>
       <button class="nav-btn" id="tabBtn-status" onclick="showTab('status')">Conexões</button>
     </div>
@@ -368,43 +367,6 @@ function renderAdminHtml(storeConfig) {
       </table></div>
     </div>
 
-    <!-- ABA 9: IMPORTAR PLANILHAS (ADMIN) -->
-    <div id="tab-import" class="tab-content">
-      <h2>Importar LISTA DE PRODUTOS</h2>
-      <p>Selecione seu Excel como está. Usaremos somente a aba PRODUTOS, mantendo os IDs e os status.</p>
-      <div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:16px;margin-top:14px;">
-        <label for="importFile">Arquivo Excel (.xlsx)</label>
-        <input id="importFile" type="file" accept=".xlsx" onchange="resetImportPreview()" style="display:block;margin:12px 0;" />
-        <label for="importMode">O que deseja fazer?</label>
-        <select id="importMode" onchange="resetImportPreview()" style="display:block;padding:10px;margin:12px 0;max-width:100%;">
-          <option value="replace">Substituir todos os produtos pelos da planilha</option>
-          <option value="merge">Adicionar ou atualizar, mantendo os demais produtos</option>
-        </select>
-        <p>Ao substituir, fotos e estoques que não estão na planilha serão removidos ou zerados. Pedidos, vendas e usuários serão mantidos.</p>
-        <button class="action-btn btn-blue" id="btnValidateImport" onclick="validateImportPayload()">1. Conferir planilha</button>
-        <button class="action-btn btn-gray" onclick="downloadCatalogBackup()">Baixar cópia dos produtos atuais</button>
-        <div id="importFeedback" role="status" aria-live="polite" style="white-space:pre-wrap;margin:16px 0;"></div>
-        <label style="display:block;margin:12px 0;"><input id="confirmReplace" type="checkbox" onchange="updateImportButton()" /> Conferi a prévia e confirmo a operação selecionada.</label>
-        <button class="action-btn btn-green" id="btnSubmitImport" disabled onclick="submitImportPayload()">2. Importar planilha</button>
-      </div>
-
-      <!-- SEÇÃO: TRANSFERÊNCIA DE FOTOS DO GOOGLE DRIVE PARA O FIREBASE STORAGE -->
-      <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:8px; padding:18px; margin-top:20px;">
-        <h3 style="color:#14532d; font-size:15px; margin-bottom:6px; display:flex; align-items:center; gap:8px;">Armazenamento de Fotos no Firebase Storage
-        </h3>
-        <p style="font-size:12px; color:#166534; line-height:1.6; margin-bottom:12px;">
-          As fotos do Google Drive são transferidas e armazenadas <strong>no Firebase Storage</strong>; o produto mantém a URL de exibição e o caminho do arquivo para permitir sua remoção. Tags e metadados continuam no Firestore.
-        </p>
-        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-          <button class="action-btn btn-green" id="btnTransferDrivePhotos" onclick="transferDrivePhotosFromAdmin()">
-            ⚡ Sincronizar &amp; Transferir Fotos do Drive pro Storage
-          </button>
-          <span id="transferPhotosStatus" style="font-size:12px; color:#475569;"></span>
-        </div>
-        <div id="transferPhotosResultBox" style="display:none; margin-top:12px; padding:10px 14px; background:white; border-radius:6px; border:1px solid #86efac; font-size:12px; max-height:180px; overflow-y:auto; line-height:1.6;"></div>
-      </div>
-    </div>
-
     <!-- ABA 10: NOTIFICAÇÕES (CAIXA E ADMIN) -->
     <div id="tab-notifs" class="tab-content">
       <h2>Central de Notificações & Avisos do Sistema</h2>
@@ -417,7 +379,7 @@ function renderAdminHtml(storeConfig) {
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
         <div>
           <h2>Status das Conexões & Diagnóstico do Sistema</h2>
-          <p style="font-size:12px; color:#64748b;">Monitoramento de comunicação em tempo real com Google Sheets API, Meta WhatsApp Webhook e Cloud Firestore.</p>
+          <p style="font-size:12px; color:#64748b;">Monitoramento do WhatsApp e do Cloud Firestore.</p>
         </div>
         <button class="action-btn btn-green" onclick="loadAdminStatusData()" style="padding:10px 16px; font-size:13px;">
           🔄 Atualizar Diagnósticos
@@ -651,7 +613,6 @@ function renderAdminHtml(storeConfig) {
       document.getElementById('tabBtn-orders').style.display = isAdmin ? 'block' : 'none';
       document.getElementById('tabBtn-products').style.display = isAdmin ? 'block' : 'none';
       document.getElementById('tabBtn-team').style.display = isAdmin ? 'block' : 'none';
-      document.getElementById('tabBtn-import').style.display = isAdmin ? 'block' : 'none';
       const statusBtn = document.getElementById('tabBtn-status');
       if (statusBtn) statusBtn.style.display = isAdmin ? 'block' : 'none';
 
@@ -1116,6 +1077,21 @@ function renderAdminHtml(storeConfig) {
       filterPriceTable();
     }
 
+    function isStoredProductImageUrl(url) {
+      const value = String(url || '').trim().toLowerCase();
+      return value.startsWith('/api/images/') || /^https:\/\/(?:firebasestorage|storage)\.googleapis\.com\//i.test(value);
+    }
+
+    function getProductImageUrl(product) {
+      const candidates = [
+        ...(Array.isArray(product.images) ? product.images : []),
+        product.imageUrl,
+        product.imageurl,
+        product.imagePathCache,
+      ].map((image) => typeof image === 'string' ? image.trim() : image?.url || image?.imageUrl || '');
+      return candidates.find(isStoredProductImageUrl) || '/store-assets/placeholder.svg';
+    }
+
     function filterPriceTable() {
       if (!Array.isArray(allProducts)) allProducts = [];
       const q = document.getElementById('priceSearchInput').value.toLowerCase();
@@ -1124,7 +1100,7 @@ function renderAdminHtml(storeConfig) {
 
       allProducts.filter(p => !q || (p.name || p.descricao || '').toLowerCase().includes(q) || (p.categoria || '').toLowerCase().includes(q)).forEach(p => {
         const tr = document.createElement('tr');
-        const img = (p.images && p.images[0]) || p.imageUrl || p.imageurl || 'https://images.unsplash.com/photo-1512428813834-c702c7702b78?w=600';
+        const img = getProductImageUrl(p);
         tr.innerHTML = \`
           <td><img src="\${img}" class="prod-thumb" /></td>
           <td><strong>\${p.descricao || p.name}</strong></td>
@@ -1326,137 +1302,35 @@ function renderAdminHtml(storeConfig) {
       }
     }
 
-    // 11. DIAGNÓSTICO & STATUS DAS CONEXÕES (SHEETS, WHATSAPP, FIRESTORE)
+    // 11. Diagnóstico das conexões WhatsApp e Firestore
     async function loadAdminStatusData() {
       const container = document.getElementById('adminStatusDashboardContainer');
       if (!container) return;
-      container.innerHTML = '<div style="padding:30px; text-align:center; color:#64748b;">📡 Consultando diagnóstico em tempo real (Google Sheets & WhatsApp)...</div>';
-
+      container.innerHTML = '<div style="padding:30px;text-align:center;color:#64748b;">Consultando WhatsApp e Firestore...</div>';
       try {
-        const res = await fetch('/api/admin/system-status');
-        const data = await res.json();
-        const sheets = data.googleSheets || {};
-        const wa = data.whatsapp || {};
-        const fs = data.firestore || {};
-        const cat = data.defaultCatalog || {};
-
-        container.innerHTML = \`
-          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:16px;">
-            <!-- GOOGLE SHEETS API STATUS -->
-            <div style="background:#f8fafc; border:1px solid var(--border); border-radius:10px; padding:18px;">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <h3 style="font-size:15px; display:flex; align-items:center; gap:6px;">Google Sheets API</h3>
-                <span style="background:\${sheets.color || '#10b981'}; color:white; font-size:11px; font-weight:800; padding:2px 8px; border-radius:10px;">
-                  \${sheets.badge || sheets.status || 'ONLINE'}
-                </span>
-              </div>
-              <div style="font-size:13px; color:#475569; line-height:1.7;">
-                <div><strong>ID da Planilha:</strong> <code>\${sheets.spreadsheetId || 'Padrão Conflora'}</code></div>
-                <div><strong>Aba Configurada:</strong> <strong>\${sheets.sheetName || 'PRODUTOS'}</strong></div>
-                <div><strong>Produtos Indexados:</strong> <span style="font-weight:800; color:#15803d;">\${sheets.itemsActive || 111} itens</span></div>
-                <div><strong>Latência API:</strong> \${sheets.latencyMs ?? 0} ms</div>
-                <div><strong>Fonte dos Dados:</strong> \${sheets.source || 'Planilha'}</div>
-                <div style="margin-top:8px; font-size:12px; color:#64748b; background:#f1f5f9; padding:8px 10px; border-radius:6px;">
-                  ℹ️ \${sheets.message || 'Operação normal.'}
-                </div>
-              </div>
-              <div style="margin-top:14px;">
-                <button class="action-btn btn-green" onclick="testSheetsFromAdmin()" style="width:100%; justify-content:center; padding:8px;">
-                  🧪 Testar Conexão Google Sheets Agora
-                </button>
-              </div>
-            </div>
-
-            <!-- WHATSAPP WEBHOOK STATUS -->
-            <div style="background:#f8fafc; border:1px solid var(--border); border-radius:10px; padding:18px;">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <h3 style="font-size:15px; display:flex; align-items:center; gap:6px;">WhatsApp Webhook & API</h3>
-                <span style="background:\${wa.color || '#10b981'}; color:white; font-size:11px; font-weight:800; padding:2px 8px; border-radius:10px;">
-                  \${wa.badge || wa.status || 'ONLINE'}
-                </span>
-              </div>
-              <div style="font-size:13px; color:#475569; line-height:1.7;">
-                <div><strong>Rota Ativa:</strong> <code>/webhook</code> (GET verificação / POST mensagens)</div>
-                <div><strong>Número / Phone ID:</strong> \${wa.phoneNumberId || 'Emulador Local'}</div>
-                <div><strong>Verify Token:</strong> \${wa.hasVerifyToken ? '✅ Configurado' : '⚠️ Não configurado'}</div>
-                <div><strong>Access Token Graph:</strong> \${wa.hasAccessToken ? '✅ Ativo' : '⚠️ Emulador'}</div>
-                <div><strong>Total Mensagens:</strong> \${wa.totalReceivedCount || 0}</div>
-                <div><strong>Último Hit Recebido:</strong> \${wa.lastReceivedAt || 'Nenhum recente'}</div>
-                <div style="margin-top:8px; font-size:12px; color:#64748b; background:#f1f5f9; padding:8px 10px; border-radius:6px;">
-                  ℹ️ \${wa.message || 'Webhook operacional.'}
-                </div>
-              </div>
-              <div style="margin-top:14px;">
-                <button class="action-btn btn-blue" onclick="testWebhookFromAdmin()" style="width:100%; justify-content:center; padding:8px;">
-                  🧪 Testar Ping & Rota do Webhook
-                </button>
-              </div>
-            </div>
-
-            <!-- CLOUD FIRESTORE -->
-            <div style="background:#f8fafc; border:1px solid var(--border); border-radius:10px; padding:18px;">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <h3 style="font-size:15px; display:flex; align-items:center; gap:6px;">Cloud Firestore</h3>
-                <span style="background:\${fs.color || '#10b981'}; color:white; font-size:11px; font-weight:800; padding:2px 8px; border-radius:10px;">
-                  \${fs.badge || fs.status || 'ONLINE'}
-                </span>
-              </div>
-              <div style="font-size:13px; color:#475569; line-height:1.7;">
-                <div><strong>Projeto GCP:</strong> <code>\${fs.projectId || 'confloraai'}</code></div>
-                <div><strong>Latência de Resposta:</strong> \${fs.latencyMs ?? 0} ms</div>
-                <div><strong>Status de Conexão:</strong> \${fs.message || 'Conectado ao Firestore.'}</div>
-                <div><strong>Persistência:</strong> Firestore + Cache Local</div>
-              </div>
-            </div>
-
-            <!-- PLANILHA OFICIAL DE CONTINGÊNCIA -->
-            <div style="background:#f8fafc; border:1px solid var(--border); border-radius:10px; padding:18px;">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <h3 style="font-size:15px; display:flex; align-items:center; gap:6px;">Planilha Oficial Conflora</h3>
-                <span style="background:\${cat.color || '#10b981'}; color:white; font-size:11px; font-weight:800; padding:2px 8px; border-radius:10px;">
-                  \${cat.badge || 'Carregada'}
-                </span>
-              </div>
-              <div style="font-size:13px; color:#475569; line-height:1.7;">
-                <div><strong>Itens Comerciais Oficiais:</strong> <strong style="color:#15803d;">\${cat.totalItems || 111} itens</strong></div>
-                <div><strong>Categorias Mapeadas:</strong> \${cat.categoriesCount || 6}</div>
-                <div><strong>Disponibilidade:</strong> \${cat.autoFallback || '100% garantida'}</div>
-              </div>
-            </div>
-          </div>
-
-          <div id="adminTestResultBox" style="display:none; margin-top:16px; padding:12px; border-radius:8px; font-size:13px;"></div>
-        \`;
-      } catch (err) {
-        container.innerHTML = '<div style="color:#ef4444; padding:20px; text-align:center;">Erro ao carregar diagnóstico: ' + err.message + '</div>';
+        const response = await fetch('/api/admin/system-status');
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Falha ao consultar o diagnóstico.');
+        const cards = [
+          ['WhatsApp', data.whatsapp],
+          ['Cloud Firestore', data.firestore],
+        ];
+        container.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;">' + cards.map(([title, item]) => {
+          const details = title === 'WhatsApp'
+            ? '<p style="font-size:12px;color:#475569;">Rota: <code>/webhook</code><br>Número: ' + (item?.phoneNumberId || 'Não configurado') + '<br>Mensagens recebidas: ' + (item?.totalReceivedCount || 0) + '</p>'
+            : '<p style="font-size:12px;color:#475569;">Projeto: <code>' + (item?.projectId || 'confloraai') + '</code><br>Latência: ' + (item?.latencyMs ?? 0) + ' ms</p>';
+          return '<section style="background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:18px;">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+              '<h3 style="font-size:15px;">' + title + '</h3>' +
+              '<span style="background:' + (item?.color || '#64748b') + ';color:white;font-size:11px;font-weight:800;padding:2px 8px;border-radius:10px;">' + (item?.badge || item?.status || 'Indisponível') + '</span>' +
+            '</div>' +
+            '<p style="font-size:13px;color:#475569;line-height:1.7;">' + (item?.message || 'Sem dados de diagnóstico.') + '</p>' + details +
+            '</section>';
+        }).join('') + '</div>';
+      } catch (error) {
+        container.innerHTML = '<div style="color:#ef4444;padding:20px;text-align:center;">Erro ao carregar diagnóstico: ' + error.message + '</div>';
       }
     }
-
-    async function testSheetsFromAdmin() {
-      const box = document.getElementById('adminTestResultBox');
-      if (box) {
-        box.style.display = 'block';
-        box.style.background = '#f1f5f9';
-        box.style.color = '#334155';
-        box.innerHTML = '⏳ Testando conexão com Google Sheets API...';
-      }
-      try {
-        const res = await fetch('/api/admin/test-sheets', { method: 'POST' });
-        const d = await res.json();
-        if (box) {
-          box.style.background = '#dcfce7';
-          box.style.color = '#166534';
-          box.innerHTML = '✅ <strong>Google Sheets Conexão OK:</strong> ' + (d.message || 'Sincronizado com sucesso.') + ' (Latência: ' + (d.latencyMs || 0) + 'ms)';
-        }
-      } catch (err) {
-        if (box) {
-          box.style.background = '#fee2e2';
-          box.style.color = '#991b1b';
-          box.innerHTML = '❌ <strong>Erro no teste do Sheets:</strong> ' + err.message;
-        }
-      }
-    }
-
     async function testWebhookFromAdmin() {
       const box = document.getElementById('adminTestResultBox');
       if (box) {
@@ -1594,7 +1468,7 @@ function renderAdminHtml(storeConfig) {
       allProducts.filter(p => !q || (p.name || p.descricao || '').toLowerCase().includes(q)).forEach(p => {
         const div = document.createElement('div');
         div.className = 'stock-card';
-        const img = (p.images && p.images[0]) || p.imageUrl || p.imageurl || '';
+        const img = getProductImageUrl(p);
         div.innerHTML = \`
           <div style="display:flex; gap:10px; align-items:center;">
             \${img ? \`<img src="\${img}" style="width:40px; height:40px; border-radius:6px; object-fit:cover;" />\` : ''}
@@ -1667,7 +1541,7 @@ function renderAdminHtml(storeConfig) {
       document.getElementById('productStatusCount').textContent = visible.length + ' produto(s) · ' + (productStatusFilter === 'TODOS' ? 'Todos os status' : productStatusFilter === 'INATIVO' ? 'Inativos' : 'Ativos');
       visible.forEach(p => {
         const tr = document.createElement('tr');
-        const img = (p.images && p.images[0]) || p.imageUrl || p.imageurl || 'https://images.unsplash.com/photo-1512428813834-c702c7702b78?w=600';
+        const img = getProductImageUrl(p);
         tr.innerHTML = \`
           <td><img src="\${img}" class="prod-thumb" /></td>
           <td><strong>\${p.descricao || p.name}</strong>\${productIsInactive(p) ? '<p style="color:#92400e; background:#fef3c7; padding:6px 8px; border-radius:6px; font-size:12px; margin-top:6px;">INATIVO — oculto no catálogo, indisponível para compra.</p>' : ''}</td>
@@ -1820,7 +1694,7 @@ function renderAdminHtml(storeConfig) {
         ? p.images.filter(Boolean)
         : (p.imageUrl || p.imageurl ? [p.imageUrl || p.imageurl] : []);
 
-      existingImgs.forEach((url, i) => {
+      existingImgs.filter(isStoredProductImageUrl).forEach((url, i) => {
         pendingPhotosList.push({
           url,
           dataUrl: url,
@@ -1958,37 +1832,6 @@ function renderAdminHtml(storeConfig) {
       }
     }
 
-    async function transferDrivePhotosFromAdmin() {
-      const btn = document.getElementById('btnTransferDrivePhotos');
-      const status = document.getElementById('transferPhotosStatus');
-      const box = document.getElementById('transferPhotosResultBox');
-      btn.disabled = true;
-      status.textContent = '⏳ Analisando catálogo e transferindo fotos para o Firebase Storage...';
-      box.style.display = 'none';
-
-      try {
-        const res = await fetch('/api/admin/transfer-drive-photos', { method: 'POST' });
-        const data = await res.json();
-        if (data.success) {
-          status.textContent = '✅ ' + data.count + ' fotos sincronizadas no Firebase Storage!';
-          box.style.display = 'block';
-          box.innerHTML = '<strong>Resultado da transferência para o Firebase Storage:</strong><br>' +
-            (data.details && data.details.length > 0
-              ? data.details.slice(0, 15).map(d => '• <strong>' + d.name + '</strong> ➔ Arquivo: <code>' + d.fileName + '</code> | Tags: <em>' + d.tags + '</em>').join('<br>') +
-                (data.details.length > 15 ? '<br><em>... e mais ' + (data.details.length - 15) + ' produtos sincronizados.</em>' : '')
-              : 'Todos os produtos já possuem fotos sincronizadas no Firebase Storage.');
-          await loadAdminProducts();
-          await loadPriceProducts();
-        } else {
-          status.textContent = 'Erro: ' + (data.error || 'Falha ao transferir');
-        }
-      } catch (err) {
-        status.textContent = 'Erro ao transferir: ' + err.message;
-      } finally {
-        btn.disabled = false;
-      }
-    }
-
     // 11. HISTÓRICO GERAL DE PEDIDOS
     async function loadAllOrders() {
       const container = document.getElementById('allOrdersListContainer');
@@ -2079,94 +1922,6 @@ function renderAdminHtml(storeConfig) {
       } catch (error) {
         alert(error.message || 'Não foi possível registrar a venda.');
       }
-    }
-
-    // 13. PLANILHA MODELO E IMPORTADOR COM AUDITORIA LINHA A LINHA
-    function downloadCsvTemplate() {
-      const csvContent = 'id,name,category,subcategory,unit,price,stockQuantity,images,descriptionAi,tagsAi\\n' +
-        '1,Palmeira Imperial,Palmeiras,Imperial,UN,180.00,10,https://images.unsplash.com/photo-1596726596162-421712a433a0?w=800,Muda vistosa de porte nobre para sol pleno,palmeira imperial muda\\n' +
-        '2,Adubo Orgânico Compostado,Gramas & Insumos,Adubação,KG,4.50,150,,Adubo rico em matéria orgânica mineralizada,adubo organico por kg terra\\n' +
-        '3,Jabuticaba Sabará,Frutíferas,Nativas,UN,95.00,20,,Muda enxertada produzindo precocemente,fruta jabuticaba sabara\\n';
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', 'planilha_modelo_conflora.csv');
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
-
-    let importPreview = null;
-    let importBusy = false;
-    function updateImportButton() {
-      document.getElementById('btnSubmitImport').disabled = importBusy || !importPreview || !document.getElementById('confirmReplace').checked;
-    }
-    function resetImportPreview() {
-      importPreview = null;
-      document.getElementById('confirmReplace').checked = false;
-      document.getElementById('importFeedback').textContent = '';
-      updateImportButton();
-    }
-    function setImportBusy(busy) {
-      importBusy = busy;
-      ['importFile', 'importMode', 'btnValidateImport', 'confirmReplace'].forEach(id => document.getElementById(id).disabled = busy);
-      updateImportButton();
-    }
-    async function uploadWorkbook(commit) {
-      const file = document.getElementById('importFile').files[0];
-      if (!file || !file.name.toLowerCase().endsWith('.xlsx')) throw new Error('Selecione a LISTA DE PRODUTOS em formato .xlsx.');
-      if (file.size > 10 * 1024 * 1024) throw new Error('O arquivo deve ter até 10 MB.');
-      const mode = document.getElementById('importMode').value;
-      const response = await fetch('/api/admin/import-xlsx?commit=' + commit + '&mode=' + mode, {
-        method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'X-Confirm-Replace': commit ? 'SUBSTITUIR' : '' }, body: file
-      });
-      const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.message || (data.errors || []).join('\\n') || data.error || 'Não foi possível importar.');
-      return data;
-    }
-    async function validateImportPayload() {
-      resetImportPreview();
-      setImportBusy(true);
-      const feedback = document.getElementById('importFeedback');
-      feedback.textContent = 'Conferindo a planilha...';
-      try {
-        const data = await uploadWorkbook(false);
-        importPreview = data;
-        feedback.textContent = data.count + ' produtos válidos (' + data.inactive + ' inativos). Base atual: ' + data.currentCount + ' produtos.' +
-          '\\nAba utilizada: ' + data.sheet + '. Abas ignoradas: ' + (data.ignoredSheets.join(', ') || 'nenhuma') +
-          (document.getElementById('importMode').value === 'replace' ? '\\nA base ficará com exatamente ' + data.count + ' produtos. ' + data.removed + ' IDs antigos serão removidos.' : '\\nOs demais produtos, fotos e estoques existentes serão mantidos quando não informados.') +
-          '\\n\\nPrévia:\\n' + data.preview.map(p => p.id + ' — ' + p.name + ' — ' + Number(p.price).toLocaleString('pt-BR', {style:'currency', currency:'BRL'}) + ' — ' + p.status).join('\\n');
-      } catch (error) { feedback.textContent = error.message; }
-      finally { setImportBusy(false); }
-    }
-    async function submitImportPayload() {
-      if (importBusy || !importPreview || !document.getElementById('confirmReplace').checked) return;
-      const replace = document.getElementById('importMode').value === 'replace';
-      if (!confirm(replace ? 'Substituir o catálogo pelos ' + importPreview.count + ' produtos da planilha? Fotos e estoques não informados serão removidos ou zerados.' : 'Adicionar ou atualizar os produtos da planilha?')) return;
-      setImportBusy(true);
-      const feedback = document.getElementById('importFeedback');
-      feedback.textContent = 'Importando. Aguarde a conclusão...';
-      try {
-        const data = await uploadWorkbook(true);
-        importPreview = null;
-        document.getElementById('confirmReplace').checked = false;
-        feedback.textContent = data.count + ' produtos importados com sucesso. ' + (data.removed || 0) + ' IDs antigos removidos.';
-        await loadAdminProducts();
-      } catch (error) {
-        importPreview = null;
-        feedback.textContent = error.message + '\\nConfira novamente a planilha antes de tentar de novo.';
-      } finally { setImportBusy(false); }
-    }
-    async function downloadCatalogBackup() {
-      try {
-        const response = await fetch('/api/inventory');
-        if (!response.ok) throw new Error('Não foi possível obter a cópia.');
-        const data = await response.json();
-        const url = URL.createObjectURL(new Blob([JSON.stringify(data.products, null, 2)], {type: 'application/json'}));
-        const link = document.createElement('a'); link.href = url; link.download = 'produtos-antes-importacao.json'; link.click();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-      } catch (error) { document.getElementById('importFeedback').textContent = error.message; }
     }
 
     // 14. CONTROLE / MODO CONTAGEM DE ESTOQUE

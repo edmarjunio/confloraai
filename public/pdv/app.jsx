@@ -174,7 +174,9 @@ const { useState, useEffect, useRef, useMemo } = React;
             product?.imageurl,
           ]
             .map((image) => typeof image === 'string' ? image : image?.url || image?.imageUrl || image?.src || image?.downloadURL || '')
-            .filter((image) => /^(https?:\/\/|\/api\/images\/|\/store-assets\/)/i.test(String(image).trim()));
+            .filter((image) => /^https:\/\/(?:firebasestorage|storage)\.googleapis\.com\//i.test(String(image).trim())
+              || /^\/api\/images\//i.test(String(image).trim())
+              || /^\/store-assets\//i.test(String(image).trim()));
           return [productId, [...new Set(images)]];
         }).filter(([productId, images]) => productId && images.length));
       } catch (_) {
@@ -309,8 +311,14 @@ const { useState, useEffect, useRef, useMemo } = React;
               .map((entry) => (typeof entry === 'string' ? entry : entry?.url || entry?.imageUrl || entry?.src || entry?.downloadURL || ''))
               .filter(Boolean);
             const cachedImages = storefrontImagesById.get(productId) || [];
-            const imageCandidates = [...new Set([...cachedImages, ...images, item.imageUrl, item.imagePathCache]
-              .filter((image) => /^(https?:\/\/|\/api\/images\/|\/store-assets\/)/i.test(String(image || '').trim())))];
+            const imageCandidates = window.ConfloraProductCard?.getImageCandidates({
+              ...item,
+              images: [...images, ...cachedImages],
+            }) || [...new Set([...images, item.imageUrl, item.imagePathCache, ...cachedImages]
+              .map((image) => String(image || '').trim())
+              .filter((image) => /^https:\/\/(?:firebasestorage|storage)\.googleapis\.com\//i.test(image)
+                || /^\/api\/images\//i.test(image)
+                || /^\/store-assets\//i.test(image)))];
             const image = imageCandidates[0] || item.imageFallbackUrl || '/store-assets/placeholder.svg';
             return {
               ...item,
@@ -643,6 +651,28 @@ const { useState, useEffect, useRef, useMemo } = React;
           const result = await response.json();
           if (!response.ok) throw new Error(result.error || 'Não foi possível salvar este favorito.');
         }).catch((error) => alert(error.message));
+      };
+
+      const openProductInformation = (productId) => {
+        const product = products.find((candidate) => String(candidate.id) === String(productId));
+        if (!product) return;
+        const normalizeName = (value) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+        const variants = products.filter((candidate) => {
+          if (candidate.id === product.id) return true;
+          if (product.canonicalName && candidate.canonicalName) return normalizeName(candidate.canonicalName) === normalizeName(product.canonicalName);
+          return normalizeName(candidate.name) === normalizeName(product.name) && candidate.category === product.category;
+        });
+        setInfoProduct({ ...product, variants });
+      };
+
+      const productCardActionRef = useRef(() => {});
+      productCardActionRef.current = (event) => {
+        const { action, productId, nativeEvent } = event.detail || {};
+        const product = products.find((candidate) => String(candidate.id) === String(productId));
+        if (!product) return;
+        if (action === 'add') addToCart(product);
+        if (action === 'favorite') toggleShortcut(product.id, nativeEvent || event);
+        if (action === 'info') openProductInformation(product.id);
       };
 
       const handleCompleteSale = async () => {
@@ -1021,7 +1051,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                       image-candidates={JSON.stringify(item.imageCandidates || [])}
                       fallback-src={item.imageFallbackUrl || '/store-assets/placeholder.svg'}
                       alt={item.name}
-                      className="w-11 h-11 rounded-xl object-cover border border-slate-200 bg-slate-50 shrink-0"
+                      className="cf-pdv-cart-image w-11 h-11 rounded-xl object-cover border border-slate-200 bg-slate-50 shrink-0"
                     />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
@@ -1313,95 +1343,20 @@ const { useState, useEffect, useRef, useMemo } = React;
                     const productId = String(product?.id ?? product?.productId ?? product?.sku ?? '').trim();
                     const inCart = cart.find((item) => String(item?.id ?? item?.productId ?? item?.sku ?? '').trim() === productId);
                     return (
-                      <cf-card
+                      <render-product-card
                         key={product.id}
-                        onClick={() => addToCart(product)}
-                        interactive=""
-                        padding="sm"
-                        data-selected={inCart ? 'true' : undefined}
-                        style={{ position: 'relative' }}
-                        className={"cf-pdv-product-card group relative flex items-center gap-2 pt-5 " + (inCart ? 'is-selected' : '')}
-                      >
-                        {inCart && (
-                          <span aria-label={`${inCart.quantity} no carrinho`} className="cf-pdv-quantity-badge">
-                            {inCart.quantity}
-                          </span>
-                        )}
-                        <div
-                          className="cf-pdv-product-overlay"
-                          style={{ position: 'absolute', top: 4, left: 10, right: 10, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
-                        >
-                          <span title={product.category || 'Sem categoria'} className="cf-product-category-tag cf-pdv-category-label">
-                            {product.category || 'Sem categoria'}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              const normalizeName = (value) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-                              const variants = products.filter((candidate) => {
-                                if (candidate.id === product.id) return true;
-                                if (product.canonicalName && candidate.canonicalName) return normalizeName(candidate.canonicalName) === normalizeName(product.canonicalName);
-                                return normalizeName(candidate.name) === normalizeName(product.name) && candidate.category === product.category;
-                              });
-                              setInfoProduct({ ...product, variants });
-                            }}
-                            aria-label={`Informações de ${product.name}`}
-                            title={`Informações de ${product.name}`}
-                            className="cf-product-info-button cf-pdv-info-action"
-                          >INFO</button>
-                        </div>
-
-                        {/* Smaller Compact Product Thumbnail */}
-                        <div className="relative h-12 w-12 shrink-0 sm:h-14 sm:w-14">
-                          <div className="absolute inset-0 flex items-center justify-center overflow-hidden rounded-lg border border-slate-100 bg-slate-50">
-                            <render-image
-                              src={product.image}
-                              image-candidates={JSON.stringify(product.imageCandidates || [])}
-                              fallback-src={product.imageFallbackUrl || '/store-assets/placeholder.svg'}
-                              alt={product.name}
-                              loading="lazy"
-                              decoding="async"
-                              className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
-                            />
-                          </div>
-                        </div>
-
-                        {/* Compact Info & Price on Right */}
-                        <div className="flex min-h-[52px] min-w-0 flex-1 flex-col justify-between px-2 pt-3">
-                          <div className="flex items-start justify-between gap-1">
-                            <h3 title={product.name} className="min-w-0 break-words text-xs font-bold leading-tight text-slate-800">
-                              {product.name}
-                            </h3>
-                            <div className="flex shrink-0 items-center gap-1">
-                              <button
-                                type="button"
-                                onClick={(e) => toggleShortcut(product.id, e)}
-                                title="Fixar/Desafixar dos Meus Atalhos"
-                                aria-label={`${product.isShortcut ? 'Remover dos' : 'Adicionar aos'} favoritos: ${product.name}`}
-                                className={"rounded-full p-0.5 transition " + (product.isShortcut
-                                  ? 'text-red-500 hover:text-red-600'
-                                  : 'text-slate-300 hover:text-red-400')}
-                              >
-                                <Heart
-                                  className="h-4 w-4"
-                                  fill={product.isShortcut ? 'currentColor' : 'none'}
-                                />
-                              </button>
-                            </div>
-                          </div>
-
-                          <div className="mt-1.5 flex items-center justify-between gap-1">
-                            <span className="text-xs font-extrabold text-emerald-700">
-                              {formatBRL(product.price)}
-                            </span>
-                            <span className="w-5 h-5 rounded-md bg-emerald-50 group-hover:bg-[#109E46] text-emerald-700 group-hover:text-white flex items-center justify-center transition-colors shrink-0">
-                              <Plus className="w-3 h-3" />
-                            </span>
-                          </div>
-                        </div>
-                      </cf-card>
+                        ref={(element) => {
+                          if (!element || element.dataset.actionBound === 'true') return;
+                          element.dataset.actionBound = 'true';
+                          element.addEventListener('cf-product-card-action', (event) => productCardActionRef.current(event));
+                        }}
+                        variant="cashier"
+                        product-data={JSON.stringify(product)}
+                        selected={String(Boolean(inCart))}
+                        quantity={String(inCart?.quantity || 0)}
+                        favorite={String(Boolean(product.isShortcut))}
+                        className="group relative"
+                      />
                     );
                   })}
                 </div>

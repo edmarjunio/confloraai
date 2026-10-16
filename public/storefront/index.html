@@ -72,17 +72,23 @@
         </div>
 
         <span id="region"></span>
-        <button id="teamDrawerBtn" class="team-hamburger-btn" type="button" title="Menu da Equipe" data-i18n-title="header.team_menu" aria-label="Menu da Equipe" data-i18n-aria="header.team_menu" aria-haspopup="dialog">
-          <span class="team-hamburger-icon">☰</span>
-          <span class="team-hamburger-label" data-i18n="header.team_menu">Equipe</span>
+        <button id="headerAccountIdentity" class="header-account-identity" type="button" hidden aria-label="Abrir minha conta">
+          <span data-icon="user" aria-hidden="true"></span>
+          <span class="header-account-copy">
+            <strong id="headerAccountName"></strong>
+            <small id="headerAccountRole"></small>
+          </span>
         </button>
-        <button id="accountButton" class="quiet" hidden data-i18n="header.login">Entrar</button>
         <button id="cartButton" aria-haspopup="dialog">
           <span data-icon="cart" aria-hidden="true"></span>
           <span class="cart-label" data-i18n="header.cart">Sacola</span> <span id="cartCount">0</span>
         </button>
         <button id="cashierShortcut" type="button" aria-label="Ir para o Caixa" title="Ir para o Caixa" hidden>
           <span data-icon="register" aria-hidden="true"></span><span>IR PARA O CAIXA</span>
+        </button>
+        <button id="accountButton" class="header-login-button" type="button" hidden data-i18n="header.login">Entrar</button>
+        <button id="adminSettingsButton" class="admin-settings-button" type="button" title="Configurações administrativas" aria-label="Abrir configurações administrativas" hidden>
+          <span data-icon="menu" aria-hidden="true"></span>
         </button>
       </div>
     </header>
@@ -426,7 +432,7 @@
                 <div class="team-nav-icon">⚙️</div>
                 <div class="team-nav-text">
                   <strong data-i18n="team.admin_full">Painel Admin Completo</strong>
-                  <small data-i18n="team.admin_full_desc">Equipe, importação de planilhas e configurações</small>
+                  <small data-i18n="team.admin_full_desc">Equipe, permissões e configurações</small>
                 </div>
                 <span class="team-nav-arrow">➔</span>
               </a>
@@ -443,6 +449,7 @@
     </div>
 
     <script src="/store-assets/render-image.js"></script>
+    <script src="/store-assets/product-card.js"></script>
     <script type="module" src="/store-assets/v5/app.js"></script>
   </body>
 </html>

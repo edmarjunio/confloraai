@@ -1,30 +1,11 @@
 const { normalizeText, toSingular } = require('../shared/string.util');
 const Logger = require('../shared/logger');
 const { normalizeCatalogItem } = require('./normalize-catalog-item');
-const { extractDriveFileId } = require('./product-photo.service');
-
-function buildDriveDirectImageUrl(fileId, rawUrl) {
-  const normalizedFileId = typeof fileId === 'string' ? fileId.trim() : '';
-  if (/^(img_|photo_)/.test(normalizedFileId)) {
-    return `/api/images/${normalizedFileId}`;
-  }
-
-  const normalizedRawUrl = typeof rawUrl === 'string' ? rawUrl.trim() : '';
-  if (normalizedRawUrl.startsWith('/api/images/')) {
-    return normalizedRawUrl;
-  }
-  if (normalizedRawUrl.startsWith('http')) {
-    const isGoogleDriveUrl = /https?:\/\/(?:drive|docs)\.google\.com\//i.test(normalizedRawUrl);
-    const driveFileId = isGoogleDriveUrl ? extractDriveFileId(normalizedRawUrl) : null;
-    if (driveFileId) {
-      return `https://drive.google.com/uc?export=view&id=${driveFileId}`;
-    }
-    return normalizedRawUrl;
-  }
-  if (normalizedFileId.length > 10) {
-    return `https://drive.google.com/uc?export=view&id=${normalizedFileId}`;
-  }
-  return null;
+function isStoredProductImage(value) {
+  return typeof value === 'string' && (
+    value.startsWith('/api/images/') ||
+    /^https:\/\/(?:firebasestorage|storage)\.googleapis\.com\//i.test(value)
+  );
 }
 
 class CatalogRepository {
@@ -50,17 +31,11 @@ class CatalogRepository {
     try {
       if (!this.firestoreRepo) {throw new Error('Repositório Firestore não configurado.');}
       const products = await this.firestoreRepo.getAllProducts();
-      if (Array.isArray(products) && products.length > 0) {
-        this.loadItems(products);
-      } else {
-        const { DEFAULT_CATALOG_ITEMS } = require('./default-catalog');
-        this.loadItems(DEFAULT_CATALOG_ITEMS);
-      }
+      this.loadItems(Array.isArray(products) ? products : []);
     } catch (error) {
-      const { DEFAULT_CATALOG_ITEMS } = require('./default-catalog');
-      this.loadItems(DEFAULT_CATALOG_ITEMS);
+      this.loadItems([]);
       if (error && (error.code === 7 || (error.message && (error.message.includes('PERMISSION_DENIED') || error.message.includes('insufficient permissions'))))) {
-        Logger.info('Firestore com permissões restritas no GCP; operando com catálogo de referência local.');
+        Logger.info('Firestore sem permissão de leitura; catálogo mantido vazio para evitar produtos fictícios.');
         return;
       }
       throw error;
@@ -131,20 +106,21 @@ class CatalogRepository {
         productGroup.descriptionAi = item.descriptionAi;
       }
 
-      // Imagens do Drive, URL ou Firestore
-      const directUrl = buildDriveDirectImageUrl(item.imageFileId, item.imageUrl);
+      // Referências de imagem no Firebase Storage ou compatibilidade de URL legada.
+      const directUrl = [item.imageUrl, item.imageurl, item.imagePathCache]
+        .find(isStoredProductImage);
       if (directUrl && !productGroup.images.includes(directUrl)) {
         productGroup.images.push(directUrl);
       }
       if (Array.isArray(item.images)) {
         for (const img of item.images) {
-          if (img && typeof img === 'string' && !productGroup.images.includes(img.trim())) {
+          if (isStoredProductImage(img) && !productGroup.images.includes(img.trim())) {
             productGroup.images.push(img.trim());
           }
         }
       }
 
-      // Indexação de TAGS_IA da planilha
+      // Indexação de tags cadastradas no Firestore para busca do catálogo e do agente.
       if (item.tagsAi) {
         const rawTags = item.tagsAi.split(/[,;\n]/).map((t) => normalizeText(t)).filter((t) => t.length > 1);
         for (const tag of rawTags) {
@@ -336,5 +312,4 @@ class CatalogRepository {
 
 module.exports = {
   CatalogRepository,
-  buildDriveDirectImageUrl,
 };

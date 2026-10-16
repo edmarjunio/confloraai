@@ -157,7 +157,7 @@ export const en = {
   'team.manager_panel': 'Management Dashboard',
   'team.manager_desc': 'Daily revenue, average ticket, and cash analytics',
   'team.admin_full': 'Full Admin Panel',
-  'team.admin_full_desc': 'Staff management, permissions, and spreadsheet imports',
+  'team.admin_full_desc': 'Staff management, permissions, and settings',
   'team.customer_notice': '🛒 Are you a store customer?',
   'team.back_to_shop': 'Continue Shopping',
 

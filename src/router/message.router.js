@@ -225,7 +225,7 @@ class MessageRouter {
       }
     }
 
-    // 3. Pedido de fotos do Google Drive
+    // 3. Pedido de fotos dos produtos cadastrados
     if (PHOTO_TRIGGER_PATTERNS.some((pattern) => pattern.test(normalized))) {
       const cleaned = cleanConversationalPrefixes(normalized);
       const matchedProduct = this.catalogRepository.findProductByName(cleaned);

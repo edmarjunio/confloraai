@@ -1,7 +1,6 @@
 const profile = require("../../config/stores/conflora.example.json");
 const { rankProductSales } = require("../catalog/product-sales");
 const { productStatus } = require("../catalog/product-status");
-const { resolveHdProductImage } = require("../catalog/image-resolver");
 const {
   ensure,
   digest,
@@ -18,7 +17,8 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
   const unit = item.unit || item.unidade || "UN";
   const photo = (value) =>
     typeof value === "string" &&
-    /^(https:\/\/|\/api\/images\/|\/store-assets\/)/.test(value)
+    (/^https:\/\/(?:firebasestorage|storage)\.googleapis\.com\//.test(value) ||
+      /^\/api\/images\//.test(value))
       ? value
       : "";
   const images = (Array.isArray(item.images) ? item.images : [])
@@ -36,7 +36,7 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
       amountMinor: Math.round(Number(item.price ?? item.valor_num ?? 0) * 100),
       currency: "BRL",
     },
-    imageUrl: registeredImage || resolveHdProductImage(name, category, subcategory),
+    imageUrl: registeredImage,
     imageIsIllustrative: !registeredImage,
     images,
     categories: [digest(category).slice(0, 16)],
@@ -87,10 +87,16 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
       increment: unit === "KG" ? 0.1 : 1,
     },
     salesCount: Number(item.salesCount) || 0,
+    descriptionAi: item.descriptionAi || item.descricao_ia || "",
     cuidados_basicos: item.cuidados_basicos || item.cuidadosBasicos || "",
+    iluminacao: item.iluminacao || item.iluminação || item.illumination || item.lighting || "",
     ambiente_ideal: item.ambiente_ideal || item.ambienteIdeal || "",
     dicas_armazenamento: item.dicas_armazenamento || item.dicasArmazenamento || "",
     durabilidade: item.durabilidade || "",
+    preferences: item.preferences || item.o_que_gosta || item.oQueGosta || item.gosta_de || "",
+    dislikes: item.dislikes || item.o_que_evitar || item.oQueEvitar || item.nao_gosta || "",
+    alimentacao: item.alimentacao || item.alimentação || item.feeding || item.dieta || "",
+    feeding: item.feeding || item.alimentacao || item.alimentação || item.dieta || "",
   };
 }
 function existingConfig(products, saved, settings = { stockControlEnabled: true }) {
@@ -99,6 +105,8 @@ function existingConfig(products, saved, settings = { stockControlEnabled: true 
   );
   if (saved?.config) {
     const result = structuredClone(saved.config);
+    result.branding ||= {};
+    result.branding.logoUrl ||= profile.branding.logoUrl;
     for (const product of activeProducts) {
       if (
         !result.categories.some(

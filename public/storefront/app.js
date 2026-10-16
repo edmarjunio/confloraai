@@ -12,7 +12,6 @@ import { createChat } from "./chat.js";
 import { createAdmin } from "./admin.js";
 import { createExistingApi } from "./existing-api.js";
 import { createProductEntry } from "./product-entry.js";
-import { initTeamDrawer } from "./team-drawer.js";
 import { icon } from "./icons.js";
 import {
   getLanguage,
@@ -40,11 +39,33 @@ const state = {
 };
 
 const cashierShortcut = $("#cashierShortcut");
-function updateCashierShortcut() {
-  const allowedRoles = ["ADMIN", "CAIXA", "VENDEDOR"];
-  cashierShortcut.hidden = !allowedRoles.includes(String(state.user?.role || "").toUpperCase());
+function updateHeaderActions() {
+  const role = String(state.user?.role || "CLIENTE").toUpperCase();
+  const isLoggedIn = Boolean(state.user);
+  const allowedCashierRoles = ["ADMIN", "CAIXA", "VENDEDOR"];
+  const identity = $("#headerAccountIdentity");
+
+  identity.hidden = !isLoggedIn;
+  $("#accountButton").hidden = isLoggedIn;
+  $("#adminSettingsButton").hidden = role !== "ADMIN";
+  cashierShortcut.hidden = !allowedCashierRoles.includes(role);
+
+  if (isLoggedIn) {
+    $("#headerAccountName").textContent =
+      state.user.name || state.user.email || "Usuário";
+    $("#headerAccountRole").textContent = role;
+    identity.setAttribute(
+      "aria-label",
+      `Abrir conta de ${state.user.name || "usuário"} (${role})`,
+    );
+  }
 }
 cashierShortcut.addEventListener("click", () => location.assign("/caixa"));
+$("#adminSettingsButton").addEventListener("click", () => {
+  if (String(state.user?.role || "").toUpperCase() === "ADMIN") {
+    location.assign(existingStore ? "/admin" : `${basePath}/admin`);
+  }
+});
 
 let catalog;
 let cart;
@@ -138,12 +159,23 @@ function applyConfig() {
   $("#region").textContent = [config.identity?.city, config.identity?.region]
     .filter(Boolean)
     .join(" · ");
-  $("#logo").hidden = !config.branding?.logoUrl;
-  $("#logo").src = config.branding?.logoUrl || "/store-assets/placeholder.svg";
-  $("#logo").alt = config.identity?.name || "";
+  const logoUrl = config.branding?.logoUrl || "/store-assets/brands/conflora-logo.png";
+  const logo = $("#logo");
+  const defaultLogoUrl = "/store-assets/brands/conflora-logo.png";
+  logo.hidden = false;
+  logo.onerror = () => {
+    if (logo.src !== new URL(defaultLogoUrl, window.location.href).href) {
+      logo.src = defaultLogoUrl;
+      return;
+    }
+    logo.hidden = true;
+    $("#brand").classList.remove("has-logo");
+  };
+  logo.src = logoUrl;
+  logo.alt = config.identity?.name || "";
   $("#storeIcon").href = config.branding?.iconUrl || "data:,";
   $("#brand").href = basePath || "/";
-  $("#brand").classList.toggle("has-logo", !!config.branding?.logoUrl);
+  $("#brand").classList.add("has-logo");
 
   cart?.configure();
   chat?.configure();
@@ -193,8 +225,7 @@ async function account() {
             state.user = null;
             appStore.getState().setUser(null);
             catalog?.refreshFavorites();
-            updateCashierShortcut();
-            $("#accountButton").textContent = "header.login".tr;
+            updateHeaderActions();
             $("#accountDialog").close();
             navigate(basePath || "/");
           } catch (error) {
@@ -297,9 +328,8 @@ async function account() {
           })
         ).user;
         appStore.getState().setUser(state.user);
-        $("#accountButton").textContent = state.user.name;
         catalog?.refreshFavorites();
-        updateCashierShortcut();
+        updateHeaderActions();
         $("#accountDialog").close();
         route();
       } catch (error) {
@@ -374,6 +404,9 @@ $("#brand").addEventListener("click", (event) => {
 $("#accountButton").addEventListener("click", () =>
   account().catch((error) => notify(error.message)),
 );
+$("#headerAccountIdentity").addEventListener("click", () =>
+  account().catch((error) => notify(error.message)),
+);
 
 // Language Selector listener
 const langSelect = $("#languageSelect");
@@ -411,12 +444,11 @@ try {
     state.user = (await state.api("/me")).user;
     if (state.user) {
       appStore.getState().setUser(state.user);
-      $("#accountButton").textContent = state.user.name;
     }
   } catch {
     // Non-blocking auth check
   }
-  updateCashierShortcut();
+  updateHeaderActions();
 
   catalog = createCatalog(
     state,
@@ -434,8 +466,6 @@ try {
   catalog.render();
   cart.render();
   await route();
-  initTeamDrawer();
-
   if (existingStore) {
     import("/storefront-auth.js").catch(() => {});
   }

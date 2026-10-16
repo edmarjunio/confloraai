@@ -154,61 +154,6 @@ function generateStandardDescription(product = {}) {
 }
 
 /**
- * Detecta se uma string representa um caminho ou link do Google Drive / AppSheet
- */
-function isGoogleDrivePath(value) {
-  if (!value || typeof value !== 'string') {
-    return false;
-  }
-  const str = value.trim();
-
-  // Links do Google Drive
-  if (str.includes('drive.google.com') || str.includes('docs.google.com')) {
-    return true;
-  }
-
-  // IDs explícitos de arquivos Drive
-  if (str.startsWith('drive-file-') || str.startsWith('drive:')) {
-    return true;
-  }
-
-  // Pastas típicas do AppSheet integradas com o Drive
-  if (
-    /^(?:Produtos_Images|Images|Files|appsheet\/data|Imagens|Fotos|conflora_drive)\//i.test(str)
-  ) {
-    return true;
-  }
-
-  // Nomes de arquivo de imagem soltos vindos de planilhas locais/Drive (ex: "311428b7.jpg")
-  if (/^[a-zA-Z0-9_\-./\\]+\.(?:jpe?g|png|webp|gif|bmp)$/i.test(str) && !str.startsWith('http://') && !str.startsWith('https://')) {
-    return true;
-  }
-
-  return false;
-}
-
-/**
- * Extrai o ID do arquivo do Google Drive a partir de uma URL ou string
- */
-function extractDriveFileId(value) {
-  if (!value || typeof value !== 'string') {
-    return null;
-  }
-  const str = value.trim();
-
-  const idMatch =
-    str.match(/\/d\/([a-zA-Z0-9_-]+)/) ||
-    str.match(/[?&]id=([a-zA-Z0-9_-]+)/) ||
-    str.match(/^drive-file-([a-zA-Z0-9_-]+)/);
-
-  if (idMatch && idMatch[1]) {
-    return idMatch[1];
-  }
-
-  return null;
-}
-
-/**
  * Imagem fallback SVG codificada em base64 com identidade visual oficial da Conflora
  */
 function createConfloraSvgFallback(name = 'Conflora', category = 'Viveiro') {
@@ -236,7 +181,6 @@ function createConfloraSvgFallback(name = 'Conflora', category = 'Viveiro') {
 function buildFirestorePhotoDocument(product, {
   base64Data,
   contentType = 'image/jpeg',
-  originalPath = null,
   source = 'WEBSITE_DIRECT',
   index = 0,
 } = {}) {
@@ -270,8 +214,7 @@ function buildFirestorePhotoDocument(product, {
     dataUrl,
     sizeBytes: Buffer.byteLength(finalBase64, 'utf8'),
     source,
-    originalDrivePath: originalPath || null,
-    storageLocation: 'firestore:product_images',
+  storageLocation: 'firebase-storage',
     createdAt: now,
     updatedAt: now,
   };
@@ -362,8 +305,6 @@ module.exports = {
   generateStandardPhotoName,
   generateStandardTags,
   generateStandardDescription,
-  isGoogleDrivePath,
-  extractDriveFileId,
   createConfloraSvgFallback,
   buildFirestorePhotoDocument,
   buildOptimizedFirestorePhotoDocument,

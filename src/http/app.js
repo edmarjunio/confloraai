@@ -1,11 +1,7 @@
 const { randomUUID } = require('node:crypto');
 const { createWebSessions, safeUser } = require('../security/web-session');
-const { readProductWorkbook } = require('../catalog/spreadsheet-import');
-const { buildDriveDirectImageUrl } = require('../catalog/catalog.repository');
 const { rankProductSales } = require('../catalog/product-sales');
 const { getCashierProductDetails } = require('../catalog/cashier-product-details');
-const { getProductImageFallback } = require('../catalog/product-image-fallbacks');
-const { resolveHdProductImage } = require('../catalog/image-resolver');
 let expressModule = null;
 function getExpress() {
   if (!expressModule) {
@@ -20,46 +16,30 @@ function getExpress() {
 
 function getProductImageCandidates(product = {}) {
   const images = (Array.isArray(product.images) ? product.images : [])
-    .map((image) => (typeof image === 'string' ? image : image?.url || image?.imageUrl || ''))
-    .map((image) => buildDriveDirectImageUrl('', image) || image)
+    .map((image) => (typeof image === 'string' ? image : image?.url || image?.imageUrl || image?.src || image?.downloadURL || ''))
     .filter(Boolean);
-  const fileId = product.imageFileId || product.ImageFileId || product.ImageFileID || '';
-  const fileIdImage = buildDriveDirectImageUrl(fileId, '');
-
   return [...new Set([
-    fileIdImage,
     ...images,
     product.imageUrl,
     product.imageurl,
-    product.imageURL,
-    product.ImageURL,
-    product.ImageUrl,
     product.imagePathCache,
-    product.ImagePathCache,
-    product.originalDrivePath,
-    product.driveImagePath,
-    product.CAMINHO_FOTO,
-    product.FOTO,
-    product.IMAGEM,
-    product.DRIVE_PATH,
-  ].map((image) => buildDriveDirectImageUrl('', image) || image).filter(Boolean))];
+  ].filter(isRenderableProductImageUrl))];
 }
 
 function isRenderableProductImageUrl(value) {
-  return typeof value === 'string' && /^(https?:\/\/|\/api\/images\/|\/store-assets\/)/i.test(value.trim());
+  return typeof value === 'string' && (
+    /^https:\/\/(?:firebasestorage|storage)\.googleapis\.com\//i.test(value.trim()) ||
+    /^\/api\/images\//i.test(value.trim()) ||
+    /^\/store-assets\//i.test(value.trim())
+  );
 }
 
 function getCashierProductImageCandidates(product = {}) {
-  const registeredImages = [
-    product.imageUrl,
-    product.imageurl,
-    ...(Array.isArray(product.images) ? product.images : []),
-  ]
-    .map((image) => typeof image === 'string' ? image : image?.url || image?.imageUrl || image?.src || '')
-    .map((image) => buildDriveDirectImageUrl('', image) || image)
-    .filter(isRenderableProductImageUrl);
-
-  return [...new Set(registeredImages)];
+  return [...new Set(
+    getProductImageCandidates(product)
+      .map((image) => String(image || '').trim())
+      .filter(isRenderableProductImageUrl),
+  )];
 }
 
 const config = require('../config/env');
@@ -836,10 +816,10 @@ Sou o assistente oficial de vendas. Como posso ajudar com nossas plantas, mudas 
         div.className = 'product-item';
         const qty = p.stockQuantity ?? p.estoque ?? 0;
         const isLow = qty <= 5;
-        const img = p.imageurl || 'https://images.unsplash.com/photo-1512428813834-c702c7702b78?auto=format&fit=crop&w=100&q=80';
+        const img = p.imageUrl || p.imageurl || '/store-assets/placeholder.svg';
 
         div.innerHTML = \`
-          <img src="\${img}" class="product-thumb" alt="\${p.descricao || p.name}" onerror="this.src='https://placehold.co/44x44/22543d/white?text=🌱'" />
+          <img src="\${img}" class="product-thumb" alt="\${p.descricao || p.name}" onerror="this.src='/store-assets/placeholder.svg'" />
           <div class="product-info">
             <div class="product-title">\${p.descricao || p.name}</div>
             <div class="product-sub">\${p.categoria || ''} • R$ \${Number(p.valor_num || p.price || 0).toFixed(2)}</div>
@@ -996,7 +976,6 @@ function createApp({
   });
   const signatureValidator = new SignatureValidator(config.whatsapp.metaAppSecret);
   const systemStatusService = new SystemStatusService({
-    catalogRepo: messageService ? messageService.catalogRepo : null,
     firestoreRepo: messageService ? messageService.firestoreRepo : null,
     whatsappClient: messageService ? messageService.whatsappClient : null,
   });
@@ -1043,32 +1022,6 @@ function createApp({
     }
     next();
   });
-  app.post('/api/admin/import-xlsx', express.raw({ type: 'application/octet-stream', limit: '10mb' }), async (req, res) => {
-    try {
-      if (!Buffer.isBuffer(req.body)) {return res.status(400).json({ error: 'Envie um arquivo .xlsx.' });}
-      const audit = await readProductWorkbook(req.body);
-      const previous = await messageService.firestoreRepo.getAllProducts();
-      const incoming = new Set(audit.products.map(p => p.id));
-      if (req.query.commit !== 'true') {
-        return res.status(audit.errors.length ? 422 : 200).json({
-          success: audit.errors.length === 0, count: audit.products.length, currentCount: previous.length,
-          removed: previous.filter(p => !incoming.has(p.id)).length,
-          inactive: audit.products.filter(p => p.status === 'INATIVO').length,
-          sheet: audit.sheet, ignoredSheets: audit.ignoredSheets, errors: audit.errors,
-          preview: audit.products.slice(0, 8).map(p => ({ id: p.id, name: p.name, price: p.price, status: p.status })),
-        });
-      }
-      if (!['replace', 'merge'].includes(req.query.mode)) {return res.status(400).json({ error: 'Escolha o modo de importação.' });}
-      if (req.query.mode === 'replace' && req.headers['x-confirm-replace'] !== 'SUBSTITUIR') {return res.status(400).json({ error: 'Confirme a substituição do catálogo.' });}
-      if (audit.errors.length) {return res.status(422).json({ success: false, errors: audit.errors, message: audit.errors.join('\n') });}
-      const result = req.query.mode === 'replace'
-        ? await messageService.firestoreRepo.replaceProducts(audit.records)
-        : await messageService.firestoreRepo.importSpreadsheetData({ type: 'products', records: audit.records });
-      if (messageService.catalogRepo) {messageService.catalogRepo.lastCacheTime = 0;}
-      return res.status(result.success ? 200 : 503).json(result);
-    } catch (error) { return res.status(400).json({ success: false, error: error.message }); }
-  });
-
   // Home / Cardápio Digital Conflora
   app.get(['/', '/products/:productId', '/configuracoes'], (req, res) => {
     if (process.env.STOREFRONT_STORE_SLUG) {
@@ -1368,8 +1321,9 @@ function createApp({
         return {
           ...product,
           images: imageCandidates,
-          imageUrl: imageCandidates[0] || product.imageUrl || product.imageurl || '',
-          imageFallbackUrl: getProductImageFallback(product.category || product.categoria || ''),
+          imageUrl: imageCandidates[0] || '',
+          imageurl: imageCandidates[0] || '',
+          imageFallbackUrl: '/store-assets/placeholder.svg',
         };
       });
       let movements = [];
@@ -1407,44 +1361,21 @@ function createApp({
     }
   });
 
-  // Servir Foto de Produto Armazenada no Cloud Firestore
+  // Mantém compatibilidade de URL redirecionando IDs de imagem para o Firebase Storage.
   app.get('/api/images/:id', async (req, res) => {
     try {
       const { id } = req.params;
       const photo = await messageService.firestoreRepo.getProductPhoto(id);
-      // SVGs saved by older import flows are branded placeholders, not product photos.
-      const photoPrefix = photo?.data ? Buffer.from(photo.data, 'base64').subarray(0, 120).toString('utf8').trim() : '';
-      const isSvgPlaceholder = String(photo?.contentType || '').toLowerCase().includes('svg')
-        || /^(<\?xml[^>]*>\s*)?<svg\b/i.test(photoPrefix);
-      if (photo?.data && !isSvgPlaceholder) {
-        const mimeType = photo.contentType || 'image/jpeg';
-        res.setHeader('Content-Type', mimeType);
-        res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
-        if (photo.fileName) {
-          res.setHeader('Content-Disposition', `inline; filename="${photo.fileName}"`);
-        }
-        const imgBuffer = Buffer.from(photo.data, 'base64');
-        return res.status(200).send(imgBuffer);
-      }
-
       if (photo?.imageUrl && photo.imageUrl !== `/api/images/${id}`) {
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
         return res.redirect(302, photo.imageUrl);
       }
-
-      // Se não encontrou foto diretamente, tenta buscar o produto correspondente
       const cleanProdId = String(photo?.productId || id.replace(/^img_/, ''));
       const prod = await messageService.firestoreRepo.getProductById(cleanProdId);
-      if (prod && prod.imageUrl && prod.imageUrl.startsWith('http') && !prod.imageUrl.includes('/api/images/')) {
+      if (prod && isRenderableProductImageUrl(prod.imageUrl) && prod.imageUrl.startsWith('https://')) {
         return res.redirect(prod.imageUrl);
       }
-
-      // Fallback em SVG da Conflora
-      const fallbackUrl = prod
-        ? resolveHdProductImage(prod.name || prod.descricao || '', prod.category || prod.categoria || '', prod.subcategory || prod.subcategoria || '')
-        : getProductImageFallback('DEFAULT');
-      res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
-      return res.redirect(302, fallbackUrl);
+      return res.redirect(302, '/store-assets/placeholder.svg');
     } catch (err) {
       Logger.error('Erro ao servir imagem do Firestore', err);
       res.status(500).send('Erro ao carregar imagem');
@@ -1855,11 +1786,7 @@ function createApp({
             imageUrl,
             images: imageCandidates,
             imagePathCache: p.imagePathCache || '',
-            imageFallbackUrl: resolveHdProductImage(
-              p.name || p.descricao || p.DESCRIÇÃO || '',
-              p.category || p.categoria || p.CATEGORIA || '',
-              p.subcategory || p.subcategoria || p.SUBCATEGORIA || '',
-            ),
+            imageFallbackUrl: '/store-assets/placeholder.svg',
             descriptionAi: p.descriptionAi || p.descricao_ia || '',
             tagsAi: p.tagsAi || p.tags_ia || '',
             details: getCashierProductDetails(p),
@@ -2117,20 +2044,6 @@ function createApp({
     }
   });
 
-  // Admin: Transferir fotos do Google Drive para o Firebase Storage e salvar os metadados
-  app.post('/api/admin/transfer-drive-photos', async (_req, res) => {
-    try {
-      const result = await messageService.firestoreRepo.transferAllDrivePhotosToFirestore();
-      if (messageService.catalogRepo) {
-        messageService.catalogRepo.lastCacheTime = 0;
-      }
-      res.status(200).json(result);
-    } catch (err) {
-      Logger.error('Erro ao transferir fotos do Google Drive para o Firebase Storage', err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
   // Admin: Excluir Produto
   app.delete('/api/admin/products/:id', async (req, res) => {
     try {
@@ -2143,18 +2056,6 @@ function createApp({
     }
   });
 
-  // Admin: Importar Dados da Planilha
-  app.post('/api/admin/import-data', async (req, res) => {
-    try {
-      const { type, records } = req.body;
-      const result = await messageService.firestoreRepo.importSpreadsheetData({ type, records });
-      res.status(200).json(result);
-    } catch (err) {
-      Logger.error('Erro na importação de dados da planilha', err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
   // System Diagnostics & Connection Status API (Exclusivo Admin)
   app.get('/api/admin/system-status', async (_req, res) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -2163,15 +2064,6 @@ function createApp({
       res.status(200).json(status);
     } catch (err) {
       Logger.error('Erro ao coletar status do sistema', err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.post('/api/admin/test-sheets', async (_req, res) => {
-    try {
-      const result = await systemStatusService.checkGoogleSheetsStatus();
-      res.status(200).json(result);
-    } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });

@@ -30,9 +30,9 @@ class WhatsAppClient {
   }
 
   /**
-   * Envia uma imagem hospedada no Google Drive ou URL pública com legenda formatada.
+   * Envia uma imagem pública, como uma foto hospedada no Firebase Storage, com legenda formatada.
    * @param {string} to - Destinatário
-   * @param {string} imageUrl - Link direto da imagem (Google Drive ou web)
+   * @param {string} imageUrl - URL pública da imagem do produto
    * @param {string} caption - Legenda com o nome do produto e valores
    */
   async sendImageMessage(to, imageUrl, caption = '') {

@@ -4,8 +4,8 @@ Agente de atendimento e vendas da Conflora para WhatsApp, usando:
 
 - WhatsApp Cloud API (Meta)
 - Gemini via Vertex AI
-- Google Sheets como catálogo oficial
-- Firestore para memória, pedidos e deduplicação
+- Firestore para catálogo, estoque, memória, pedidos e deduplicação
+- Firebase Storage para fotos de produtos
 - Cloud Tasks para processamento assíncrono, follow-up e encaminhamento de comprovantes
 - Cloud Run para produção
 
@@ -28,7 +28,8 @@ Cloud Tasks
 /tasks/processar-mensagem
       |
       +--> Firestore: histórico / deduplicação / pedidos
-      +--> Google Sheets: catálogo e preços
+      +--> Firestore: catálogo, categorias e preços
+      +--> Firebase Storage: fotos de produtos
       +--> Gemini: conversa e decisões
       +--> WhatsApp Cloud API: resposta ao cliente
 
@@ -47,7 +48,7 @@ Pedido aguardando confirmação
 ```text
 src/
   ai/                 # Gemini e ferramentas do agente
-  catalog/            # acesso/pesquisa do catálogo no Sheets
+  catalog/            # acesso e pesquisa do catálogo no Firestore
   config/             # configuração centralizada
   database/           # persistência Firestore
   http/               # Express, webhook e rotas
@@ -121,9 +122,6 @@ GCP_PROJECT_ID=conflora-ai
 GCP_REGION=southamerica-east1
 GEMINI_LOCATION=global
 GEMINI_MODEL=gemini-3.7-flash
-SPREADSHEET_ID=1p9gVQkuZkVagi4gyP4Tp8fdItHm6W-wkT2osxTstQVU
-SHEET_NAME=PRODUTOS
-SHEETS_CACHE_SECONDS=60
 ```
 
 Não versionar `.env`.
@@ -139,7 +137,7 @@ gcloud auth application-default login
 gcloud auth application-default set-quota-project conflora-ai
 ```
 
-As Application Default Credentials são usadas localmente pelo Firestore, Google Sheets e Vertex AI.
+As Application Default Credentials são usadas localmente pelo Firestore, Firebase Storage e Vertex AI/Gemini.
 
 # 3. Infraestrutura Google Cloud
 
@@ -156,14 +154,6 @@ O script:
 - cria a fila `conflora-jobs` se necessário;
 - cria a conta `conflora-api-sa@conflora-ai.iam.gserviceaccount.com`;
 - concede apenas os papéis de runtime necessários.
-
-Depois compartilhe a planilha Google Sheets com:
-
-```text
-conflora-api-sa@conflora-ai.iam.gserviceaccount.com
-```
-
-como **Leitor**.
 
 # 4. Testes locais
 
@@ -308,7 +298,6 @@ No Cloud Shell, defina os valores **sem colocá-los no código**:
 ```bash
 export PROJECT_ID="conflora-ai"
 export REGION="southamerica-east1"
-export SPREADSHEET_ID="1p9gVQkuZkVagi4gyP4Tp8fdItHm6W-wkT2osxTstQVU"
 export SERVICE_URL="https://conflora-api-1073181815328.southamerica-east1.run.app"
 export WHATSAPP_GRAPH_VERSION="VERSAO_EXIBIDA_PELA_META"
 export WHATSAPP_PHONE_NUMBER_ID="SEU_PHONE_NUMBER_ID"
@@ -356,7 +345,7 @@ Quero uma palmeira
 Fluxo esperado:
 
 ```text
-Meta -> /webhook -> Cloud Tasks -> Firestore -> Gemini + Sheets -> WhatsApp
+Meta -> /webhook -> Cloud Tasks -> Firestore -> Gemini -> WhatsApp
 ```
 
 Use logs para depuração:
@@ -432,33 +421,6 @@ O login por PIN permanece disponível. O botão Sair também encerra a sessão F
 A página inicial compartilha o mesmo fluxo Google, sem campos manuais.
 
 Referência: https://firebase.google.com/docs/auth/web/google-signin
-
-# Importação direta da LISTA DE PRODUTOS
-
-No painel, entre como ADMIN e abra **Importar Planilhas**. Selecione o arquivo
-`.xlsx` original, escolha **Substituir todos os produtos pelos da planilha**,
-clique em **Conferir planilha**, confira a prévia, marque a confirmação e clique
-em **Importar planilha**. Não é necessário renomear colunas nem converter para JSON.
-
-- A aba usada é `PRODUTOS`. Outras abas são ignoradas.
-- São preservados os IDs e os status. Produtos INATIVOS ficam no cadastro, mas
-  não são exibidos no catálogo do cliente.
-- A substituição deixa somente os produtos do arquivo. Fotos e estoques ausentes
-  no Excel são removidos/zerados. Pedidos, vendas e usuários são preservados.
-- **Adicionar ou atualizar** mantém os demais IDs, fotos e estoques ausentes no arquivo.
-- É possível baixar uma cópia JSON dos produtos atuais antes da operação.
-- Toda a planilha é validada antes de gravar. A gravação usa lotes de 200 e não é
-  uma transação única: uma falha de infraestrutura pode deixar resultado parcial.
-  A tela informa a falha. Conferir e reenviar o mesmo arquivo permite concluir.
-- Faça a substituição fora do horário de movimentação do estoque; alterações
-  concorrentes em produtos durante a importação não são bloqueadas globalmente.
-
-Após atualizar o código, execute `npm ci`. Sessões antigas guardadas apenas no
-navegador não concedem acesso: entre novamente. O login cria cookie HttpOnly com
-validade de 12 horas; em produção, requer HTTPS. As sessões são persistidas em
-`web_sessions` no Firestore e os perfis são conferidos no servidor a cada acesso.
-Os PINs de demonstração existem somente nos testes em memória. Em uma base nova,
-o administrador entra com o Google e cadastra os operadores pela tela de equipe.
 
 ## Testes da interface
 

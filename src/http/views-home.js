@@ -1,12 +1,5 @@
 const { renderFirebaseAuthScript } = require('./firebase-client');
 const { GOOGLE_ANALYTICS_TAG } = require('./analytics');
-const { PRODUCT_IMAGE_FALLBACKS } = require('../catalog/product-image-fallbacks');
-
-function escapeHtmlAttribute(value) {
-  return String(value || '').replace(/[&<>"']/g, (character) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-  })[character]);
-}
 
 const FETCH_SHIM_SCRIPT = `<script>
   (function() {
@@ -25,47 +18,6 @@ const FETCH_SHIM_SCRIPT = `<script>
     } catch (_) {}
   })();
 </script>`;
-
-function renderInitialProductCards(items) {
-  if (!Array.isArray(items)) {
-    return '';
-  }
-  return items.slice(0, 24).map(p => {
-    const price = Number(p.valor_num || p.price || 0);
-    const byKg = (p.unit || p.unidade || '').toUpperCase() === 'KG' || /\bkg\b/i.test(p.descricao || p.name || '');
-    const images = [
-      ...(Array.isArray(p.images) ? p.images : []),
-      p.imageUrl, p.imageurl, p.imageFallbackUrl,
-    ].map((image) => typeof image === 'string' ? image : image?.url || image?.imageUrl || image?.src || image?.downloadURL || '')
-      .filter((image, index, all) => image && all.indexOf(image) === index);
-    const img = images[0] || '/store-assets/placeholder.svg';
-    const rawCategory = p.categoria || p.category || '';
-    const category = String(rawCategory).split('/')[0].trim();
-    return `
-      <cf-card class="cf-card--product prod-card" padding="none" data-prod-id="${p.id}">
-        <div class="card-img-wrapper" onclick="openGallery('${p.id}')">
-          <render-image class="prod-img" src="${escapeHtmlAttribute(img)}" image-candidates="${escapeHtmlAttribute(JSON.stringify(images.slice(1)))}" fallback-src="/store-assets/placeholder.svg" alt="${escapeHtmlAttribute(p.descricao || p.name)}" loading="lazy" decoding="async"></render-image>
-          ${category ? `<span class="category-photo-badge">${escapeHtmlAttribute(category)}</span>` : ''}
-          ${byKg ? '<span class="unit-tag-badge">⚖️ POR KG</span>' : ''}
-        </div>
-        <div class="card-body">
-          <div class="card-title" title="${escapeHtmlAttribute(p.descricao || p.name)}" onclick="openGallery('${p.id}')">${p.descricao || p.name}</div>
-          <div class="card-footer">
-            <div>
-              <div class="card-price">R$ ${price.toFixed(2).replace('.', ',')} <span style="font-size:11px; font-weight:normal; color:#64748b;">${byKg ? '/kg' : ''}</span></div>
-              <span class="card-stock">${p.stockQuantity ?? p.estoque ?? 30} ${byKg ? 'kg' : 'un.'} disp.</span>
-            </div>
-            <div class="card-btn-container" id="cardBtnContainer_${p.id}">
-              <button class="add-btn add-btn-initial" onclick="handleProductAddClick('${p.id}', event)" title="Adicionar à Sacola">
-                ${byKg ? '⚖️ +' : '+'}
-              </button>
-            </div>
-          </div>
-        </div>
-      </cf-card>
-    `;
-  }).join('');
-}
 
 function renderHomeHtml() {
   return `<!DOCTYPE html>
@@ -89,6 +41,7 @@ function renderHomeHtml() {
   <link rel="stylesheet" href="/store-assets/site-header.css">
   <link rel="stylesheet" href="/store-assets/design-system.css">
   <script src="/store-assets/render-image.js"></script>
+  <script src="/store-assets/product-card.js"></script>
 
   <style>
     @font-face {
@@ -269,6 +222,9 @@ function renderHomeHtml() {
       display: flex;
       align-items: center;
       gap: 12px;
+    }
+    .brand-title.has-logo > span {
+      display: none;
     }
     .conflora-logo-badge {
       width: 44px;
@@ -520,16 +476,6 @@ function renderHomeHtml() {
       left: 8px;
       z-index: 2;
       max-width: calc(100% - 56px);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      background: #f97316;
-      color: #fff;
-      font-size: 10px;
-      font-weight: 800;
-      padding: 3px 8px;
-      border-radius: 999px;
-      box-shadow: 0 1px 4px rgb(15 23 42 / 25%);
     }
     .unit-tag-badge {
       position: absolute;
@@ -550,16 +496,6 @@ function renderHomeHtml() {
       flex-direction: column;
       flex: 1;
       justify-content: space-between;
-    }
-    .card-category {
-      font-size: 11px;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      font-weight: 700;
-      margin-bottom: 2px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
     }
     .card-title {
       font-size: 13px;
@@ -1774,7 +1710,7 @@ function renderHomeHtml() {
 
   <div class="app-container">
     <header class="brand-header conflora-site-header">
-      <a href="/" class="brand-title conflora-site-brand" aria-label="Ir para a página inicial">
+      <a href="/" class="brand-title has-logo conflora-site-brand" aria-label="Conflora Horta e Viveiro — página inicial">
         <img src="/store-assets/brands/conflora-logo.png" alt="" />
         <span><strong data-i18n="header.brandTitle">Conflora Horta e Viveiro</strong><small data-i18n="header.brandSubtitle">Horta e Viveiro • Mineiros - GO</small></span>
       </a>
@@ -1818,7 +1754,6 @@ function renderHomeHtml() {
 
         <!-- 2. GRID VIRTUALIZADO / PAGINADO EM LOTES -->
         <div class="products-grid" id="productsGrid">
-          ${renderInitialProductCards()}
         </div>
 
         <!-- 2. SENTINELA INVISÍVEL PARA INTERSECTION OBSERVER -->
@@ -2302,7 +2237,6 @@ function renderHomeHtml() {
 
     const OWNER_WHATSAPP_PHONE = '5564999351616';
 
-    const REAL_HD_FALLBACKS = ${JSON.stringify(PRODUCT_IMAGE_FALLBACKS)};
 
     const VALID_COUPONS = {
       'CONFLORA10': { type: 'PERCENT', value: 10, label: '10% de desconto' },
@@ -2646,8 +2580,7 @@ function renderHomeHtml() {
       if (product.imageUrl || product.imageurl) {
         return product.imageUrl || product.imageurl;
       }
-      const category = product.categoria || product.category || '';
-      return product.imageFallbackUrl || REAL_HD_FALLBACKS[category] || REAL_HD_FALLBACKS['DEFAULT'];
+      return product.imageFallbackUrl || '/store-assets/placeholder.svg';
     }
 
     // =========================================================================
@@ -3002,7 +2935,7 @@ function renderHomeHtml() {
       const grid = document.getElementById('productsGrid');
 
       nextBatch.forEach(p => {
-        const card = createProductCardElement(p);
+        const card = renderCard(p);
         grid.appendChild(card);
       });
 
@@ -3028,11 +2961,7 @@ function renderHomeHtml() {
     }
 
     // 5. CRIAÇÃO DO CARD ESTILO IFOOD COM ADIÇÃO EM 1 CLIQUE
-    function createProductCardElement(p) {
-      const card = document.createElement('cf-card');
-      card.className = 'cf-card--product prod-card';
-      card.setAttribute('padding', 'none');
-      card.dataset.prodId = p.id;
+    function renderCard(p) {
       const price = Number(p.valor_num || p.price || 0);
       const images = [
         ...(Array.isArray(p.images) ? p.images : []),
@@ -3040,31 +2969,26 @@ function renderHomeHtml() {
       ].map((image) => typeof image === 'string' ? image : image?.url || image?.imageUrl || image?.src || image?.downloadURL || '')
         .filter((image, index, all) => image && all.indexOf(image) === index);
       const rawCategory = p.categoria || p.category || '';
-      const category = String(rawCategory).split('/')[0].trim();
-      const stock = p.stockQuantity ?? p.estoque ?? 30;
-      const byKg = isSoldByKg(p);
-
-      card.innerHTML = \`
-        <div class="card-img-wrapper" onclick="openGallery('\${p.id}')">
-          <render-image class="prod-img" src="\${escapeHtml(images[0] || '/store-assets/placeholder.svg')}" image-candidates="\${escapeHtml(JSON.stringify(images.slice(1)))}" fallback-src="\${escapeHtml(p.imageFallbackUrl || REAL_HD_FALLBACKS['DEFAULT'] || '/store-assets/placeholder.svg')}" alt="\${escapeHtml(p.descricao || p.name)}" loading="lazy" decoding="async"></render-image>
-          \${category ? '<span class="category-photo-badge">' + escapeHtml(category) + '</span>' : ''}
-          \${images.length > 1 ? ('<span class="photo-count-badge">📷 ' + images.length + ' fotos</span>') : ''}
-          \${byKg ? '<span class="unit-tag-badge">⚖️ POR KG</span>' : ''}
-        </div>
-        <div class="card-body">
-          <div class="card-title" title="\${escapeHtml(p.descricao || p.name)}" onclick="openGallery('\${p.id}')">\${p.descricao || p.name}</div>
-          <div class="card-footer">
-            <div>
-              <div class="card-price">\${localization.formatCurrency(price)} <span style="font-size:11px; font-weight:normal; color:#64748b;">\${byKg ? '/kg' : ''}</span></div>
-              <span class="card-stock">\${stock} \${byKg ? 'kg' : 'un.'} disp.</span>
-            </div>
-            <div class="card-btn-container" id="cardBtnContainer_\${p.id}">
-              \${renderCardButtonHtml(p.id)}
-            </div>
-          </div>
-        </div>
-      \`;
-
+      const category = String(rawCategory).trim();
+      const card = document.createElement('render-product-card');
+      const cardProduct = {
+        ...p,
+        id: String(p.id || ''),
+        name: p.descricao || p.name || 'Produto',
+        price,
+        category,
+        subcategory: p.subcategoria || p.subcategory || '',
+        images,
+        imageFallbackUrl: p.imageFallbackUrl || '/store-assets/placeholder.svg',
+        unit: isSoldByKg(p) ? 'KG' : (p.unit || p.unidade || 'UN'),
+        cartControlsHtml: renderCardButtonHtml(p.id),
+      };
+      card.setAttribute('variant', 'legacy-catalog');
+      card.dataset.prodId = p.id;
+      card.product = cardProduct;
+      card.addEventListener('cf-product-card-action', (event) => {
+        if (event.detail?.action === 'open') openGallery(String(event.detail.productId));
+      });
       return card;
     }
 
@@ -4160,7 +4084,7 @@ function renderHomeHtml() {
         if (fallbackProducts.length > 0) {
           recommendationsHtml = '<div class="ai-recommendations-grid">' + fallbackProducts.map(function(p) {
             const price = Number(p.valor_num || p.price || 0);
-            const img = (p.images && p.images[0]) || p.imageUrl || p.imageurl || 'https://images.unsplash.com/photo-1512428813834-c702c7702b78?w=800';
+            const img = (p.images && p.images[0]) || p.imageUrl || p.imageurl || '/store-assets/placeholder.svg';
             return '<div class="ai-product-mini-card" data-prod-id="' + p.id + '">' +
               '<img src="' + img + '" alt="' + escapeHtml(p.descricao || p.name) + '" class="ai-mini-card-img" loading="lazy" decoding="async" />' +
               '<div class="ai-mini-card-info">' +
@@ -4459,8 +4383,8 @@ function renderHomeHtml() {
         body.innerHTML = \`
           <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px;">
             <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:12px;">
-              <strong>📊 Google Sheets API:</strong> \${data.googleSheets?.status || 'ONLINE'}<br>
-              <span style="font-size:11px; color:#64748b;">\${data.googleSheets?.itemsActive || 0} produtos ativos</span>
+              <strong>🔥 Cloud Firestore:</strong> \${data.firestore?.status || 'ONLINE'}<br>
+              <span style="font-size:11px; color:#64748b;">\${data.firestore?.message || 'Catálogo e dados operacionais'}</span>
             </div>
             <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:12px;">
               <strong>💬 WhatsApp Webhook:</strong> \${data.whatsapp?.status || 'ONLINE'}<br>

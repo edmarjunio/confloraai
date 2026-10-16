@@ -46,53 +46,14 @@ test('Catálogo: mais vendidos respeita quantidades, desempate e busca', async (
   await expect(page.locator('#productsGrid')).not.toContainText('Zamioculca');
   await expect(page.locator('#productsGrid')).toContainText('Abacaxi');
 });
-test("Admin: login, todas as 11 telas, upload real e confirmação de substituição", async ({
-  page,
-}) => {
+test("Admin: login, navegação pelas telas operacionais sem importadores externos", async ({ page }) => {
   await pinLogin(page, "Edmar Júnio (Izibola)", "1234");
-  for (const tab of [
-    "analytics",
-    "cashier",
-    "diff",
-    "orders",
-    "stock",
-    "price",
-    "products",
-    "team",
-    "notifs",
-    "status",
-    "import",
-  ]) {
+  for (const tab of ["analytics", "cashier", "diff", "orders", "stock", "price", "products", "team", "notifs", "status"]) {
     await page.locator("#tabBtn-" + tab).click();
     await expect(page.locator("#tab-" + tab)).toHaveClass(/active/);
   }
-  await expect(page.locator("#btnSubmitImport")).toBeDisabled();
-  await page
-    .locator("#importFile")
-    .setInputFiles(path.join(__dirname, "../fixtures/lista-de-produtos.xlsx"));
-  await page.locator("#btnValidateImport").click();
-  await expect(page.locator("#importFeedback")).toContainText(
-    "745 produtos válidos",
-  );
-  await expect(page.locator("#importFeedback")).toContainText("3 inativos");
-  await page.locator("#confirmReplace").check();
-  await page.locator("#btnSubmitImport").click();
-  await expect(page.locator("#importFeedback")).toContainText(
-    "745 produtos importados com sucesso",
-  );
-  const products = (await (await page.request.get("/api/inventory")).json())
-    .products;
-  expect(products).toHaveLength(745);
-  expect(products.some((p) => p.id === "test-plant")).toBe(false);
-  await page.screenshot({
-    path: "test-results/importacao-validada.png",
-    fullPage: true,
-  });
-  await page.reload();
-  await expect(page.locator("#loggedUserRole")).toHaveText("ADMIN");
-  await expect(page.locator("#loginModal")).not.toHaveClass(/open/);
-});
-test("Caixa: login, cinco telas permitidas, bloqueios e venda no balcão", async ({
+  await expect(page.locator("#tabBtn-import")).toHaveCount(0);
+});test("Caixa: login, cinco telas permitidas, bloqueios e venda no balcão", async ({
   page,
 }) => {
   await pinLogin(page, "Atendente do Caixa", "0000");
@@ -105,14 +66,10 @@ test("Caixa: login, cinco telas permitidas, bloqueios e venda no balcão", async
     "orders",
     "products",
     "team",
-    "import",
     "status",
   ]) {
     await expect(page.locator("#tabBtn-" + tab)).toBeHidden();
   }
-  expect(
-    (await page.request.post("/api/admin/import-data", { data: {} })).status(),
-  ).toBe(403);
   await page.locator("#tabBtn-cashier").click();
   await page.locator('button[onclick="openManualOrderModal()"]').click();
   await page.locator("#mCustName").fill("Teste Caixa");
@@ -171,7 +128,7 @@ test('Admin: visual do catálogo e navegação responsiva sem overflow da págin
   await expect(page.locator('header')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await page.screenshot({ path: 'test-results/admin-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const tab of ['analytics', 'products', 'cashier', 'orders', 'stock', 'price', 'team', 'import', 'notifs', 'status', 'diff']) {
+  for (const tab of ['analytics', 'products', 'cashier', 'orders', 'stock', 'price', 'team', 'notifs', 'status', 'diff']) {
     await page.locator('#tabBtn-' + tab).click();
     await expect(page.locator('#tab-' + tab)).toBeVisible();
     const width = await page.locator('html').evaluate(node => ({ scroll: node.scrollWidth, viewport: node.clientWidth }));

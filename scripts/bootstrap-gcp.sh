@@ -13,7 +13,6 @@ gcloud services enable \
   run.googleapis.com \
   cloudtasks.googleapis.com \
   firestore.googleapis.com \
-  sheets.googleapis.com \
   aiplatform.googleapis.com \
   secretmanager.googleapis.com \
   --project="${PROJECT_ID}"
@@ -53,4 +52,3 @@ for ROLE in "${ROLES[@]}"; do
 done
 
 echo ">>> Bootstrap concluído com sucesso!"
-echo ">>> Não esqueça de compartilhar a planilha do Google Sheets com: ${SERVICE_ACCOUNT} (como Leitor)."

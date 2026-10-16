@@ -87,7 +87,7 @@ export function BotanicalAiDrawer({
             category: 'Plantas / Mudas',
             formattedPrice: 'R$ 79,00',
             price: 79,
-            imageUrl: 'https://images.unsplash.com/photo-1614594975525-e45190c55d0b?w=800',
+            imageUrl: '/store-assets/placeholder.svg',
           },
           {
             id: 'prod-jabuticaba-sabara',
@@ -95,7 +95,7 @@ export function BotanicalAiDrawer({
             category: 'Frutíferas',
             formattedPrice: 'R$ 180,00',
             price: 180,
-            imageUrl: 'https://images.unsplash.com/photo-1557800636-894a64c1696f?w=800',
+            imageUrl: '/store-assets/placeholder.svg',
           },
         ],
       };

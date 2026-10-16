@@ -1,19 +1,19 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildDriveDirectImageUrl } = require('../src/catalog/catalog.repository');
+const { CatalogRepository } = require('../src/catalog/catalog.repository');
 
-test('product image URLs resolve Firestore photo IDs and embeddable Google Drive links', () => {
-  assert.equal(buildDriveDirectImageUrl('img_product_1', ''), '/api/images/img_product_1');
-  assert.equal(
-    buildDriveDirectImageUrl('img_product_1', 'https://example.com/old-photo.jpg'),
-    '/api/images/img_product_1',
-  );
-  assert.equal(
-    buildDriveDirectImageUrl('', 'https://drive.google.com/file/d/drive-photo-123/view?usp=sharing'),
-    'https://drive.google.com/uc?export=view&id=drive-photo-123',
-  );
-  assert.equal(
-    buildDriveDirectImageUrl('', 'https://images.unsplash.com/photo-123?w=800'),
-    'https://images.unsplash.com/photo-123?w=800',
-  );
+test('catalog accepts Firebase Storage images and ignores external image sources', () => {
+  const repository = new CatalogRepository({
+    mockData: [
+      { id: 'storage', name: 'Imagem Storage', price: 1, imageUrl: 'https://firebasestorage.googleapis.com/v0/b/app/o/product.jpg?alt=media' },
+      { id: 'drive', name: 'Imagem externa', price: 1, imageUrl: 'https://drive.google.com/file/d/123/view' },
+      { id: 'unsplash', name: 'Imagem ilustrativa', price: 1, imageUrl: 'https://images.unsplash.com/photo-123?w=800' },
+    ],
+  });
+
+  assert.deepEqual(repository.items.find((item) => item.id === 'storage').images, [
+    'https://firebasestorage.googleapis.com/v0/b/app/o/product.jpg?alt=media',
+  ]);
+  assert.deepEqual(repository.items.find((item) => item.id === 'drive').images, []);
+  assert.deepEqual(repository.items.find((item) => item.id === 'unsplash').images, []);
 });

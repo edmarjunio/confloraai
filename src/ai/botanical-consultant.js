@@ -142,7 +142,7 @@ class BotanicalConsultantService {
     // Mapeia produtos com formato enxuto para o card do chat
     const formattedRecommendations = recommendedProducts.map((p) => {
       const price = Number(p.valor_num || p.price || 0);
-      const img = (p.images && p.images[0]) || p.imageUrl || p.imageurl || 'https://images.unsplash.com/photo-1512428813834-c702c7702b78?w=800';
+      const img = (p.images && p.images[0]) || p.imageUrl || p.imageurl || '/store-assets/placeholder.svg';
       return {
         id: p.id,
         name: p.descricao || p.name || 'Muda Conflora',

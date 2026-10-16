@@ -1,4 +1,4 @@
-// Ambiente de teste isolado: nunca acessa Firestore, Google ou WhatsApp reais.
+// Ambiente de teste isolado: nunca acessa serviços externos.
 process.env.NODE_ENV = "test";
 const { createApp } = require("../src/http/app");
 const { FirestoreRepository } = require("../src/database/firestore.repository");
@@ -8,23 +8,14 @@ const { seedStores } = require('./storefront-fixture');
 (async () => {
   const storeRepository = new StoreRepository();
   await seedStores(storeRepository);
-  const { readProductWorkbook } = require("../src/catalog/spreadsheet-import");
-  const fs = require("node:fs");
-  await repo.replaceProducts(
-    (
-      await readProductWorkbook(
-        fs.readFileSync(__dirname + "/fixtures/lista-de-produtos.xlsx"),
-      )
-    ).records,
-  );
-  await repo.saveProduct({
-    id: "test-plant",
-    name: "Planta Teste",
-    category: "Plantas",
-    price: 25,
-    stockQuantity: 100,
-    status: "ATIVO",
-  });
+  for (const product of [
+    { id: "test-avocado", name: "Abacate KG", category: "Hortifrutti", price: 8.99 },
+    { id: "test-begonia", name: "Begônia", category: "Plantas / Mudas", price: 25 },
+    { id: "test-zamioculca", name: "Zamioculca", category: "Plantas / Mudas", price: 49 },
+    { id: "test-plant", name: "Planta Teste", category: "Plantas", price: 25 },
+  ]) {
+    await repo.saveProduct({ ...product, stockQuantity: 100, status: "ATIVO" });
+  }
   const app = createApp({
     storeRepository,
     messageService: {

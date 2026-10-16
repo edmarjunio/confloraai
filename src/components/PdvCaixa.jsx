@@ -53,7 +53,7 @@ const INITIAL_PRODUCTS = [
     price: 8.90,
     stock: 'Em Estoque',
     isShortcut: true,
-    image: 'https://images.unsplash.com/photo-1523049673857-eb18f1d7b578?auto=format&fit=crop&w=300&q=80'
+    image: '/store-assets/placeholder.svg'
   },
   {
     id: 2,
@@ -64,7 +64,7 @@ const INITIAL_PRODUCTS = [
     price: 8.50,
     stock: 'Em Estoque',
     isShortcut: true,
-    image: 'https://images.unsplash.com/photo-1550258987-190a2d41a8ba?auto=format&fit=crop&w=300&q=80'
+    image: '/store-assets/placeholder.svg'
   },
   {
     id: 3,
@@ -75,7 +75,7 @@ const INITIAL_PRODUCTS = [
     price: 7.00,
     stock: 'Em Estoque',
     isShortcut: true,
-    image: 'https://images.unsplash.com/photo-1570586437263-ab629fccc818?auto=format&fit=crop&w=300&q=80'
+    image: '/store-assets/placeholder.svg'
   },
   {
     id: 4,
@@ -86,7 +86,7 @@ const INITIAL_PRODUCTS = [
     price: 10.90,
     stock: 'Em Estoque',
     isShortcut: false,
-    image: 'https://images.unsplash.com/photo-1596097635121-14b63b7a0c19?auto=format&fit=crop&w=300&q=80'
+    image: '/store-assets/placeholder.svg'
   },
   {
     id: 5,
@@ -97,7 +97,7 @@ const INITIAL_PRODUCTS = [
     price: 79.00,
     stock: 'Em Estoque',
     isShortcut: true,
-    image: 'https://images.unsplash.com/photo-1614594975525-e45190c55d0b?auto=format&fit=crop&w=300&q=80'
+    image: '/store-assets/placeholder.svg'
   },
   {
     id: 6,
@@ -108,7 +108,7 @@ const INITIAL_PRODUCTS = [
     price: 149.00,
     stock: 'Em Estoque',
     isShortcut: true,
-    image: 'https://images.unsplash.com/photo-1459411552884-841db9b3cc2a?auto=format&fit=crop&w=300&q=80'
+    image: '/store-assets/placeholder.svg'
   },
   {
     id: 7,
@@ -119,7 +119,7 @@ const INITIAL_PRODUCTS = [
     price: 6.00,
     stock: 'Em Estoque',
     isShortcut: true,
-    image: 'https://images.unsplash.com/photo-1622206151226-18ca2c9ab4a1?auto=format&fit=crop&w=300&q=80'
+    image: '/store-assets/placeholder.svg'
   },
   {
     id: 8,
@@ -130,7 +130,7 @@ const INITIAL_PRODUCTS = [
     price: 8.00,
     stock: 'Em Estoque',
     isShortcut: true,
-    image: 'https://images.unsplash.com/photo-1556801712-76c8eb07bbc9?auto=format&fit=crop&w=300&q=80'
+    image: '/store-assets/placeholder.svg'
   },
   {
     id: 9,
@@ -141,7 +141,7 @@ const INITIAL_PRODUCTS = [
     price: 25.00,
     stock: 'Últimas Un.',
     isShortcut: true,
-    image: 'https://images.unsplash.com/photo-1490750967868-88aa4486c946?auto=format&fit=crop&w=300&q=80'
+    image: '/store-assets/placeholder.svg'
   },
   {
     id: 10,
@@ -152,7 +152,7 @@ const INITIAL_PRODUCTS = [
     price: 19.90,
     stock: 'Em Estoque',
     isShortcut: true,
-    image: 'https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?auto=format&fit=crop&w=300&q=80'
+    image: '/store-assets/placeholder.svg'
   },
   {
     id: 11,
@@ -163,7 +163,7 @@ const INITIAL_PRODUCTS = [
     price: 130.00,
     stock: 'Em Estoque',
     isShortcut: false,
-    image: 'https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=300&q=80'
+    image: '/store-assets/placeholder.svg'
   },
   {
     id: 12,
@@ -174,7 +174,7 @@ const INITIAL_PRODUCTS = [
     price: 190.00,
     stock: 'Sob Consulta',
     isShortcut: false,
-    image: 'https://images.unsplash.com/photo-1552728089-57bdde30beb3?auto=format&fit=crop&w=300&q=80'
+    image: '/store-assets/placeholder.svg'
   },
 ];
 
@@ -843,7 +843,7 @@ const renderCashierPanel = () => (
                   alt={item.name}
                   className="w-11 h-11 rounded-xl object-cover border border-slate-200 bg-slate-50 shrink-0"
                   onError={(e) => {
-                    e.target.src = 'https://placehold.co/80x80/e2e8f0/1e293b?text=Item';
+                    e.target.src = '/store-assets/placeholder.svg';
                   }}
                 />
                 <div className="min-w-0 flex-1">
@@ -1223,7 +1223,7 @@ const renderCashierPanel = () => (
                         alt={product.name}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         onError={(e) => {
-                          e.target.src = 'https://placehold.co/100x100/e2e8f0/1e293b?text=Item';
+                          e.target.src = '/store-assets/placeholder.svg';
                         }}
                       />
                     </div>

@@ -1,86 +1,9 @@
 process.env.NODE_ENV = "test";
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const { FirestoreRepository } = require("../src/database/firestore.repository");
-const { readProductWorkbook } = require("../src/catalog/spreadsheet-import");
 const { CatalogRepository } = require("../src/catalog/catalog.repository");
 const { createApp } = require("../src/http/app");
-const fixture = fs.readFileSync(__dirname + "/fixtures/lista-de-produtos.xlsx");
-const row = {
-  "Product ID": "new",
-  DESCRIÇÃO: "Produto novo",
-  CATEGORIA: "Horta",
-  VALOR: "R$ 1.234,56",
-  STATUS: "ATIVO",
-};
-
-test("Excel original: 745 IDs únicos, 742 ativos, preços mistos e aba extra ignorada", async () => {
-  const audit = await readProductWorkbook(fixture);
-  assert.deepEqual(audit.errors, []);
-  assert.equal(audit.products.length, 745);
-  assert.equal(new Set(audit.products.map((p) => p.id)).size, 745);
-  assert.equal(audit.products.filter((p) => p.status === "ATIVO").length, 742);
-  assert.deepEqual(audit.ignoredSheets, ["Página4"]);
-  assert.equal(audit.products.find((p) => p.id === "311428b7").price, 8.99);
-  assert.equal(audit.products.find((p) => p.id === "508ebad7").price, 149);
-});
-
-test("Substituição exata, reenvio idempotente e validação antes de qualquer exclusão", async () => {
-  const repo = new FirestoreRepository({ isInMemory: true });
-  await repo.saveProduct({ id: "old", name: "Antigo", price: 1 });
-  const invalid = await repo.replaceProducts([{ ...row, VALOR: "inválido" }]);
-  assert.equal(invalid.success, false);
-  assert.equal((await repo.getAllProducts())[0].id, "old");
-  const { records } = await readProductWorkbook(fixture);
-  assert.equal((await repo.replaceProducts(records)).removed, 1);
-  assert.equal((await repo.getAllProducts()).length, 745);
-  assert.equal((await repo.replaceProducts(records)).removed, 0);
-  assert.equal((await repo.getAllProducts()).length, 745);
-  const catalog = new CatalogRepository({ firestoreRepo: repo });
-  await repo.replaceProducts([row]);
-  await catalog.refreshCatalog();
-  assert.equal(
-    catalog.items.length,
-    1,
-    "Não mistura os produtos substituídos com catálogo padrão",
-  );
-  assert.equal(catalog.items[0].price, 1234.56);
-});
-
-test("Falha no segundo lote é explícita e não inicia a exclusão de produtos anteriores", async () => {
-  let commits = 0;
-  let deletes = 0;
-  const repo = new FirestoreRepository({
-    isInMemory: true,
-    firestoreInstance: {
-      collection: () => ({
-        doc: (id) => ({ id }),
-        get: async () => ({
-          docs: [{ id: "old", data: () => ({ name: "Antigo" }) }],
-        }),
-      }),
-      batch: () => ({
-        set() {},
-        delete() {
-          deletes++;
-        },
-        async commit() {
-          if (++commits === 2) {
-            throw new Error("offline");
-          }
-        },
-      }),
-    },
-  });
-  const { records } = await readProductWorkbook(fixture);
-  const result = await repo.replaceProducts(records);
-  assert.equal(result.success, false);
-  assert.equal(result.partial, true);
-  assert.equal(result.count, 200);
-  assert.equal(deletes, 0);
-});
-
 async function appContext(t) {
   const repo = new FirestoreRepository({ isInMemory: true });
   const app = createApp({
@@ -226,7 +149,7 @@ test("Cadastro/senha: não toma conta existente; cliente não acessa admin nem d
     password: "senha123",
   });
   const cookie = response.headers.get("set-cookie").split(";")[0];
-  assert.equal((await request("/api/admin/products", row, cookie)).status, 403);
+  assert.equal((await request("/api/admin/products", { id: "forbidden", name: "Forbidden", category: "Horta", price: 1 }, cookie)).status, 403);
   assert.equal(
     (await request("/api/customer/orders?userId=usr-edmar", undefined, cookie))
       .status,
@@ -265,7 +188,6 @@ test("Permissões: visitante, caixa, admin, revogação e lista pública sem cre
   }
   for (const route of [
     "/products",
-    "/import-data",
     "/seed-catalog",
     "/users",
   ]) {
@@ -279,37 +201,6 @@ test("Permissões: visitante, caixa, admin, revogação e lista pública sem cre
     (await request("/api/admin/orders", undefined, cashier)).status,
     403,
   );
-});
-
-test("Upload HTTP: prévia, confirmação obrigatória, substituição e rejeição de arquivo inválido", async (t) => {
-  const { repo, base, login } = await appContext(t);
-  const cookie = await login("usr-edmar", "1234");
-  const upload = (query, confirmation, body = fixture) =>
-    fetch(base + "/api/admin/import-xlsx?" + query, {
-      method: "POST",
-      headers: {
-        cookie,
-        "Content-Type": "application/octet-stream",
-        "X-Confirm-Replace": confirmation,
-      },
-      body,
-    });
-  const preview = await upload("commit=false&mode=replace", "");
-  assert.equal(preview.status, 200);
-  assert.equal((await preview.json()).count, 745);
-  assert.equal((await repo.getAllProducts()).length, 0);
-  assert.equal((await upload("commit=true&mode=replace", "")).status, 400);
-  assert.equal(
-    (await upload("commit=true&mode=replace", "SUBSTITUIR")).status,
-    200,
-  );
-  assert.equal((await repo.getAllProducts()).length, 745);
-  assert.equal(
-    (await upload("commit=true&mode=replace", "SUBSTITUIR", Buffer.from("bad")))
-      .status,
-    400,
-  );
-  assert.equal((await repo.getAllProducts()).length, 745);
 });
 
 test("Google: caixa mantém perfil, inativo bloqueado e token inválido não cria sessão", async (t) => {
@@ -414,26 +305,4 @@ test("Fluxo caixa: venda, solicitação, aprovação/recusa de admin e notifica�
     await request("/api/admin/daily-metrics", undefined, admin)
   ).json();
   assert.equal(metrics.totalRevenue, 20);
-});
-
-test("Mesclar mantém produtos/fotos/estoque, enquanto substituir os remove", async () => {
-  const repo = new FirestoreRepository({ isInMemory: true });
-  await repo.saveProduct({ id: "old", name: "Antigo" });
-  await repo.saveProduct({
-    id: "new",
-    name: "Novo",
-    images: ["https://example.com/photo.jpg"],
-    stockQuantity: 25,
-  });
-  assert.equal(
-    (await repo.importSpreadsheetData({ records: [row] })).success,
-    true,
-  );
-  assert.equal((await repo.getAllProducts()).length, 2);
-  assert.equal(repo.inMemoryProducts.get("new").stockQuantity, 25);
-  assert.equal(repo.inMemoryProducts.get("new").images.length, 1);
-  await repo.replaceProducts([row]);
-  assert.equal((await repo.getAllProducts()).length, 1);
-  assert.equal(repo.inMemoryProducts.get("new").stockQuantity, 0);
-  assert.equal(repo.inMemoryProducts.get("new").images?.length || 0, 0);
 });

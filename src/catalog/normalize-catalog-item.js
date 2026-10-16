@@ -14,10 +14,14 @@ function normalizeCatalogItem(it) {
     : typeof it.estoque === 'number'
     ? it.estoque
     : 0;
-  const images = (Array.isArray(it.images) && it.images.length > 0)
-    ? it.images
-    : (it.imageUrl || it.imageurl ? [it.imageUrl || it.imageurl] : []);
-  const imageUrl = images[0] || it.imageUrl || it.imageurl || 'https://images.unsplash.com/photo-1512428813834-c702c7702b78?w=800';
+  const imageCandidates = [
+    ...(Array.isArray(it.images) ? it.images : []),
+    it.imageUrl,
+    it.imageurl,
+    it.imagePathCache,
+  ];
+  const images = [...new Set(imageCandidates.filter(isStoredProductImage))];
+  const imageUrl = images[0] || '';
 
   return {
     ...it,
@@ -37,14 +41,23 @@ function normalizeCatalogItem(it) {
     estoque: stockQuantity,
     salesCount: it.salesCount || 0,
     status: (it.status || 'ATIVO').toUpperCase(),
-    images: images.length > 0 ? images : [imageUrl],
+    images: images.length > 0 ? images : (imageUrl ? [imageUrl] : []),
     imageUrl,
     imageurl: imageUrl,
+    imageURL: imageUrl,
+    imagePathCache: imageUrl,
     descriptionAi: it.descriptionAi || it.descricao_ia || '',
     descricao_ia: it.descriptionAi || it.descricao_ia || '',
     tagsAi: it.tagsAi || it.tags_ia || '',
     tags_ia: it.tagsAi || it.tags_ia || '',
   };
+}
+
+function isStoredProductImage(value) {
+  return typeof value === 'string' && (
+    /^https:\/\/(?:firebasestorage|storage)\.googleapis\.com\//i.test(value.trim()) ||
+    /^\/api\/images\//i.test(value.trim())
+  );
 }
 
 module.exports = { normalizeCatalogItem };

@@ -174,3 +174,88 @@ test("main mobile product, bottom sheet and conversational cards follow the appr
   }));
   expect(width.scroll).toBeLessThanOrEqual(width.viewport);
 });
+
+test("catalog header exposes login, account role and admin settings according to session", async ({ page }) => {
+  await page.route("**/api/auth/me", (route) =>
+    route.fulfill({ json: { user: null } }),
+  );
+  await page.goto("/");
+  await expect(page.locator("#accountButton")).toBeVisible();
+  await expect(page.locator("#headerAccountIdentity")).toBeHidden();
+  await expect(page.locator("#cashierShortcut")).toBeHidden();
+  await expect(page.locator("#adminSettingsButton")).toBeHidden();
+  await page.locator("#accountButton").click();
+  await expect(page.locator("#accountDialog")).toBeVisible();
+  await page.locator('#accountDialog [data-close]').click();
+
+  await page.unroute("**/api/auth/me");
+  await page.route("**/api/auth/me", (route) =>
+    route.fulfill({
+      json: {
+        user: {
+          id: "catalog-customer",
+          name: "Cliente Demonstração",
+          role: "CLIENTE",
+        },
+      },
+    }),
+  );
+  await page.goto("/");
+  await expect(page.locator("#headerAccountIdentity")).toBeVisible();
+  await expect(page.locator("#headerAccountName")).toHaveText(
+    "Cliente Demonstração",
+  );
+  await expect(page.locator("#headerAccountRole")).toHaveText("CLIENTE");
+  await expect(page.locator("#accountButton")).toBeHidden();
+  await expect(page.locator("#cashierShortcut")).toBeHidden();
+  await expect(page.locator("#adminSettingsButton")).toBeHidden();
+  await page.locator("#headerAccountIdentity").click();
+  await expect(page.locator("#accountDialog")).toBeVisible();
+  await page.locator('#accountDialog [data-close]').click();
+
+  await page.unroute("**/api/auth/me");
+  await page.route("**/api/auth/me", (route) =>
+    route.fulfill({
+      json: {
+        user: {
+          id: "catalog-admin",
+          name: "Admin Conflora",
+          role: "ADMIN",
+        },
+      },
+    }),
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await expect(page.locator("#headerAccountName")).toHaveText("Admin Conflora");
+  await expect(page.locator("#headerAccountRole")).toHaveText("ADMIN");
+  await expect(page.locator("#cashierShortcut")).toBeVisible();
+  await expect(page.locator("#adminSettingsButton")).toBeVisible();
+  await page.locator("#adminSettingsButton").click();
+  await expect(page).toHaveURL(/\/admin$/);
+
+  await page.goto("/");
+  await expect(page.locator("#cashierShortcut")).toBeVisible();
+  await page.locator("#cashierShortcut").click();
+  await expect(page).toHaveURL(/\/caixa$/);
+
+  await page.goto("/");
+  const headerOrder = await page.locator(".header-actions").evaluate((header) => {
+    const ids = [
+      "headerAccountIdentity",
+      "cartButton",
+      "cashierShortcut",
+      "adminSettingsButton",
+    ];
+    return ids.map((id) =>
+      [...header.children].findIndex((child) => child.id === id),
+    );
+  });
+  expect(headerOrder[0]).toBeLessThan(headerOrder[1]);
+  expect(headerOrder[1]).toBeLessThan(headerOrder[2]);
+  expect(headerOrder[2]).toBeLessThan(headerOrder[3]);
+  const viewportWidth = await page
+    .locator("html")
+    .evaluate((html) => ({ scroll: html.scrollWidth, viewport: html.clientWidth }));
+  expect(viewportWidth.scroll).toBeLessThanOrEqual(viewportWidth.viewport);
+});

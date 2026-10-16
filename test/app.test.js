@@ -23,7 +23,7 @@ const mockProducts = [
     subcategory: 'Palmeiras',
     price: 79.0,
     status: 'ATIVO',
-    imageFileId: 'drive-file-rabo-de-raposa-01',
+    imageUrl: 'https://firebasestorage.googleapis.com/v0/b/conflora/o/rabo-01.jpg?alt=media',
     descriptionAi: 'Palmeira ornamental de crescimento rápido para sol pleno.',
     tagsAi: 'rabo de raposa, wodyetia bifurcata, palmeira australiana',
   },
@@ -34,7 +34,7 @@ const mockProducts = [
     subcategory: 'Palmeiras',
     price: 195.0,
     status: 'ATIVO',
-    imageFileId: 'drive-file-rabo-de-raposa-02',
+    imageUrl: 'https://firebasestorage.googleapis.com/v0/b/conflora/o/rabo-02.jpg?alt=media',
     descriptionAi: 'Muda grande 2 metros.',
   },
   {
@@ -138,7 +138,7 @@ function createTestMessageService(aiMock = null, captures = {}) {
   captures.messages = captures.messages || [];
 
   const firestoreRepo = new FirestoreRepository({ isInMemory: true });
-  const catalogRepo = new CatalogRepository({ spreadsheetId: 'mock-id', mockData: mockProducts, firestoreRepo });
+  const catalogRepo = new CatalogRepository({ mockData: mockProducts, firestoreRepo });
   const router = new MessageRouter(catalogRepo);
   const directPriceService = new DirectPriceService();
   const agentService = new AgentService({ aiClient: aiMock });
@@ -371,7 +371,7 @@ test('9. Confirmação do pedido: Envio ao dono e fechamento com cliente', async
   assert.strictEqual(profile.deliveryAddress, 'Rua 12, Quadra 10, Lote 5, Centro');
 });
 
-test('10. Envio de fotos do Google Drive com legenda identificando nome e valores', async () => {
+test('10. Envio de fotos do Firebase Storage com legenda identificando nome e valores', async () => {
   const captures = { images: [] };
   const service = createTestMessageService(null, captures);
 
@@ -407,7 +407,7 @@ test('12. Robustez do parser de moedas (US comma e BR dot)', () => {
   assert.strictEqual(formatCurrency(2900), 'R$ 2.900,00');
 });
 
-test('13. Busca inteligente usando TAGS_IA da planilha (ex: "três marias")', async () => {
+test('13. Busca inteligente usando tags cadastradas no Firestore (ex: "três marias")', async () => {
   const service = createTestMessageService();
   const product = service.catalogRepo.findProductByName('tres marias');
   assert.ok(product);
@@ -446,7 +446,7 @@ test('16. Cardápio Digital & Painel Admin: Renderização e elementos essenciai
   assert.match(homeHtml, /Cardápio Digital/);
   assert.match(homeHtml, /galleryModal/);
   assert.match(homeHtml, /setOrderType/);
-  assert.match(homeHtml, /class="brand-title conflora-site-brand" aria-label="Ir para a página inicial"/);
+  assert.match(homeHtml, /class="brand-title has-logo conflora-site-brand" aria-label="Conflora Horta e Viveiro — página inicial"/);
   assert.match(homeHtml, /site-header\.css/);
 
   const adminHtml = renderAdminHtml();
@@ -456,7 +456,7 @@ test('16. Cardápio Digital & Painel Admin: Renderização e elementos essenciai
   assert.match(adminHtml, /Caixa e vendas/);
   assert.match(adminHtml, /Entrada Rápida de Estoque/);
   assert.match(adminHtml, /Cadastro & Alteração de Produtos/);
-  assert.match(adminHtml, /id="tabBtn-import"/);
+  assert.doesNotMatch(adminHtml, /tabBtn-import|import-data|import-xlsx|AppSheet|Google Sheets/);
 
   const managementHtml = renderAdminGerencialHtml();
   assert.match(managementHtml, /class="conflora-site-brand" aria-label="Conflora — página inicial"/);
@@ -476,7 +476,7 @@ test('16. Cardápio Digital & Painel Admin: Renderização e elementos essenciai
   }
 });
 
-test('17. Firestore Repository: Entrada ágil de estoque, venda balcão e importador de planilha', async () => {
+test('17. Firestore Repository: Entrada ágil de estoque e venda balcão', async () => {
   const repo = new FirestoreRepository({ isInMemory: true });
 
   // 1. O repositório começa vazio; o cenário cadastra seu próprio produto.
@@ -514,38 +514,20 @@ test('17. Firestore Repository: Entrada ágil de estoque, venda balcão e import
   const updatedProd = updatedProds.find(p => p.id === prodId);
   assert.strictEqual(updatedProd.stockQuantity, initialStock + 10 - 2);
 
-  // 4. Importação de lote de planilha
-  const importResult = await repo.importSpreadsheetData({
-    type: 'products',
-    records: [
-      { id: 'teste-imp-1', name: 'Palmeira Imperial Gigante', category: 'Palmeiras', price: 'R$ 350,00', stockQuantity: 5 },
-      { id: 'teste-imp-2', name: 'Muda de Jabuticaba Híbrida', category: 'Frutíferas', price: 120, stockQuantity: 8 },
-    ],
-  });
-  assert.strictEqual(importResult.success, true);
-  assert.strictEqual(importResult.count, 2);
-
-  const afterImport = await repo.getAllProducts();
-  const importedItem = afterImport.find(p => p.id === 'teste-imp-1');
-  assert.ok(importedItem);
-  assert.strictEqual(importedItem.name, 'Palmeira Imperial Gigante');
 });
 
 test('18. Status Dashboard & Google Auth: Diagnóstico de conexões e autenticação Google', async () => {
   const { SystemStatusService } = require('../src/services/system-status.service');
   const repo = new FirestoreRepository({ isInMemory: true });
   const catalog = new CatalogRepository({ firestoreRepo: repo });
-  const statusService = new SystemStatusService({ catalogRepo: catalog, firestoreRepo: repo, whatsappClient: {} });
+  const statusService = new SystemStatusService({ firestoreRepo: repo, whatsappClient: {} });
 
   // 1. Diagnóstico completo
   const status = await statusService.getSystemStatus();
-  assert.ok(status.googleSheets);
   assert.ok(status.whatsapp);
   assert.ok(status.firestore);
-  assert.ok(status.defaultCatalog);
-  assert.strictEqual(status.defaultCatalog.status, 'DISABLED');
-  assert.strictEqual(status.defaultCatalog.totalItems, 0);
-  assert.ok(['ONLINE', 'FALLBACK_OFFICIAL', 'DISABLED'].includes(status.googleSheets.status));
+  assert.equal('googleSheets' in status, false);
+  assert.equal('defaultCatalog' in status, false);
 
   // 2. Teste do webhook
   statusService.recordWebhookHit('5564999351616');
