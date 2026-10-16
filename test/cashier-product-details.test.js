@@ -15,11 +15,18 @@ test('cashier product details expose registered care, habitat and feeding notes'
     { label: 'Descrição', value: 'Planta ornamental para jardim.' },
     { label: 'Cuidados', value: 'Regar quando o substrato estiver seco.' },
     { label: 'Iluminação', value: 'Luz indireta.' },
-    { label: 'Ambiente ideal', value: 'Aquário de água doce.' },
+    { label: 'Onde deixar / moradia', value: 'Aquário de água doce.' },
     { label: 'Alimentação', value: 'Ração específica para a espécie.' },
   ]);
 });
 
-test('cashier product details omit fields that are not registered', () => {
-  assert.deepEqual(getCashierProductDetails({ name: 'Produto sem especificações' }), []);
+test('cashier product details use safe guidance when details are not registered', () => {
+  const details = getCashierProductDetails({ name: 'Produto sem especificações' });
+
+  assert.deepEqual(details.map(({ label }) => label), [
+    'Descrição',
+    'Cuidados',
+    'Onde deixar / moradia',
+  ]);
+  assert.ok(details.every(({ value }) => value.length > 20));
 });

@@ -27,7 +27,7 @@ function productKind(product) {
 
 function buildProductInformation(product = {}) {
   const name = firstText(product.name, product.canonicalName, product.descricao, 'Produto Conflora');
-  const category = firstText(product.category, product.categoria, 'Produtos Conflora');
+  const category = firstText(product.category, product.categoria);
   const subcategory = firstText(product.subcategory, product.subcategoria);
   const fullName = normalizeText(`${name} ${category} ${subcategory}`);
   const kind = productKind(product);
