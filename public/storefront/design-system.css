@@ -125,6 +125,7 @@ cf-card.cf-card--product[interactive]:hover,
   max-width: 100%;
   min-height: 18px;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   overflow: hidden;
   padding: 3px 7px;
@@ -134,9 +135,17 @@ cf-card.cf-card--product[interactive]:hover,
   font-size: 9px;
   font-weight: 800;
   line-height: 1.2;
+  text-align: center;
   white-space: nowrap;
   text-overflow: ellipsis;
   box-shadow: 0 1px 4px rgb(0 0 0 / 16%);
+}
+.cf-product-category-tag-label {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
 }
 .cf-product-info-button {
   display: grid;

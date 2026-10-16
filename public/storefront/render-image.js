@@ -120,9 +120,18 @@
       render() {
         const category = (this.getAttribute("category") || "").trim();
         const icon = this.getAttribute("icon") || categoryIcon(category);
+        const fullCategory = category || "Produto";
         const tag = document.createElement("span");
         tag.className = `cf-product-category-tag ${this.getAttribute("class") || ""}`.trim();
-        tag.textContent = `${icon} ${category || "Produto"}`;
+        tag.title = fullCategory;
+        tag.setAttribute("aria-label", fullCategory);
+        const iconElement = document.createElement("span");
+        iconElement.setAttribute("aria-hidden", "true");
+        iconElement.textContent = icon;
+        const label = document.createElement("span");
+        label.className = "cf-product-category-tag-label";
+        label.textContent = fullCategory;
+        tag.append(iconElement, label);
         this.style.display = "contents";
         this.replaceChildren(tag);
       }
