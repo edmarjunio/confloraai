@@ -52,6 +52,10 @@ export function createExistingApi() {
     if (route === "/favorites") {
       return request("/api/customer/favorites", options);
     }
+    if (route.startsWith("/customer/orders")) {
+      const query = route.slice("/customer/orders".length);
+      return request(`/api/customer/orders${query}`);
+    }
     if (route.startsWith("/auth/")) {
       return request("/api" + route, options);
     }

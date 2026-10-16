@@ -79,6 +79,12 @@ export function createCart(state) {
     persist();
     render();
     notify(`${product.name} ${"catalog.added_to_cart".tr}`);
+    state.trackEvent?.("add_to_cart", {
+      productId: product.id,
+      productName: product.name,
+      category: product.categoryName,
+      value: Number(product.price?.amountMinor || 0) / 100,
+    });
 
     // Sync into Zustand cart store
     cartStore.getState().addItem(product, quantity);
@@ -368,6 +374,7 @@ export function createCart(state) {
       ),
       items: items.map((i) => ({ ...i })),
     };
+    state.trackEvent?.("begin_checkout", { value: subtotal() / 100, resultCount: items.length });
 
     const serialized = JSON.stringify(payload);
     const bytes = new TextEncoder().encode(serialized);
@@ -387,6 +394,21 @@ export function createCart(state) {
     try {
       // Execute order via TanStack Query mutation
       const order = await storeQueries.submitOrder(payload);
+      state.trackEvent?.("purchase", {
+        orderId: order.id,
+        value: Number(order.totalMinor || subtotal()) / 100,
+        resultCount: payload.items.length,
+        items: payload.items.map((item) => {
+          const product = productFor(item);
+          return {
+            productId: item.productId,
+            productName: product?.name || "Produto",
+            category: product?.categoryName || "",
+            value: Number(product?.price?.amountMinor || 0) / 100,
+            quantity: item.quantity,
+          };
+        }),
+      });
 
       items = [];
       persist();

@@ -66,6 +66,7 @@ export function createCatalog(state, add, navigate) {
   const favorites = new Set();
   let favoriteRevision = 0;
   let favoriteSaveQueue = Promise.resolve();
+  let searchEventTimer;
   const loadMoreButton = $("#loadMore");
   const pageObserver = typeof IntersectionObserver === "function"
     ? new IntersectionObserver((entries) => {
@@ -126,6 +127,12 @@ export function createCatalog(state, add, navigate) {
   }
 
   function openProductInformation(product) {
+    state.trackEvent?.("view_item", {
+      productId: product.id,
+      productName: product.name,
+      category: product.categoryName,
+      value: Number(product.price?.amountMinor || 0) / 100,
+    });
     const normalizeName = (value) => normalizeProductText(value);
     const relatedProducts = state.products.filter((candidate) => {
       if (candidate.id === product.id) return true;
@@ -358,6 +365,7 @@ export function createCatalog(state, add, navigate) {
           showingFavorites = !showingFavorites;
           selectedCategory = "";
           pageSize = 24;
+          state.trackEvent?.("category_filter", { category: showingFavorites ? "Curtidos" : "Todas" });
           render();
         },
       }, [icon("heart"), element("span", { text: "Curtidos" })]),
@@ -369,6 +377,7 @@ export function createCatalog(state, add, navigate) {
           showingFavorites = false;
           selectedCategory = "";
           pageSize = 24;
+          state.trackEvent?.("category_filter", { category: "Todas" });
           render();
         },
       }, [element("span", { text: "🌿", "aria-hidden": "true" }), element("span", { text: "Todas" })]),
@@ -381,6 +390,7 @@ export function createCatalog(state, add, navigate) {
             showingFavorites = false;
             selectedCategory = category.id;
             pageSize = 24;
+            state.trackEvent?.("category_filter", { category: category.name });
             render();
           },
         }, [element("span", { text: categoryIcon(category.name), "aria-hidden": "true" }), element("span", { text: category.name })]),
@@ -470,6 +480,12 @@ export function createCatalog(state, add, navigate) {
       );
       return;
     }
+    state.trackEvent?.("view_item", {
+      productId: product.id,
+      productName: product.name,
+      category: product.categoryName,
+      value: Number(product.price?.amountMinor || 0) / 100,
+    });
     document.title = `${product.name} · ${state.config.identity.name}`;
 
     const isInactive =
@@ -716,6 +732,11 @@ export function createCatalog(state, add, navigate) {
     }
     pageSize = 24;
     render();
+    const searchLength = $("#search").value.trim().length;
+    clearTimeout(searchEventTimer);
+    if (searchLength >= 2) {
+      searchEventTimer = setTimeout(() => state.trackEvent?.("search", { searchLength, resultCount: renderedItems.length }), 650);
+    }
   });
   $("#sortOrder").addEventListener("change", () => {
     pageSize = 24;

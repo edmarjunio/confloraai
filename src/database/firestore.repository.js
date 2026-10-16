@@ -89,6 +89,7 @@ class FirestoreRepository {
     this.inMemoryOrderAlterations = new Map();
     this.inMemoryDiscountApprovals = new Map();
     this.inMemoryNotifications = [];
+    this.inMemoryStorefrontEvents = [];
     this._firestoreClientDisabled = false;
 
     const defaultUsers = [
@@ -3198,8 +3199,8 @@ class FirestoreRepository {
 
   // --- Métricas do Dia e Analytics ---
 
-  async getDailySalesMetrics() {
-    const allOrders = await this.getAllOrders(200);
+  async getDailySalesMetrics({ operatorId = '', operatorName = '' } = {}) {
+    const allOrders = await this.getAllOrders(10000);
     const todayStr = new Date()
       .toISOString()
       .slice(0, 10);
@@ -3207,8 +3208,11 @@ class FirestoreRepository {
     const todayOrders = allOrders.filter((o) => {
       const orderDate = (o.createdAt || '')
         .slice(0, 10);
-
-      return orderDate === todayStr;
+      if (orderDate !== todayStr) return false;
+      if (!operatorId && !operatorName) return true;
+      const matchesName = operatorName && String(o.operatorName || '').trim().toLowerCase() === String(operatorName).trim().toLowerCase();
+      if (operatorId) return String(o.operatorId || '') === String(operatorId) || (!o.operatorId && matchesName);
+      return matchesName;
     });
 
     let totalRevenue = 0;
@@ -3265,6 +3269,132 @@ class FirestoreRepository {
       byStatus,
       todayOrders,
     };
+  }
+
+  async recordStorefrontEvent(event) {
+    const eventId = String(event.id || `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`);
+    const record = { ...event, id: eventId, createdAt: new Date().toISOString() };
+    if (this.firestore && !this._firestoreClientDisabled) {
+      try {
+        await this.firestore.collection('storefront_events').doc(eventId).set(record);
+        return { success: true };
+      } catch (error) {
+        Logger.warn('Não foi possível gravar evento do catálogo', { error: error.message });
+        throw error;
+      }
+    }
+    this.inMemoryStorefrontEvents.push(record);
+    if (this.inMemoryStorefrontEvents.length > 10000) this.inMemoryStorefrontEvents.splice(0, this.inMemoryStorefrontEvents.length - 10000);
+    return { success: true };
+  }
+
+  async getStorefrontAnalyticsSummary({ days = 30 } = {}) {
+    const range = Math.max(1, Math.min(90, Number(days) || 30));
+    const since = new Date(Date.now() - range * 86400000).toISOString();
+    let events = this.inMemoryStorefrontEvents.filter((event) => event.createdAt >= since);
+    if (this.firestore && !this._firestoreClientDisabled) {
+      try {
+        const snap = await this.firestore.collection('storefront_events')
+          .where('createdAt', '>=', since)
+          .orderBy('createdAt', 'desc')
+          .limit(10000)
+          .get();
+        events = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      } catch (error) {
+        Logger.warn('Não foi possível consultar eventos do catálogo', { error: error.message });
+      }
+    }
+
+    const counts = Object.create(null);
+    const visitors = new Set();
+    const purchasers = new Set();
+    const products = new Map();
+    const campaigns = new Map();
+    let purchaseRevenue = 0;
+    for (const event of events) {
+      counts[event.eventName] = (counts[event.eventName] || 0) + 1;
+      if (event.eventName === 'page_view' && event.visitorId) visitors.add(event.visitorId);
+      if (event.eventName === 'purchase') {
+        purchaseRevenue += Number(event.value) || 0;
+        if (event.visitorId) purchasers.add(event.visitorId);
+      }
+      const eventProducts = event.eventName === 'purchase' && Array.isArray(event.items)
+        ? event.items
+        : (event.productId ? [{ productId: event.productId, productName: event.productName, quantity: 1 }] : []);
+      for (const item of eventProducts) {
+        if (!item.productId || !['view_item', 'add_to_cart', 'purchase'].includes(event.eventName)) continue;
+        const product = products.get(item.productId) || { productId: item.productId, name: item.productName || 'Produto', views: 0, adds: 0, purchases: 0 };
+        if (event.eventName === 'view_item') product.views++;
+        if (event.eventName === 'add_to_cart') product.adds++;
+        if (event.eventName === 'purchase') product.purchases += Number(item.quantity) || 1;
+        products.set(item.productId, product);
+      }
+      if (event.utmSource || event.utmMedium || event.utmCampaign) {
+        const key = [event.utmSource || 'direto', event.utmMedium || '', event.utmCampaign || ''].join(' / ');
+        const campaign = campaigns.get(key) || { name: key, visits: 0, purchases: 0, revenue: 0 };
+        if (event.eventName === 'page_view') campaign.visits++;
+        if (event.eventName === 'purchase') { campaign.purchases++; campaign.revenue += Number(event.value) || 0; }
+        campaigns.set(key, campaign);
+      }
+    }
+    const visitorCount = visitors.size;
+    return {
+      days: range,
+      since,
+      eventCounts: counts,
+      visitors: visitorCount,
+      productViews: counts.view_item || 0,
+      addToCart: counts.add_to_cart || 0,
+      checkoutStarts: counts.begin_checkout || 0,
+      purchases: counts.purchase || 0,
+      revenue: purchaseRevenue,
+      conversionRate: visitorCount ? (purchasers.size / visitorCount) * 100 : 0,
+      topProducts: [...products.values()].sort((a, b) => b.purchases - a.purchases || b.adds - a.adds || b.views - a.views).slice(0, 10),
+      campaigns: [...campaigns.values()].sort((a, b) => b.revenue - a.revenue || b.visits - a.visits).slice(0, 10),
+      collectedEvents: events.length,
+    };
+  }
+
+  async getCustomerOrderHistoryPage({ customerId = '', customerEmail = '', cursor = '', limit = 12 } = {}) {
+    const cleanId = String(customerId || '').trim();
+    const cleanEmail = String(customerEmail || '').trim().toLowerCase();
+    const pageSize = Math.max(1, Math.min(30, Number(limit) || 12));
+    const matches = (order) => Boolean(
+      (cleanId && String(order.customerId || '') === cleanId) ||
+      (cleanEmail && String(order.customerEmail || '').trim().toLowerCase() === cleanEmail),
+    );
+    if (!cleanId && !cleanEmail) return { orders: [], nextCursor: null, hasMore: false };
+
+    if (this.firestore && !this._firestoreClientDisabled && !FirestoreRepository._globalClientDisabled) {
+      try {
+        const collection = this.firestore.collection('orders');
+        const identityQueries = [
+          ...(cleanId ? [collection.where('customerId', '==', cleanId)] : []),
+          ...(cleanEmail ? [collection.where('customerEmail', '==', cleanEmail)] : []),
+        ];
+        const snapshots = await Promise.all(identityQueries.map((query) => query.get()));
+        const uniqueOrders = new Map();
+        for (const snapshot of snapshots) {
+          for (const doc of snapshot.docs) uniqueOrders.set(doc.id, { id: doc.id, ...doc.data() });
+        }
+        const allCustomerOrders = [...uniqueOrders.values()].filter(matches).sort((a, b) =>
+          String(b.createdAt || '').localeCompare(String(a.createdAt || '')) || String(b.id).localeCompare(String(a.id)),
+        );
+        const cursorIndex = cursor ? allCustomerOrders.findIndex((order) => order.id === cursor) + 1 : 0;
+        const page = allCustomerOrders.slice(cursorIndex, cursorIndex + pageSize);
+        const hasMore = cursorIndex + page.length < allCustomerOrders.length;
+        const orders = page;
+        return { orders, nextCursor: hasMore ? orders[orders.length - 1]?.id || null : null, hasMore };
+      } catch (error) {
+        Logger.warn('Falha ao consultar histórico do cliente no Firestore', { error: error.message });
+      }
+    }
+
+    const orders = (await this.getAllOrders(10000)).filter(matches).sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    const cursorIndex = cursor ? orders.findIndex((order) => order.id === cursor) + 1 : 0;
+    const page = orders.slice(cursorIndex, cursorIndex + pageSize);
+    const hasMore = cursorIndex + page.length < orders.length;
+    return { orders: page, nextCursor: hasMore ? page[page.length - 1]?.id || null : null, hasMore };
   }
 }
 

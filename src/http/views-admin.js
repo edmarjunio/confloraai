@@ -71,75 +71,93 @@ function renderAdminHtml(storeConfig) {
     <!-- NAVEGAÇÃO POR ABAS (FILTRADAS AUTOMATICAMENTE POR CARGO) -->
     <div class="nav-tabs" id="navTabsContainer">
       <!-- Abas ADMIN -->
-      <button class="nav-btn active" id="tabBtn-analytics" onclick="showTab('analytics')">Visão geral</button>
-      <button class="nav-btn" id="tabBtn-cashier" onclick="showTab('cashier')">Caixa e vendas</button>
-      <button class="nav-btn" id="tabBtn-diff" onclick="showTab('diff')">Alterações<span id="diffCountBadge" style="background:#ef4444; color:white; padding:1px 6px; border-radius:10px; font-size:10px; margin-left:4px; display:none;">0</span></button>
-      <button class="nav-btn" id="tabBtn-orders" onclick="showTab('orders')">Pedidos</button>
+      <button class="nav-btn active" id="tabBtn-cashier" onclick="showTab('cashier')">Caixa/Vendas</button>
+      <button class="nav-btn" id="tabBtn-orders" onclick="showTab('orders')">Comandas</button>
       <button class="nav-btn" id="tabBtn-stock" onclick="showTab('stock')">Estoque</button>
-      <button class="nav-btn" id="tabBtn-price" onclick="showTab('price')">Preços</button>
       <button class="nav-btn" id="tabBtn-products" onclick="showTab('products')">Produtos</button>
       <button class="nav-btn" id="tabBtn-team" onclick="showTab('team')">Equipe</button>
-      <button class="nav-btn" id="tabBtn-notifs" onclick="showTab('notifs')">Notificações</button>
-      <button class="nav-btn" id="tabBtn-status" onclick="showTab('status')">Conexões</button>
+      <button class="nav-btn" id="tabBtn-status" onclick="showTab('status')">Teste de conexões/servidor</button>
+      <button class="nav-btn" id="tabBtn-analytics" onclick="showTab('analytics')">Eventos</button>
     </div>
 
     <!-- ABA 1: ANALYTICS & MÉTRICAS (EXCLUSIVA ADMIN) -->
-    <div id="tab-analytics" class="tab-content active">
+    <div id="tab-analytics" class="tab-content">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
         <div>
-          <h2>Desempenho e Tráfego do Catálogo Digital</h2>
-          <p style="font-size:12px; color:#64748b;">Monitoramento em tempo real via <strong>Google tag (gtag.js): G-TX7SZBP9J8</strong></p>
+          <h2>Eventos e desempenho do catálogo</h2>
+          <p style="font-size:12px; color:#64748b;">Eventos reais do catálogo enviados ao Google Analytics 4 e registrados para apoiar decisões de marketing.</p>
         </div>
         <div style="display:flex; gap:8px; align-items:center;">
-          <span style="font-size:12px; background:#dcfce7; color:#166534; font-weight:bold; padding:4px 10px; border-radius:12px;">🟢 GA4 Tag Ativa</span>
-          <button class="action-btn btn-blue" onclick="testGaEvent()">⚡ Testar Evento GA4</button>
+          <label for="analyticsPeriod" style="font-size:12px;">Período</label>
+          <select id="analyticsPeriod" onchange="loadAnalyticsData()"><option value="7">7 dias</option><option value="30" selected>30 dias</option><option value="90">90 dias</option></select>
+          <button class="action-btn btn-blue" onclick="testGaEvent()">Testar evento GA4</button>
+          <button class="action-btn btn-gray" onclick="loadAnalyticsData()">Atualizar</button>
         </div>
       </div>
 
       <div class="stat-grid">
         <div class="stat-card">
-          <div class="stat-label">Visitantes no Cardápio (Hoje)</div>
-          <div class="stat-val" id="analyticsVisitors">142</div>
-          <div style="font-size:11px; color:#166534; margin-top:4px;">↗ +18% em relação a ontem</div>
+          <div class="stat-label">Visitantes únicos</div>
+          <div class="stat-val" id="analyticsVisitors">0</div>
+          <div style="font-size:11px; color:#64748b; margin-top:4px;">Sessões sem dados pessoais</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">Visualizações de Produtos</div>
-          <div class="stat-val" id="analyticsViews">684</div>
-          <div style="font-size:11px; color:#64748b; margin-top:4px;">Fotos de plantas ampliadas</div>
+          <div class="stat-val" id="analyticsViews">0</div>
+          <div style="font-size:11px; color:#64748b; margin-top:4px;">Evento view_item</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Taxa de Conversão da Sacola</div>
-          <div class="stat-val" id="analyticsConversion">12.4%</div>
-          <div style="font-size:11px; color:#166534; margin-top:4px;">Visitantes que finalizam pedido</div>
+          <div class="stat-label">Adições à sacola</div>
+          <div class="stat-val" id="analyticsAdds">0</div>
+          <div style="font-size:11px; color:#64748b; margin-top:4px;">Evento add_to_cart</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Faturamento do Dia</div>
+          <div class="stat-label">Inícios de finalização</div>
+          <div class="stat-val" id="analyticsCheckouts">0</div>
+          <div style="font-size:11px; color:#64748b; margin-top:4px;">Evento begin_checkout</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Pedidos pelo catálogo</div>
+          <div class="stat-val" id="analyticsPurchases">0</div>
+          <div style="font-size:11px; color:#64748b; margin-top:4px;">Evento purchase</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Conversão visita → compra</div>
+          <div class="stat-val" id="analyticsConversion">0%</div>
+          <div style="font-size:11px; color:#64748b; margin-top:4px;">Baseada em visitantes identificados</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Receita atribuída ao catálogo</div>
           <div class="stat-val" id="analyticsRevenue">R$ 0,00</div>
-          <div style="font-size:11px; color:#64748b; margin-top:4px;">Vendas Web + Balcão Caixa</div>
+          <div style="font-size:11px; color:#64748b; margin-top:4px;">Pedidos online no período</div>
         </div>
       </div>
 
       <div class="admin-columns">
         <div style="border:1px solid var(--border); border-radius:8px; padding:16px;">
-          <h3 style="font-size:14px; margin-bottom:12px;">Mudas & Produtos Mais Acessados (GA4 view_item)</h3>
-          <div id="analyticsTopProducts" style="font-size:13px; color:#334155;">Carregando métricas...</div>
+          <h3 style="font-size:14px; margin-bottom:12px;">Produtos mais vistos e vendidos</h3>
+          <div id="analyticsTopProducts" style="font-size:13px; color:#334155;">Carregando eventos…</div>
         </div>
         <div style="border:1px solid var(--border); border-radius:8px; padding:16px;">
-          <h3 style="font-size:14px; margin-bottom:12px;">Divisão de Vendas por Canal & Pagamento</h3>
-          <div id="analyticsPaymentSplit" style="font-size:13px; color:#334155;">Carregando divisões...</div>
+          <h3 style="font-size:14px; margin-bottom:12px;">Campanhas e origem do tráfego</h3>
+          <div id="analyticsCampaigns" style="font-size:13px; color:#334155;">Carregando campanhas…</div>
         </div>
       </div>
+      <p id="analyticsStatus" role="status" style="font-size:12px; color:#64748b; margin-top:12px;"></p>
     </div>
 
     <!-- ABA 2: FRENTE DE CAIXA & VENDAS DO DIA (ADMIN E CAIXA) -->
-    <div id="tab-cashier" class="tab-content">
+    <div id="tab-cashier" class="tab-content active">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
         <div>
-          <h2>Frente de Caixa & Vendas de Hoje</h2>
-          <p style="font-size:12px; color:#64748b;">Conferência de lançamentos do dia e registro de vendas no balcão.</p>
+          <h2>Caixa/Vendas de Hoje</h2>
+          <p style="font-size:12px; color:#64748b;">Caixa e vendas: ADMIN vê o total da loja e pode filtrar por operador. CAIXA e VENDEDOR veem apenas as próprias vendas.</p>
         </div>
-        <div style="display:flex; gap:8px;">
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <label id="adminSalesFilterWrap" hidden style="display:flex; align-items:center; gap:6px; font-size:12px;">Vendedor/caixa <select id="adminSalesFilter"><option value="">Todos</option></select></label>
           <button class="action-btn btn-green" onclick="openManualOrderModal()">➕ Lançar Venda no Balcão</button>
+          <button class="action-btn btn-gray" id="cashierAlterationsButton" onclick="showTab('diff')">Solicitações de correção</button>
+          <button class="action-btn btn-gray" onclick="showTab('price')">Consultar preços</button>
           <button class="action-btn btn-gray" onclick="loadCashierDaily()">🔄 Atualizar</button>
         </div>
       </div>
@@ -198,8 +216,8 @@ function renderAdminHtml(storeConfig) {
     <!-- ABA 4: HISTÓRICO COMPLETO DE PEDIDOS (ADMIN) -->
     <div id="tab-orders" class="tab-content">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
-        <h2>Histórico Geral de Pedidos (Web, WhatsApp e Balcão)</h2>
-        <button class="action-btn btn-gray" onclick="loadAllOrders()">🔄 Atualizar</button>
+        <h2>Comandas e pedidos (Web, WhatsApp e Balcão)</h2>
+        <div style="display:flex; gap:8px; align-items:center;"><button class="action-btn btn-gray" onclick="showTab('diff')">Alterações <span id="diffCountBadge" style="background:#ef4444; color:white; padding:1px 6px; border-radius:10px; font-size:10px; margin-left:4px; display:none;">0</span></button><button class="action-btn btn-gray" onclick="loadAllOrders()">🔄 Atualizar</button></div>
       </div>
       <div id="allOrdersListContainer">Carregando histórico...</div>
     </div>
@@ -242,6 +260,7 @@ function renderAdminHtml(storeConfig) {
     <!-- ABA 7: CADASTRO DE PRODUTOS COM MÚLTIPLAS IMAGENS (ADMIN) -->
     <div id="tab-products" class="tab-content">
       <h2 id="productFormTitle">Cadastro & Alteração de Produtos</h2>
+      <button type="button" class="action-btn btn-gray" onclick="showTab('price')">Abrir consulta e ajuste de preços</button>
       <div class="product-admin-toolbar">
         <button type="button" id="adminQuickEntryButton" class="action-btn btn-blue" onclick="openAdminQuickEntry()">+ Entrada rápida</button>
         <button type="button" id="productInventoryToggle" class="action-btn btn-gray" disabled onclick="toggleProductInventory()">Carregando controle de estoque...</button>
@@ -325,7 +344,6 @@ function renderAdminHtml(storeConfig) {
           <button type="button" class="action-btn btn-gray" data-status="INATIVO" aria-pressed="false" onclick="setProductStatusFilter('INATIVO')">INATIVOS</button>
         </div>
         <p id="productStatusCount" role="status" style="font-size:13px;"></p>
-        <button type="button" class="action-btn btn-green" onclick="showTab('import')">Importar LISTA DE PRODUTOS</button>
       </div>
       <div class="table-scroll" tabindex="0" role="region" aria-label="Tabela de dados"><table>
         <thead>
@@ -564,7 +582,7 @@ function renderAdminHtml(storeConfig) {
     let currentUser = null;
     fetch('/api/auth/me').then(res => res.json()).then(data => {
       currentUser = data.user;
-      if (currentUser && ['ADMIN', 'CAIXA'].includes(currentUser.role)) closeLoginModal();
+      if (currentUser && ['ADMIN', 'CAIXA', 'VENDEDOR'].includes(currentUser.role)) closeLoginModal();
       applyUserRoleUI();
     }).catch(() => { currentUser = null; applyUserRoleUI(); });
 
@@ -572,12 +590,16 @@ function renderAdminHtml(storeConfig) {
     let allOrders = [];
     let currentSelectedUserIdForLogin = '';
 
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
+    }
+
     function applyUserRoleUI() {
       const photo = document.getElementById('loggedUserPhoto');
       photo.hidden = !currentUser?.picture;
       if (currentUser?.picture) photo.src = currentUser.picture;
       else photo.removeAttribute('src');
-      if (!currentUser || !['ADMIN', 'CAIXA'].includes(currentUser.role)) {
+      if (!currentUser || !['ADMIN', 'CAIXA', 'VENDEDOR'].includes(currentUser.role)) {
         document.getElementById('loggedUserName').innerText = 'Não autenticado';
         const roleEl = document.getElementById('loggedUserRole');
         roleEl.innerText = 'BLOQUEADO';
@@ -601,32 +623,26 @@ function renderAdminHtml(storeConfig) {
 
       const isAdmin = currentUser.role === 'ADMIN';
 
-      // Mostra as abas básicas
-      document.getElementById('tabBtn-cashier').style.display = 'block';
-      document.getElementById('tabBtn-diff').style.display = 'block';
-      document.getElementById('tabBtn-stock').style.display = 'block';
-      document.getElementById('tabBtn-price').style.display = 'block';
-      document.getElementById('tabBtn-notifs').style.display = 'block';
-
-      // Visibilidade das abas exclusivas de ADMIN
-      document.getElementById('tabBtn-analytics').style.display = isAdmin ? 'block' : 'none';
-      document.getElementById('tabBtn-orders').style.display = isAdmin ? 'block' : 'none';
-      document.getElementById('tabBtn-products').style.display = isAdmin ? 'block' : 'none';
-      document.getElementById('tabBtn-team').style.display = isAdmin ? 'block' : 'none';
-      const statusBtn = document.getElementById('tabBtn-status');
-      if (statusBtn) statusBtn.style.display = isAdmin ? 'block' : 'none';
-
-      // Se for Caixa e estiver em aba proibida, redireciona para Caixa
-      if (!isAdmin) {
-        showTab('cashier');
-      } else {
-        showTab('analytics');
+      const visibleTabs = isAdmin
+        ? ['cashier', 'orders', 'stock', 'products', 'team', 'status', 'analytics']
+        : ['cashier'];
+      for (const tab of ['cashier', 'orders', 'stock', 'products', 'team', 'status', 'analytics']) {
+        const button = document.getElementById('tabBtn-' + tab);
+        if (button) button.style.display = visibleTabs.includes(tab) ? 'block' : 'none';
       }
+      const salesFilter = document.getElementById('adminSalesFilterWrap');
+      if (salesFilter) salesFilter.hidden = !isAdmin;
+      const alterationsButton = document.getElementById('cashierAlterationsButton');
+      if (alterationsButton) alterationsButton.hidden = currentUser.role === 'VENDEDOR';
+      showTab('cashier');
     }
 
     function showTab(tab) {
-      if (!currentUser || !['ADMIN', 'CAIXA'].includes(currentUser.role)) return;
-      if (currentUser.role !== 'ADMIN' && !['cashier', 'diff', 'stock', 'price', 'notifs'].includes(tab)) return;
+      if (!currentUser || !['ADMIN', 'CAIXA', 'VENDEDOR'].includes(currentUser.role)) return;
+      const isAdmin = currentUser.role === 'ADMIN';
+      const isStaffAuxiliaryTab = ['diff', 'price', 'notifs'].includes(tab);
+      if (!isAdmin && tab !== 'cashier' && !(['CAIXA', 'VENDEDOR'].includes(currentUser.role) && ['diff', 'price', 'notifs'].includes(tab))) return;
+      if (!document.getElementById('tab-' + tab)) return;
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
       document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
       
@@ -634,6 +650,7 @@ function renderAdminHtml(storeConfig) {
       const targetBtn = document.getElementById('tabBtn-' + tab);
       if (targetContent) targetContent.classList.add('active');
       if (targetBtn) targetBtn.classList.add('active');
+      if (isStaffAuxiliaryTab && targetBtn) targetBtn.classList.remove('active');
 
       if (tab === 'analytics') loadAnalyticsData();
       if (tab === 'cashier') loadCashierDaily();
@@ -648,49 +665,65 @@ function renderAdminHtml(storeConfig) {
       if (tab === 'status') loadAdminStatusData();
     }
 
-    // 1. ANALYTICS & MÉTRICAS
+    // 1. EVENTOS DO CATÁLOGO & INDICADORES PARA MARKETING
     async function loadAnalyticsData() {
+      const status = document.getElementById('analyticsStatus');
+      status.textContent = 'Buscando eventos coletados…';
       try {
-        const res = await fetch('/api/admin/daily-metrics');
-        const m = await res.json();
-        document.getElementById('analyticsRevenue').innerText = 'R$ ' + Number(m.totalRevenue || 0).toFixed(2).replace('.', ',');
-        
-        // Split de pagamento
-        const pEl = document.getElementById('analyticsPaymentSplit');
-        pEl.innerHTML = \`
-          <div style="margin-bottom:6px;">• <strong>PIX:</strong> R$ \${Number(m.byPayment?.PIX || 0).toFixed(2)}</div>
-          <div style="margin-bottom:6px;">• <strong>Cartão:</strong> R$ \${Number(m.byPayment?.CARTAO || 0).toFixed(2)}</div>
-          <div style="margin-bottom:6px;">• <strong>Dinheiro:</strong> R$ \${Number(m.byPayment?.DINHEIRO || 0).toFixed(2)}</div>
-          <div style="margin-top:10px; font-weight:bold; color:#15803d;">Ticket Médio: R$ \${Number(m.ticketMedio || 0).toFixed(2)}</div>
-        \`;
-
-        // Produtos mais buscados
+        const days = Number(document.getElementById('analyticsPeriod').value || 30);
+        const res = await fetch('/api/admin/analytics/events?days=' + encodeURIComponent(days));
+        const metrics = await res.json();
+        if (!res.ok) throw new Error(metrics.error || 'Não foi possível carregar os eventos.');
+        const number = value => Number(value || 0).toLocaleString('pt-BR');
+        const currency = value => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        document.getElementById('analyticsVisitors').textContent = number(metrics.visitors);
+        document.getElementById('analyticsViews').textContent = number(metrics.productViews);
+        document.getElementById('analyticsAdds').textContent = number(metrics.addToCart);
+        document.getElementById('analyticsCheckouts').textContent = number(metrics.checkoutStarts);
+        document.getElementById('analyticsPurchases').textContent = number(metrics.purchases);
+        document.getElementById('analyticsConversion').textContent = Number(metrics.conversionRate || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%';
+        document.getElementById('analyticsRevenue').textContent = currency(metrics.revenue);
         const topEl = document.getElementById('analyticsTopProducts');
-        topEl.innerHTML = \`
-          <div style="margin-bottom:6px;">1. 🌴 Palmeira Rabo de Raposa (214 visualizações)</div>
-          <div style="margin-bottom:6px;">2. 🥗 Alface Crespa Hidropônica (188 visualizações)</div>
-          <div style="margin-bottom:6px;">3. 🍋 Jabuticaba Sabará Enxertada (142 visualizações)</div>
-          <div style="margin-bottom:6px;">4. 🪵 Poste de Eucalipto Tratado (96 visualizações)</div>
-        \`;
+        const topProducts = metrics.topProducts || [];
+        topEl.replaceChildren(...(topProducts.length ? topProducts.map((product, index) => {
+          const row = document.createElement('div');
+          row.style.marginBottom = '7px';
+          row.textContent = (index + 1) + '. ' + product.name + ' · ' + number(product.views) + ' visualizações · ' + number(product.adds) + ' adições · ' + number(product.purchases) + ' vendidos';
+          return row;
+        }) : [Object.assign(document.createElement('p'), { textContent: 'Ainda não há eventos de produto neste período.' })]));
+        const campaignEl = document.getElementById('analyticsCampaigns');
+        const campaigns = metrics.campaigns || [];
+        campaignEl.replaceChildren(...(campaigns.length ? campaigns.map(campaign => {
+          const row = document.createElement('div');
+          row.style.marginBottom = '8px';
+          row.textContent = campaign.name + ' · ' + number(campaign.visits) + ' visitas · ' + number(campaign.purchases) + ' pedidos · ' + currency(campaign.revenue);
+          return row;
+        }) : [Object.assign(document.createElement('p'), { textContent: 'Nenhuma campanha UTM registrada ainda. Use utm_source, utm_medium e utm_campaign nos links de anúncios.' })]));
+        status.textContent = number(metrics.collectedEvents) + ' eventos coletados nos últimos ' + days + ' dias. Métricas começam a acumular após a publicação desta versão.';
       } catch (err) {
-        console.error('Erro ao carregar analytics', err);
+        status.textContent = err.message || 'Erro ao carregar eventos do catálogo.';
       }
     }
 
     function testGaEvent() {
       if (typeof gtag === 'function') {
-        gtag('event', 'admin_analytics_test', { event_category: 'admin', user: currentUser.name });
-        alert('⚡ Evento enviado com sucesso para a tag G-TX7SZBP9J8 do Google Analytics!');
+        gtag('event', 'admin_analytics_test', { event_category: 'admin' });
+        alert('Evento de teste colocado na fila do Google Analytics 4. Confira a chegada no DebugView do GA4.');
       } else {
-        alert('Google Analytics tag G-TX7SZBP9J8 ativa em background.');
+        alert('A biblioteca do Google Analytics não foi carregada nesta página.');
       }
     }
 
     // 2. CAIXA & VENDAS DO DIA
     async function loadCashierDaily() {
       try {
-        const res = await fetch('/api/admin/daily-metrics');
+        const isAdmin = currentUser?.role === 'ADMIN';
+        const operator = isAdmin ? document.getElementById('adminSalesFilter')?.value || '' : '';
+        const selectedOperatorName = isAdmin ? document.getElementById('adminSalesFilter')?.selectedOptions?.[0]?.textContent || '' : '';
+        const url = '/api/admin/daily-metrics' + (operator ? '?operator=' + encodeURIComponent(operator) + '&operatorName=' + encodeURIComponent(selectedOperatorName) : '');
+        const res = await fetch(url);
         const m = await res.json();
+        if (!res.ok) throw new Error(m.error || 'Não foi possível carregar as vendas.');
         document.getElementById('cashierTotalToday').innerText = 'R$ ' + Number(m.totalRevenue || 0).toFixed(2).replace('.', ',');
         document.getElementById('cashierPixToday').innerText = 'R$ ' + Number(m.byPayment?.PIX || 0).toFixed(2).replace('.', ',');
         document.getElementById('cashierCardToday').innerText = 'R$ ' + Number(m.byPayment?.CARTAO || 0).toFixed(2).replace('.', ',');
@@ -699,6 +732,19 @@ function renderAdminHtml(storeConfig) {
         const tbody = document.getElementById('todayOrdersBody');
         tbody.innerHTML = '';
         const list = m.todayOrders || [];
+        if (isAdmin && !operator) {
+          const select = document.getElementById('adminSalesFilter');
+          const selectedValue = select.value;
+          const operators = new Map();
+          for (const order of list) {
+            const id = String(order.operatorId || '');
+            const name = String(order.operatorName || '').trim();
+            const value = id || (name ? 'name:' + name : '');
+            if (value && !operators.has(value)) operators.set(value, name || id);
+          }
+          select.replaceChildren(new Option('Todos', ''), ...[...operators].sort((a, b) => a[1].localeCompare(b[1], 'pt-BR')).map(([value, label]) => new Option(label, value)));
+          select.value = selectedValue;
+        }
         if (list.length === 0) {
           tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:#64748b;">Nenhuma venda realizada hoje ainda.</td></tr>';
           return;
@@ -706,14 +752,14 @@ function renderAdminHtml(storeConfig) {
 
         list.forEach(o => {
           const tr = document.createElement('tr');
-          const itemsTxt = (o.items || []).map(i => i.name + ' (' + (i.quantity || 1) + 'x)').join(', ');
+          const itemsTxt = (o.items || []).map(i => escapeHtml(i.name) + ' (' + (i.quantity || 1) + 'x)').join(', ');
           tr.innerHTML = \`
             <td><strong>#\${(o.id || '').slice(-6)}</strong></td>
-            <td>\${o.customerName || 'Cliente Balcão'}</td>
+            <td>\${escapeHtml(o.customerName || 'Cliente Balcão')}</td>
             <td>\${itemsTxt}</td>
-            <td>\${o.paymentMethod || 'PIX'}</td>
+            <td>\${escapeHtml(o.paymentMethod || 'PIX')}</td>
             <td><strong>R$ \${Number(o.total || 0).toFixed(2).replace('.', ',')}</strong></td>
-            <td><span class="badge \${o.status === 'CONFIRMED' ? 'badge-confirmed' : 'badge-pending'}">\${o.status}</span></td>
+            <td><span class="badge \${o.status === 'CONFIRMED' ? 'badge-confirmed' : 'badge-pending'}">\${escapeHtml(o.status)}</span></td>
             <td>
               <button class="action-btn btn-amber" style="padding:4px 8px;" onclick="openAlterationModal('\${o.id}')" title="Corrigir se errou no lançamento">✏️ Corrigir Venda</button>
             </td>
@@ -721,7 +767,7 @@ function renderAdminHtml(storeConfig) {
           tbody.appendChild(tr);
         });
       } catch (err) {
-        console.error('Erro ao carregar caixa', err);
+        document.getElementById('todayOrdersBody').innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:#b91c1c;">' + escapeHtml(err.message || 'Erro ao carregar vendas.') + '</td></tr>';
       }
     }
 
@@ -1079,7 +1125,7 @@ function renderAdminHtml(storeConfig) {
 
     function isStoredProductImageUrl(url) {
       const value = String(url || '').trim().toLowerCase();
-      return value.startsWith('/api/images/') || /^https:\/\/(?:firebasestorage|storage)\.googleapis\.com\//i.test(value);
+      return value.startsWith('/api/images/') || /^https:\\/\\/(?:firebasestorage|storage)\\.googleapis\\.com\\//i.test(value);
     }
 
     function getProductImageUrl(product) {
@@ -1962,10 +2008,9 @@ function renderAdminHtml(storeConfig) {
 
     // INICIALIZAÇÃO
     applyUserRoleUI();
-    loadNotifications();
-    loadPriceProducts();
     const isStockActive = localStorage.getItem('conflora_stock_control_active') !== 'false';
     updateStockControlBadge(isStockActive);
+    document.getElementById('adminSalesFilter')?.addEventListener('change', loadCashierDaily);
   </script>
 ${renderFirebaseAuthScript()}
 </body>

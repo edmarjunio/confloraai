@@ -38,14 +38,80 @@ const state = {
   user: null,
 };
 
+let analyticsVisitorId = "";
+try {
+  analyticsVisitorId = localStorage.getItem("conflora_analytics_visitor") || "";
+  if (!analyticsVisitorId) {
+    analyticsVisitorId = crypto.randomUUID();
+    localStorage.setItem("conflora_analytics_visitor", analyticsVisitorId);
+  }
+} catch {
+  analyticsVisitorId = `visitor_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+const analyticsCampaign = new URLSearchParams(location.search);
+function trackStorefrontEvent(eventName, details = {}) {
+  if (!existingStore) return;
+  const event = {
+    eventName,
+    visitorId: analyticsVisitorId,
+    utmSource: analyticsCampaign.get("utm_source") || "",
+    utmMedium: analyticsCampaign.get("utm_medium") || "",
+    utmCampaign: analyticsCampaign.get("utm_campaign") || "",
+    ...details,
+  };
+  fetch("/api/analytics/events", {
+    method: "POST",
+    credentials: "same-origin",
+    keepalive: true,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(event),
+  }).catch(() => {});
+  if (typeof window.gtag === "function") {
+    const item = Array.isArray(event.items) && event.items.length ? event.items.map((entry) => ({
+      item_id: entry.productId,
+      item_name: entry.productName,
+      item_category: entry.category,
+      price: entry.value,
+      quantity: entry.quantity,
+    })) : event.productId ? [{
+      item_id: event.productId,
+      item_name: event.productName,
+      item_category: event.category,
+      price: event.value,
+    }] : undefined;
+    window.gtag("event", eventName, {
+      currency: "BRL",
+      ...(event.value !== undefined ? { value: event.value } : {}),
+      ...(item ? { items: item } : {}),
+      ...(event.orderId ? { transaction_id: event.orderId } : {}),
+      ...(event.searchLength ? { search_term_length: event.searchLength } : {}),
+      ...(event.resultCount !== undefined ? { results: event.resultCount } : {}),
+    });
+  }
+}
+state.trackEvent = trackStorefrontEvent;
+
+if (existingStore) {
+  window.dataLayer = window.dataLayer || [];
+  window.gtag = window.gtag || function gtag() { window.dataLayer.push(arguments); };
+  window.gtag("js", new Date());
+  window.gtag("config", "G-TX7SZBP9J8");
+  const analyticsScript = document.createElement("script");
+  analyticsScript.async = true;
+  analyticsScript.src = "https://www.googletagmanager.com/gtag/js?id=G-TX7SZBP9J8";
+  document.head.append(analyticsScript);
+}
+
 const cashierShortcut = $("#cashierShortcut");
 function updateHeaderActions() {
   const role = String(state.user?.role || "CLIENTE").toUpperCase();
   const isLoggedIn = Boolean(state.user);
   const allowedCashierRoles = ["ADMIN", "CAIXA", "VENDEDOR"];
   const identity = $("#headerAccountIdentity");
+  const historyButton = $("#historyButton");
 
   identity.hidden = !isLoggedIn;
+  historyButton.hidden = !isLoggedIn || !existingStore;
   $("#accountButton").hidden = isLoggedIn;
   $("#adminSettingsButton").hidden = role !== "ADMIN";
   cashierShortcut.hidden = !allowedCashierRoles.includes(role);
@@ -236,36 +302,13 @@ async function account() {
         },
       }),
     );
-    content.append(element("h3", { text: "cart.title".tr }));
-    try {
-      const orders = await state.api("/orders");
-      for (const order of orders.sort((a, b) =>
-        b.createdAt.localeCompare(a.createdAt),
-      )) {
-        content.append(
-          element("article", { class: "order-card" }, [
-            element("strong", {
-              text: `#${order.id.slice(0, 8)} · ${money(order.totalMinor)}`,
-            }),
-            element("span", {
-              class: "badge",
-              text: order.status,
-            }),
-            ...order.items.map((i) =>
-              element("p", { text: `${i.quantity} × ${i.name}` }),
-            ),
-          ]),
-        );
-      }
-      if (!orders.length) {
-        content.append(
-          element("p", {
-            text: "cart.empty_subtitle".tr,
-          }),
-        );
-      }
-    } catch (error) {
-      content.append(element("p", { text: error.message }));
+    if (existingStore) {
+      content.append(element("button", {
+        type: "button",
+        class: "primary",
+        text: "Histórico de compras",
+        onclick: () => { $("#accountDialog").close(); openPurchaseHistory(); },
+      }));
     }
   } else {
     const form = element("form");
@@ -345,6 +388,104 @@ async function account() {
   openDialog($("#accountDialog"));
 }
 
+const historyDialog = $("#historyDialog");
+const historyList = $("#historyList");
+const historySentinel = $("#historyLoadSentinel");
+const historyState = { buffer: [], cursor: "", hasMore: false, loading: false, failed: false };
+
+function renderPurchase(order) {
+  const createdAt = order.createdAt ? new Date(order.createdAt).toLocaleString("pt-BR") : "Data não informada";
+  const items = Array.isArray(order.items) ? order.items : [];
+  const total = Number.isFinite(order.totalMinor) ? order.totalMinor : Math.round(Number(order.total || 0) * 100);
+  const details = element("details", { class: "history-order-details" }, [
+    element("summary", { text: "Ver detalhes da compra" }),
+    element("div", { class: "history-order-meta" }, [
+      element("span", { text: `Pagamento: ${order.paymentMethod || "Não informado"}` }),
+      element("span", { text: `Entrega: ${order.fulfillment === "delivery" ? "Endereço" : order.fulfillment === "pickup" ? "Retirada" : order.deliveryAddress || "Não informado"}` }),
+      ...(order.serviceArea ? [element("span", { text: `Região: ${order.serviceArea}` })] : []),
+      ...(order.deliveryAddress || order.address ? [element("span", { text: `Endereço: ${order.deliveryAddress || order.address}` })] : []),
+      ...items.map((item) => element("span", { text: `${item.quantity || 1} × ${item.name || "Produto"} · ${money(Math.round(Number(item.price || 0) * Number(item.quantity || 1) * 100))}` })),
+    ]),
+  ]);
+  return element("article", { class: "history-order-card" }, [
+    element("div", { class: "history-order-summary" }, [
+      element("div", {}, [
+        element("strong", { text: `Pedido #${String(order.id || "").slice(-8).toUpperCase()}` }),
+        element("span", { class: "muted", text: createdAt }),
+      ]),
+      element("div", { class: "history-order-total" }, [
+        element("strong", { text: money(total) }),
+        element("span", { class: "badge", text: String(order.status || "RECEBIDO").replaceAll("_", " ") }),
+      ]),
+    ]),
+    element("p", { class: "history-order-items", text: `${items.length} ${items.length === 1 ? "item" : "itens"} · ${items.slice(0, 3).map((item) => item.name || "Produto").join(", ")}${items.length > 3 ? "…" : ""}` }),
+    details,
+  ]);
+}
+
+function renderHistoryBatch() {
+  const nextOrders = historyState.buffer.splice(0, 6);
+  for (const order of nextOrders) historyList.insertBefore(renderPurchase(order), historySentinel);
+  if (!historyList.querySelector(".history-order-card") && !historyState.loading && !historyState.hasMore && !historyState.failed) {
+    historyList.insertBefore(element("p", { class: "muted", text: "Você ainda não tem compras vinculadas a esta conta." }), historySentinel);
+  }
+  if (!historyState.buffer.length && historyState.hasMore && !historyState.loading) loadHistoryPage();
+  if (!historyState.buffer.length && !historyState.hasMore && !historyState.loading) historySentinel.replaceChildren();
+}
+
+async function loadHistoryPage() {
+  if (historyState.loading || !historyState.hasMore && historyState.cursor) return;
+  historyState.loading = true;
+  historySentinel.textContent = "Carregando mais compras…";
+  try {
+    const query = new URLSearchParams({ limit: "12" });
+    if (historyState.cursor) query.set("cursor", historyState.cursor);
+    const page = await state.api(`/customer/orders?${query}`);
+    historyState.buffer.push(...(page.orders || []));
+    historyState.cursor = page.nextCursor || "";
+    historyState.hasMore = Boolean(page.hasMore);
+    historyState.failed = false;
+    if (!historyState.buffer.length && historyState.hasMore) {
+      historyState.loading = false;
+      return loadHistoryPage();
+    }
+    renderHistoryBatch();
+  } catch (error) {
+    historyState.failed = true;
+    historySentinel.replaceChildren(element("button", { type: "button", class: "quiet", text: "Tentar novamente", onclick: () => { historyState.failed = false; loadHistoryPage(); } }));
+    if (!historyList.querySelector(".history-order-card")) historyList.insertBefore(element("p", { class: "error", text: error.message }), historySentinel);
+  } finally {
+    historyState.loading = false;
+    if (!historyState.buffer.length && historyState.hasMore) loadHistoryPage();
+    else if (!historyState.buffer.length) renderHistoryBatch();
+  }
+}
+
+function openPurchaseHistory() {
+  if (!state.user) {
+    notify("Entre na sua conta para consultar seu histórico.");
+    return;
+  }
+  historyState.buffer = [];
+  historyState.cursor = "";
+  historyState.hasMore = false;
+  historyState.loading = false;
+  historyState.failed = false;
+  historyList.replaceChildren(historySentinel);
+  historySentinel.textContent = "Carregando suas compras…";
+  openDialog(historyDialog);
+  if (!historyState.observer && typeof IntersectionObserver === "function") {
+    historyState.observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting) && !historyState.loading && !historyState.failed) {
+        if (historyState.buffer.length) renderHistoryBatch();
+        else if (historyState.hasMore || !historyState.cursor) loadHistoryPage();
+      }
+    }, { root: historyList, rootMargin: "140px" });
+    historyState.observer.observe(historySentinel);
+  }
+  loadHistoryPage();
+}
+
 // Global modal triggers and shortcuts
 for (const button of document.querySelectorAll("[data-close]")) {
   button.addEventListener("click", () => button.closest("dialog").close());
@@ -409,6 +550,9 @@ $("#accountButton").addEventListener("click", () =>
 $("#headerAccountIdentity").addEventListener("click", () =>
   account().catch((error) => notify(error.message)),
 );
+$("#historyButton").addEventListener("click", openPurchaseHistory);
+$("#historyCloseButton").addEventListener("click", () => historyDialog.close());
+historyDialog.addEventListener("click", (event) => { if (event.target === historyDialog) historyDialog.close(); });
 
 // Language Selector listener
 const langSelect = $("#languageSelect");
@@ -467,6 +611,7 @@ try {
   applyConfig();
   catalog.render();
   cart.render();
+  trackStorefrontEvent("page_view", { resultCount: state.products.length });
   await route();
   if (existingStore) {
     import("/storefront-auth.js").catch(() => {});

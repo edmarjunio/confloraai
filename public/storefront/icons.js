@@ -34,6 +34,7 @@ const paths = {
   shield: ["M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z", "m9 12 2 2 4-4"],
   box: ["m12 3 9 5-9 5-9-5 9-5Z", "M3 8v9l9 5 9-5V8", "M12 13v9"],
   clock: ["M12 8v4l3 2", "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"],
+  history: ["M3 12a9 9 0 1 0 2.64-6.36L3 8", "M3 3v5h5", "M12 7v5l3 2"],
 };
 export function icon(name) {
   const node = document.createElementNS("http://www.w3.org/2000/svg", "svg");

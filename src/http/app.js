@@ -1036,7 +1036,7 @@ function createApp({
     if (req.path === '/auth/login' || (req.path === '/auth/users' && req.method === 'GET')) {return next();}
     if (!req.user) {return res.status(401).json({ error: 'Entre na sua conta.' });}
     const cashierRoute = /^(?:\/orders(?:\/manual)?|\/daily-metrics|\/stock\/quick-entry|\/alterations|\/notifications(?:\/[^/]+\/read)?)$/.test(req.path);
-    if (req.user.role !== 'ADMIN' && !(req.user.role === 'CAIXA' && cashierRoute)) {
+    if (req.user.role !== 'ADMIN' && !(['CAIXA', 'VENDEDOR'].includes(req.user.role) && cashierRoute)) {
       return res.status(403).json({ error: 'Acesso não autorizado para este perfil.' });
     }
     next();
@@ -1610,7 +1610,13 @@ function createApp({
   app.get('/api/customer/orders', async (req, res) => {
     try {
       if (!req.user) {return res.status(401).json({ error: 'Entre na sua conta.' });}
-      const data = await messageService.firestoreRepo.getCustomerPurchases(req.user.id);
+      const limit = Math.max(1, Math.min(30, Number.parseInt(req.query.limit, 10) || 12));
+      const data = await messageService.firestoreRepo.getCustomerOrderHistoryPage({
+        customerId: req.user.id,
+        customerEmail: req.user.email,
+        cursor: String(req.query.cursor || '').slice(0, 180),
+        limit,
+      });
       res.status(200).json({ success: true, ...data });
     } catch (err) {
       Logger.error('Erro ao buscar pedidos do cliente', err);
@@ -1645,10 +1651,67 @@ function createApp({
     }
   });
 
-  // Admin: Get all orders (Web & WhatsApp)
-  app.get('/api/admin/orders', async (_req, res) => {
+  // Eventos anônimos e sem dados pessoais para leitura de tráfego e conversão do catálogo.
+  app.post('/api/analytics/events', async (req, res) => {
+    const acceptedEvents = new Set(['page_view', 'view_item', 'add_to_cart', 'begin_checkout', 'purchase', 'search', 'category_filter']);
+    const body = req.body || {};
+    const eventName = String(body.eventName || '').trim();
+    const visitorId = String(body.visitorId || '').trim();
+    if (!acceptedEvents.has(eventName) || !/^[a-zA-Z0-9_-]{8,80}$/.test(visitorId)) {
+      return res.status(400).json({ success: false, error: 'Evento de catálogo inválido.' });
+    }
+    const shortText = (value, max) => String(value || '').trim().slice(0, max);
+    const numericValue = Number(body.value);
     try {
-      const orders = await messageService.firestoreRepo.getAllOrders(50);
+      await messageService.firestoreRepo.recordStorefrontEvent({
+        eventName,
+        visitorId,
+        productId: shortText(body.productId, 160),
+        productName: shortText(body.productName, 120),
+        category: shortText(body.category, 80),
+        orderId: shortText(body.orderId, 100),
+        items: Array.isArray(body.items) ? body.items.slice(0, 100).map((item) => ({
+          productId: shortText(item?.productId, 160),
+          productName: shortText(item?.productName, 120),
+          category: shortText(item?.category, 80),
+          value: Number.isFinite(Number(item?.value)) ? Math.max(0, Math.min(Number(item.value), 1000000)) : 0,
+          quantity: Number.isFinite(Number(item?.quantity)) ? Math.max(0, Math.min(Number(item.quantity), 10000)) : 0,
+        })) : [],
+        value: Number.isFinite(numericValue) && numericValue >= 0 ? Math.min(numericValue, 1000000) : 0,
+        searchLength: Math.max(0, Math.min(100, Number.parseInt(body.searchLength, 10) || 0)),
+        resultCount: Math.max(0, Math.min(100000, Number.parseInt(body.resultCount, 10) || 0)),
+        utmSource: shortText(body.utmSource, 100),
+        utmMedium: shortText(body.utmMedium, 100),
+        utmCampaign: shortText(body.utmCampaign, 120),
+      });
+      res.status(202).json({ success: true });
+    } catch (error) {
+      Logger.error('Falha ao armazenar evento do catálogo', error);
+      res.status(503).json({ success: false, error: 'Não foi possível registrar o evento.' });
+    }
+  });
+
+  app.get('/api/admin/analytics/events', async (_req, res) => {
+    try {
+      const summary = await messageService.firestoreRepo.getStorefrontAnalyticsSummary({ days: _req.query.days });
+      res.status(200).json(summary);
+    } catch (error) {
+      Logger.error('Erro ao consultar eventos do catálogo', error);
+      res.status(500).json({ error: 'Não foi possível consultar os eventos do catálogo.' });
+    }
+  });
+
+  // Admin: Get all orders (Web & WhatsApp)
+  app.get('/api/admin/orders', async (req, res) => {
+    try {
+      let orders = await messageService.firestoreRepo.getAllOrders(50);
+      if (req.user?.role !== 'ADMIN') {
+        const operatorName = String(req.user?.name || '').trim().toLowerCase();
+        orders = orders.filter((order) =>
+          String(order.operatorId || '') === String(req.user?.id || '') ||
+          (!order.operatorId && operatorName && String(order.operatorName || '').trim().toLowerCase() === operatorName),
+        );
+      }
       res.status(200).json(orders);
     } catch (err) {
       Logger.error('Erro ao buscar pedidos no admin', err);
@@ -2446,9 +2509,16 @@ function createApp({
   });
 
   // Métricas do Dia e Resumo do Caixa
-  app.get('/api/admin/daily-metrics', async (_req, res) => {
+  app.get('/api/admin/daily-metrics', async (req, res) => {
     try {
-      const metrics = await messageService.firestoreRepo.getDailySalesMetrics();
+      const isAdmin = req.user?.role === 'ADMIN';
+      const selectedOperator = isAdmin ? String(req.query.operator || '') : '';
+      const metrics = await messageService.firestoreRepo.getDailySalesMetrics({
+        operatorId: isAdmin ? (selectedOperator.startsWith('name:') ? '' : selectedOperator) : req.user?.id,
+        operatorName: isAdmin
+          ? (selectedOperator.startsWith('name:') ? selectedOperator.slice(5) : String(req.query.operatorName || ''))
+          : req.user?.name,
+      });
       res.status(200).json(metrics);
     } catch (err) {
       Logger.error('Erro ao buscar métricas diárias', err);
