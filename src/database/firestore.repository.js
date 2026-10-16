@@ -14,9 +14,7 @@ const {
   validateOrderConfirmation,
   validateStockQuantity,
   remainingStock,
-  availableStock,
 } = require('../orders/order-integrity');
-const { PIX_PAYMENT_TTL_SECONDS, pixExpirationDate } = require('../orders/pix-expiration');
 const {
   generateStandardTags,
   generateStandardDescription,
@@ -100,7 +98,6 @@ class FirestoreRepository {
     this.inMemoryNotifications = [];
     this.inMemoryStorefrontEvents = [];
     this._firestoreClientDisabled = false;
-    this.directOrderQueue = Promise.resolve();
 
     const defaultUsers = [
       {
@@ -476,7 +473,6 @@ class FirestoreRepository {
 
     const previousProduct = await this.getProductById(product.id);
     const dataWithTs = { ...product, updatedAt: new Date().toISOString() };
-    delete dataWithTs.reservedQuantity;
     if (product.unit !== undefined || product.unidade !== undefined || product.saleUnit?.code !== undefined) {
       const unit = String(product.saleUnit?.code || product.unit || product.unidade || 'UN').trim().toUpperCase();
       if (!['UN', 'KG'].includes(unit)) { throw new Error('A unidade de venda deve ser UN ou KG.'); }
@@ -654,22 +650,11 @@ class FirestoreRepository {
 
     if (this.firestore && !this._firestoreClientDisabled) {
       try {
-        const productRef = this.firestore.collection('products').doc(String(product.id));
-        if (product.stockQuantity !== undefined || product.estoque !== undefined) {
-          await this.firestore.runTransaction(async (transaction) => {
-            const currentSnapshot = await transaction.get(productRef);
-            const reserved = Number(currentSnapshot.data()?.reservedQuantity || 0);
-            const nextStock = Number(dataWithTs.stockQuantity ?? dataWithTs.estoque);
-            if (nextStock + 0.000001 < reserved) {
-              throw new Error(`O estoque não pode ficar abaixo das ${reserved} unidades reservadas por pedidos em aberto.`);
-            }
-            transaction.set(productRef, dataWithTs, { merge: true });
-          });
-        } else {
-          await productRef.set(dataWithTs, { merge: true });
-        }
+        await this.firestore
+          .collection('products')
+          .doc(String(product.id))
+          .set(dataWithTs, { merge: true });
       } catch (err) {
-        if (/unidades reservadas/.test(err.message || '')) throw err;
         if (
           err.code === 7 ||
           err.message?.includes('PERMISSION_DENIED')
@@ -680,18 +665,6 @@ class FirestoreRepository {
             error: err.message,
           });
         }
-      }
-    }
-
-    const currentProduct = this.inMemoryProducts.get(String(product.id));
-    const requestedStock = product.stockQuantity ?? product.estoque;
-    if (requestedStock !== undefined && currentProduct) {
-      const reserved = Number(currentProduct.reservedQuantity || 0);
-      if (Number(requestedStock) + 0.000001 < reserved) {
-        throw new Error(`O estoque não pode ficar abaixo das ${reserved} unidades reservadas por pedidos em aberto.`);
-      }
-      if (Number(currentProduct.reservedQuantity || 0) > Number(dataWithTs.reservedQuantity || 0)) {
-        dataWithTs.reservedQuantity = Number(currentProduct.reservedQuantity || 0);
       }
     }
 
@@ -764,7 +737,6 @@ class FirestoreRepository {
     mercadoPagoPreferenceId = '',
     paymentCheckoutUrl = '',
     requirePersistence = false,
-    receivedBy = null,
     discountAmount = 0,
     discountPercent = 0,
     orderType = 'PICKUP',
@@ -806,7 +778,6 @@ class FirestoreRepository {
       paymentCheckoutUrl,
       source: 'CAIXA_MANUAL',
       status: status || 'CONFIRMED',
-      ...(receivedBy ? { receivedBy } : {}),
     };
     if (orderId) {
       orderData.id = String(orderId);
@@ -815,7 +786,7 @@ class FirestoreRepository {
     const shouldConfirm = PAID_ORDER_STATUSES.has(orderData.status);
     if (shouldConfirm) {orderData.status = 'PENDING';}
     const order = await this.createDirectOrder(orderData, { requirePersistence });
-    return shouldConfirm ? this.confirmOrderPayment(order.id, { receivedBy }) : order;
+    return shouldConfirm ? this.confirmOrderPayment(order.id) : order;
   }
 
   async getOrderById(orderId) {
@@ -908,10 +879,6 @@ class FirestoreRepository {
     changeGiven = 0,
     paymentTransactionId = '',
     paymentAmount = null,
-    paymentMethod = '',
-    receivedBy = null,
-    pixTxid = '',
-    manualProofNote = '',
   } = {}) {
     const order = await this.getOrderById(orderId);
     if (!order) {
@@ -922,13 +889,9 @@ class FirestoreRepository {
     }
 
     const now = new Date().toISOString();
-    const normalizedPaymentMethod = String(paymentMethod || order.paymentMethod || '').toUpperCase();
     const updateData = {
       status: 'CONFIRMED',
-      paymentMethod: normalizedPaymentMethod,
-      paymentStatus: normalizedPaymentMethod === 'FIADO' ? 'ON_ACCOUNT' : 'APPROVED',
-      paidAt: normalizedPaymentMethod === 'FIADO' ? null : now,
-      completedAt: now,
+      paidAt: now,
       verifiedVia,
       updatedAt: now,
     };
@@ -937,61 +900,13 @@ class FirestoreRepository {
       updateData.paymentProvider = 'MERCADO_PAGO';
       updateData.paymentTransactionId = String(paymentTransactionId);
       updateData.paymentVerifiedAmount = paymentAmount;
-    } else if (verifiedVia === 'SICREDI_PIX_WEBHOOK') {
-      updateData.paymentStatus = 'APPROVED';
-      updateData.paymentProvider = 'SICREDI';
-      updateData.paymentTransactionId = String(paymentTransactionId);
-      updateData.paymentVerifiedAmount = paymentAmount;
-      updateData.pixTxid = pixTxid;
-      updateData.pixVerified = true;
-      updateData.receivedBy = receivedBy || order.createdBy || null;
-      updateData.cashierName = updateData.receivedBy?.name || '';
-      updateData.cashierEmail = updateData.receivedBy?.email || '';
-    } else if (verifiedVia === 'CAIXA_PIX_MANUAL') {
-      updateData.paymentStatus = 'APPROVED';
-      updateData.paymentProvider = 'MANUAL_COMPROVANTE';
-      updateData.paymentTransactionId = String(paymentTransactionId);
-      updateData.paymentVerifiedAmount = paymentAmount;
-      updateData.pixTxid = pixTxid;
-      updateData.pixVerified = true;
-      updateData.receivedBy = receivedBy;
-      updateData.manualProofNote = String(manualProofNote).trim().slice(0, 500);
-      updateData.manualPixConfirmation = { receivedBy, proofNote: updateData.manualProofNote, confirmedAt: now };
-      updateData.cashierName = receivedBy.name;
-      updateData.cashierEmail = receivedBy.email || '';
-    } else if (verifiedVia === 'CAIXA_MANUAL') {
-      if (receivedBy && !['ADMIN', 'CAIXA'].includes(receivedBy.role)) throw new Error('Somente o caixa ou administrador pode confirmar o recebimento.');
-      updateData.paymentProvider = 'CAIXA';
-      if (receivedBy) {
-        updateData.receivedBy = receivedBy;
-        updateData.cashierName = receivedBy.name;
-        updateData.cashierEmail = receivedBy.email || '';
-      }
     }
-    if (verifiedVia.includes('PIX') || normalizedPaymentMethod === 'PIX') {
+    if (verifiedVia.includes('PIX') || order.paymentMethod === 'PIX') {
       updateData.pixVerified = true;
     }
-    if (normalizedPaymentMethod === 'DINHEIRO') {
-      const tendered = Number(receivedAmount ?? order.cashTendered ?? order.total);
-      if (!Number.isFinite(tendered) || Math.round(tendered * 100) < Math.round(Number(order.total) * 100)) {
-        throw new Error('Valor recebido em dinheiro menor que o total.');
-      }
-      updateData.cashReceived = tendered;
-      updateData.changeGiven = (Math.round(tendered * 100) - Math.round(Number(order.total) * 100)) / 100;
-    } else if (typeof receivedAmount === 'number') {
+    if (typeof receivedAmount === 'number') {
       updateData.cashReceived = receivedAmount;
       updateData.changeGiven = changeGiven;
-    }
-    if (order.paymentMethod === 'PIX' && !['MERCADO_PAGO_WEBHOOK', 'SICREDI_PIX_WEBHOOK', 'CAIXA_PIX_MANUAL'].includes(verifiedVia)) {
-      throw new Error('Pix só pode ser confirmado pelo Sicredi ou com comprovante conferido pelo caixa/admin.');
-    }
-    if (verifiedVia === 'CAIXA_PIX_MANUAL' && (!['ADMIN', 'CAIXA'].includes(receivedBy?.role)
-      || String(manualProofNote || '').trim().length < 5
-      || pixTxid !== order.pixData?.txid)) {
-      throw new Error('Confirmação manual do Pix exige conferência auditada do comprovante e cobrança correspondente.');
-    }
-    if (verifiedVia === 'SICREDI_PIX_WEBHOOK' && pixTxid !== order.pixData?.txid) {
-      throw new Error('O Pix recebido não corresponde à cobrança deste pedido.');
     }
 
     if (
@@ -1376,19 +1291,18 @@ class FirestoreRepository {
       try {
         const result = await this.firestore.runTransaction(async (transaction) => {
           let orderRef = null;
-          let orderData = null;
           if (id) {
             orderRef = this.firestore.collection('orders').doc(id);
             const orderSnapshot = await transaction.get(orderRef);
             if (!orderSnapshot.exists) {
               throw new Error('Pedido não encontrado para registrar a baixa de estoque.');
             }
-            orderData = orderSnapshot.data() || {};
+            const orderData = orderSnapshot.data() || {};
             validateOrderConfirmation(orderData, orderUpdates);
             items = Array.isArray(orderData.items) ? orderData.items : [];
             if (
               orderUpdates &&
-              (PAID_ORDER_STATUSES.has(orderData.status) || orderData.completedAt)
+              PAID_ORDER_STATUSES.has(orderData.status)
             ) {
               return {
                 success: true,
@@ -1411,25 +1325,12 @@ class FirestoreRepository {
               transaction.update(orderRef, {
                 stockDeducted: true,
                 stockDeductedAt: now,
-                stockReservationReleased: true,
                 ...(orderUpdates || {}),
               });
             }
           };
 
           if (!stockControlEnabled || items.length === 0) {
-            if (orderRef && orderData?.stockReserved && !orderData.stockReservationReleased && items.length) {
-              const quantities = new Map();
-              for (const item of items) quantities.set(String(item.productId), Number(((quantities.get(String(item.productId)) || 0) + validateStockQuantity(item)).toFixed(3)));
-              const reservations = [];
-              for (const [productId, quantity] of quantities) {
-                const productRef = this.firestore.collection('products').doc(productId);
-                const snapshot = await transaction.get(productRef);
-                if (!snapshot.exists || Number(snapshot.data()?.reservedQuantity || 0) + 0.000001 < quantity) throw new Error('Reserva de estoque inconsistente; pagamento não confirmado.');
-                reservations.push({ productRef, reserved: Number(snapshot.data().reservedQuantity || 0), quantity });
-              }
-              for (const { productRef, reserved, quantity } of reservations) transaction.update(productRef, { reservedQuantity: Number((reserved - quantity).toFixed(3)), updatedAt: now });
-            }
             markOrderHandled();
             return {
               success: true,
@@ -1486,18 +1387,9 @@ class FirestoreRepository {
                   ? entry.productData.estoque
                   : 0;
             const newStock = remainingStock(entry.productData, entry.quantity);
-            const reserved = Number(entry.productData.reservedQuantity || 0);
-            const releasingReservation = Boolean(orderData?.stockReserved && !orderData.stockReservationReleased);
-            if (releasingReservation && reserved + 0.000001 < entry.quantity) {
-              throw new Error('Reserva de estoque inconsistente; pagamento não confirmado.');
-            }
-            if (!releasingReservation && availableStock(entry.productData) + 0.000001 < entry.quantity) {
-              throw new Error(`Estoque disponível insuficiente para ${entry.productData.name || entry.item.name}.`);
-            }
             transaction.update(entry.docRef, {
               stockQuantity: newStock,
               estoque: newStock,
-              reservedQuantity: releasingReservation ? Number((reserved - entry.quantity).toFixed(3)) : reserved,
               updatedAt: now,
             });
 
@@ -1518,7 +1410,6 @@ class FirestoreRepository {
               productName: entry.productData.name || entry.item.name,
               qty: entry.quantity,
               newStock,
-              reservedQuantity: releasingReservation ? Number((reserved - entry.quantity).toFixed(3)) : reserved,
             });
           }
 
@@ -1537,7 +1428,6 @@ class FirestoreRepository {
           } else {
             localOrder.stockDeducted = true;
             localOrder.stockDeductedAt = localOrder.stockDeductedAt || now;
-            localOrder.stockReservationReleased = true;
             if (orderUpdates && result.newlyConfirmed) {
               Object.assign(localOrder, orderUpdates);
             }
@@ -1548,7 +1438,6 @@ class FirestoreRepository {
           if (product) {
             product.stockQuantity = item.newStock;
             product.estoque = item.newStock;
-            product.reservedQuantity = item.reservedQuantity;
             this.inMemoryProducts.set(String(item.productId), product);
           }
         }
@@ -1571,9 +1460,8 @@ class FirestoreRepository {
       throw new Error('Firestore indisponível para registrar a baixa de estoque do pedido.');
     }
 
-    let order = null;
     if (id) {
-      order = this.inMemoryOrders.get(id);
+      const order = this.inMemoryOrders.get(id);
       if (!order) {
         throw new Error('Pedido não encontrado para registrar a baixa de estoque.');
       }
@@ -1581,7 +1469,7 @@ class FirestoreRepository {
       items = Array.isArray(order.items) ? order.items : [];
       if (
         orderUpdates &&
-        (PAID_ORDER_STATUSES.has(order.status) || order.completedAt)
+        PAID_ORDER_STATUSES.has(order.status)
       ) {
         return {
           success: true,
@@ -1598,20 +1486,8 @@ class FirestoreRepository {
         return { success: true, deducted: [], newlyConfirmed: true };
       }
       if (!stockControlEnabled || items.length === 0) {
-        if (order.stockReserved && !order.stockReservationReleased && items.length) {
-          const quantities = new Map();
-          for (const item of items) quantities.set(String(item.productId), Number(((quantities.get(String(item.productId)) || 0) + validateStockQuantity(item)).toFixed(3)));
-          for (const [productId, quantity] of quantities) {
-            const product = this.inMemoryProducts.get(productId);
-            const reserved = Number(product?.reservedQuantity || 0);
-            if (!product || reserved + 0.000001 < quantity) throw new Error('Reserva de estoque inconsistente; pagamento não confirmado.');
-            product.reservedQuantity = Number((reserved - quantity).toFixed(3));
-            this.inMemoryProducts.set(productId, product);
-          }
-        }
         order.stockDeducted = true;
         order.stockDeductedAt = now;
-        order.stockReservationReleased = true;
         if (orderUpdates) {Object.assign(order, orderUpdates);}
         return {
           success: true,
@@ -1641,19 +1517,13 @@ class FirestoreRepository {
       }
       if (!found) {throw new Error(`Produto não encontrado para baixa: ${item.productId || item.name}.`);}
     }
-    for (const [productId, { product, quantity }] of resolvedItems) {
-      remainingStock(product, quantity);
-      const ownsReservation = order?.stockReserved && !order.stockReservationReleased;
-      if (ownsReservation && Number(product.reservedQuantity || 0) + 0.000001 < quantity) throw new Error('Reserva de estoque inconsistente; pagamento não confirmado.');
-      if (!ownsReservation && availableStock(product) + 0.000001 < quantity) throw new Error(`Estoque disponível insuficiente para ${product.name || productId}.`);
-    }
+    for (const { product, quantity } of resolvedItems.values()) {remainingStock(product, quantity);}
     const deducted = [];
     for (const [productId, { product, quantity }] of resolvedItems) {
         const previousStock = Number(product.stockQuantity ?? product.estoque ?? 0);
         const newStock = remainingStock(product, quantity);
         product.stockQuantity = newStock;
         product.estoque = newStock;
-        if (order?.stockReserved && !order.stockReservationReleased) product.reservedQuantity = Number((Number(product.reservedQuantity || 0) - quantity).toFixed(3));
         this.inMemoryProducts.set(productId, product);
         deducted.push({
           productId,
@@ -1666,9 +1536,9 @@ class FirestoreRepository {
     }
 
     if (id) {
+      const order = this.inMemoryOrders.get(id);
       order.stockDeducted = true;
       order.stockDeductedAt = now;
-      order.stockReservationReleased = true;
       if (orderUpdates) {Object.assign(order, orderUpdates);}
     }
     return {
@@ -1752,10 +1622,6 @@ class FirestoreRepository {
       if (!Number.isFinite(previousStock)) throw new Error('O estoque atual do produto não é um número válido.');
       const newStock = kind === 'SET' ? amount : kind === 'ENTRY' ? previousStock + amount : previousStock - amount;
       if (newStock < 0) throw new Error(`Estoque insuficiente. Saldo atual: ${previousStock}.`);
-      const reserved = Number(product.reservedQuantity || 0);
-      if (!Number.isFinite(reserved) || newStock + 0.000001 < reserved) {
-        throw new Error(`O ajuste não pode deixar o estoque abaixo das ${reserved} unidades já reservadas por pedidos em aberto.`);
-      }
       return { previousStock, newStock };
     };
     const buildMovement = (product, previousStock, newStock) => ({
@@ -1805,20 +1671,14 @@ class FirestoreRepository {
     return { success: true, duplicate: false, ...movement };
   }
 
-  async createDirectOrder(orderData, { requirePersistence = false, reserveInventory = false } = {}) {
+  async createDirectOrder(orderData, { requirePersistence = false } = {}) {
     const now = new Date().toISOString();
-    const inventory = reserveInventory ? await this.getInventorySettings() : { stockControlEnabled: false };
-    const shouldReserve = reserveInventory && inventory.stockControlEnabled;
 
     const dataWithTs = {
       ...orderData,
       status: orderData.status || 'PENDING',
       createdAt: now,
       updatedAt: now,
-      ...(String(orderData.paymentMethod || '').toUpperCase() === 'PIX'
-        ? { pixExpiresAt: orderData.pixExpiresAt || pixExpirationDate(now), pixTtlSeconds: PIX_PAYMENT_TTL_SECONDS }
-        : {}),
-      ...(reserveInventory ? { stockReserved: shouldReserve, stockReservationReleased: false } : {}),
     };
 
     if (requirePersistence && (!this.firestore || this._firestoreClientDisabled)) {
@@ -1832,44 +1692,6 @@ class FirestoreRepository {
           ? collection.doc(String(dataWithTs.id))
           : collection.doc();
         const { ...documentData } = dataWithTs;
-        if (reserveInventory) {
-          const productsToReserve = new Map();
-          for (const item of documentData.items || []) {
-            const productId = String(item.productId || item.id || '');
-            if (!productId) throw new Error('Produto sem identificador; não foi possível reservar o estoque.');
-            const quantity = validateStockQuantity(item);
-            const entry = productsToReserve.get(productId) || { quantity: 0, item };
-            entry.quantity = Number((entry.quantity + quantity).toFixed(3));
-            productsToReserve.set(productId, entry);
-          }
-          const saved = await this.firestore.runTransaction(async (transaction) => {
-            const previousSnapshot = await transaction.get(ref);
-            if (previousSnapshot.exists) {
-              const previous = { id: ref.id, ...previousSnapshot.data() };
-              if (previous.idempotencyFingerprint && previous.idempotencyFingerprint === documentData.idempotencyFingerprint) return previous;
-              throw new Error('Identificador do pedido já foi usado. Recarregue a sacola e tente novamente.');
-            }
-            const productEntries = [];
-            if (shouldReserve) {
-              for (const [productId, entry] of productsToReserve) {
-                const productRef = this.firestore.collection('products').doc(productId);
-                const snapshot = await transaction.get(productRef);
-                if (!snapshot.exists) throw new Error(`Produto não encontrado: ${entry.item.name || productId}.`);
-                const product = snapshot.data() || {};
-                if (availableStock(product) + 0.000001 < entry.quantity) throw new Error(`Estoque indisponível para ${product.name || entry.item.name || productId}.`);
-                productEntries.push({ productRef, product, quantity: entry.quantity });
-              }
-            }
-            for (const { productRef, product, quantity } of productEntries) {
-              transaction.update(productRef, { reservedQuantity: Number((Number(product.reservedQuantity || 0) + quantity).toFixed(3)), updatedAt: now });
-            }
-            const savedOrder = { ...documentData, id: ref.id, stockReserved: shouldReserve, stockReservationReleased: false };
-            transaction.set(ref, savedOrder);
-            return savedOrder;
-          });
-          this.inMemoryOrders.set(ref.id, saved);
-          return saved;
-        }
         await ref.set(documentData);
 
         const saved = {
@@ -1898,7 +1720,7 @@ class FirestoreRepository {
       }
     }
 
-    if (requirePersistence || (reserveInventory && !this.isInMemory)) {
+    if (requirePersistence) {
       throw new Error('Não foi possível salvar o pedido PIX com segurança.');
     }
 
@@ -1910,38 +1732,10 @@ class FirestoreRepository {
       ...dataWithTs,
       id: localId,
     };
-    const createInMemory = async () => {
-      const previous = this.inMemoryOrders.get(localId);
-      if (previous) {
-        if (previous.idempotencyFingerprint && previous.idempotencyFingerprint === orderObj.idempotencyFingerprint) return previous;
-        throw new Error('Identificador do pedido já foi usado. Recarregue a sacola e tente novamente.');
-      }
-      const productsToReserve = new Map();
-      if (shouldReserve) {
-        for (const item of orderObj.items || []) {
-          const productId = String(item.productId || item.id || '');
-          const quantity = validateStockQuantity(item);
-          const entry = productsToReserve.get(productId) || { quantity: 0, item };
-          entry.quantity = Number((entry.quantity + quantity).toFixed(3));
-          productsToReserve.set(productId, entry);
-        }
-        for (const [productId, entry] of productsToReserve) {
-          const product = this.inMemoryProducts.get(productId);
-          if (!product || availableStock(product) + 0.000001 < entry.quantity) throw new Error(`Estoque indisponível para ${product?.name || entry.item.name || productId}.`);
-        }
-        for (const [productId, entry] of productsToReserve) {
-          const product = this.inMemoryProducts.get(productId);
-          product.reservedQuantity = Number((Number(product.reservedQuantity || 0) + entry.quantity).toFixed(3));
-          this.inMemoryProducts.set(productId, product);
-        }
-      }
-      const savedOrder = { ...orderObj, stockReserved: shouldReserve, stockReservationReleased: false };
-      this.inMemoryOrders.set(localId, savedOrder);
-      return savedOrder;
-    };
-    const queued = this.directOrderQueue.then(createInMemory);
-    this.directOrderQueue = queued.catch(() => {});
-    return queued;
+
+    this.inMemoryOrders.set(localId, orderObj);
+
+    return orderObj;
   }
 
   async getSalesOrders() {
@@ -2032,10 +1826,10 @@ class FirestoreRepository {
     );
   }
 
-  async updateOrderStatus(orderId, status, { receivedBy = null } = {}) {
+  async updateOrderStatus(orderId, status) {
     const normalizedStatus = String(status).toUpperCase();
     if (['CONFIRMED', 'PAID_CONFIRMED'].includes(normalizedStatus)) {
-      const order = await this.confirmOrderPayment(orderId, { receivedBy });
+      const order = await this.confirmOrderPayment(orderId);
       return { success: true, orderId, status: order.status };
     }
     if (normalizedStatus === 'CANCELLED') {return this.cancelOrder(orderId);}

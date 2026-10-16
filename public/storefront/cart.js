@@ -3,7 +3,6 @@ import {
   element,
   money,
   notify,
-  copyText,
   storageGet,
   storageSet,
   openDialog,
@@ -14,35 +13,6 @@ import { onLanguageChange } from "./i18n/index.js";
 import { cartStore } from "./store/index.js";
 import { storeQueries } from "./query/tanstackQuery.js";
 import { renderOrderReceipt } from "./receipt.js";
-
-function renderPixPayment(order) {
-  const pixData = order?.pixData || {};
-  const pixCode = String(order?.pixCopiaECola || pixData.pixCopiaECola || "").trim();
-  const qrCode = String(pixData.qrCodeBase64 || order?.qrCodeBase64 || "").trim();
-  const section = element("section", { class: "checkout-pix-payment", "aria-label": "Pagamento Pix" }, [
-    element("h3", { text: "Pagamento via Pix Sicredi" }),
-    element("p", { class: "checkout-pix-fixed", text: `Valor fixo do pedido: ${money(Number(order.totalMinor || Math.round(Number(order.total || 0) * 100)))}` }),
-  ]);
-  if (qrCode.startsWith("data:image/")) {
-    section.append(element("img", { class: "checkout-pix-qr", src: qrCode, alt: "QR Code Pix com valor fixo", width: "240", height: "240" }));
-  }
-  if (pixCode) {
-    section.append(
-      element("p", { class: "checkout-pix-hint", text: "Escaneie o QR Code ou copie o código Pix abaixo para pagar." }),
-      element("pre", { class: "checkout-pix-code", text: pixCode }),
-      element("button", { type: "button", class: "primary checkout-pix-copy", text: "Copiar Pix copia e cola", onclick: () => copyText(pixCode) }),
-    );
-  } else {
-    section.append(element("p", { class: "checkout-pix-hint", text: "A cobrança Pix está sendo preparada. O valor será fixo e a confirmação aparecerá aqui quando o Sicredi responder." }));
-  }
-  if (order.pixExpiresAt) {
-    const expiry = new Date(order.pixExpiresAt);
-    if (Number.isFinite(expiry.getTime())) {
-      section.append(element("p", { class: "checkout-pix-expiry", text: `Prazo para pagamento: ${expiry.toLocaleString("pt-BR")}` }));
-    }
-  }
-  return section;
-}
 
 export function createCart(state) {
   const key = `store:${state.slug}:cart:v1`;
@@ -462,7 +432,17 @@ export function createCart(state) {
         element("p", { text: "cart.order_success_desc".tr }),
         renderOrderReceipt(order),
       );
-      if (order.paymentMethod === "PIX") receipt.append(renderPixPayment(order));
+      if (order.paymentMethod === "PIX" && order.paymentCheckoutUrl) {
+        receipt.append(
+          element("a", {
+            class: "primary",
+            text: "cart.pix_copy".tr,
+            href: order.paymentCheckoutUrl,
+            target: "_blank",
+            rel: "noopener noreferrer",
+          }),
+        );
+      }
       receipt.append(
         element("button", {
           type: "button",

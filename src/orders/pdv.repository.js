@@ -1,5 +1,4 @@
 const { remainingStock, validateStockQuantity } = require('./order-integrity');
-const { PIX_PAYMENT_TTL_SECONDS, pixExpirationDate, isPixOrderExpired } = require('./pix-expiration');
 
 /** PDV writes never fall back to process memory when Firestore fails. */
 class PdvRepository {
@@ -64,63 +63,18 @@ class PdvRepository {
     return [...(map?.values() || [])].filter((row) => field.split('.').reduce((current, key) => current?.[key], row) === value);
   }
 
-  watchPendingOrderChanges(onChange, onError = () => {}) {
-    const firestore = this.repository.firestore;
-    if (!firestore || this.repository._firestoreClientDisabled) return null;
-    try {
-      return firestore.collection('orders')
-        .where('status', 'in', ['CREATING_PIX', 'AWAITING_PIX', 'AWAITING_CASHIER', 'PENDING'])
-        .onSnapshot((snapshot) => onChange(snapshot.docChanges()), onError);
-    } catch (error) {
-      onError(error);
-      return null;
-    }
-  }
-
   async create(order) {
-    const inventory = await this.repository.getInventorySettings();
     return this.transaction(async (tx) => {
       const previous = await tx.get('orders', order.id);
       if (previous) {
         if (previous.requestHash !== order.requestHash || previous.createdBy.id !== order.createdBy.id) { throw new Error('Identificador já utilizado por outra venda.'); }
         return previous;
       }
-      const quantities = new Map();
-      for (const item of order.items || []) {
-        const quantity = validateStockQuantity(item);
-        quantities.set(item.productId, Number(((quantities.get(item.productId) || 0) + quantity).toFixed(3)));
-      }
-      const products = [];
-      if (inventory.stockControlEnabled) {
-        for (const [productId, quantity] of quantities) {
-          const product = await tx.get('products', productId);
-          if (!product) throw new Error(`Produto não encontrado para reservar estoque: ${productId}.`);
-          const stock = Number(product.stockQuantity ?? product.estoque ?? 0);
-          const reserved = Number(product.reservedQuantity || 0);
-          if (!Number.isFinite(stock) || !Number.isFinite(reserved) || stock - reserved < quantity) {
-            throw new Error(`Estoque disponível insuficiente: ${product.name || productId}.`);
-          }
-          products.push({ id: productId, product, quantity, reserved });
-        }
-      }
-      const now = new Date().toISOString();
-      const savedOrder = {
-        ...order,
-        stockReserved: inventory.stockControlEnabled && products.length > 0,
-        stockReservationReleased: false,
-        ...(order.paymentMethod === 'PIX' ? {
-          pixExpiresAt: order.pixExpiresAt || pixExpirationDate(now),
-          pixData: { ...order.pixData, expiresInSeconds: PIX_PAYMENT_TTL_SECONDS },
-        } : {}),
-      };
-      for (const { id, product, quantity, reserved } of products) {
-        tx.set('products', id, { ...product, reservedQuantity: Number((reserved + quantity).toFixed(3)), updatedAt: now });
-      }
-      tx.set('orders', order.id, savedOrder);
-      if (savedOrder.status !== 'CREATING_PIX') {
+      tx.set('orders', order.id, order);
+      if (order.status !== 'CREATING_PIX') {
         tx.set('pdv_outbox', `${order.id}-receipt`, { id: `${order.id}-receipt`, orderId: order.id, kind: 'receipt', status: 'PENDING', attempts: 0 });
       }
-      return savedOrder;
+      return order;
     });
   }
 
@@ -134,7 +88,7 @@ class PdvRepository {
       if (!Number.isFinite(Number(charge.amount)) || Math.round(Number(charge.amount) * 100) !== Math.round(Number(order.total) * 100) || !String(charge.pixCopiaECola || '').trim() || !String(charge.qrCodeBase64 || '').startsWith('data:image/')) {
         throw new Error('Cobrança Pix divergente do pedido ou sem QR Code válido.');
       }
-      const updated = { ...order, pixData: { ...charge, expiresInSeconds: order.pixData?.expiresInSeconds || PIX_PAYMENT_TTL_SECONDS }, pixCopiaECola: charge.pixCopiaECola, status: order.completedAt ? order.status : 'AWAITING_PIX' };
+      const updated = { ...order, pixData: charge, pixCopiaECola: charge.pixCopiaECola, status: order.completedAt ? order.status : 'AWAITING_PIX' };
       tx.set('orders', orderId, updated);
       if (!job) { tx.set('pdv_outbox', jobId, { id: jobId, orderId, kind: 'receipt', status: 'PENDING', attempts: 0 }); }
       return updated;
@@ -150,8 +104,7 @@ class PdvRepository {
       if (order.paymentMethod === 'PIX') { return order; }
       if (order.status !== 'AWAITING_CASHIER') { throw new Error('A comanda não está aguardando recebimento no caixa.'); }
       const pixData = { txid: order.id.replace(/-/g, '').toUpperCase(), provider: 'SICREDI' };
-      const now = new Date().toISOString();
-      const updated = { ...order, paymentMethod: 'PIX', paymentStatus: 'PENDING', status: 'CREATING_PIX', pixData: { ...pixData, expiresInSeconds: PIX_PAYMENT_TTL_SECONDS }, pixExpiresAt: pixExpirationDate(now), pixCopiaECola: '', updatedAt: now };
+      const updated = { ...order, paymentMethod: 'PIX', paymentStatus: 'PENDING', status: 'CREATING_PIX', pixData, pixCopiaECola: '', updatedAt: new Date().toISOString() };
       tx.set('orders', order.id, updated);
       return updated;
     });
@@ -180,11 +133,8 @@ class PdvRepository {
       if (paymentMethodOverride && order.status !== 'AWAITING_CASHIER') { throw new Error('A forma de pagamento só pode ser escolhida antes do recebimento.'); }
       if (paymentMethodOverride && !['DINHEIRO', 'DEBITO', 'CREDITO', 'FIADO', 'SALDO_CLIENTE'].includes(paymentMethod)) { throw new Error('Forma de pagamento inválida para recebimento manual.'); }
       if (order.paymentMethod === 'PIX' && paymentMethod !== 'PIX') { throw new Error('Uma cobrança Pix já emitida não pode ser convertida; aguarde a confirmação do Sicredi.'); }
-      const manualPix = verification?.verifiedVia === 'CAIXA_PIX_MANUAL';
-      if (paymentMethod === 'PIX' && (!verification || verification.txid !== order.pixData?.txid || verification.amountMinor !== Math.round(order.total * 100)
-        || (manualPix && (!['ADMIN', 'CAIXA'].includes(receiver?.role) || String(verification.proofNote || '').trim().length < 5))
-        || (!manualPix && verification.verifiedVia !== 'SICREDI_PIX_WEBHOOK'))) {
-        throw new Error('Pix exige confirmação do Sicredi ou validação manual auditada pelo caixa/admin com o valor exato.');
+      if (paymentMethod === 'PIX' && (!verification || verification.txid !== order.pixData?.txid || verification.amountMinor !== Math.round(order.total * 100))) {
+        throw new Error('Pix exige confirmação do Sicredi com identificador e valor exatos.');
       }
       if (paymentMethod !== 'PIX' && !['ADMIN', 'CAIXA'].includes(receiver?.role)) { throw new Error('Somente o caixa pode receber esta comanda.'); }
       const tendered = cashReceived ?? order.cashTendered ?? order.total;
@@ -200,13 +150,7 @@ class PdvRepository {
         for (const [id, quantity] of quantities) {
           const product = await tx.get('products', id);
           if (!product) { throw new Error('Produto não encontrado para baixa.'); }
-          const stock = remainingStock(product, quantity);
-          const reserved = Number(product.reservedQuantity || 0);
-          const nextReserved = order.stockReserved && !order.stockReservationReleased
-            ? Number((reserved - quantity).toFixed(3))
-            : reserved;
-          if (nextReserved < -0.000001) throw new Error('Reserva de estoque inconsistente; atualize a comanda antes de receber.');
-          products.push({ id, quantity, product, stock, reserved: Math.max(0, nextReserved) });
+          products.push({ id, quantity, product, stock: remainingStock(product, quantity) });
         }
       }
       const onAccount = paymentMethod === 'FIADO';
@@ -217,17 +161,15 @@ class PdvRepository {
       const totalMinor = Math.round(Number(order.total) * 100);
       if (usingCredit && creditMinor < totalMinor) { throw new Error('O crédito disponível foi alterado e não cobre mais o total. Atualize o saldo antes de confirmar.'); }
       // No transaction reads after this point.
-      for (const { id, quantity, product, stock, reserved } of products) {
-        tx.set('products', id, { ...product, stockQuantity: stock, estoque: stock, reservedQuantity: reserved, updatedAt: now });
+      for (const { id, quantity, product, stock } of products) {
+        tx.set('products', id, { ...product, stockQuantity: stock, estoque: stock, updatedAt: now });
         tx.set('stock_movements', `${order.id}-${id}`, { productId: id, productName: product.name, orderId, quantityDeducted: quantity, previousStock: stock + quantity, newStock: stock, type: 'SALE_PDV', createdAt: now });
       }
-      const receivedBy = manualPix ? receiver : paymentMethod === 'PIX' ? (receiver || order.createdBy) : receiver;
+      const receivedBy = paymentMethod === 'PIX' ? order.createdBy : receiver;
       const completed = { ...order, paymentMethod, receivedBy, cashierName: receivedBy.name, cashierEmail: receivedBy.email || '', status: 'CONFIRMED',
         paymentStatus: onAccount ? 'ON_ACCOUNT' : 'APPROVED', paidAt: onAccount ? null : now,
         completedAt: now, stockDeducted: true, stockDeductedAt: order.stockDeductedAt || now,
-        stockReservationReleased: true,
-        verifiedVia: verification ? verification.verifiedVia : 'CAIXA',
-        ...(manualPix ? { pixManualConfirmation: { confirmedBy: receiver.id, confirmedByName: receiver.name, role: receiver.role, proofNote: String(verification.proofNote).trim(), confirmedAt: now } } : {}), updatedAt: now,
+        verifiedVia: verification ? 'SICREDI_PIX_WEBHOOK' : 'CAIXA', updatedAt: now,
         ...(paymentMethod === 'DINHEIRO' ? { cashReceived: tendered, changeGiven: (Math.round(tendered * 100) - Math.round(order.total * 100)) / 100 } : {}),
         ...(verification ? { paymentTransactionId: verification.endToEndId, paymentVerifiedAmount: verification.amountMinor / 100, pixVerified: true } : {}) };
       if (onAccount) {
@@ -257,72 +199,6 @@ class PdvRepository {
       }
       return completed;
     });
-  }
-
-  async cancelOrder(orderId, reason = 'Cancelado no caixa', receiver = null) {
-    const inventory = await this.repository.getInventorySettings();
-    return this.transaction(async (tx) => {
-      const order = await tx.get('orders', orderId);
-      if (!order || !['PDV', 'WEB_CATALOG'].includes(order.source)) throw new Error('Comanda não encontrada.');
-      if (order.completedAt || order.paymentTransactionId) throw new Error('Comanda paga não pode ser cancelada sem estorno.');
-      if (order.paymentMethod === 'PIX' && !isPixOrderExpired(order)) throw new Error('A cobrança Pix ainda está válida. Aguarde o prazo ou solicite conciliação antes de cancelar.');
-      if (order.status === 'CANCELLED') return order;
-      const products = [];
-      if (inventory.stockControlEnabled && order.stockReserved && !order.stockReservationReleased) {
-        const quantities = new Map();
-        for (const item of order.items || []) quantities.set(item.productId, Number(((quantities.get(item.productId) || 0) + validateStockQuantity(item)).toFixed(3)));
-        for (const [id, quantity] of quantities) {
-          const product = await tx.get('products', id);
-          if (!product) throw new Error('Produto reservado não encontrado; cancelamento não foi registrado.');
-          const reserved = Number(product.reservedQuantity || 0);
-          if (reserved + 0.000001 < quantity) throw new Error('Reserva de estoque inconsistente; cancelamento não foi registrado.');
-          products.push({ id, product, reserved: Number((reserved - quantity).toFixed(3)) });
-        }
-      }
-      const now = new Date().toISOString();
-      for (const { id, product, reserved } of products) tx.set('products', id, { ...product, reservedQuantity: reserved, updatedAt: now });
-      const cancelled = { ...order, status: 'CANCELLED', paymentStatus: order.paymentMethod === 'PIX' ? 'EXPIRED' : order.paymentStatus, cancelReason: String(reason || 'Cancelado no caixa').slice(0, 300), cancelledAt: now, cancelledBy: receiver ? { id: receiver.id, name: receiver.name, role: receiver.role } : null, stockReservationReleased: true, updatedAt: now };
-      tx.set('orders', order.id, cancelled);
-      return cancelled;
-    });
-  }
-
-  async expirePixOrder(orderId, now = Date.now()) {
-    const inventory = await this.repository.getInventorySettings();
-    return this.transaction(async (tx) => {
-      const order = await tx.get('orders', orderId);
-      if (!order || order.paymentMethod !== 'PIX' || !['CREATING_PIX', 'AWAITING_PIX', 'PENDING'].includes(order.status)
-        || order.completedAt || order.paymentTransactionId || !isPixOrderExpired(order, now)) return null;
-      const products = [];
-      if (inventory.stockControlEnabled && order.stockReserved && !order.stockReservationReleased) {
-        const quantities = new Map();
-        for (const item of order.items || []) quantities.set(item.productId, Number(((quantities.get(item.productId) || 0) + validateStockQuantity(item)).toFixed(3)));
-        for (const [id, quantity] of quantities) {
-          const product = await tx.get('products', id);
-          if (!product) throw new Error('Produto reservado não encontrado; expiração não foi registrada.');
-          const reserved = Number(product.reservedQuantity || 0);
-          if (reserved + 0.000001 < quantity) throw new Error('Reserva de estoque inconsistente; expiração não foi registrada.');
-          products.push({ id, product, reserved: Number((reserved - quantity).toFixed(3)) });
-        }
-      }
-      const timestamp = new Date(now).toISOString();
-      for (const { id, product, reserved } of products) tx.set('products', id, { ...product, reservedQuantity: reserved, updatedAt: timestamp });
-      const expired = { ...order, status: 'CANCELLED', paymentStatus: 'EXPIRED', cancelReason: 'Prazo do Pix expirado', cancelledAt: timestamp, expiredAt: timestamp, stockReservationReleased: true, updatedAt: timestamp };
-      tx.set('orders', order.id, expired);
-      return expired;
-    });
-  }
-
-  async expirePendingPixOrders(now = Date.now(), limit = 100) {
-    const pixOrders = await this.list('orders', 'paymentMethod', 'PIX');
-    const expired = pixOrders.filter((order) => ['CREATING_PIX', 'AWAITING_PIX', 'PENDING'].includes(order.status)
-      && !order.completedAt && !order.paymentTransactionId && isPixOrderExpired(order, now)).slice(0, limit);
-    const results = [];
-    for (const order of expired) {
-      const result = await this.expirePixOrder(order.id, now);
-      if (result) results.push(result);
-    }
-    return results;
   }
 
   async settle({ id, customerKey, amount, paymentMethod, notes, receivedBy, entryType = 'QUITACAO_FIADO' }) {

@@ -7,23 +7,12 @@ function validateOrderConfirmation(order, updates) {
   }
   if (!updates || String(order.paymentMethod).toUpperCase() !== 'PIX') {return;}
   if (PAID_ORDER_STATUSES.has(order.status) && order.paymentTransactionId) {return;}
-  const totalMinor = Math.round(Number(order.total) * 100);
-  const amountMinor = Math.round(Number(updates.paymentVerifiedAmount ?? updates.paymentAmount) * 100);
-  const sicrediVerified = updates.verifiedVia === 'SICREDI_PIX_WEBHOOK'
-    && updates.pixTxid === order.pixData?.txid
-    && /^E[a-zA-Z0-9]{31}$/.test(updates.paymentTransactionId || '');
-  const manualVerified = updates.verifiedVia === 'CAIXA_PIX_MANUAL'
-    && updates.pixTxid === order.pixData?.txid
-    && /^MANUAL-[a-f0-9-]{36}$/i.test(updates.paymentTransactionId || '')
-    && ['ADMIN', 'CAIXA'].includes(updates.receivedBy?.role)
-    && String(updates.manualProofNote || '').trim().length >= 5;
-  const mercadoPagoVerified = updates.verifiedVia === 'MERCADO_PAGO_WEBHOOK'
-    && /^\d+$/.test(updates.paymentTransactionId || '');
   if (
-    (!sicrediVerified && !manualVerified && !mercadoPagoVerified) ||
-    !Number.isFinite(amountMinor) ||
-    totalMinor <= 0 ||
-    amountMinor !== totalMinor
+    updates.verifiedVia !== 'MERCADO_PAGO_WEBHOOK' ||
+    !/^\d+$/.test(updates.paymentTransactionId || '') ||
+    !Number.isFinite(Number(updates.paymentVerifiedAmount)) ||
+    Number(order.total) <= 0 ||
+    Math.round(Number(updates.paymentVerifiedAmount) * 100) !== Math.round(Number(order.total) * 100)
   ) {
     throw new Error('Confirmação PIX exige pagamento verificado com o valor do pedido.');
   }
@@ -48,11 +37,4 @@ function remainingStock(product, quantity) {
   return unit === 'KG' ? Number(nextStock.toFixed(3)) : nextStock;
 }
 
-function availableStock(product) {
-  const stock = Number(product?.stockQuantity ?? product?.estoque ?? 0);
-  const reserved = Number(product?.reservedQuantity || 0);
-  if (!Number.isFinite(stock) || !Number.isFinite(reserved)) return 0;
-  return Math.max(0, stock - reserved);
-}
-
-module.exports = { PAID_ORDER_STATUSES, validateOrderConfirmation, validateStockQuantity, remainingStock, availableStock };
+module.exports = { PAID_ORDER_STATUSES, validateOrderConfirmation, validateStockQuantity, remainingStock };

@@ -2,7 +2,6 @@ const profile = require("../../config/stores/conflora.example.json");
 const { rankProductSales } = require("../catalog/product-sales");
 const { productStatus } = require("../catalog/product-status");
 const { resolveHdProductImage } = require("../catalog/image-resolver");
-const { availableStock } = require("../orders/order-integrity");
 const {
   ensure,
   digest,
@@ -99,7 +98,7 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
         : "ATIVO",
     stock: {
       tracked: stockControlEnabled,
-      quantity: Math.max(0, availableStock(item)),
+      quantity: Math.max(0, Number(item.stockQuantity ?? item.estoque ?? 0)),
     },
     saleUnit: {
       code: unit,

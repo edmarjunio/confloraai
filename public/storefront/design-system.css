@@ -445,24 +445,9 @@ cf-card.cf-order-card--selected { border-color: #7dd3fc; background: rgb(224 242
 cf-card.cf-order-card--green { border-color: #6ee7b7; background: rgb(209 250 229 / 72%); }
 cf-card.cf-order-card--red { border-color: #fda4af; background: rgb(255 228 230 / 76%); }
 cf-card.cf-order-card--selected { border-color: #0ea5e9; box-shadow: 0 0 0 3px rgb(14 165 233 / 20%), 0 8px 18px rgb(15 56 30 / 12%); }
-cf-card.cf-order-card--new {
-  position: relative;
-  z-index: 1;
-  animation: cf-order-arrival-pulse 1.05s ease-in-out 5;
-}
-.cf-order-arrival-notice { animation: cf-order-notice-enter 280ms ease-out both; }
-@keyframes cf-order-arrival-pulse {
-  0%, 100% { transform: translateY(0) scale(1); box-shadow: 0 2px 7px rgb(15 23 42 / 8%); }
-  50% { transform: translateY(-3px) scale(1.012); box-shadow: 0 12px 26px rgb(245 158 11 / 27%); }
-}
-@keyframes cf-order-notice-enter {
-  from { opacity: 0; transform: translateY(-6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
 
 @media (prefers-reduced-motion: reduce) {
   cf-card[interactive], .cf-button { transition: none; }
   cf-card.cf-order-card { transition: none; }
   cf-card.cf-order-card:hover { transform: none; }
-  cf-card.cf-order-card--new, .cf-order-arrival-notice { animation: none !important; }
 }

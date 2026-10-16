@@ -67,11 +67,10 @@ class SicrediPixClient {
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
   }
-  async createCharge({ amount, txid = this.generateTxId(), ticketNumber = '', expiresInSeconds = 3600 }) {
+  async createCharge({ amount, txid = this.generateTxId(), ticketNumber = '' }) {
     if (!Number.isFinite(amount) || amount <= 0 || !/^[a-zA-Z0-9]{26,35}$/.test(txid) || !this.pixKey) { throw new Error('Configure a chave Pix Sicredi e informe um valor válido.'); }
-    const expiration = Math.min(86400, Math.max(300, Math.round(Number(expiresInSeconds) || 3600)));
     const requestBody = {
-      calendario: { expiracao: expiration },
+      calendario: { expiracao: 3600 },
       valor: { original: amount.toFixed(2), modalidadeAlteracao: 0 },
       chave: this.pixKey,
       solicitacaoPagador: `Pedido Conflora #${ticketNumber}`,
@@ -97,7 +96,6 @@ class SicrediPixClient {
       mode: 'API_SICREDI_FIXED_AMOUNT',
       qrCodeBase64: await QRCode.toDataURL(data.pixCopiaECola, { width: 320, margin: 2 }),
       status: data.status || 'ATIVA',
-      expiresInSeconds: expiration,
     };
   }
   async checkReceivedPayment(endToEndId) {
