@@ -699,3 +699,86 @@ test('Cashier board filters history, separates pending stages, and calculates cl
   const invalidRange = await fetch(`${base}/api/caixa/orders?from=2026-02-31&to=2026-03-01`, { headers: { cookie: cashierCookie } });
   assert.equal(invalidRange.status, 400);
 });
+
+test('command progression holds inventory atomically, final payment deducts once, expiry releases only the hold', async () => {
+  const s = setup();
+  const order = await s.service.create({ ...s.input, deferToCashier: true }, seller);
+  await assert.rejects(s.repository.advanceToPayment(order.id, actor(seller)), /Caixa/);
+  const [pending] = await Promise.all([s.repository.advanceToPayment(order.id, actor(cashier)), s.repository.advanceToPayment(order.id, actor(cashier))]);
+  assert.equal(pending.status, 'AWAITING_PAYMENT');
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
+  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 2);
+  const paid = await s.repository.receive(order.id, actor(cashier), null, 20, 'DINHEIRO');
+  assert.equal(paid.paymentStatus, 'APPROVED');
+  await s.repository.receive(order.id, actor(cashier));
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
+  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 0);
+  await assert.rejects(s.repository.advanceToPayment(order.id, actor(cashier)), /Só é possível/);
+  const next = await s.service.create({ ...s.input, requestId: randomUUID(), deferToCashier: true }, seller);
+  await s.repository.advanceToPayment(next.id, actor(cashier));
+  await s.repository.transaction(async (tx) => { const row = await tx.get('orders', next.id); tx.set('orders', next.id, { ...row, paymentExpiresAt: new Date(Date.now() - 1000).toISOString() }); });
+  await assert.rejects(s.repository.receive(next.id, actor(cashier)), /prazo/);
+  await assert.rejects(s.repository.requestPixAtCashier(next.id, actor(cashier)), /prazo/);
+  await s.service.expirePixOrder(next.id);
+  assert.equal((await s.repository.read('orders', next.id)).status, 'CANCELLED');
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
+  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 0);
+});
+
+test('debt accepts successive and mixed receipts without changing stock or duplicating payment', async () => {
+  const s = setup(); s.base.inMemoryCustomers.get('customer').debtBalance = 200;
+  const first = { id: randomUUID(), customerKey: 'customer', amount: 100, paymentMethod: 'DINHEIRO', receivedBy: actor(cashier) };
+  assert.equal((await s.repository.settle(first)).newBalance, 100);
+  assert.equal((await s.repository.settle(first)).newBalance, 100);
+  const remainder = { id: randomUUID(), customerKey: 'customer', amount: 100, paymentParts: [{ method: 'DEBITO', amount: 40 }, { method: 'PIX', amount: 60 }], receivedBy: actor(cashier), verification: { manualPixProofSeen: true, manualPixNote: 'Transferência conferida na conta' } };
+  const settled = await s.repository.settle(remainder);
+  assert.equal(settled.newBalance, 0); assert.equal(settled.paymentMethod, 'MISTO');
+  await s.repository.settle(remainder);
+  await assert.rejects(s.repository.settle({ ...first, id: randomUUID() }), /maior que a dívida/);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
+});
+
+test('HTTP restricts board moves and manually receives direct Pix without creating a bank charge', async (t) => {
+  const s = setup(); const app = createApp({ messageService: { firestoreRepo: s.base, whatsappClient: s.whatsapp }, sicrediClient: s.pix });
+  const server = app.listen(0); t.after(() => server.close());
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const post = (path, body, cookie = '') => fetch(origin + path, { method: 'POST', headers: { 'Content-Type': 'application/json', cookie }, body: JSON.stringify(body) });
+  const login = async (user) => (await post('/api/admin/auth/login', { userId: user.id, pin: user.pin })).headers.get('set-cookie').split(';')[0];
+  const sellerCookie = await login(seller); const cookie = await login(cashier);
+  const response = await post('/api/caixa/orders', { ...s.input, deferToCashier: true }, sellerCookie);
+  const { order } = await response.json(); assert.ok(order?.id);
+  const move = `/api/caixa/orders/${order.id}/move`;
+  assert.equal((await post(move, { from: 'confirmation', to: 'paid' }, cookie)).status, 400);
+  assert.equal((await post(move, { from: 'confirmation', to: 'payment' }, sellerCookie)).status, 403);
+  assert.equal((await post(move, { from: 'confirmation', to: 'payment' }, cookie)).status, 200);
+  assert.equal((await post(move, { from: 'payment', to: 'confirmation' }, cookie)).status, 400);
+  const drop = await (await post(move, { from: 'payment', to: 'paid' }, cookie)).json(); assert.equal(drop.requiresPayment, true);
+  const confirm = `/api/caixa/orders/${order.id}/confirm`;
+  assert.equal((await post(confirm, { paymentMethod: 'PIX_MANUAL' }, cookie)).status, 400);
+  const result = await post(confirm, { paymentMethod: 'PIX_MANUAL', proofSeen: true, note: 'Pix recebido na chave da loja' }, cookie);
+  assert.equal(result.status, 200); const { order: paid } = await result.json();
+  assert.equal(paid.paymentStatus, 'APPROVED'); assert.equal(paid.manualPixConfirmedBy.id, cashier.id);
+  assert.equal(paid.paymentVerificationStopReason, 'MANUAL_CONFIRMATION'); assert.equal(s.chargeCalls.length, 0);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
+  assert.equal((await post(move, { from: 'payment', to: 'paid' }, cookie)).status, 400);
+});
+
+test('manual confirmation stops subsequent Sicredi checks and fixes issued payment allocation', async () => {
+  const s = setup(); const order = await s.service.create({ ...s.input, paymentParts: [{ method: 'DINHEIRO', amount: 8 }, { method: 'PIX', amount: 12 }] }, cashier);
+  const verification = { txid: order.pixData.txid, amountMinor: 1200, verifiedVia: 'MANUAL_CAIXA_PIX', manualPixProofSeen: true, manualPixNote: 'Comprovante conferido no caixa' };
+  await assert.rejects(s.repository.receive(order.id, actor(cashier), { ...verification, amountMinor: 1100 }, null, null, { requestedParts: [{ method: 'DINHEIRO', amount: 9 }, { method: 'PIX', amount: 11 }] }), /parcelas/);
+  await s.repository.receive(order.id, actor(cashier), verification);
+  let checks = 0; s.pix.checkReceivedPayment = async () => { checks++; throw new Error('Não consultar após confirmação manual'); };
+  await s.service.handlePix(order.pixData.txid, 'E' + '7'.repeat(31));
+  assert.equal(checks, 0); assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
+  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 0);
+});
+
+
+test('mixed debt receipts are allocated to actual payment methods in executive reports', () => {
+  const { summarizeExecutivePeriod } = require('../src/reports/period-executive-metrics');
+  const report = summarizeExecutivePeriod({ from: '2026-10-16', to: '2026-10-16', settlements: [{ amount: 100, entryType: 'QUITACAO_FIADO', createdAt: '2026-10-16T15:00:00Z', paymentMethod: 'MISTO', paymentParts: [{ method: 'DINHEIRO', amount: 40 }, { method: 'PIX', amount: 60 }] }] });
+  assert.equal(report.current.byPayment.DINHEIRO.receipts, 40);
+  assert.equal(report.current.byPayment.PIX.receipts, 60);
+  assert.equal(report.current.totalCashIn, 100);
+});

@@ -1,7 +1,6 @@
-import { $, element, openDialog, money } from "./ui.js";
+import { $, element, openDialog } from "./ui.js";
 import { icon } from "./icons.js";
 import {
-  normalize,
   scopedProducts,
   nextChoices,
   searchProducts,
@@ -10,7 +9,6 @@ import {
 export function createGuidedChat(state, catalog) {
   const messages = $("#chatMessages");
   let path = [];
-  let selected = null;
   let activeResults = null;
   const pool = () =>
     scopedProducts(state.products, state.config.categories, path);
@@ -28,38 +26,13 @@ export function createGuidedChat(state, catalog) {
         ),
       ),
     );
-  function details(product) {
-    selected = product;
-    say(`Sobre ${product.name}`, "user");
-    say(
-      `${product.name} · ${money(product.price.amountMinor)} / ${product.saleUnit.label}`,
-    );
-    say(
-      product.description ||
-        "A loja ainda não cadastrou uma descrição para este produto.",
-    );
-    for (const attribute of Object.values(product.specifications || {})) {
-      say(
-        `${attribute.label}: ${attribute.value}${attribute.unit ? " " + attribute.unit : ""}`,
-      );
-    }
-    for (const section of product.contentSections || []) {
-      say(`${section.title}: ${section.body}`);
-    }
-    messages.append(catalog.card(product, { chat: true }));
-    say(
-      "Essas são as informações cadastradas pela loja. Você pode adicionar à sacola ou buscar outro produto.",
-    );
-    messages.scrollTop = messages.scrollHeight;
-  }
   function clearResults() {
     activeResults?.remove();
     activeResults = null;
     $("#chatDialog").classList.remove("has-product-results");
   }
-  function results(products) {
+  function results(products, heading) {
     clearResults();
-    selected = null;
     $("#chatDialog").classList.add("has-product-results");
 
     const count = element("span", { class: "guided-results-count" });
@@ -67,7 +40,7 @@ export function createGuidedChat(state, catalog) {
       element("div", { class: "guided-results-heading" }, [
         element("strong", {
           class: "guided-results-title",
-          text: path.length ? path.join(" · ") : "Produtos encontrados",
+          text: heading || (path.length ? path.join(" · ") : "Produtos encontrados"),
         }),
         count,
       ]),
@@ -78,7 +51,6 @@ export function createGuidedChat(state, catalog) {
         title: "Limpar filtros",
         onclick: () => {
           path = [];
-          selected = null;
           messages.replaceChildren();
           clearResults();
           browse();
@@ -98,7 +70,7 @@ export function createGuidedChat(state, catalog) {
     });
     const panel = element("section", { class: "guided-results" }, [
       toolbar,
-      element('p', { class: 'muted', text: 'Procura algum produto específico nesta categoria? Digite o nome no campo do chat abaixo.' }),
+      element('p', { class: 'muted', text: 'Digite um nome no chat para buscar em todos os produtos da loja.' }),
       grid,
       empty,
       more,
@@ -139,7 +111,7 @@ export function createGuidedChat(state, catalog) {
     const actions = element('div', { class: 'suggestions chat-next-search' }, [
       element('p', { text: `${event.detail.product.name} adicionado. Quer pesquisar outro produto ou manter esta seleção?` }),
       element('button', { text: 'Limpar e pesquisar outro', onclick: () => {
-        path = []; selected = null; messages.replaceChildren(); clearResults(); browse(); $('#chatInput').focus();
+        path = []; messages.replaceChildren(); clearResults(); browse(); $('#chatInput').focus();
       } }),
       element('button', { text: 'Manter filtro atual', onclick: () => { actions.remove(); $('#chatInput').focus(); } }),
     ]);
@@ -148,7 +120,6 @@ export function createGuidedChat(state, catalog) {
   });
   function browse() {
     clearResults();
-    selected = null;
     const choices = nextChoices(state.products, state.config.categories, path);
     say(
       path.length
@@ -174,10 +145,9 @@ export function createGuidedChat(state, catalog) {
     }
     messages.scrollTop = messages.scrollHeight;
   }
-  function search(query, all = false) {
-    const source = all
-      ? scopedProducts(state.products, state.config.categories, [])
-      : pool();
+  function search(query) {
+    path = [];
+    const source = scopedProducts(state.products, state.config.categories, []);
     const matches = searchProducts(
       source,
       query,
@@ -185,25 +155,15 @@ export function createGuidedChat(state, catalog) {
     );
     if (!matches.length) {
       say(
-        "Não encontrei esse nome nesta seleção. Tente uma palavra mais curta ou um nome alternativo.",
+        "Não encontrei esse nome na loja. Tente uma palavra mais curta ou um nome alternativo.",
       );
-      if (path.length && !all) {
-        buttons([
-          [
-            "Buscar em toda a loja",
-            () => {
-              path = [];
-              search(query, true);
-            },
-          ],
-        ]);
-      }
+      clearResults();
       return;
     }
     if (matches.some((match) => match.approximate)) {
       say("Encontrei nomes parecidos. Confira qual deles você procura:");
     }
-    results(matches.map((match) => match.product));
+    results(matches.map((match) => match.product), `Resultados para “${query}”`);
   }
   $("#chatForm").addEventListener("submit", (event) => {
     event.preventDefault();
@@ -213,25 +173,6 @@ export function createGuidedChat(state, catalog) {
     }
     $("#chatInput").value = "";
     say(query, "user");
-    const choice = nextChoices(
-      state.products,
-      state.config.categories,
-      path,
-    ).find((item) => normalize(item.name) === normalize(query));
-    if (choice) {
-      path.push(choice.name);
-      browse();
-      return;
-    }
-    if (
-      selected &&
-      /^(preco|valor|quanto custa|como cuidar|cuidados|detalhes|especificacoes|tamanho|ambiente)[ ?]*$/.test(
-        normalize(query),
-      )
-    ) {
-      details(selected);
-      return;
-    }
     search(query);
   });
   $("#aiFab").addEventListener("click", () => {

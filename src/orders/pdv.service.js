@@ -153,12 +153,16 @@ class PdvService {
 
   async schedulePixExpiration(order) {
     if (!order?.id || order.paymentMethod !== 'PIX') return;
+    return this.schedulePaymentExpiration(order);
+  }
+
+  async schedulePaymentExpiration(order) {
     if (process.env.NODE_ENV === 'production' && typeof this.taskQueueClient?.enqueuePixExpiration !== 'function') {
       await this.repository.cancelOrder(order.id, 'Cloud Tasks não está disponível para expirar a reserva Pix.').catch(() => {});
       throw new Error('Cloud Tasks não está disponível para expirar a reserva Pix.');
     }
     try {
-      await this.taskQueueClient?.enqueuePixExpiration?.(order.id, Number(order.pixTtlSeconds || order.pixData?.expiresInSeconds) || 3600);
+      await this.taskQueueClient?.enqueuePixExpiration?.(order.id, Math.max(1, Math.ceil((Date.parse(order.pixExpiresAt || order.paymentExpiresAt) - Date.now()) / 1000)) || Number(order.pixTtlSeconds || order.pixData?.expiresInSeconds) || 3600);
     } catch (error) {
       await this.repository.cancelOrder(order.id, 'Não foi possível agendar a expiração da reserva Pix.').catch(() => {});
       throw error;
@@ -167,16 +171,16 @@ class PdvService {
 
   async expirePixOrder(orderId) {
     const order = await this.repository.read('orders', String(orderId));
-    if (!order || order.paymentMethod !== 'PIX' || order.completedAt || order.status === 'CANCELLED' || order.paymentTransactionId) return false;
-    const expiresAt = Date.parse(order.pixExpiresAt || '');
+    if (!order || order.completedAt || order.status === 'CANCELLED' || order.paymentTransactionId) return false;
+    const expiresAt = Date.parse(order.pixExpiresAt || order.paymentExpiresAt || '');
     if (!Number.isFinite(expiresAt) || expiresAt > Date.now()) return false;
-    await this.repository.repository.cancelOrder(order.id, 'Prazo de pagamento Pix expirado');
+    await this.repository.repository.cancelOrder(order.id, 'Prazo de pagamento expirado');
     return true;
   }
 
   async expirePixOrders() {
     const orders = await this.repository.repository.getAllOrders(10000);
-    for (const order of orders.filter((item) => ['CREATING_PIX', 'AWAITING_PIX', 'PENDING'].includes(item.status) && item.paymentMethod === 'PIX')) {
+    for (const order of orders.filter((item) => item.status === 'AWAITING_PAYMENT' || (['CREATING_PIX', 'AWAITING_PIX', 'PENDING'].includes(item.status) && item.paymentMethod === 'PIX'))) {
       try { await this.expirePixOrder(order.id); } catch {}
     }
   }
@@ -231,16 +235,7 @@ class PdvService {
         return true;
       }
       const verification = { txid, endToEndId, amountMinor: Math.round(Number(payment.valor) * 100), verifiedVia: 'SICREDI_PIX_WEBHOOK' };
-      if (order.source === 'PDV') {
-        await this.repository.receive(order.id, null, verification);
-      } else {
-        await this.repository.repository.confirmOrderPayment(order.id, {
-          verifiedVia: verification.verifiedVia,
-          paymentTransactionId: endToEndId,
-          paymentAmount: Number(payment.valor),
-          pixTxid: txid,
-        });
-      }
+      await this.repository.receive(order.id, null, verification);
     }
     const notificationIds = await this.repository.ensurePaymentNotifications(order.id);
     for (const id of notificationIds) await this.deliver(id);
@@ -262,6 +257,8 @@ class PdvService {
     try {
       const order = job.orderId ? await this.repository.read('orders', job.orderId) : null;
       const settlement = job.settlementId ? await this.repository.read('debt_settlements', job.settlementId) : null;
+      const settlementMethods = settlement ? (settlement.paymentParts || [{ method: settlement.paymentMethod, amount: settlement.amount }])
+        .map((part) => `${part.method}: ${money(part.amount)}`).join(' + ') : '';
       const isOwner = ['owner-paid', 'owner-debt-paid'].includes(job.kind);
       const phone = normalizePhone(isOwner ? this.ownerPhone : (order?.customerPhone || settlement?.customerPhone));
       if (!phone && isOwner) { throw new Error('WhatsApp da horta não configurado.'); }
@@ -270,8 +267,8 @@ class PdvService {
       if (job.kind === 'receipt' || job.kind === 'customer-paid' || job.kind === 'pix-charge') {
         text = !order.completedAt && !order.paidAt && job.kind !== 'customer-paid' ? formatCustomerOrderMessage(order) : formatOrderReceipt(order);
       }
-      else if (settlement?.entryType === 'CREDITO_CLIENTE') { text = `CONFLORA — CRÉDITO DO CLIENTE\nCliente: ${settlement.customerName}\nValor recebido: ${money(settlement.amount)}\nCrédito disponível: ${money(settlement.newCreditBalance)}\nRecebido por: ${settlement.receivedBy.name}\nForma: ${settlement.paymentMethod}`; }
-      else if (settlement) { text = `CONFLORA — QUITAÇÃO DE FIADO\nCliente: ${settlement.customerName}\nValor: ${money(settlement.amount)}\nSaldo devedor: ${money(settlement.newBalance)}${settlement.excessCredit ? '\nExcedente registrado como crédito: ' + money(settlement.excessCredit) : ''}\nRecebido por: ${settlement.receivedBy.name}\nForma: ${settlement.paymentMethod}`; }
+      else if (settlement?.entryType === 'CREDITO_CLIENTE') { text = `CONFLORA — CRÉDITO DO CLIENTE\nCliente: ${settlement.customerName}\nValor recebido: ${money(settlement.amount)}\nCrédito disponível: ${money(settlement.newCreditBalance)}\nRecebido por: ${settlement.receivedBy.name}\nForma: ${settlementMethods}`; }
+      else if (settlement) { text = `CONFLORA — QUITAÇÃO DE FIADO\nCliente: ${settlement.customerName}\nValor: ${money(settlement.amount)}\nSaldo devedor: ${money(settlement.newBalance)}${settlement.excessCredit ? '\nExcedente registrado como crédito: ' + money(settlement.excessCredit) : ''}\nRecebido por: ${settlement.receivedBy.name}\nForma: ${settlementMethods}`; }
       else {
         const author = order.createdBy?.name || order.customerName || 'Catálogo online';
         const receiver = order.receivedBy?.name || (order.verifiedVia === 'SICREDI_PIX_WEBHOOK' ? 'Sicredi · confirmação automática' : 'Equipe Conflora');

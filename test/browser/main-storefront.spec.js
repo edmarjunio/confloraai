@@ -303,3 +303,24 @@ test("catalog header exposes login, account role and admin settings according to
     .evaluate((html) => ({ scroll: html.scrollWidth, viewport: html.clientWidth }));
   expect(viewportWidth.scroll).toBeLessThanOrEqual(viewportWidth.viewport);
 });
+
+test('mobile chat searches the full catalog after selecting a category and keeps cards readable', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/'); await selectPortuguese(page);
+  if (await page.locator('#coachSkip').isVisible()) await page.locator('#coachSkip').click();
+  await page.locator('#aiFab').click();
+  await page.locator('#chatMessages').getByRole('button', { name: /Plantas/, exact: false }).first().click();
+  await page.locator('#chatInput').fill('Abacate');
+  await page.locator('#chatForm').evaluate((form) => form.requestSubmit());
+  const card = page.locator('#chatMessages .guided-results-grid render-product-card').filter({ hasText: 'Abacate KG' }).first();
+  await expect(card).toBeVisible();
+  expect(await card.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+  await expect(card.locator('.cf-shared-unit')).toHaveCSS('white-space', 'nowrap');
+  await card.locator('[data-action="add"]').click();
+  const weight = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'Quantos quilos de Abacate KG?' }) });
+  await expect(weight).toBeVisible();
+  await weight.getByRole('button', { name: 'Adicionar ao carrinho', exact: true }).click();
+  const actions = page.locator('.chat-next-search'); await expect(actions).toBeVisible();
+  expect(await actions.evaluate((node) => parseFloat(window.getComputedStyle(node).paddingLeft))).toBeGreaterThanOrEqual(14);
+  await page.screenshot({ path: 'test-results/chat-search-mobile.png' });
+});

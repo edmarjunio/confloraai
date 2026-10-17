@@ -105,11 +105,12 @@ function summarizePeriod({ from, to, orders = [], settlements = [] }) {
     const type = settlement.entryType || settlement.type || 'QUITACAO_FIADO';
     if (type === 'CREDITO_CLIENTE') { advanceCreditMinor += amountMinor; }
     else { receivedDebtMinor += amountMinor; }
-    const methodName = String(settlement.paymentMethod || 'OUTROS').toUpperCase();
-    const method = byPayment.get(methodName) ? methodName : 'OUTROS';
-    const payment = byPayment.get(method);
-    payment.receivedMinor += amountMinor;
-    payment.receiptCount++;
+    for (const part of settlement.paymentParts || [{ method: settlement.paymentMethod, amount: settlement.amount }]) {
+      const methodName = String(part.method || 'OUTROS').toUpperCase();
+      const payment = byPayment.get(byPayment.has(methodName) ? methodName : 'OUTROS');
+      payment.receivedMinor += cents(part.amount);
+      payment.receiptCount++;
+    }
   }
 
   const totalRevenue = reais(salesMinor);

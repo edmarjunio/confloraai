@@ -31,7 +31,7 @@ Clientes autenticados acessam **Minha conta** para consultar compras, recibos, f
 
 O código do pedido e a chave de idempotência impedem que uma repetição da mesma solicitação crie outra cobrança. Se o navegador perder a resposta, consulte a venda/comanda antes de iniciar uma nova. **Pix emitido reserva estoque**: com saldo físico 10 e reserva 2, ficam 8 disponíveis. A confirmação converte a reserva em baixa; o vencimento cancela o pedido e libera a reserva, sem aumentar o saldo físico. A reserva Pix permanece obrigatória mesmo com o controle legado de estoque desativado.
 
-A tela de comandas recebe mudanças em tempo real e destaca pedidos novos. Sem cobrança emitida, **Somente criar comanda e encaminhar ao caixa** não reserva nem baixa estoque. Pagamentos divididos com Pix cobram somente a parcela Pix; se vencerem após receber dinheiro/cartão, o cancelamento preserva esses valores e marca conciliação/estorno. Pix recebido para pedido já cancelado é registrado para conciliação, sem reabrir a venda automaticamente.
+A tela de comandas recebe mudanças em tempo real e destaca pedidos novos. Sem cobrança emitida, **Somente criar comanda e encaminhar ao caixa** cria a etapa de confirmação. Ao confirmar a comanda e passar para **Esperando pagamento**, o servidor reserva as unidades até o prazo de pagamento; a baixa física acontece somente ao finalizar o recebimento. O vencimento libera a reserva. Pagamentos divididos com Pix cobram somente a parcela Pix; se vencerem após receber dinheiro/cartão, o cancelamento preserva esses valores e marca conciliação/estorno. Pix recebido para pedido já cancelado é registrado para conciliação, sem reabrir a venda automaticamente.
 
 Em produção, a expiração é agendada no Cloud Tasks. Configure `TASK_SECRET`, `SERVICE_URL`, projeto, região e fila; conceda ao backend permissão para criar tarefas. O serviço recusa iniciar a cobrança quando não consegue garantir esse agendamento. Localmente há uma varredura de expiração enquanto o servidor está ativo.
 
@@ -91,6 +91,15 @@ O fluxo do site já usa Firebase Authentication para obter a identidade Google e
 4. Teste no domínio publicado: login, logout, acesso do cliente à própria conta e bloqueio de cliente nas telas `/admin` e `/caixa`. Para liberar equipe, cadastre/atribua o papel no cadastro interno; login Google não dá acesso administrativo por si só.
 
 Não use credencial privada de conta de serviço no navegador. O backend deve usar a identidade de runtime do Google Cloud ou Application Default Credentials.
+
+## Operar o quadro de comandas e receber dívidas
+
+- **Amarelo:** esperando confirmação. Caixa/Admin pode arrastar para **azul**, esperando pagamento, ou abrir a comanda e confirmar pelo botão. Vendedor apenas lança e acompanha.
+- **Azul → verde:** arrastar abre o recebimento; nenhuma baixa ocorre ao arrastar. Escolha uma ou mais formas, confira os valores e confirme. As demais movimentações são bloqueadas no servidor.
+- **Vermelho:** fiados registrados. Os recebimentos são lançados na conta do cliente, sem repetir a baixa da venda original.
+- **Pix recebido diretamente na chave:** em Esperando pagamento, escolha **Pix já recebido (conferir comprovante)**; confira o valor e a conta, marque a conferência e registre a observação. Para cobrança já emitida, use **Confirmar Pix manualmente e finalizar**. Somente Caixa/Admin confirma. Após a confirmação manual, eventos seguintes não consultam o Sicredi nem repetem a baixa. As parcelas de uma cobrança emitida permanecem fixas para preservar a conciliação.
+- **Recebimento parcial:** abra Receber pagamento, selecione o cliente e informe o valor recebido. Em dívida de R$ 200, receber R$ 100 deixa R$ 100 pendentes. Use **Receber valor restante** para registrar outro recebimento com nova identificação. Cada recebimento também pode ser dividido entre dinheiro, débito, crédito e Pix conferido.
+- O chat mantém a navegação por categorias nos botões; texto digitado busca em todo o catálogo. Os resultados usam o cartão compartilhado, com uma coluna no celular e até três em telas maiores.
 
 ## Vincular a API Pix do Sicredi
 

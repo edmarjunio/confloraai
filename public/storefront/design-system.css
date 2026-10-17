@@ -439,11 +439,13 @@ cf-card.cf-order-card {
   transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease, border-color 160ms ease;
 }
 cf-card.cf-order-card:hover { transform: translateY(-3px); box-shadow: 0 12px 22px rgb(15 56 30 / 15%); }
-cf-card.cf-order-card--amber { border-color: #fcd34d; background: rgb(254 243 199 / 68%); }
-cf-card.cf-order-card--blue,
-cf-card.cf-order-card--selected { border-color: #7dd3fc; background: rgb(224 242 254 / 78%); }
-cf-card.cf-order-card--green { border-color: #6ee7b7; background: rgb(209 250 229 / 72%); }
-cf-card.cf-order-card--red { border-color: #fda4af; background: rgb(255 228 230 / 76%); }
+cf-card.cf-order-card--amber { border-color: #fcd34d; background: rgb(254 225 104 / 38%) !important; }
+cf-card.cf-order-card--blue { border-color: #7dd3fc; background: rgb(125 211 252 / 30%) !important; }
+cf-card.cf-order-card--green { border-color: #6ee7b7; background: rgb(110 231 183 / 30%) !important; }
+cf-card.cf-order-card--red { border-color: #fda4af; background: rgb(253 164 175 / 30%) !important; }
+cf-card.cf-order-card[draggable="true"] { cursor: grab; }
+cf-card.cf-order-card[draggable="true"]:active { cursor: grabbing; }
+.cf-order-column--drop { outline: 2px dashed #109e46; outline-offset: 2px; background: #ecfdf5 !important; }
 cf-card.cf-order-card--selected { border-color: #0ea5e9; box-shadow: 0 0 0 3px rgb(14 165 233 / 20%), 0 8px 18px rgb(15 56 30 / 12%); }
 cf-card.cf-order-card--attention { animation: cf-order-arrival 1.35s ease-in-out 5; }
 @keyframes cf-order-arrival {

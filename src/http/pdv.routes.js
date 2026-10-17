@@ -20,6 +20,15 @@ function requireCashier(req, res, next) {
   next();
 }
 
+function manualPixVerification(order, parts, body) {
+  if (body?.proofSeen !== true) throw new Error('Confirme que conferiu o comprovante Pix antes de finalizar.');
+  const note = String(body?.note || '').trim();
+  if (note.length < 8) throw new Error('Registre uma observação sobre o comprovante (mínimo 8 caracteres).');
+  return { verifiedVia: 'MANUAL_CAIXA_PIX', txid: order.pixData?.txid,
+    amountMinor: Math.round(parts.filter((part) => part.method === 'PIX').reduce((sum, part) => sum + part.amount, 0) * 100),
+    endToEndId: String(body.endToEndId || '').trim().slice(0, 80), manualPixProofSeen: true, manualPixNote: note };
+}
+
 function businessDate(value) {
   if (!value) { return ''; }
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date(value));
@@ -55,10 +64,12 @@ function paymentTotals(orders, settlements) {
     }
   }
   for (const settlement of settlements) {
-    const row = totals[settlement.paymentMethod];
-    if (!row) { continue; }
-    row.debt += Number(settlement.amount || 0);
-    row.debtCount += 1;
+    for (const part of settlement.paymentParts || [{ method: settlement.paymentMethod, amount: settlement.amount }]) {
+      const row = totals[part.method];
+      if (!row) continue;
+      row.debt += Number(part.amount || 0);
+      row.debtCount += 1;
+    }
   }
   for (const row of Object.values(totals)) { row.total = row.sales + row.debt; }
   return totals;
@@ -161,7 +172,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     const openOrders = orders.filter((order) => !order.completedAt && order.status !== 'CANCELLED' &&
       canViewOpenOrder(order));
     const pendingConfirmation = openOrders.filter((order) => order.status === 'AWAITING_CASHIER' || (order.status === 'PENDING' && order.paymentMethod !== 'PIX'));
-    const pendingPayment = openOrders.filter((order) => ['CREATING_PIX', 'AWAITING_PIX'].includes(order.status) || (order.status === 'PENDING' && order.paymentMethod === 'PIX'));
+    const pendingPayment = openOrders.filter((order) => ['AWAITING_PAYMENT', 'CREATING_PIX', 'AWAITING_PIX'].includes(order.status) || (order.status === 'PENDING' && order.paymentMethod === 'PIX'));
     const history = orders.filter((order) => canViewPersonalOrder(order) && isWithinRange(order.paidAt || order.completedAt || order.createdAt, range));
     const completed = history.filter((order) => order.completedAt && order.status !== 'CANCELLED');
     const confirmed = completed.filter((order) => order.paymentStatus === 'ON_ACCOUNT');
@@ -218,35 +229,40 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     return order;
   };
   app.get('/api/caixa/orders/:id', route(async (req, res) => res.json(await findOrder(req))));
+  app.post('/api/caixa/orders/:id/move', requireCashier, route(async (req, res) => {
+    const order = await findOrder(req);
+    const { from, to } = req.body || {};
+    const stage = ['AWAITING_CASHIER', 'PENDING'].includes(order.status) && !order.pixData?.txid ? 'confirmation'
+      : (['AWAITING_PAYMENT', 'CREATING_PIX', 'AWAITING_PIX'].includes(order.status) || (order.status === 'PENDING' && order.pixData?.txid)) ? 'payment' : 'closed';
+    if (from !== stage || !((from === 'confirmation' && to === 'payment') || (from === 'payment' && to === 'paid'))) {
+      throw new Error('Movimento permitido: confirmação → pagamento → pago. Atualize a comanda se ela mudou.');
+    }
+    if (to === 'paid') return res.json({ order, requiresPayment: true });
+    const updated = await store.advanceToPayment(order.id, actor(req.user));
+    await service.schedulePaymentExpiration(updated);
+    res.json({ order: updated });
+  }));
   app.post('/api/caixa/orders/:id/confirm', requireCashier, route(async (req, res) => {
     const existing = await findOrder(req);
-    const parts = normalizePaymentParts(req.body.paymentParts, req.body.paymentMethod || existing.paymentMethod, existing.total);
-    if (existing.source !== 'PDV' && parts.length > 1) throw new Error('Divida o pagamento pelo PDV para preservar as parcelas da comanda.');
+    const isManualPix = req.body.manualPix === true || req.body.paymentMethod === 'PIX_MANUAL';
+    const requestedMethod = req.body.paymentMethod === 'PIX_MANUAL' ? 'PIX' : req.body.paymentMethod;
+    const parts = normalizePaymentParts(req.body.paymentParts, requestedMethod || existing.paymentMethod, existing.total);
     const paymentMethod = parts.some((part) => part.method === 'PIX') ? 'PIX' : parts.length > 1 ? 'MISTO' : parts[0].method;
-    if (paymentMethod === 'PIX') {
-      if (existing.source === 'WEB_CATALOG' && ['CREATING_PIX', 'AWAITING_PIX'].includes(existing.status)) {
-        throw new Error('A cobrança Pix já foi emitida. Confirme pelo Sicredi ou use a confirmação manual após conferir o comprovante.');
-      }
+    if (paymentMethod === 'PIX' && !isManualPix) {
       const order = await service.requestPixAtCashier(existing.id, req.user, parts);
       return res.status(202).json({ success: true, awaitingPayment: true, order, receiptText: formatOrderReceipt(order) });
     }
     const receivedAmount = req.body.receivedAmount === null || req.body.receivedAmount === undefined || req.body.receivedAmount === ''
       ? null : Number(req.body.receivedAmount);
-    const order = existing.source === 'PDV'
-      ? await store.receive(existing.id, actor(req.user), null, receivedAmount, paymentMethod, { sendFinalReceipt: true, requestedParts: parts })
-      : await repository.confirmOrderPayment(existing.id, {
-        verifiedVia: 'CAIXA_MANUAL', receivedBy: actor(req.user), paymentMethod,
-        receivedAmount: paymentMethod === 'DINHEIRO' ? (receivedAmount ?? Number(existing.total || 0)) : receivedAmount,
-        changeGiven: receivedAmount === null ? 0 : Math.max(0, receivedAmount - Number(existing.total || 0)),
-      });
-    if (existing.source === 'WEB_CATALOG') {
-      await store.transaction(async (tx) => {
-        const jobId = `${existing.id}-final-receipt`;
-        tx.set('pdv_outbox', jobId, { id: jobId, orderId: existing.id, kind: 'customer-paid', status: 'PENDING', attempts: 0 });
-      });
+    const verification = isManualPix && paymentMethod === 'PIX' ? manualPixVerification(existing, parts, req.body) : null;
+    const order = await store.receive(existing.id, actor(req.user), verification, receivedAmount,
+      existing.pixData?.txid ? null : paymentMethod, { sendFinalReceipt: !verification, requestedParts: parts });
+    if (verification) {
+      for (const id of await store.ensurePaymentNotifications(order.id)) await service.deliver(id);
     }
-    await service.deliver(`${order.id}-final-receipt`);
-    const delivery = await store.read('pdv_outbox', `${order.id}-final-receipt`);
+    const receiptId = `${order.id}-${verification ? 'customer-paid' : 'final-receipt'}`;
+    await service.deliver(receiptId);
+    const delivery = await store.read('pdv_outbox', receiptId);
     res.json({ success: true, order, receiptText: formatOrderReceipt(order), receiptDelivery: { sent: delivery?.status === 'SENT' && Boolean(order.customerPhone), reason: delivery?.lastError || (order.customerPhone ? '' : 'Sem WhatsApp informado.') } });
   }));
   app.post('/api/caixa/orders/:id/confirm-manual-pix', requireCashier, route(async (req, res) => {
@@ -256,26 +272,9 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
       await service.expirePixOrder(existing.id);
       throw new Error('Esta cobrança Pix venceu e o estoque está sendo liberado. Confira o histórico do pedido.');
     }
-    if (req.body?.proofSeen !== true) { throw new Error('Confirme que conferiu o comprovante Pix antes de finalizar.'); }
-    const note = String(req.body?.note || '').trim();
-    if (note.length < 8) { throw new Error('Registre uma observação sobre o comprovante (mínimo 8 caracteres).'); }
     const receiver = actor(req.user);
-    const verification = {
-      verifiedVia: 'MANUAL_CAIXA_PIX',
-      txid: existing.pixData?.txid,
-      amountMinor: Math.round(partAmount(existing, 'PIX') * 100),
-      endToEndId: String(req.body?.endToEndId || '').trim().slice(0, 80),
-      manualPixProofSeen: true,
-      manualPixNote: note,
-    };
-    const order = existing.source === 'PDV'
-      ? await store.receive(existing.id, receiver, verification)
-      : await repository.confirmOrderPayment(existing.id, {
-        verifiedVia: 'MANUAL_CAIXA_PIX',
-        paymentTransactionId: verification.endToEndId || `MANUAL-${existing.id}`,
-        paymentAmount: Number(existing.total), pixTxid: verification.txid,
-        receivedBy: receiver, manualPixProofSeen: true, manualPixNote: note,
-      });
+    const verification = manualPixVerification(existing, existing.paymentParts || [{ method: 'PIX', amount: existing.total }], req.body);
+    const order = await store.receive(existing.id, receiver, verification);
     const notificationIds = await store.ensurePaymentNotifications(order.id);
     for (const id of notificationIds) await service.deliver(id);
     res.json({ success: true, order, receiptText: formatOrderReceipt(order) });
@@ -303,8 +302,8 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     try {
       const order = await store.read('orders', orderId);
       if (!order || order.status === 'CANCELLED' || order.completedAt || order.paymentTransactionId) return res.sendStatus(200);
-      if (order.paymentMethod !== 'PIX') return res.sendStatus(200);
-      if (Date.parse(order.pixExpiresAt || '') > Date.now()) return res.sendStatus(503);
+      if (!order.pixExpiresAt && !order.paymentExpiresAt) return res.sendStatus(200);
+      if (Date.parse(order.pixExpiresAt || order.paymentExpiresAt || '') > Date.now()) return res.sendStatus(503);
       await service.expirePixOrder(orderId);
       return res.sendStatus(200);
     } catch (error) {
@@ -322,12 +321,16 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
   app.post('/api/caixa/debts/settle', requireCashier, route(async (req, res) => {
     const amount = Number(req.body.amount);
     const paymentMethod = String(req.body.paymentMethod || '').toUpperCase();
-    if (!Number.isFinite(amount) || amount <= 0 || !['DINHEIRO', 'DEBITO', 'CREDITO'].includes(paymentMethod)) { throw new Error('Use dinheiro, débito ou crédito para receber o pagamento no caixa.'); }
+    if (!Number.isFinite(amount) || amount <= 0 || Math.abs(amount * 100 - Math.round(amount * 100)) > 0.00001) throw new Error('Informe o valor recebido em centavos.');
+    const parts = normalizePaymentParts(req.body.paymentParts, paymentMethod, amount);
+    if (parts.some((part) => !['DINHEIRO', 'DEBITO', 'CREDITO', 'PIX'].includes(part.method))) throw new Error('Use dinheiro, cartão ou Pix conferido.');
+    const verification = parts.some((part) => part.method === 'PIX') ? manualPixVerification({}, parts, req.body) : null;
     const customerKey = String(req.body.customerKey || '');
     if (!customerKey || customerKey.includes('/')) { throw new Error('Selecione o cliente cadastrado.'); }
     const entryType = String(req.body.entryType || 'QUITACAO_FIADO').toUpperCase();
     if (!['QUITACAO_FIADO', 'CREDITO_CLIENTE'].includes(entryType)) { throw new Error('Tipo de recebimento inválido.'); }
-    const result = await store.settle({ id: requestId(req.body.requestId), customerKey, amount: Math.round(amount * 100) / 100, paymentMethod, notes: String(req.body.notes || '').slice(0, 500), receivedBy: actor(req.user), entryType });
+    const result = await store.settle({ id: requestId(req.body.requestId), customerKey, amount: Math.round(amount * 100) / 100, paymentMethod, paymentParts: parts, verification,
+      notes: String(req.body.notes || '').slice(0, 500), receivedBy: actor(req.user), entryType });
     await service.deliver(result.id);
     res.json({ success: true, ...result });
   }));

@@ -4,8 +4,8 @@ window.PdvComponents = (() => {
   const money = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   const button = 'cf-button';
   const field = 'w-full p-3 border rounded-xl my-2';
-  function PaymentPartsEditor({ parts, onChange, total, customerId }) {
-    const labels = { PIX: 'Pix Sicredi', DINHEIRO: 'Dinheiro', DEBITO: 'Débito', CREDITO: 'Crédito', FIADO: 'Fiado' };
+  function PaymentPartsEditor({ parts, onChange, total, customerId, allowedMethods }) {
+    const labels = Object.fromEntries(Object.entries({ PIX: 'Pix', DINHEIRO: 'Dinheiro', DEBITO: 'Débito', CREDITO: 'Crédito', FIADO: 'Fiado' }).filter(([method]) => !allowedMethods || allowedMethods.includes(method)));
     const update = (index, values) => onChange(parts.map((part, current) => current === index ? { ...part, ...values } : part));
     const sum = parts.reduce((value, part) => value + Math.round(Number(part.amount || 0) * 100), 0);
     const remaining = (Math.round(total * 100) - sum) / 100;
@@ -231,12 +231,12 @@ window.PdvComponents = (() => {
     if (order.status === 'CANCELLED') return 'Cancelado';
     if (order.paymentStatus === 'ON_ACCOUNT') return 'Fiado registrado';
     if (order.paymentStatus === 'APPROVED' && (order.paidAt || order.completedAt)) return 'Pago / finalizado';
-    if (['CREATING_PIX', 'AWAITING_PIX'].includes(order.status)) return 'Esperando pagamento';
+    if (['AWAITING_PAYMENT', 'CREATING_PIX', 'AWAITING_PIX'].includes(order.status)) return 'Esperando pagamento';
     if (order.status === 'AWAITING_CASHIER') return 'Esperando confirmação';
     if (order.completedAt) return 'Confirmado';
     return 'Em andamento';
   }
-  function OrderDetails({ order, onClose, canReceive = false, canConfirmManualPix = false, busy = false, error = '', onReceive, onManualPix }) {
+  function OrderDetails({ order, onClose, canReceive = false, canConfirmManualPix = false, busy = false, error = '', onReceive, onManualPix, canAdvance = false, onAdvance }) {
     const [paymentMethod, setPaymentMethod] = useState(order.paymentMethod || 'DINHEIRO');
     const [cashAmount, setCashAmount] = useState(Number(order.total || 0).toFixed(2));
     const [copied, setCopied] = useState(false);
@@ -251,6 +251,9 @@ window.PdvComponents = (() => {
     }, [order.id, order.status, order.paymentMethod]);
     const [splitPayment, setSplitPayment] = useState(order.paymentParts?.length > 1);
     const [paymentParts, setPaymentParts] = useState(order.paymentParts?.length > 1 ? order.paymentParts : [{ method: 'DINHEIRO', amount: '' }, { method: 'CREDITO', amount: '' }]);
+    const [directPix, setDirectPix] = useState(false);
+    const hasPixPart = splitPayment ? paymentParts.some((part) => part.method === 'PIX') : paymentMethod === 'PIX';
+    const needsManualProof = splitPayment ? directPix && hasPixPart : paymentMethod === 'PIX_MANUAL';
     const pixCopyPaste = order.pixData?.pixCopiaECola || order.pixCopiaECola || '';
     const pixAmount = (order.paymentParts || [{ method: order.paymentMethod, amount: order.total }])
       .filter((part) => part.method === 'PIX').reduce((sum, part) => sum + Number(part.amount || 0), 0);
@@ -262,7 +265,7 @@ window.PdvComponents = (() => {
       <div className="space-y-2 text-sm">
         <p className="font-bold text-lg">{order.customerName || 'Cliente Balcão'}</p>
         <p className="text-slate-600">{orderStatusLabel(order)} · {paymentLabel(order.paymentMethod)}</p>
-        <cf-list>{(order.items || []).map((item, index) => <cf-list-item className="flex justify-between gap-3" key={`${item.productId}-${index}`}><span title={item.name}>{orderItemLabel(item)}</span><strong>{money(item.subtotalMinor ? item.subtotalMinor / 100 : item.price * item.quantity)}</strong></cf-list-item>)}</cf-list>
+        <cf-list>{(order.items || []).map((item, index) => <cf-list-item class="flex justify-between gap-3" key={`${item.productId}-${index}`}><span title={item.name}>{orderItemLabel(item)}</span><strong>{money(item.subtotalMinor ? item.subtotalMinor / 100 : item.price * item.quantity)}</strong></cf-list-item>)}</cf-list>
         <p>Subtotal: {money(order.subtotal)}</p>
         {Number(order.discountAmount) > 0 && <p>Desconto: −{money(order.discountAmount)}</p>}
         {Number(order.freightValue) > 0 && <p>Entrega: {money(order.freightValue)}</p>}
@@ -277,7 +280,7 @@ window.PdvComponents = (() => {
         {order.notes && <p>Observação: {order.notes}</p>}
         {order.paymentMethod === 'PIX' && ['CREATING_PIX', 'AWAITING_PIX'].includes(order.status) && <section className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 p-4">
           <h3 className="font-black text-sky-950">Pix aguardando confirmação</h3>
-          <p className="mt-1 text-xs text-sky-900">A venda só será finalizada depois que o Sicredi confirmar o pagamento do valor exato.</p>
+          <p className="mt-1 text-xs text-sky-900">A venda será finalizada pela confirmação do Sicredi ou pela conferência manual do Pix pelo caixa/admin.</p>
           {order.pixData?.qrCodeBase64 && <img src={order.pixData.qrCodeBase64} alt={`QR Code Pix da comanda ${order.ticketNumber}`} className="mx-auto mt-3 block max-h-48 w-48 rounded-lg bg-white object-contain p-2" />}
           {pixCopyPaste && <><label className="mt-3 block text-xs font-bold text-sky-950">Pix copia e cola<textarea readOnly value={pixCopyPaste} className="mt-1 w-full rounded-xl border border-sky-200 bg-white p-2 text-xs" rows={3} /></label><button type="button" className={button + ' mt-2 w-full'} onClick={copyPixCode}>{copied ? 'Código copiado' : 'Copiar Pix copia e cola'}</button></>}
           {!order.pixData?.qrCodeBase64 && !pixCopyPaste && <p className="mt-2 text-xs text-sky-900">A cobrança está sendo preparada. Atualize em alguns instantes.</p>}
@@ -288,31 +291,35 @@ window.PdvComponents = (() => {
             <button type="button" className={button + ' w-full'} disabled={busy || !manualProofSeen || manualPixNote.trim().length < 8} onClick={() => onManualPix(order, manualPixNote)}>Confirmar Pix manualmente e finalizar</button>
           </div>}
         </section>}
+        {canAdvance && <button type="button" className={button + ' mt-4 w-full'} disabled={busy} onClick={() => onAdvance(order)}>Confirmar comanda e aguardar pagamento</button>}
         {canReceive && <section className="mt-4 space-y-2 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
           <h3 className="font-black text-emerald-950">Receber no caixa</h3>
           <label className="block text-xs font-bold text-slate-700">Forma de pagamento
             <select className={field} value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}>
-              <option value="DINHEIRO">Dinheiro</option><option value="DEBITO">Cartão de débito</option><option value="CREDITO">Cartão de crédito</option><option value="PIX">Pix com confirmação Sicredi</option>
+              <option value="DINHEIRO">Dinheiro</option><option value="DEBITO">Cartão de débito</option><option value="CREDITO">Cartão de crédito</option><option value="PIX">Pix com confirmação Sicredi</option><option value="PIX_MANUAL">Pix já recebido (conferir comprovante)</option>
               <option value="FIADO" disabled={!order.customerId}>Fiado (cliente cadastrado)</option><option value="SALDO_CLIENTE" disabled={!order.customerId}>Saldo do cliente</option>
             </select>
           </label>
           <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={splitPayment} onChange={(event) => setSplitPayment(event.target.checked)} />Usar mais de uma forma de pagamento</label>
           {splitPayment && <PaymentPartsEditor parts={paymentParts} onChange={setPaymentParts} total={Number(order.total)} customerId={order.customerId} />}
+          {splitPayment && paymentParts.some((part) => part.method === 'PIX') && <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={directPix} onChange={(event) => setDirectPix(event.target.checked)} />Pix já recebido: confirmar manualmente</label>}
+          {needsManualProof && <div className="space-y-2"><label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={manualProofSeen} onChange={(event) => setManualProofSeen(event.target.checked)} />Conferi o valor do Pix e a conta recebedora da Conflora.</label><label className="block text-xs">Observação do comprovante<textarea className={field} value={manualPixNote} onChange={(event) => setManualPixNote(event.target.value)} /></label></div>}
           {paymentMethod === 'DINHEIRO' && !splitPayment && <label className="block text-xs font-bold text-slate-700">Valor recebido em dinheiro (R$)<input className={field} type="number" min={Number(order.total || 0)} step="0.01" value={cashAmount} onChange={(event) => setCashAmount(event.target.value)} /></label>}
-          {paymentMethod === 'DINHEIRO' && Number(cashAmount) >= Number(order.total || 0) && <p className="text-right text-xs font-bold text-emerald-900">Troco: {money(Number(cashAmount) - Number(order.total || 0))}</p>}
+          {paymentMethod === 'DINHEIRO' && !splitPayment && Number(cashAmount) >= Number(order.total || 0) && <p className="text-right text-xs font-bold text-emerald-900">Troco: {money(Number(cashAmount) - Number(order.total || 0))}</p>}
           {!order.customerId && ['FIADO', 'SALDO_CLIENTE'].includes(paymentMethod) && <p className="text-xs text-amber-900">Selecione um cliente cadastrado antes de receber em fiado ou usar saldo.</p>}
-          {error && <p role="alert" className="rounded-lg bg-red-50 p-2 text-xs text-red-800">{error}</p>}
-          <button type="button" className={button + ' w-full'} disabled={busy || (!splitPayment && paymentMethod === 'DINHEIRO' && Number(cashAmount) < Number(order.total || 0)) || (!splitPayment && ['FIADO', 'SALDO_CLIENTE'].includes(paymentMethod) && !order.customerId)} onClick={() => onReceive(order, splitPayment ? 'MISTO' : paymentMethod, !splitPayment && paymentMethod === 'DINHEIRO' ? cashAmount : null, splitPayment ? paymentParts.map((part) => ({ ...part, amount: Number(part.amount) })) : undefined)}>
-            {busy ? 'Processando…' : paymentMethod === 'PIX' ? 'Gerar QR Code Pix' : 'Confirmar pagamento e finalizar'}
+
+          <button type="button" className={button + ' w-full'} disabled={busy || (needsManualProof && (!manualProofSeen || manualPixNote.trim().length < 8)) || (!splitPayment && paymentMethod === 'DINHEIRO' && Number(cashAmount) < Number(order.total || 0)) || (!splitPayment && ['FIADO', 'SALDO_CLIENTE'].includes(paymentMethod) && !order.customerId)} onClick={() => onReceive(order, splitPayment ? 'MISTO' : paymentMethod, !splitPayment && paymentMethod === 'DINHEIRO' ? cashAmount : null, splitPayment ? paymentParts.map((part) => ({ ...part, amount: Number(part.amount) })) : undefined, { manualPix: needsManualProof, proofSeen: manualProofSeen, note: manualPixNote })}>
+            {busy ? 'Processando…' : hasPixPart && !needsManualProof ? 'Gerar QR Code Pix' : 'Confirmar pagamento e finalizar'}
           </button>
         </section>}
+        {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-xs text-red-800">{error}</p>}
       </div>
     </Panel>;
   }
-  function OrderCard({ order, tone, selected, attention, onDetails }) {
+  function OrderCard({ order, tone, selected, attention, onDetails, stage, canMove, onDragStart, onDragEnd }) {
     const items = (order.items || []).slice(0, 2);
     const extraItems = Math.max(0, (order.items || []).length - items.length);
-    return <cf-card padding="sm" className={`cf-order-card cf-order-card--${tone || 'amber'} ${selected ? 'cf-order-card--selected' : ''} ${attention ? 'cf-order-card--attention' : ''}`}>
+    return <cf-card padding="sm" draggable={canMove && ['confirmation', 'payment'].includes(stage) ? 'true' : undefined} onDragStart={(event) => { event.dataTransfer.setData('application/x-conflora-order', JSON.stringify({ id: order.id, from: stage })); event.dataTransfer.effectAllowed = 'move'; onDragStart?.(stage); }} onDragEnd={onDragEnd} class={`cf-order-card cf-order-card--${tone || 'amber'} ${selected ? 'cf-order-card--selected' : ''} ${attention ? 'cf-order-card--attention' : ''}`}>
       <button type="button" className="w-full cursor-pointer text-left" onClick={() => onDetails(order)} aria-label={`Abrir recibo e detalhes da comanda ${order.ticketNumber}`}>
         <div className="flex items-start justify-between gap-2">
           <span className="text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Comanda #{order.ticketNumber}</span>
@@ -330,26 +337,27 @@ window.PdvComponents = (() => {
     </cf-card>;
   }
   function MetricCard({ label, value, description, tone = 'default' }) {
-    return <cf-card padding="sm" className="cf-metric-card" tone={tone === 'debt' ? 'warning' : undefined}>
+    return <cf-card padding="sm" class="cf-metric-card" tone={tone === 'debt' ? 'warning' : undefined}>
       <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</p>
       <p className="mt-1 text-xl font-black text-[#0F381E]">{value}</p>
       {description && <p className="mt-1 text-[10px] text-slate-500">{description}</p>}
     </cf-card>;
   }
-  function CashierColumn({ title, hint, orders, tone, selectedOrderId, pulsedOrderIds, onDetails }) {
+  function CashierColumn({ title, hint, orders, tone, selectedOrderId, pulsedOrderIds, onDetails, stage, canMove, dragFrom, onMove, onDragStart, onDragEnd }) {
     const themes = {
       amber: 'border-amber-300 bg-amber-50 text-amber-950',
       blue: 'border-sky-300 bg-sky-50 text-sky-950',
       green: 'border-emerald-300 bg-emerald-50 text-emerald-950',
       red: 'border-red-300 bg-red-50 text-red-950',
     };
-    return <section className="min-w-[84vw] snap-start rounded-2xl border border-slate-200 bg-slate-100 p-3 md:min-w-0" aria-label={title}>
+    const acceptsDrop = canMove && ((dragFrom === 'confirmation' && stage === 'payment') || (dragFrom === 'payment' && stage === 'paid'));
+    return <section onDragOver={(event) => { if (acceptsDrop) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; } }} onDrop={(event) => { event.preventDefault(); if (!acceptsDrop) return; try { const payload = JSON.parse(event.dataTransfer.getData('application/x-conflora-order')); onMove(payload.id, payload.from, stage); } catch { /* Ignore unrelated drag payloads. */ } onDragEnd(); }} className={`min-w-[84vw] snap-start rounded-2xl border border-slate-200 bg-slate-100 p-3 md:min-w-0 ${acceptsDrop ? 'cf-order-column--drop' : ''}`} aria-label={title}>
       <header className={`mb-3 rounded-xl border px-3 py-2 ${themes[tone]}`}>
         <div className="flex items-center justify-between gap-2"><h3 className="text-xs font-black tracking-wide">{title}</h3><span className="rounded-full bg-white/80 px-2 py-0.5 text-xs font-extrabold">{orders.length}</span></div>
         <p className="mt-1 text-[10px] opacity-75">{hint}</p>
       </header>
       <div className="max-h-[58vh] space-y-2 overflow-y-auto pr-1">
-        {orders.map((order) => <OrderCard key={order.id} order={order} tone={tone} attention={pulsedOrderIds.has(order.id)} selected={selectedOrderId === order.id && order.status === 'AWAITING_CASHIER'} onDetails={onDetails} />)}
+        {orders.map((order) => <OrderCard key={order.id} order={order} tone={tone} stage={stage} canMove={canMove} onDragStart={onDragStart} onDragEnd={onDragEnd} attention={pulsedOrderIds.has(order.id)} selected={selectedOrderId === order.id && order.status === 'AWAITING_CASHIER'} onDetails={onDetails} />)}
         {!orders.length && <p className="rounded-xl border border-dashed border-slate-300 bg-white/70 p-4 text-center text-xs text-slate-500">Nenhuma comanda nesta etapa.</p>}
       </div>
     </section>;
@@ -362,6 +370,7 @@ window.PdvComponents = (() => {
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState(null);
+    const [dragFrom, setDragFrom] = useState(null);
     const [refreshing, setRefreshing] = useState(false);
     const [pulsedOrderIds, setPulsedOrderIds] = useState(() => new Set());
     const [newOrderNotice, setNewOrderNotice] = useState('');
@@ -410,13 +419,14 @@ window.PdvComponents = (() => {
       setDateTo(today);
       setDateFrom(days === 0 ? today : dateOffset(today, -(days - 1)));
     };
-    const receive = async (order, paymentMethod, receivedAmount, paymentParts) => {
+    const receive = async (order, paymentMethod, receivedAmount, paymentParts, verification = {}) => {
       setError('');
       setBusy(true);
       try {
         const response = await api('/api/caixa/orders/' + order.id + '/confirm', {
           paymentMethod,
           paymentParts,
+          ...verification,
           receivedAmount: receivedAmount === null || receivedAmount === undefined || receivedAmount === '' ? null : Number(String(receivedAmount).replace(',', '.')),
         });
         setSelectedOrder(response.order || order);
@@ -425,11 +435,21 @@ window.PdvComponents = (() => {
       finally { setBusy(false); }
     };
 
+    const moveOrder = async (id, from, to) => {
+      if (busy || user.role === 'VENDEDOR') return;
+      setBusy(true); setError('');
+      try {
+        const response = await api('/api/caixa/orders/' + encodeURIComponent(id) + '/move', { from, to });
+        setSelectedOrder(response.order); await refresh(true);
+      } catch (err) { setError(err.message); }
+      finally { setBusy(false); setDragFrom(null); }
+    };
+
     const columns = data ? [
-      { title: 'ESPERANDO CONFIRMAÇÃO', hint: 'Comandas aguardando recebimento no caixa', orders: data.pendingConfirmation, tone: 'amber' },
-      { title: 'ESPERANDO PAGAMENTO', hint: 'Pix aguardando confirmação do Sicredi', orders: data.pendingPayment, tone: 'blue' },
-      { title: 'PAGOS / FINALIZADOS', hint: 'Pagamentos recebidos e pedidos concluídos', orders: data.paid, tone: 'green' },
-      { title: 'FIADOS', hint: 'Vendas registradas para pagamento posterior', orders: data.confirmed, tone: 'red' },
+      { title: 'ESPERANDO CONFIRMAÇÃO', hint: 'Comandas aguardando recebimento no caixa', orders: data.pendingConfirmation, tone: 'amber', stage: 'confirmation' },
+      { title: 'ESPERANDO PAGAMENTO', hint: 'Receba no caixa ou aguarde a confirmação do Pix', orders: data.pendingPayment, tone: 'blue', stage: 'payment' },
+      { title: 'PAGOS / FINALIZADOS', hint: 'Pagamentos recebidos e pedidos concluídos', orders: data.paid, tone: 'green', stage: 'paid' },
+      { title: 'FIADOS', hint: 'Vendas registradas para pagamento posterior', orders: data.confirmed, tone: 'red', stage: 'debt' },
     ] : [];
     const title = view === 'orders' ? 'Comandas' : view === 'history' ? 'Histórico de vendas' : 'Relatório';
     const reportOrders = data ? data.history.filter((order) => user.role === 'ADMIN'
@@ -498,7 +518,7 @@ window.PdvComponents = (() => {
               <p className="mb-2 text-[11px] font-medium text-slate-500">Deslize para o lado no celular para ver as etapas do quadro.</p>
               {newOrderNotice && <div role="status" className="mb-3 rounded-xl border border-amber-300 bg-amber-100 px-4 py-3 text-sm font-extrabold text-amber-950 shadow-sm" aria-live="polite">🔔 {newOrderNotice}</div>}
               <div className="flex snap-x gap-3 overflow-x-auto pb-3 md:grid md:grid-cols-2 xl:grid-cols-4 md:overflow-visible">
-                {columns.map((column) => <CashierColumn key={column.title} {...column} pulsedOrderIds={pulsedOrderIds} selectedOrderId={selectedOrder?.id} onDetails={setSelectedOrder} />)}
+                {columns.map((column) => <CashierColumn key={column.title} {...column} canMove={['ADMIN', 'CAIXA'].includes(user.role) && !busy} dragFrom={dragFrom} onMove={moveOrder} onDragStart={setDragFrom} onDragEnd={() => setDragFrom(null)} pulsedOrderIds={pulsedOrderIds} selectedOrderId={selectedOrder?.id} onDetails={setSelectedOrder} />)}
               </div>
             </>}
 
@@ -537,7 +557,7 @@ window.PdvComponents = (() => {
             </>}
           </>}
       </main>
-      {selectedOrder && <OrderDetails key={`${selectedOrder.id}:${selectedOrder.status}:${selectedOrder.paymentMethod}`} order={selectedOrder} canReceive={user.role !== 'VENDEDOR' && selectedOrder.status === 'AWAITING_CASHIER'} canConfirmManualPix={user.role !== 'VENDEDOR' && selectedOrder.paymentMethod === 'PIX' && ['CREATING_PIX', 'AWAITING_PIX'].includes(selectedOrder.status)} busy={busy} error={error} onReceive={receive} onManualPix={async (order, note) => {
+      {selectedOrder && <OrderDetails key={`${selectedOrder.id}:${selectedOrder.status}:${selectedOrder.paymentMethod}`} order={selectedOrder} canAdvance={user.role !== 'VENDEDOR' && ['AWAITING_CASHIER', 'PENDING'].includes(selectedOrder.status) && !selectedOrder.pixData?.txid} onAdvance={(order) => moveOrder(order.id, 'confirmation', 'payment')} canReceive={user.role !== 'VENDEDOR' && selectedOrder.status === 'AWAITING_PAYMENT'} canConfirmManualPix={user.role !== 'VENDEDOR' && selectedOrder.paymentMethod === 'PIX' && ['CREATING_PIX', 'AWAITING_PIX'].includes(selectedOrder.status)} busy={busy} error={error} onReceive={receive} onManualPix={async (order, note) => {
         setBusy(true); setError('');
         try {
           const response = await api('/api/caixa/orders/' + order.id + '/confirm-manual-pix', { proofSeen: true, note });
@@ -549,16 +569,19 @@ window.PdvComponents = (() => {
   }
   function DebtSettlement({ onClose }) {
     const [query, setQuery] = useState(''); const [customers, setCustomers] = useState([]); const [customer, setCustomer] = useState(null);
-    const [balance, setBalance] = useState(0); const [creditBalance, setCreditBalance] = useState(0); const [entryType, setEntryType] = useState('QUITACAO_FIADO'); const [amount, setAmount] = useState(''); const [method, setMethod] = useState('DINHEIRO'); const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [result, setResult] = useState(null); const [id] = useState(() => crypto.randomUUID());
+    const [balance, setBalance] = useState(0); const [creditBalance, setCreditBalance] = useState(0); const [entryType, setEntryType] = useState('QUITACAO_FIADO'); const [amount, setAmount] = useState(''); const [method, setMethod] = useState('DINHEIRO'); const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [result, setResult] = useState(null); const [id, setId] = useState(() => crypto.randomUUID());
+    const [splitPayment, setSplitPayment] = useState(false); const [parts, setParts] = useState([{ method: 'DINHEIRO', amount: '' }, { method: 'CREDITO', amount: '' }]);
+    const [proofSeen, setProofSeen] = useState(false); const [note, setNote] = useState('');
+    const hasPix = splitPayment ? parts.some((part) => part.method === 'PIX') : method === 'PIX';
     useEffect(() => { let active = true; const timer = setTimeout(() => api('/api/caixa/customers?q=' + encodeURIComponent(query)).then((rows) => { if (active) setCustomers(rows); }).catch((err) => { if (active) setError(err.message); }), 250); return () => { active = false; clearTimeout(timer); }; }, [query]);
     const select = async (row) => { try { const debt = await api('/api/caixa/customers/' + encodeURIComponent(row.id) + '/debts'); setCustomer(row); setBalance(debt.balance); setCreditBalance(debt.creditBalance || 0); } catch (err) { setError(err.message); } };
     const submit = async () => {
       setBusy(true); setError('');
-      try { setResult(await api('/api/caixa/debts/settle', { requestId: id, customerKey: customer.id, amount: Number(amount), paymentMethod: method, entryType })); } catch (err) { setError(err.message); } finally { setBusy(false); }
+      try { setResult(await api('/api/caixa/debts/settle', { requestId: id, customerKey: customer.id, amount: Number(amount), paymentMethod: method, paymentParts: splitPayment ? parts.map((part) => ({ ...part, amount: Number(part.amount) })) : undefined, proofSeen, note, entryType })); } catch (err) { setError(err.message); } finally { setBusy(false); }
     };
     const isCreditEntry = entryType === 'CREDITO_CLIENTE';
     const amountInvalid = !Number.isFinite(Number(amount)) || Number(amount) <= 0 || (!isCreditEntry && Number(amount) > balance);
-    return <Panel title="Receber pagamento do cliente" onClose={onClose}>{error && <p role="alert" className="text-red-700">{error}</p>}{result ? <div><p>Recebimento registrado: {money(result.amount)}</p><p>Saldo devedor: {money(result.newBalance)}</p><p>Crédito disponível: {money(result.newCreditBalance)}</p></div> : <><label>Buscar cliente cadastrado<input className={field} value={query} onChange={(e) => setQuery(e.target.value)} /></label><div className="max-h-36 overflow-auto">{customers.map((row) => <button className="block w-full border-b p-2 text-left" key={row.id} onClick={() => select(row)}>{row.name} · {row.phone || 'Sem telefone'}</button>)}</div>{customer && <><p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm font-bold">{customer.name}<span className="mt-1 block text-xs font-medium text-amber-800">Saldo devedor: {money(balance)}</span><span className="block text-xs font-medium text-emerald-800">Crédito disponível: {money(creditBalance)}</span></p><label>Tipo de lançamento<select className={field} value={entryType} onChange={(event) => setEntryType(event.target.value)}><option value="QUITACAO_FIADO">Receber pagamento de dívida</option><option value="CREDITO_CLIENTE">Adicionar crédito antecipado</option></select></label><label>Valor recebido<input className={field} type="number" min="0.01" max={isCreditEntry ? undefined : balance} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></label><select aria-label="Forma de recebimento" className={field} value={method} onChange={(e) => setMethod(e.target.value)}><option value="DINHEIRO">Dinheiro</option><option value="DEBITO">Cartão de débito</option><option value="CREDITO">Cartão de crédito</option></select><button className={button} disabled={busy || amountInvalid || (!isCreditEntry && balance <= 0)} onClick={submit}>{busy ? 'Registrando…' : isCreditEntry ? 'Registrar crédito recebido' : 'Confirmar recebimento'}</button></>}</>}</Panel>;
+    return <Panel title="Receber pagamento do cliente" onClose={onClose}>{error && <p role="alert" className="text-red-700">{error}</p>}{result ? <div><p>Recebimento registrado: {money(result.amount)}</p><p>Saldo devedor: {money(result.newBalance)}</p><p>Crédito disponível: {money(result.newCreditBalance)}</p>{result.newBalance > 0 && <button className={button + ' mt-4'} onClick={() => { setBalance(result.newBalance); setCreditBalance(result.newCreditBalance || 0); setAmount(Number(result.newBalance).toFixed(2)); setId(crypto.randomUUID()); setResult(null); setSplitPayment(false); setProofSeen(false); setNote(''); }}>Receber valor restante</button>}</div> : <><label>Buscar cliente cadastrado<input className={field} value={query} onChange={(e) => setQuery(e.target.value)} /></label><div className="max-h-36 overflow-auto">{customers.map((row) => <button className="block w-full border-b p-2 text-left" key={row.id} onClick={() => select(row)}>{row.name} · {row.phone || 'Sem telefone'}</button>)}</div>{customer && <><p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm font-bold">{customer.name}<span className="mt-1 block text-xs font-medium text-amber-800">Saldo devedor: {money(balance)}</span><span className="block text-xs font-medium text-emerald-800">Crédito disponível: {money(creditBalance)}</span></p><label>Tipo de lançamento<select className={field} value={entryType} onChange={(event) => setEntryType(event.target.value)}><option value="QUITACAO_FIADO">Receber pagamento de dívida</option><option value="CREDITO_CLIENTE">Adicionar crédito antecipado</option></select></label><label>Valor recebido<input className={field} type="number" min="0.01" max={isCreditEntry ? undefined : balance} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></label><select aria-label="Forma de recebimento" className={field} value={method} onChange={(e) => setMethod(e.target.value)}><option value="DINHEIRO">Dinheiro</option><option value="DEBITO">Cartão de débito</option><option value="CREDITO">Cartão de crédito</option><option value="PIX">Pix já recebido</option></select><label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={splitPayment} onChange={(event) => setSplitPayment(event.target.checked)} />Usar mais de uma forma de pagamento</label>{splitPayment && <PaymentPartsEditor parts={parts} onChange={setParts} total={Number(amount || 0)} allowedMethods={['DINHEIRO', 'DEBITO', 'CREDITO', 'PIX']} />}{hasPix && <div className="my-3 space-y-2"><label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={proofSeen} onChange={(event) => setProofSeen(event.target.checked)} />Conferi o Pix recebido na conta da Conflora.</label><label className="block text-xs">Observação do comprovante<textarea className={field} value={note} onChange={(event) => setNote(event.target.value)} /></label></div>}{!isCreditEntry && <p className="my-3 text-sm font-bold">Saldo após recebimento: {money(Math.max(0, balance - Number(amount || 0)))}</p>}<button className={button} disabled={busy || (hasPix && (!proofSeen || note.trim().length < 8)) || amountInvalid || (!isCreditEntry && balance <= 0)} onClick={submit}>{busy ? 'Registrando…' : isCreditEntry ? 'Registrar crédito recebido' : 'Confirmar recebimento'}</button></>}</>}</Panel>;
   }
   return { SiteBrand, Loading, Login, Receipt, CashierQueue, DebtSettlement, DiscountApproval, ProductInformation, WeightPrompt, handleProductImageError, PaymentPartsEditor };
 })();

@@ -2752,14 +2752,18 @@ dialog .toast {
 .guided-results-search:focus { outline: 2px solid rgb(16 158 70 / 18%); border-color: var(--primary-color); }
 .guided-results-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; gap: 12px; min-width: 0; }
 .guided-results-grid > render-product-card { min-width: 0; }
-.messages .cf-pdv-product-card { min-height: 90px; max-height: 124px; padding: 9px; background: #fff; border: 1px solid #dce5df; border-radius: 14px; }
+.messages .cf-pdv-product-card { min-height: 104px; max-height: none; height: auto; padding: 12px; background: #fff; border: 1px solid #dce5df; border-radius: 14px; box-sizing: border-box; }
 .messages .cf-shared-pdv-thumbnail { width: 58px; height: 58px; flex: 0 0 58px; }
 .messages .cf-shared-pdv-image { width: 100%; height: 100%; object-fit: cover; border-radius: 9px; }
 .messages .cf-shared-pdv-details { min-width: 0; }
 .messages .cf-shared-pdv-details h3 { font-size: 12px; line-height: 1.25; }
+.messages .cf-shared-pdv-content { width: 100%; align-items: center; gap: 10px; }
+.messages .cf-shared-pdv-price-row { flex-wrap: nowrap; gap: 4px; }
+.messages .cf-shared-unit { flex-shrink: 0; white-space: nowrap; font-size: 11px; line-height: 1.3; }
 .messages > .cf-pdv-product-card { width: min(100%, 400px); }
-.chat-next-search { padding: 12px; border: 1px solid #cde5d4; border-radius: 12px; background: #f1faf4; }
-.chat-next-search p { flex-basis: 100%; font-size: 13px; }
+.messages .suggestions.chat-next-search { padding: 14px 16px; gap: 10px; margin-block: 12px; border: 1px solid #cde5d4; border-radius: 12px; background: #f1faf4; overflow: visible; }
+.chat-next-search p { flex-basis: 100%; font-size: 13px; line-height: 1.6; margin: 0; }
+.messages .chat-next-search button { white-space: normal; min-height: 38px; padding: 9px 12px; }
 .ledger-payment { display: grid; gap: 10px; margin: 0 0 20px; }
 .ledger-payment label { display: grid; gap: 6px; }
 .ledger-payment input, .ledger-payment textarea { width: 100%; padding: 10px; border: 1px solid #cddbd2; border-radius: 10px; box-sizing: border-box; }
@@ -2795,10 +2799,7 @@ dialog .toast {
   .chat-drawer.has-product-results[open] { width: min(820px, calc(100vw - 44px)); }
 }
 @media (max-width: 760px) {
-  .guided-results-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
-}
-@media (max-width: 460px) {
-  .guided-results-grid { grid-template-columns: 1fr; }
+  .guided-results-grid { grid-template-columns: 1fr; gap: 10px; }
 }
 .action-entry-btn {
   border: 1px solid #cbd5e1 !important;

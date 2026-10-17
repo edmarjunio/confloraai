@@ -19,6 +19,8 @@ export interface SaleInput {
 export interface VerifiedPix { txid: string; endToEndId: string; amountMinor: number; }
 export interface DebtSettlementInput {
   id: string; customerKey: string; amount: number;
-  paymentMethod: 'DINHEIRO' | 'DEBITO' | 'CREDITO';
+  paymentMethod: 'DINHEIRO' | 'DEBITO' | 'CREDITO' | 'PIX' | 'MISTO';
+  paymentParts?: Array<{ method: 'DINHEIRO' | 'DEBITO' | 'CREDITO' | 'PIX'; amount: number }>;
+  verification?: { manualPixProofSeen: boolean; manualPixNote: string };
   receivedBy: StaffActor; notes: string;
 }
