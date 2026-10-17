@@ -87,7 +87,7 @@ test("mobile bottom sheet, assistant recommendations and tenant-local storage", 
   await page
     .locator("#chatMessages render-product-card")
     .filter({ hasText: "Ração para gatos" })
-    .getByRole("button", { name: "Adicionar", exact: true })
+    .getByRole("button", { name: "Adicionar Ração para gatos ao carrinho", exact: true })
     .click();
   await expect(page.locator("#cartButton")).toContainText("1");
   await page.screenshot({

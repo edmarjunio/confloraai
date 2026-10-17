@@ -93,6 +93,12 @@ module.exports = [
     },
   },
   {
+    files: ["public/storefront/sw.js"],
+    languageOptions: {
+      globals: { self: "readonly", caches: "readonly" },
+    },
+  },
+  {
     files: ["test/browser/**/*.js"],
     languageOptions: {
       globals: {

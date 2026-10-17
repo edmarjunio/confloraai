@@ -6,6 +6,7 @@ export function createExistingApi() {
   async function request(path, options = {}) {
     const response = await fetch(path, {
       credentials: "same-origin",
+      signal: AbortSignal.timeout(15000),
       ...options,
       headers: { "Content-Type": "application/json", ...options.headers },
       ...(options.body ? { body: JSON.stringify(options.body) } : {}),
@@ -42,10 +43,15 @@ export function createExistingApi() {
       catalogPromise = null;
       return result;
     }
-    if (route === "/config" || route === "/products") {
+    if ((route === "/config" || route === "/products") && (!options.method || options.method === "GET")) {
       catalogPromise ||= request("/api/storefront/catalog");
-      const result = await catalogPromise;
-      return route === "/config" ? result.config : result.products;
+      const pending = catalogPromise;
+      try {
+        const result = await pending;
+        return route === "/config" ? result.config : result.products;
+      } finally {
+        if (catalogPromise === pending) catalogPromise = null;
+      }
     }
     if (route === "/me") {
       return request("/api/auth/me");

@@ -7,17 +7,8 @@ import {
   storageSet,
 } from "./ui.js";
 import { icon } from "./icons.js";
-import { searchProducts } from "./guided-search.mjs";
+import { searchProducts, normalize as normalizeProductText } from "./guided-search.mjs";
 import { buildProductInfoContent } from "./product-info-content.js";
-
-function normalizeProductText(value) {
-  return String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
 
 export function createCatalog(state, add, navigate) {
   let pageSize = 24;

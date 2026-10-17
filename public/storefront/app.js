@@ -22,12 +22,14 @@ import {
 import { appStore } from "./store/index.js";
 import { storeQueries, queryClient } from "./query/tanstackQuery.js";
 import { renderOrderReceipt } from "./receipt.js";
+import { createPublicCache } from "./public-cache.mjs";
 
 const existingStore = !location.pathname.startsWith("/shop/");
 const slug = existingStore
   ? "conflora"
   : decodeURIComponent(location.pathname.split("/")[2]);
 const basePath = existingStore ? "" : `/shop/${slug}`;
+const publicCache = createPublicCache(existingStore ? "main:conflora" : `tenant:${slug}`);
 
 const state = {
   existingStore,
@@ -258,11 +260,13 @@ function applyConfig() {
 }
 
 state.applyConfig = applyConfig;
+state.persistPublicSnapshot = () => publicCache.write(state);
 state.refreshCatalog = () => catalog?.render();
 state.reloadProducts = async () => {
   // Query via TanStack Query cache invalidation
   queryClient.invalidateQueries({ queryKey: ["catalog"] });
   state.products = await storeQueries.getCatalog(slug, state.api);
+  publicCache.write(state);
   catalog?.render();
   cart?.render();
 };
@@ -762,25 +766,51 @@ onLanguageChange(() => {
 window.addEventListener("popstate", route);
 
 // Application bootstrap
+let catalogRefresh;
+let lastCatalogRefresh = 0;
+async function refreshPublicCatalog() {
+  if (catalogRefresh) return catalogRefresh;
+  lastCatalogRefresh = Date.now();
+  catalogRefresh = (async () => {
+    const [config, products] = await Promise.all([
+      state.api("/config"), state.api("/products"),
+    ]);
+    publicCache.write({ config, products });
+    const changed = JSON.stringify([state.config, state.products]) !== JSON.stringify([config, products]);
+    if (!changed) return;
+    state.config = config;
+    state.products = products;
+    queryClient.setQueryData(["catalog", slug], products);
+    applyConfig();
+    catalog.render();
+    cart.render();
+    // Update a product page without replacing an open administrative form.
+    if (location.pathname.includes("/products/")) await route();
+  })();
+  try {
+    await catalogRefresh;
+  } finally {
+    catalogRefresh = null;
+  }
+}
+
 try {
   // Apply initial HTML translations immediately
   applyHtmlTranslations();
 
-  // Load config and catalog products using TanStack Query caching
-  [state.config, state.products] = await Promise.all([
-    state.api("/config"),
-    storeQueries.getCatalog(slug, state.api),
-  ]);
-
-  try {
-    state.user = (await state.api("/me")).user;
-    if (state.user) {
-      appStore.getState().setUser(state.user);
-    }
-  } catch {
-    // Non-blocking auth check
+  const session = state.api("/me").catch(() => ({ user: null }));
+  const saved = publicCache.read();
+  if (saved) {
+    state.config = saved.config;
+    state.products = saved.products;
+    queryClient.setQueryData(["catalog", slug], saved.products);
+  } else {
+    [state.config, state.products] = await Promise.all([
+      state.api("/config"), storeQueries.getCatalog(slug, state.api),
+    ]);
+    publicCache.write(state);
+    lastCatalogRefresh = Date.now();
   }
-  updateHeaderActions();
 
   catalog = createCatalog(
     state,
@@ -799,6 +829,25 @@ try {
   cart.render();
   trackStorefrontEvent("page_view", { resultCount: state.products.length });
   await route();
+  if (saved) refreshPublicCatalog().catch(() => {});
+  // Login resolution does not block the public catalogue or its first render.
+  session.then(async ({ user }) => {
+    state.user = user || null;
+    appStore.getState().setUser(state.user);
+    updateHeaderActions();
+    catalog.refreshFavorites();
+    if (/\/(admin|configuracoes)\/?$/.test(location.pathname)) await route();
+  }).catch(() => {});
+  const refreshOnReturn = () => {
+    if (document.visibilityState === "visible" && Date.now() - lastCatalogRefresh > 60000) {
+      refreshPublicCatalog().catch(() => {});
+    }
+  };
+  document.addEventListener("visibilitychange", refreshOnReturn);
+  window.addEventListener("online", refreshOnReturn);
+  if ("serviceWorker" in navigator && window.isSecureContext) {
+    navigator.serviceWorker.register("/storefront/sw.js", { scope: "/", updateViaCache: "none" }).catch(() => {});
+  }
   if (existingStore) {
     import("/storefront-auth.js").catch(() => {});
   }

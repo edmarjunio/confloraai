@@ -5,12 +5,29 @@
   "hosting": {
     "site": "confloraai",
     "public": "public",
+    "headers": [
+      { "source": "/storefront/sw.js", "headers": [
+        { "key": "Service-Worker-Allowed", "value": "/" },
+        { "key": "Cache-Control", "value": "no-cache" }
+      ] },
+      { "source": "/storefront/**", "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ] }
+    ],
     "ignore": [
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
     ],
     "rewrites": [
+      {
+        "source": "/webhook",
+        "run": { "serviceId": "confloraai", "region": "southamerica-east1" }
+      },
+      {
+        "source": "/store-assets/**",
+        "run": { "serviceId": "confloraai", "region": "southamerica-east1" }
+      },
       {
         "source": "/api/**",
         "run": {

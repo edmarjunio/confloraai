@@ -75,9 +75,11 @@ class QueryCache {
   }
 
   invalidate(key) {
-    const prefixHash = Array.isArray(key) ? JSON.stringify(key[0]) : JSON.stringify(key);
+    const prefix = Array.isArray(key) ? key : [key];
     for (const [hash, entry] of this.queries.entries()) {
-      if (hash.startsWith(prefixHash.slice(0, -1))) {
+      let candidate;
+      try { candidate = JSON.parse(hash); } catch { candidate = [hash]; }
+      if (Array.isArray(candidate) && prefix.every((part, index) => JSON.stringify(part) === JSON.stringify(candidate[index]))) {
         entry.updatedAt = 0; // Mark stale
         this.notify(hash, entry);
       }
@@ -88,6 +90,7 @@ class QueryCache {
 export class QueryClient {
   constructor(options = {}) {
     this.cache = new QueryCache();
+    this.inFlight = new Map();
     this.defaultOptions = options.defaultOptions || {
       queries: {
         staleTime: 1000 * 60 * 2, // 2 min
@@ -104,20 +107,30 @@ export class QueryClient {
     if (cached && !isStale) {
       return cached.data;
     }
+    const hash = this.cache.hashKey(queryKey);
+    if (this.inFlight.has(hash)) return this.inFlight.get(hash);
 
-    try {
-      const data = await queryFn();
-      this.cache.set(queryKey, data, {
-        staleTime: staleTime ?? this.defaultOptions.queries.staleTime,
-      });
-      return data;
-    } catch (err) {
-      if (cached) {
-        // Return stale data on error as fallback
-        console.warn('TanStack Query: fetch failed, returning stale cache:', err);
-        return cached.data;
+    const pending = (async () => {
+      try {
+        const data = await queryFn();
+        this.cache.set(queryKey, data, {
+          staleTime: staleTime ?? this.defaultOptions.queries.staleTime,
+        });
+        return data;
+      } catch (err) {
+        if (cached) {
+          // Return stale data on error as fallback
+          console.warn('TanStack Query: fetch failed, returning stale cache:', err);
+          return cached.data;
+        }
+        throw err;
       }
-      throw err;
+    })();
+    this.inFlight.set(hash, pending);
+    try {
+      return await pending;
+    } finally {
+      if (this.inFlight.get(hash) === pending) this.inFlight.delete(hash);
     }
   }
 

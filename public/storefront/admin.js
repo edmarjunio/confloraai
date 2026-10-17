@@ -386,6 +386,7 @@ export function createAdmin(state) {
           },
         });
         state.applyConfig();
+        state.persistPublicSnapshot?.();
         if (next.assistant.mode !== config.assistant.mode) {
           window.location.reload();
           return;

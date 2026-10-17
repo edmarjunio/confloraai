@@ -13,18 +13,12 @@ import { onLanguageChange } from "./i18n/index.js";
 import { cartStore } from "./store/index.js";
 import { storeQueries } from "./query/tanstackQuery.js";
 import { renderOrderReceipt } from "./receipt.js";
+import { normalizeStoredCart } from "./cart-storage.mjs";
 
 export function createCart(state) {
   const key = `store:${state.slug}:cart:v1`;
   const stored = storageGet(key, []);
-  let items = Array.isArray(stored)
-    ? stored.filter(
-        (i) =>
-          typeof i.productId === "string" &&
-          Number.isFinite(i.quantity) &&
-          i.quantity > 0,
-      )
-    : [];
+  let items = normalizeStoredCart(stored);
   let sending = false;
   let confirmationAccepted = false;
   let pending = storageGet(`${key}:pending`, null);

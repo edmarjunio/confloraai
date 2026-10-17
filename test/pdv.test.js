@@ -2,6 +2,7 @@ process.env.NODE_ENV = 'test';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
+const { TextDecoder } = require('node:util');
 const { FirestoreRepository } = require('../src/database/firestore.repository');
 const { PdvRepository } = require('../src/orders/pdv.repository');
 const { PdvService } = require('../src/orders/pdv.service');

@@ -16,6 +16,8 @@
     "test:dev": "node --import ./scripts/test-env.js --test test/*.test.js",
     "test:pix": "node --import ./scripts/test-env.js --test test/mercado-pago.test.js test/mercado-pago-live-mode.test.js test/order-integrity.test.js test/pdv.test.js",
     "test:pdv": "node --import ./scripts/test-env.js --test test/pdv.test.js",
+    "test:whatsapp": "node --import ./scripts/test-env.js --test test/whatsapp-flow.test.js",
+    "check:whatsapp": "node scripts/check-whatsapp-config.js",
     "test:dev-isolation": "node --test test/dev-environment.test.js test/mercado-pago-live-mode.test.js",
     "dev:isolated": "node --env-file=.env.dev --watch src/server.js",
     "seed:dev": "node --env-file=.env.dev scripts/seed-dev.js",

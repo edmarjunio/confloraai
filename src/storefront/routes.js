@@ -19,6 +19,10 @@ function installStorefront(app, { express, firestore, repository, assistant }) {
   const router = express.Router({ mergeParams: true });
   const assets = path.resolve(__dirname, "../../public/storefront");
   const brandImages = new Map();
+  app.get('/storefront/sw.js', (_req, res) => {
+    res.set('Service-Worker-Allowed', '/').set('Cache-Control', 'no-cache')
+      .sendFile(path.join(assets, 'sw.js'));
+  });
   app.get("/store-assets/brands/:file", async (req, res, next) => {
     if (!/^[a-zA-Z0-9_-]+\.(png|jpg|jpeg|webp)$/.test(req.params.file)) {
       return res.sendStatus(404);
@@ -61,6 +65,7 @@ function installStorefront(app, { express, firestore, repository, assistant }) {
     express.static(assets, staticOptions)
   );
   app.use("/store-assets", express.static(assets, staticOptions));
+  app.use("/storefront", express.static(assets, staticOptions));
   app.get(
     ["/shop/:slug", "/shop/:slug/products/:productId", "/shop/:slug/admin"],
     async (req, res, next) => {
