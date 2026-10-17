@@ -38,7 +38,9 @@ test('public shell and catalogue reopen offline without caching private APIs', a
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.locator('#products .product-card')).toHaveCount(2);
     const paths = await page.evaluate(async () => {
-      const cache = await window.caches.open('conflora-public-shell-v1');
+      const cacheName = (await window.caches.keys()).find(name => name.startsWith('conflora-public-shell-'));
+      if (!cacheName) throw new Error('Cache público da loja não foi instalado.');
+      const cache = await window.caches.open(cacheName);
       return (await cache.keys()).map(request => new URL(request.url).pathname);
     });
     expect(paths).toContain('/store-assets/brands/conflora-logo.png');

@@ -1,4 +1,5 @@
 process.env.NODE_ENV = 'test';
+process.env.OWNER_WHATSAPP_NUMBER = '5564999994321';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
@@ -180,6 +181,18 @@ test('seller creates a pending order; cashier receives once and attribution surv
   assert.equal(received[0].receivedBy.id, secondCashier.id);
   assert.equal(received[0].receivedBy.email, secondCashier.email);
   await assert.rejects(s.base.confirmOrderPayment(order.id), /PDV/);
+});
+
+test('Firestore permission failure never accepts a financial write in process memory', async () => {
+  const s = setup();
+  s.base.firestore = { runTransaction: async () => {
+    throw Object.assign(new Error('PERMISSION_DENIED'), { code: 7 });
+  } };
+  await assert.rejects(s.repository.transaction(async (tx) => {
+    const product = await tx.get('products', 'plant');
+    tx.set('products', 'plant', { ...product, stockQuantity: 0 });
+  }), /PERMISSION_DENIED/);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
 });
 
 test('Pix receipt includes image; bank verification finalizes exactly once under repeated webhooks', async () => {
