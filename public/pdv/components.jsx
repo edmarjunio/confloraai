@@ -2,6 +2,12 @@
 window.PdvComponents = (() => {
   const { useState, useEffect, useRef } = React;
   const OrderCardSurface = window.PdvStyled?.OrderCardSurface || 'cf-card';
+  const orderCardColors = Object.freeze({
+    amber: { backgroundColor: '#ffec99', borderColor: '#e0aa00' },
+    blue: { backgroundColor: '#bdddff', borderColor: '#4594df' },
+    green: { backgroundColor: '#b8ebcf', borderColor: '#29a66a' },
+    red: { backgroundColor: '#ffc9d0', borderColor: '#e65b70' },
+  });
   const money = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   const button = 'cf-button';
   const field = 'w-full p-3 border rounded-xl my-2';
@@ -323,7 +329,7 @@ window.PdvComponents = (() => {
     const items = (order.items || []).slice(0, 2);
     const extraItems = Math.max(0, (order.items || []).length - items.length);
     const deliveryDriver = order.assignedDriver || order.deliveredBy;
-    return <OrderCardSurface padding="sm" draggable={canMove && ['confirmation', 'payment'].includes(stage) ? 'true' : undefined} onDragStart={(event) => { event.dataTransfer.setData('application/x-conflora-order', JSON.stringify({ id: order.id, from: stage })); event.dataTransfer.effectAllowed = 'move'; onDragStart?.(stage); }} onDragEnd={onDragEnd} className={`cf-order-card cf-order-card--${tone || 'amber'} ${selected ? 'cf-order-card--selected' : ''} ${attention ? 'cf-order-card--attention' : ''}`}>
+    return <OrderCardSurface padding="sm" style={orderCardColors[tone] || orderCardColors.amber} draggable={canMove && ['confirmation', 'payment'].includes(stage) ? 'true' : undefined} onDragStart={(event) => { event.dataTransfer.setData('application/x-conflora-order', JSON.stringify({ id: order.id, from: stage })); event.dataTransfer.effectAllowed = 'move'; onDragStart?.(stage); }} onDragEnd={onDragEnd} className={`cf-order-card cf-order-card--${tone || 'amber'} ${selected ? 'cf-order-card--selected' : ''} ${attention ? 'cf-order-card--attention' : ''}`}>
       <button type="button" className="w-full cursor-pointer text-left" onClick={() => onDetails(order)} aria-label={`Abrir recibo e detalhes da comanda ${order.ticketNumber}`}>
         <div className="flex items-start justify-between gap-2">
           <span className="text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Comanda #{order.ticketNumber || String(order.id).slice(-6).toUpperCase()}</span>

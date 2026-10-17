@@ -63,7 +63,7 @@ test('quadro permite apenas avançar etapas e abre recebimento ao arrastar para 
   const card = (region) => region.locator('cf-card').filter({ hasText: 'Arrastar Teste' });
   await expect(card(payment)).toHaveAttribute('draggable', 'true');
   const dialog = page.getByRole('dialog', { name: `Comanda #${order.ticketNumber}` });
-  await expect(card(payment)).toHaveCSS('background-color', 'rgba(125, 211, 252, 0.3)');
+  await expect(card(payment)).toHaveCSS('background-color', 'rgb(189, 221, 255)');
   await card(payment).dragTo(paid.locator('header'));
   await expect(dialog.getByRole('heading', { name: 'Receber no caixa' })).toBeVisible();
   await dialog.getByLabel('Usar mais de uma forma de pagamento').check();
@@ -71,7 +71,7 @@ test('quadro permite apenas avançar etapas e abre recebimento ao arrastar para 
   await dialog.getByRole('button', { name: 'Confirmar pagamento e finalizar', exact: true }).click();
   await expect(dialog).toContainText('Pago / finalizado');
   await dialog.getByRole('button', { name: 'Fechar', exact: true }).click();
-  await expect(card(paid)).toHaveCSS('background-color', 'rgba(110, 231, 183, 0.3)');
+  await expect(card(paid)).toHaveCSS('background-color', 'rgb(184, 235, 207)');
   await expect(card(paid)).not.toHaveAttribute('draggable', 'true');
 });
 

@@ -11,10 +11,6 @@ window.PdvStyled = (() => {
       transition: transform 160ms ease, box-shadow 160ms ease;
     }
     &.cf-order-card:hover { transform: translateY(-3px); box-shadow: 0 12px 22px rgb(15 56 30 / 15%); }
-    &.cf-order-card--amber { border-color: #fcd34d; background: rgb(254 225 104 / 38%); }
-    &.cf-order-card--blue { border-color: #7dd3fc; background: rgb(125 211 252 / 30%); }
-    &.cf-order-card--green { border-color: #6ee7b7; background: rgb(110 231 183 / 30%); }
-    &.cf-order-card--red { border-color: #fda4af; background: rgb(253 164 175 / 30%); }
     &[draggable="true"] { cursor: grab; }
     &[draggable="true"]:active { cursor: grabbing; }
     &.cf-order-card--selected { border-color: #0ea5e9; box-shadow: 0 0 0 3px rgb(14 165 233 / 20%); }
