@@ -132,7 +132,7 @@ class PdvService {
     const amountFor = (method) => paymentParts.find((part) => part.method === method)?.amount || 0;
     const hasPix = amountFor('PIX') > 0;
     paymentMethod = hasPix ? 'PIX' : paymentParts.length > 1 ? 'MISTO' : paymentParts[0].method;
-    const deferToCashier = input.deferToCashier === true || (user.role === 'VENDEDOR' && paymentParts.some((part) => part.method !== 'PIX'));
+    const deferToCashier = input.deferToCashier === true || (input.orderType === 'DELIVERY' && !hasPix) || (user.role === 'VENDEDOR' && paymentParts.some((part) => part.method !== 'PIX'));
     const cashTendered = amountFor('DINHEIRO') && !deferToCashier ? Number(input.cashReceived ?? amountFor('DINHEIRO')) : null;
     if (cashTendered !== null && (!Number.isFinite(cashTendered) || Math.round(cashTendered * 100) < Math.round(amountFor('DINHEIRO') * 100))) { throw new Error('Valor recebido em dinheiro menor que o total.'); }
     const customerId = String(input.customerId || '');
@@ -158,20 +158,21 @@ class PdvService {
       return { approvalRequired: true, approval };
     }
     const ticketNumber = id.replace(/-/g, '').slice(0, 10).toUpperCase();
-    const pixData = hasPix && !deferToCashier ? { txid: id.replace(/-/g, '').toUpperCase(), provider: 'SICREDI' } : null;
+    const creditPending = amountFor('FIADO') > 0 && (user.role !== 'ADMIN' || deferToCashier);
+    const pixData = hasPix && !deferToCashier && !creditPending ? { txid: id.replace(/-/g, '').toUpperCase(), provider: 'SICREDI' } : null;
     const isDelivery = input.orderType === 'DELIVERY';
     const order = await this.repository.create({
       id, requestHash, source: 'PDV', ticketNumber, items, subtotal: subtotalMinor / 100,
       discountPercent, discountAmount: discountMinor / 100, freightValue, total,
       customerId, customerName: String(input.customerName || customer?.name || 'Cliente Balcão').slice(0, 100), customerPhone: phone,
       orderType: isDelivery ? 'DELIVERY' : 'PICKUP', deliveryAddress: String(input.deliveryAddress || '').slice(0, 250), notes: String(input.notes || '').slice(0, 500),
-      ...(isDelivery ? { deliveryStatus: 'PENDING_DISPATCH' } : {}),
+      ...(isDelivery ? { deliveryStatus: hasPix || creditPending ? 'PENDING_DISPATCH' : 'PENDING_DELIVERY' } : {}),
       ...(deliveryLocation ? { deliveryLocation } : {}),
       createdBy, sellerName: createdBy.name, sellerEmail: createdBy.email, operatorId: user.id, operatorName: createdBy.name, operatorEmail: createdBy.email,
-      receivedBy: null, paymentMethod, paymentStatus: 'PENDING', status: pixData ? 'CREATING_PIX' : deferToCashier ? 'AWAITING_PAYMENT' : 'AWAITING_CASHIER',
-      cashTendered,
-      paymentParts: paymentParts.map((part) => ({ ...part, ...(hasPix && !deferToCashier && ['DINHEIRO', 'DEBITO', 'CREDITO'].includes(part.method) ? { status: 'RECEIVED_AT_CASHIER', receivedBy: createdBy } : {}) })), deferToCashier,
-      ...(hasPix && !deferToCashier && paymentParts.length > 1 ? { mixedReceivedBy: createdBy } : {}),
+      receivedBy: null, paymentMethod, paymentStatus: 'PENDING', status: creditPending ? 'AWAITING_CONFIRMATION' : pixData ? 'CREATING_PIX' : deferToCashier ? 'AWAITING_PAYMENT' : 'AWAITING_CASHIER',
+      cashTendered, ...(creditPending ? { creditApprovalStatus: 'PENDING' } : {}),
+      paymentParts: paymentParts.map((part) => ({ ...part, ...(hasPix && !deferToCashier && !creditPending && ['DINHEIRO', 'DEBITO', 'CREDITO'].includes(part.method) ? { status: 'RECEIVED_AT_CASHIER', receivedBy: createdBy } : {}) })), deferToCashier,
+      ...(hasPix && !deferToCashier && !creditPending && paymentParts.length > 1 ? { mixedReceivedBy: createdBy } : {}),
       pixData, pixCopiaECola: pixData?.pixCopiaECola || '',
       ...(pixData ? { pixTtlSeconds: Math.min(86400, Math.max(300, Number(process.env.PIX_PAYMENT_TTL_SECONDS) || 3600)), pixExpiresAt: new Date(Date.now() + Math.min(86400, Math.max(300, Number(process.env.PIX_PAYMENT_TTL_SECONDS) || 3600)) * 1000).toISOString() } : {}),
       createdAt: new Date().toISOString(),
@@ -236,7 +237,7 @@ class PdvService {
   }
 
   async finishCreation(order, user, deferReceipt = false) {
-    if (!deferReceipt && !order.deferToCashier && order.paymentMethod !== 'PIX' && ['ADMIN', 'CAIXA'].includes(user.role)) { order = await this.repository.receive(order.id, actor(user)); }
+    if (order.creditApprovalStatus !== 'PENDING' && !deferReceipt && !order.deferToCashier && order.paymentMethod !== 'PIX' && ['ADMIN', 'CAIXA'].includes(user.role)) { order = await this.repository.receive(order.id, actor(user)); }
     await this.deliver(`${order.id}-receipt`);
     const delivery = await this.repository.read('pdv_outbox', `${order.id}-receipt`);
     return { ...order, receiptText: formatOrderReceipt(order), qrCodeBase64: order.pixData?.qrCodeBase64 || '', receiptDelivery: { sent: delivery?.status === 'SENT' && Boolean(order.customerPhone), reason: delivery?.lastError || (order.customerPhone ? '' : 'Sem WhatsApp informado.') } };
@@ -250,7 +251,12 @@ class PdvService {
     const enriched = orders.filter((order) => isDelivery(order) && order.status !== 'CANCELLED').map((order) => ({
       ...order, deliveryStatus: order.deliveryStatus || 'PENDING_DISPATCH', isPaid: isDeliverySettled(order),
     })).sort((left, right) => String(left.createdAt || '').localeCompare(String(right.createdAt || '')));
-    const available = enriched.filter((order) => order.deliveryStatus === 'PENDING_DELIVERY').map(order => user.role === 'ENTREGADOR' ? { id: order.id, ticketNumber: order.ticketNumber, deliveryStatus: order.deliveryStatus, availableForClaim: true } : order);
+    const available = enriched.filter(order => {
+      if (order.assignedDriver?.id || order.creditApprovalStatus === 'PENDING') return false;
+      const includesCredit = (order.paymentParts || [{ method: order.paymentMethod }]).some(part => part.method === 'FIADO');
+      if ((order.paymentMethod === 'PIX' || includesCredit) && !isDeliverySettled(order)) return false;
+      return ['PENDING_DELIVERY', 'PENDING_DISPATCH'].includes(order.deliveryStatus);
+    });
     const inRoute = enriched.filter((order) =>
       order.deliveryStatus === 'OUT_FOR_DELIVERY' &&
       (user.role === 'ADMIN' || user.role === 'CAIXA' || order.assignedDriver?.id === user.id)

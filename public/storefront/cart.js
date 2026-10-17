@@ -238,6 +238,7 @@ export function createCart(state) {
         label: {
           PIX: "cart.pix_option".tr,
           CARD: "cart.card_option".tr,
+          CREDITO: "Cartão de crédito", DEBITO: "Cartão de débito", FIADO: "Fiado · aprovação do Admin",
           CASH: "cart.cash_option".tr,
         }[value] || value,
       })),
@@ -361,6 +362,10 @@ export function createCart(state) {
       if (delivery && address.length < 8) {
         $("#checkoutError").textContent = "Informe o endereço completo para a entrega.";
         form.elements.address?.focus();
+        return;
+      }
+      if (payment === "FIADO" && !state.user?.email) {
+        $("#checkoutError").textContent = "Entre na sua conta antes de solicitar fiado. A compra depende da aprovação de um Admin.";
         return;
       }
       if (payment === "CASH" && cash < total) {

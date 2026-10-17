@@ -42,7 +42,7 @@ test('caixa divide pagamento e pode encaminhar uma comanda Pix sem emitir cobran
   await search.fill('Planta Teste');
   await page.getByText('Planta Teste', { exact: true }).click();
   await page.getByRole('button', { name: /PAGAR - F1/ }).click();
-  await page.getByRole('button', { name: 'PIX Sicredi', exact: true }).click();
+  await page.getByRole('button', { name: 'Pix · QR Code / Copia e Cola', exact: true }).click();
   await page.getByLabel('Somente criar comanda e encaminhar ao caixa (inclusive Pix)').check();
   const result = page.waitForResponse((response) => response.url().endsWith('/api/caixa/orders') && response.request().method() === 'POST');
   await page.getByRole('button', { name: 'Enviar comanda ao caixa', exact: true }).click();
@@ -79,7 +79,11 @@ test('caixa recebe dívida parcialmente e quita o restante com Pix conferido', a
   expect((await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-caixa1', pin: '0000' } })).ok()).toBe(true);
   const customerResponse = await page.request.post('/api/caixa/customers', { data: { name: 'Cliente Parcelado E2E' } });
   const { customer } = await customerResponse.json();
-  expect((await page.request.post('/api/caixa/orders', { data: { requestId: require('node:crypto').randomUUID(), items: [{ productId: 'test-plant', quantity: 8 }], paymentMethod: 'FIADO', customerId: customer.id } })).ok()).toBe(true);
+  const creditResponse = await page.request.post('/api/caixa/orders', { data: { requestId: require('node:crypto').randomUUID(), items: [{ productId: 'test-plant', quantity: 8 }], paymentMethod: 'FIADO', customerId: customer.id } });
+  expect(creditResponse.ok()).toBe(true); const creditOrder = (await creditResponse.json()).order;
+  await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-edmar', pin: '1234' } });
+  expect((await page.request.post(`/api/caixa/orders/${creditOrder.id}/confirm`, { data: { paymentMethod: 'FIADO' } })).ok()).toBe(true);
+  await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-caixa1', pin: '0000' } });
   await page.goto('/pdv'); await expect(page.getByPlaceholder('Nome, categoria ou descrição (Ex.: plantas de sombra, plantas para jardim, flores, e etc)')).toBeVisible(); await page.keyboard.press('F3');
   await page.getByRole('button', { name: 'Receber pagamento', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Receber pagamento do cliente', exact: true });
@@ -137,7 +141,8 @@ test('comanda recebe por botões e Pix manual exige arquivo antes de finalizar',
   await open.click(); const dialog = page.getByRole('dialog', { name: `Comanda #${order.ticketNumber}` });
   await expect(dialog.getByRole('combobox')).toHaveCount(0);
   await page.mouse.click(2, 2); await expect(dialog).toBeHidden(); await open.click();
-  await dialog.getByRole('button', { name: 'Pix já recebido', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Pix · QR Code / Copia e Cola', exact: true }).click();
+  await dialog.getByRole('checkbox', { name: 'Pix já recebido: confirmar manualmente', exact: true }).check();
   await dialog.getByRole('checkbox', { name: /Conferi o valor do Pix/ }).check();
   await dialog.getByLabel('Observação do comprovante').fill('Comprovante conferido na conta');
   const finish = dialog.getByRole('button', { name: 'Confirmar pagamento e finalizar', exact: true });

@@ -98,7 +98,7 @@ export const en = {
   'cart.delivery_address_label': 'Full Address (Street, Number, Neighborhood)',
   'cart.delivery_address_placeholder': 'E.g.: 123 Main Street, Suite 4',
   'cart.payment_title': 'Payment method',
-  'cart.pix_option': 'Pix (Instant Confirmation)',
+  'cart.pix_option': 'Pix · QR code / Payment code',
   'cart.pix_instant_badge': 'Instant',
   'cart.card_option': 'Card on delivery/pickup',
   'cart.cash_option': 'Cash on hand',

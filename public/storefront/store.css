@@ -3719,3 +3719,7 @@ body {
 .cart-drawer #checkoutForm > .total { background: #f1f8f3; border: 1px solid #dceadf; border-radius: 14px; padding: 15px; margin: 16px 0; }
 .cart-drawer #checkoutTotal { font-size: 23px; color: #155d30; }
 .cart-drawer #submitOrder { min-height: 49px; border-radius: 13px; font-size: 14px; font-weight: 800; }
+
+#chatSuggestions{display:flex;flex-wrap:wrap;gap:8px;padding:12px;background:#fff;border-top:1px solid #e0eae3}#chatSuggestions button{min-height:40px;padding:10px 14px;border-radius:999px;font-weight:800;font-size:12px;box-shadow:0 3px 8px #153e2410}#chatSuggestions .chat-action-back{background:#eaf3ff;color:#23518c;border:1px solid #c6d9f3}#chatSuggestions .chat-action-restart{background:#109e46;color:white;border:1px solid #109e46}#chatSuggestions .chat-action-clear{background:#fff1f1;color:#b42336;border:1px solid #f3c9ce}.guided-choices button{min-height:40px;padding:10px 13px;border-radius:12px;font-weight:650}.chat-next-search button{font-weight:750;min-height:40px}
+
+.chat-ai-controls{display:flex;gap:8px;flex-wrap:wrap;padding:12px;background:white;border-top:1px solid #e0eae3}.chat-ai-controls button{min-height:40px;padding:10px 14px;border-radius:999px;font-weight:800;font-size:12px}.chat-ai-controls .chat-action-back{background:#eaf3ff;color:#23518c}.chat-ai-controls .chat-action-restart{background:#109e46;color:white}.chat-ai-controls .chat-action-clear{background:#fff1f1;color:#b42336}

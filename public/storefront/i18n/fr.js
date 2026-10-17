@@ -98,7 +98,7 @@ export const fr = {
   'cart.delivery_address_label': 'Adresse complète (Rue, Numéro, Quartier)',
   'cart.delivery_address_placeholder': 'Ex : 12 rue des Fleurs, Centre',
   'cart.payment_title': 'Mode de paiement',
-  'cart.pix_option': 'Pix (Confirmation Instantanée)',
+  'cart.pix_option': 'Pix · QR code / Code de paiement',
   'cart.pix_instant_badge': 'Instantané',
   'cart.card_option': 'Carte à la livraison/au retrait',
   'cart.cash_option': 'Espèces en main',

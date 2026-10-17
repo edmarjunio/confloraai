@@ -151,13 +151,7 @@ test('Cliente: compra, recibo e detalhes do histórico usam o mesmo comprovante'
   expect((await replay.json()).order.id).toBe(originalOrder.id);
   await page.route('**/api/customer/orders**', route => route.fulfill({ json: {
     success: true,
-    orders: [{
-      id: 'history-e2e-order', createdAt: new Date().toISOString(),
-      customerName: 'Cliente E2E', paymentMethod: 'DINHEIRO', fulfillment: 'pickup',
-      total: 25, totalMinor: 2500, status: 'CONFIRMED',
-      items: [{ name: 'Planta Teste', quantity: 1, price: 25 }],
-      receiptText: purchaseReceipt,
-    }],
+    orders: [originalOrder],
     hasMore: false, nextCursor: null,
   } }));
   await page.locator('#cartCloseButton').click();
@@ -165,7 +159,7 @@ test('Cliente: compra, recibo e detalhes do histórico usam o mesmo comprovante'
   await expect(page.locator('#historyList')).toContainText('Pedido #');
   const orderDetails = page.locator('.history-order-details').first();
   await orderDetails.locator('summary').click();
-  await expect(orderDetails.locator('.order-receipt-text')).toHaveText(purchaseReceipt);
+  expect(await orderDetails.locator('.order-receipt-text').innerText()).toBe(purchaseReceipt);
 });
 
 test('Admin: entrada, saída com justificativa e contagem substituem saldo com imagem renderizada', async ({ page }) => {

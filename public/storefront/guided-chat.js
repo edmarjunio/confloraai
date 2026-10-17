@@ -155,9 +155,10 @@ export function createGuidedChat(state, catalog) {
     );
     if (!matches.length) {
       say(
-        "Não encontrei esse nome na loja. Tente uma palavra mais curta ou um nome alternativo.",
+        "Não encontrei produtos com essas informações no cadastro. Tente o nome do item ou escolha uma categoria abaixo.",
       );
       clearResults();
+      buttons([["Escolher categoria", () => { path = []; browse(); }], ["Ver todos os produtos", () => results(source, "Todos os produtos")]]);
       return;
     }
     if (matches.some((match) => match.approximate)) {
@@ -182,7 +183,7 @@ export function createGuidedChat(state, catalog) {
   function configure() {
     $("#aiFab").hidden = !state.config.assistant.enabled;
     $("#chatTitle").textContent = $("#aiName").textContent =
-      state.config.assistant.displayName || "Guia de compras";
+      "Assistente de compras";
     $(".chat-note").textContent =
       "Respostas baseadas nas informações cadastradas pela loja.";
     $(".fab-caption").textContent = "Encontre seu produto";
@@ -190,14 +191,16 @@ export function createGuidedChat(state, catalog) {
       "Digite o nome ou uma dúvida sobre o produto…";
     $("#chatSuggestions").replaceChildren(
       element("button", {
-        text: "Voltar",
+        text: "← Voltar",
+        class: "chat-action-back",
         onclick: () => {
           path.pop();
           browse();
         },
       }),
       element("button", {
-        text: "Começar de novo",
+        text: "↻ Começar de novo",
+        class: "chat-action-restart",
         onclick: () => {
           path = [];
           messages.replaceChildren();
@@ -205,6 +208,7 @@ export function createGuidedChat(state, catalog) {
         },
       }),
     );
+    $('#chatSuggestions').append(element('button', { text: 'Limpar conversa', class: 'chat-action-clear', onclick: () => { path = []; clearResults(); messages.replaceChildren(); $('#chatInput').value = ''; browse(); $('#chatInput').focus(); } }));
     if (!messages.children.length) {
       browse();
     }

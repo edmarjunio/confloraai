@@ -74,6 +74,7 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
     tags: (Array.isArray(item.tags) ? item.tags : []).filter(
       (tag) => typeof tag === "string",
     ),
+    searchAttributes: { light: item.light || item.iluminacao || item.luminosidade || '', environment: item.environment || item.ambiente_ideal || item.onde_deixar || '' },
     specifications: Object.fromEntries(
       Object.entries(item.specifications || {}).filter(
         ([, value]) =>
@@ -158,6 +159,7 @@ function existingConfig(products, saved, settings = { stockControlEnabled: true 
         });
       }
     }
+    result.checkout.enabledPayments = ["PIX", "CASH", "CREDITO", "DEBITO", "FIADO"];
     result.inventory = {
       stockControlEnabled: settings?.stockControlEnabled !== false,
     };
@@ -189,7 +191,7 @@ function existingConfig(products, saved, settings = { stockControlEnabled: true 
   };
   config.checkout.contactPhone =
     process.env.OWNER_WHATSAPP_NUMBER || "5564999351616";
-  config.checkout.enabledPayments = ["PIX", "CARD", "CASH"];
+  config.checkout.enabledPayments = ["PIX", "CASH", "CREDITO", "DEBITO", "FIADO"];
   config.checkout.delivery = {
     enabled: true,
     label: "Entrega",
@@ -524,7 +526,7 @@ async function normalizeExistingCheckout(req, repository) {
     "Escolha entrega ou retirada.",
   );
   ensure(
-    storeConfig.checkout.enabledPayments.includes(input.paymentMethod),
+    (storeConfig.checkout.enabledPayments.includes(input.paymentMethod) || input.paymentMethod === "CARD"),
     "Pagamento inválido.",
   );
   ensure(
@@ -622,7 +624,7 @@ async function normalizeExistingCheckout(req, repository) {
     orderType: input.fulfillment === "delivery" ? "DELIVERY" : "PICKUP",
     deliveryAddress: input.address,
     ...(deliveryLocation ? { deliveryLocation } : {}),
-    paymentMethod: { PIX: "PIX", CARD: "CARTAO", CASH: "DINHEIRO" }[
+    paymentMethod: { PIX: "PIX", CARD: "CARTAO", CASH: "DINHEIRO", CREDITO: "CREDITO", DEBITO: "DEBITO", FIADO: "FIADO" }[
       input.paymentMethod
     ],
     cashTendered: cashTenderedMinor / 100,

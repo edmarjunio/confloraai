@@ -23,7 +23,7 @@ export interface StoreConfig {
   };
   categories: { id: string; name: string; order: number; isActive: boolean }[];
   checkout: {
-    enabledPayments: ("PIX" | "CARD" | "CASH")[];
+    enabledPayments: ("PIX" | "CARD" | "CASH" | "CREDITO" | "DEBITO" | "FIADO")[];
     pix: { key: string; recipientName: string };
     contactPhone: string;
     delivery: {

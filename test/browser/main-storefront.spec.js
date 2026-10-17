@@ -148,7 +148,7 @@ test("main URL shows the new layout and uses existing customer accounts, catalog
   await expect(page.locator("#historyList")).toContainText("Planta Teste");
   const historyOrder = page.locator(".history-order-details").first();
   await historyOrder.locator("summary").click();
-  await expect(historyOrder.locator(".order-receipt-text")).toHaveText(checkoutReceipt);
+  expect(await historyOrder.locator(".order-receipt-text").innerText()).toBe(checkoutReceipt);
   await page.locator("#historyCloseButton").click();
   await page.locator("#headerAccountIdentity").click();
   await expect(page.locator("#accountContent")).toContainText("Cliente Nova Vitrine");

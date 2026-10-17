@@ -23,6 +23,16 @@ export function createChat(state, catalog) {
       return;
     }
     const config = state.config.assistant;
+    let controls = document.querySelector('.chat-ai-controls');
+    if (!controls) {
+      const reset = () => { if (busy) return; messages.replaceChildren(); history.length = 0; bubble('Qual produto você procura?', 'assistant'); $('#chatInput').focus(); };
+      controls = element('div', { class: 'suggestions chat-ai-controls' }, [
+        element('button', { type: 'button', class: 'chat-action-back', text: '← Voltar', onclick: () => { if (busy) return; history.splice(-2); const lastUser = [...messages.querySelectorAll('.bubble.user')].pop(); if (lastUser) { while (lastUser.nextSibling) lastUser.nextSibling.remove(); lastUser.remove(); } $('#chatInput').focus(); } }),
+        element('button', { type: 'button', class: 'chat-action-restart', text: '↻ Começar de novo', onclick: reset }),
+        element('button', { type: 'button', class: 'chat-action-clear', text: 'Limpar conversa', onclick: reset }),
+      ]);
+      form.before(controls);
+    }
     $("#aiFab").hidden = !config.enabled;
     $("#aiName").textContent = $("#chatTitle").textContent = config.displayName || "assistant.drawer_title".tr;
     if (!messages.children.length) {

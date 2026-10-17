@@ -1719,16 +1719,13 @@ const { useState, useEffect, useRef, useMemo } = React;
                   <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
                     Forma de Pagamento
                   </p>
-                  <div hidden={splitPayment} className={splitPayment ? 'hidden' : 'grid grid-cols-3 gap-1.5 mb-3 sm:grid-cols-6'}>
+                  <div hidden={splitPayment} className={splitPayment ? 'hidden' : 'grid grid-cols-2 gap-2 mb-3 sm:grid-cols-5'}>
                     {[
-                      { id: 'pix', label: 'PIX Sicredi', icon: QrCode },
-                      { id: 'debito', label: 'Débito', icon: CreditCard },
-                      { id: 'credito', label: 'Crédito', icon: CreditCard },
+                      { id: 'pix', label: 'Pix · QR Code / Copia e Cola', icon: QrCode },
+                      { id: 'debito', label: 'Cartão de débito', icon: CreditCard },
+                      { id: 'credito', label: 'Cartão de crédito', icon: CreditCard },
                       { id: 'dinheiro', label: 'Dinheiro', icon: Banknote },
-                      { id: 'fiado', label: 'Fiado', icon: User },
-                      ...(currentUser.role !== 'VENDEDOR' && customerId && customerCreditBalance > 0
-                        ? [{ id: 'credito_cliente', label: 'Saldo cliente', icon: CreditCard, disabled: customerCreditBalance < finalTotal }]
-                        : []),
+                      { id: 'fiado', label: 'Fiado · aprovação do Admin', icon: User },
                     ].map((method) => {
                       const Icon = method.icon;
                       const active = paymentMethod === method.id;
@@ -1743,7 +1740,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                             : 'border-slate-200 text-slate-600 hover:bg-slate-50')}
                         >
                           <Icon className="w-4 h-4 text-emerald-700" />
-                          <span className="truncate">{method.label}</span>
+                          <span className="whitespace-normal leading-snug">{method.label}</span>
                         </button>
                       );
                     })}
@@ -1821,7 +1818,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                       className={primaryActionButtonClass + ' w-2/3 px-4 py-3 text-sm active:scale-98'}
                     >
                       <Check className="w-4 h-4" />
-                      <span>{isSubmittingSale ? 'Processando...' : deferToCashier ? 'Enviar comanda ao caixa' : splitPayment ? 'Confirmar pagamentos' : currentUser.role === 'VENDEDOR' && paymentMethod !== 'pix' ? 'Enviar comanda ao caixa' : paymentMethod === 'pix' ? 'Gerar Pix Sicredi' : paymentMethod === 'credito_cliente' ? 'Usar saldo do cliente' : customerId ? 'Finalizar venda' : customerName && customerName !== 'Cliente Balcão' ? 'Adicionar cliente e finalizar venda' : 'Finalizar venda'}</span>
+                      <span>{isSubmittingSale ? 'Processando...' : deferToCashier ? 'Enviar comanda ao caixa' : splitPayment ? 'Confirmar pagamentos' : currentUser.role === 'VENDEDOR' && paymentMethod !== 'pix' ? 'Enviar comanda ao caixa' : paymentMethod === 'pix' ? 'Gerar Pix Sicredi' : paymentMethod === 'fiado' && currentUser.role !== 'ADMIN' ? 'Solicitar aprovação do fiado' : paymentMethod === 'credito_cliente' ? 'Usar saldo do cliente' : customerId ? 'Finalizar venda' : customerName && customerName !== 'Cliente Balcão' ? 'Adicionar cliente e finalizar venda' : 'Finalizar venda'}</span>
                     </button>
                   </div>
                 </div>

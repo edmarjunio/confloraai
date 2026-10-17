@@ -2,7 +2,6 @@ import { element } from "./ui.js";
 
 /** Shared receipt renderer used by checkout and purchase history. */
 export function renderOrderReceipt(order) {
-  const receiptText = String(order?.receiptText || "").trim();
   const pixCode = String(order?.pixData?.pixCopiaECola || order?.pixCopiaECola || "").trim();
   const isAwaitingPix = order?.paymentMethod === "PIX" && !order?.paidAt && Boolean(pixCode);
   const pixPanel = isAwaitingPix ? element("section", { class: "order-receipt-pix", "aria-label": "Pagamento Pix" }, [
@@ -23,10 +22,7 @@ export function renderOrderReceipt(order) {
   }, [
     element("h3", { class: "order-receipt-title", text: "Recibo da compra" }),
     ...(pixPanel ? [pixPanel] : []),
-    element("pre", {
-      class: "order-receipt-text",
-      text: receiptText || "O recibo desta compra não está disponível.",
-    }),
+    window.ConfloraOrderDisplay.renderReceipt(order),
   ]);
   return receipt;
 }

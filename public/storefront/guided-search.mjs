@@ -6,7 +6,7 @@ export const normalize = (value) =>
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
 const stopWords = new Set(
-  "a o as os de da do das dos um uma para por em no na eu quero queria preciso tem voce voces qual quais preco valor custa quanto sobre saber produto produtos como cuidar cuidados me mostre mostrar".split(
+  "a o as os de da do das dos um uma para por em no na eu quero queria preciso tem voce voces qual quais preco valor custa quanto sobre saber produto produtos como cuidar cuidados me mostre mostrar ajuda ajude ajudar escolher escolha indicar indica indicacao recomendar recomenda recomendacao gostaria preciso planta plantas coisa alguma algo uma um que seja nao muito mais menos voce voces favor por favor comprar quero encontre encontrar tenho tenha preciso precisa precise de para".split(
     " ",
   ),
 );
@@ -107,7 +107,8 @@ export function nextChoices(products, categories, path) {
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 }
 export function searchProducts(products, query, synonyms = []) {
-  const terms = words(query).slice(0, 12);
+  const cleanedQuery = normalize(query).replace(/(?:nao (?:precisa|precise|precisam) (?:de )?(?:muito )?sol|pouco sol|sem sol direto)/g, 'sombra').replace(/(?:para |na |em )?(?:sala|apartamento|dentro de casa)/g, 'interior');
+  const terms = words(cleanedQuery).slice(0, 12);
   if (!terms.length) {
     return [];
   }
@@ -117,7 +118,9 @@ export function searchProducts(products, query, synonyms = []) {
       const identity = [
         product.name,
         ...(product.searchAliases || []),
-        ...(product.tags || []),
+        ...(product.tags || []), product.categoryName, product.subcategoryName,
+        product.description, ...Object.values(product.searchAttributes || {}),
+        ...Object.values(product.specifications || {}).map(value => typeof value === 'string' ? value : value?.value || ''),
       ].join(" ");
       const expanded = synonyms
         .filter((group) =>
@@ -129,6 +132,8 @@ export function searchProducts(products, query, synonyms = []) {
       const candidates = [...new Set(words([identity, ...expanded].join(" ")))];
       const scores = terms.map((term) =>
         Math.max(
+          term === 'sombra' && /luz indireta|iluminacao indireta/.test(normalize(identity)) ? 4 : 0,
+          term === 'interior' && /intern[oa]|apartamento|\bsala\b/.test(normalize(identity)) ? 4 : 0,
           0,
           ...candidates.map((candidate) => wordScore(term, candidate)),
         ),

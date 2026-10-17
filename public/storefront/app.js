@@ -478,7 +478,7 @@ function renderPurchase(order) {
       ]),
       element("div", { class: "history-order-total" }, [
         element("strong", { text: money(total) }),
-        element("span", { class: "badge", text: String(order.status || "RECEBIDO").replaceAll("_", " ") }),
+        element("span", { class: "badge", text: window.ConfloraOrderDisplay.status(order) }),
       ]),
     ]),
     element("p", { class: "history-order-items", text: `${items.length} ${items.length === 1 ? "item" : "itens"} · ${items.slice(0, 3).map((item) => item.name || "Produto").join(", ")}${items.length > 3 ? "…" : ""}` }),
@@ -669,7 +669,7 @@ function renderCustomerLedger(ledger) {
     if (transaction.receiptText) {
       card.append(element("details", { class: "ledger-receipt" }, [
         element("summary", { text: "Ver recibo da compra" }),
-        element("pre", { text: transaction.receiptText }),
+        window.ConfloraOrderDisplay.renderText(transaction.receiptText),
       ]));
     }
     ledgerContent.append(card);

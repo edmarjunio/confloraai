@@ -98,7 +98,7 @@ export const pt = {
   'cart.delivery_address_label': 'Endereço completo (Rua, Número, Bairro)',
   'cart.delivery_address_placeholder': 'Ex.: Rua das Flores, 123, Centro',
   'cart.payment_title': 'Forma de pagamento',
-  'cart.pix_option': 'Pix (Aprovação Instantânea)',
+  'cart.pix_option': 'Pix · QR Code / Copia e Cola',
   'cart.pix_instant_badge': 'Instantâneo',
   'cart.card_option': 'Cartão na entrega/retirada',
   'cart.cash_option': 'Dinheiro em mãos',

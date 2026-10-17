@@ -13,25 +13,33 @@ async function mockMaps(page) {
   });
 }
 
-test('driver accepts a released order, sees route and records payment and delivery on mobile', async ({ page }) => {
+test('driver receives new orders live without dispatch, accepts an order, sees route and records payment and delivery on mobile', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 }); await mockMaps(page);
-  expect((await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-caixa1', pin: '0000' } })).ok()).toBe(true);
-  const sale = await page.request.post('/api/caixa/orders', { data: { requestId: randomUUID(), items: [{ productId: 'test-plant', quantity: 1 }], paymentMethod: 'DINHEIRO', deferToCashier: true, orderType: 'DELIVERY', customerName: 'Cliente Rota E2E', customerPhone: '64999991234', deliveryAddress: 'Rua das Flores, 20, Centro, Mineiros GO', deliveryLocation: { lat: -17.56, lng: -52.54, reference: 'Portão azul' } } });
-  expect(sale.ok()).toBe(true); const { order } = await sale.json();
-  expect((await page.request.post(`/api/caixa/deliveries/${order.id}/dispatch`, { data: {} })).ok()).toBe(true);
-  await page.request.post('/api/auth/logout');
   await page.goto('/caixa'); await page.getByLabel('Usuário').selectOption('usr-entregador1'); await page.getByLabel('PIN', { exact: true }).fill('2222'); await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+  await expect(page.getByText('● Atualização automática', { exact: true })).toBeVisible();
+  const cashier = await page.context().browser().newContext({ baseURL: 'http://127.0.0.1:8099' });
+  let order;
+  try {
+    expect((await cashier.request.post('/api/admin/auth/login', { data: { userId: 'usr-caixa1', pin: '0000' } })).ok()).toBe(true);
+    const sale = await cashier.request.post('/api/caixa/orders', { data: { requestId: randomUUID(), items: [{ productId: 'test-plant', quantity: 1 }], paymentMethod: 'DINHEIRO', deferToCashier: true, orderType: 'DELIVERY', customerName: 'Cliente Rota E2E', customerPhone: '64999991234', deliveryAddress: 'Rua das Flores, 20, Centro, Mineiros GO', deliveryLocation: { lat: -17.56, lng: -52.54, reference: 'Portão azul' } } });
+    expect(sale.ok()).toBe(true); ({ order } = await sale.json());
+  } finally { await cashier.close(); }
   await expect(page.getByRole('heading', { name: '🛵 Entregas', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: /PAGAR - F1/ })).toHaveCount(0);
-  await page.getByRole('button').filter({ hasText: 'Entrega #' + order.ticketNumber }).click();
+  await page.getByRole('button', { name: 'Abrir recibo e detalhes da comanda ' + order.ticketNumber }).click();
   const dialog = page.getByRole('dialog', { name: `Comanda #${order.ticketNumber}` });
   await expect(dialog.getByRole('link', { name: 'Abrir no Waze', exact: true })).toHaveAttribute('href', /ll=-17.56%2C-52.54/);
+  await dialog.getByRole('button', { name: 'Ver mapa da rota', exact: true }).click();
   await expect(dialog).toContainText('2.1 km');
+  await dialog.getByRole('button', { name: 'Ocultar mapa da rota', exact: true }).click();
+  await expect(dialog.locator('.cf-receipt')).toContainText('Planta Teste');
+  await expect(dialog.locator('.cf-receipt')).not.toContainText('*');
+  await dialog.getByRole('button', { name: 'Separar produtos e assumir entrega', exact: true }).click();
   await expect(dialog.getByRole('heading', { name: 'Receber na entrega', exact: true })).toBeVisible();
   await dialog.getByRole('button', { name: '💵 Dinheiro', exact: true }).click();
   await dialog.getByRole('button', { name: 'Confirmar pagamento e finalizar', exact: true }).click();
   await expect(dialog).toContainText('Pago / finalizado');
-  await expect(page.getByRole('button', { name: 'Concluídas (1)', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('region', { name: 'ENTREGUE', exact: true })).toContainText('Cliente Rota E2E');
   await page.screenshot({ path: 'test-results/delivery-mobile-finished.png' });
   expect(await page.locator('html').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
 });

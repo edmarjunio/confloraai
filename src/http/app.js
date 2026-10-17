@@ -1655,16 +1655,28 @@ function createApp({
         pixData = { txid: sicrediPixClient.generateTxId(), provider: 'SICREDI', expiresInSeconds: ttlSeconds };
       }
 
+      let financialCustomerId = req.user?.id || '';
+      if (resolvedPaymentMethod === 'FIADO') {
+        if (!req.user?.email) return res.status(401).json({ error: 'Entre na sua conta para solicitar uma compra fiada.' });
+        const profiles = await messageService.firestoreRepo.findCustomerProfilesByEmail(req.user.email);
+        if (profiles.length > 1) return res.status(409).json({ error: 'A loja precisa conferir os cadastros vinculados ao seu e-mail antes de liberar fiado.' });
+        financialCustomerId = profiles[0]?.id || 'account-' + createHash('sha256').update(req.user.id).digest('hex').slice(0, 24);
+        if (!profiles.length) await app.locals.pdv.store.transaction(async tx => {
+          if (await tx.get('customers', financialCustomerId)) return;
+          const name = req.user.name || customerName;
+          tx.set('customers', financialCustomerId, { id: financialCustomerId, name, nameSearch: name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(), email: req.user.email.toLowerCase(), phone: customerPhone, address: deliveryAddress, debtBalance: 0, creditBalance: 0, updatedAt: new Date().toISOString() });
+        });
+      }
       let order = await messageService.firestoreRepo.createDirectOrder({
         id: orderId,
-        customerId: req.user?.id || '',
+        customerId: financialCustomerId,
         customerEmail: req.user?.email || '',
         customerName,
         customerPhone,
         orderType: orderType || 'DELIVERY',
         deliveryAddress: deliveryAddress || 'Retirada no Viveiro Conflora',
         ...(normalizedLocation ? { deliveryLocation: normalizedLocation } : {}),
-        ...((orderType || 'DELIVERY') === 'DELIVERY' ? { deliveryStatus: 'PENDING_DISPATCH' } : {}),
+        ...((orderType || 'DELIVERY') === 'DELIVERY' ? { deliveryStatus: ['PIX', 'FIADO'].includes(resolvedPaymentMethod) ? 'PENDING_DISPATCH' : 'PENDING_DELIVERY' } : {}),
         paymentMethod: resolvedPaymentMethod,
         items: orderItems,
         subtotal: calculatedSubtotal,
@@ -1674,7 +1686,8 @@ function createApp({
         cashTendered: Number(cashTendered) || 0,
         changeDue: Number(changeDue) || 0,
         ...(idempotencyKey ? { idempotencyFingerprint: checkoutFingerprint } : {}),
-        status: resolvedPaymentMethod === 'PIX' ? 'CREATING_PIX' : 'AWAITING_PAYMENT',
+        status: resolvedPaymentMethod === 'PIX' ? 'CREATING_PIX' : resolvedPaymentMethod === 'FIADO' ? 'AWAITING_CONFIRMATION' : 'AWAITING_PAYMENT',
+        ...(resolvedPaymentMethod === 'FIADO' ? { creditApprovalStatus: 'PENDING' } : {}),
         source: 'WEB_CATALOG',
         paymentStatus: 'PENDING',
         ...(pixData ? { pixData, pixProvider: 'SICREDI', paymentProvider: 'SICREDI' } : {}),

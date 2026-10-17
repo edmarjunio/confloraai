@@ -13,6 +13,7 @@ const { createApp } = require('../src/http/app');
 const seller = { id: 'seller', name: 'Vendedor', email: 'vendedor@conflora.test', role: 'VENDEDOR', pin: '4321' };
 const cashier = { id: 'cashier', name: 'Caixa', email: 'caixa@conflora.test', role: 'CAIXA', pin: '1234' };
 const secondCashier = { id: 'cashier-2', name: 'Outro Caixa', email: 'caixa2@conflora.test', role: 'CAIXA', pin: '5678' };
+const admin = { id: 'admin', name: 'Administrador', role: 'ADMIN' };
 const actor = ({ id, name, email, role }) => ({ id, name, email, role });
 
 const proofData = 'data:application/pdf;base64,' + Buffer.from('%PDF-1.4\nComprovante de teste\n%%EOF').toString('base64');
@@ -60,7 +61,10 @@ test('deferred Pix creates only a command; mixed receipts allocate amounts, debt
   const parts = [{ method: 'DINHEIRO', amount: 5 }, { method: 'CREDITO', amount: 10 }, { method: 'FIADO', amount: 5 }];
   const mixed = await s.service.create({ ...s.input, requestId: randomUUID(), customerId: 'customer', paymentParts: parts }, cashier);
   assert.equal(mixed.paymentMethod, 'MISTO');
-  assert.equal(mixed.paymentStatus, 'ON_ACCOUNT');
+  assert.equal(mixed.creditApprovalStatus, 'PENDING');
+  await assert.rejects(s.repository.receive(mixed.id, actor(cashier)), /administrador/);
+  await s.repository.receive(mixed.id, actor(admin));
+  assert.equal((await s.repository.read('orders', mixed.id)).paymentStatus, 'ON_ACCOUNT');
   assert.equal(s.base.inMemoryCustomers.get('customer').debtBalance, 5);
   assert.equal(mixed.paymentParts.length, 3);
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
@@ -284,7 +288,8 @@ test('fiado is not paid; concurrent debt settlements cannot overdraw or change s
   const s = setup();
   await assert.rejects(s.service.create({ ...s.input, paymentMethod: 'FIADO' }, seller), /cadastrado/);
   const order = await s.service.create({ ...s.input, paymentMethod: 'FIADO', customerId: 'customer' }, seller);
-  const received = await s.repository.receive(order.id, actor(cashier));
+  await assert.rejects(s.repository.receive(order.id, actor(cashier)), /administrador/);
+  const received = await s.repository.receive(order.id, actor(admin));
   assert.equal(received.paidAt, null);
   assert.equal(received.paymentStatus, 'ON_ACCOUNT');
   assert.equal(s.base.inMemoryCustomers.get('customer').debtBalance, 20);
@@ -404,12 +409,12 @@ test('Firestore transaction rolls back stock, debt and order together on failed 
   };
   s.base.firestore = firestore;
   s.base.getInventorySettings = async () => ({ stockControlEnabled: true });
-  await assert.rejects(s.repository.receive(order.id, actor(cashier)), /Commit failed/);
+  await assert.rejects(s.repository.receive(order.id, actor(admin)), /Commit failed/);
   assert.equal(documents.get('customers/customer').debtBalance, 0);
   assert.equal(documents.get('products/plant').stockQuantity, 20);
-  assert.equal(documents.get('orders/' + order.id).status, 'AWAITING_PAYMENT');
+  assert.equal(documents.get('orders/' + order.id).status, 'AWAITING_CONFIRMATION');
   fail = false;
-  const results = await Promise.all([s.repository.receive(order.id, actor(cashier)), s.repository.receive(order.id, actor(cashier))]);
+  const results = await Promise.all([s.repository.receive(order.id, actor(admin)), s.repository.receive(order.id, actor(admin))]);
   assert.equal(results.filter((result) => !result.alreadyConfirmed).length, 1);
   assert.equal(documents.get('products/plant').stockQuantity, 18);
   assert.equal(documents.get('customers/customer').debtBalance, 20);
@@ -666,6 +671,7 @@ test('Cashier board filters history, separates pending stages, and calculates cl
   const paidOrder = await createOrder('DINHEIRO');
   await pdv.store.receive(paidOrder.id, actor(cashier));
   const onAccount = await createOrder('FIADO', { customerId: 'customer' });
+  await pdv.store.transaction(async tx => tx.set('orders', onAccount.id, { ...onAccount, creditApprovalStatus: 'APPROVED', creditApprovedBy: actor(admin) }));
   await pdv.store.receive(onAccount.id, actor(cashier));
   await pdv.store.settle({ id: randomUUID(), customerKey: 'customer', amount: 5, paymentMethod: 'DINHEIRO', notes: '', receivedBy: actor(cashier) });
   const pixOrder = await createOrder('PIX');
@@ -841,6 +847,9 @@ test('online pickup and delivery cash/card orders appear directly in payment que
   assert.deepEqual(board.pendingConfirmation, []);
   assert.deepEqual(board.pendingPayment.map((order) => order.id).sort(), ids.sort());
   assert.equal(s.chargeCalls.length, 0); assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 4);
+  const deliveries = await app.locals.pdv.service.listDeliveries({ id: 'driver', role: 'ENTREGADOR' });
+  assert.equal(deliveries.available.length, 2);
+  assert.ok(deliveries.available.every(order => order.customerName === 'Cliente online' && order.items[0].name === 'Muda'));
   const response = await post(`/api/caixa/orders/${ids[0]}/confirm`, { paymentMethod: 'DINHEIRO', receivedAmount: 10 }, cookie);
   assert.equal(response.status, 200); assert.equal((await response.json()).order.paymentStatus, 'APPROVED');
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 19);
@@ -910,11 +919,11 @@ test('cashier customer selection keeps the existing record and email optional; d
 test('delivery: dispatcher releases cash order, only one driver accepts and payment finishes stock once', async () => {
   const s = setup(); const driver = { id: 'driver', name: 'Entregador', role: 'ENTREGADOR' }; const other = { id: 'driver2', name: 'Outro', role: 'ENTREGADOR' };
   const order = await s.service.create({ ...s.input, orderType: 'DELIVERY', customerName: 'Maria', customerPhone: '64999991234', deliveryAddress: 'Rua 10, 20, Centro, Mineiros GO', deliveryLocation: { lat: -17.56, lng: -52.55, reference: 'Portão azul' } }, seller);
-  assert.equal(order.deliveryStatus, 'PENDING_DISPATCH'); assert.equal((await s.service.listDeliveries(driver)).available.length, 0);
+  assert.equal(order.deliveryStatus, 'PENDING_DELIVERY'); assert.equal((await s.service.listDeliveries(driver)).available.length, 1);
   await assert.rejects(s.repository.dispatchDelivery(order.id, driver), /Somente/);
   await s.repository.dispatchDelivery(order.id, actor(cashier));
   const publicQueue = (await s.service.listDeliveries(driver)).available;
-  assert.equal(publicQueue.length, 1); assert.equal(publicQueue[0].customerName, undefined); assert.equal(publicQueue[0].customerPhone, undefined); assert.equal(publicQueue[0].total, undefined);
+  assert.equal(publicQueue.length, 1); assert.equal(publicQueue[0].customerName, 'Maria'); assert.equal(publicQueue[0].customerPhone, '5564999991234'); assert.equal(publicQueue[0].total, 20);
   const attempts = await Promise.allSettled([s.service.assignDelivery(order.id, driver), s.service.assignDelivery(order.id, other)]);
   assert.equal(attempts.filter((result) => result.status === 'fulfilled').length, 1);
   const assigned = await s.repository.read('orders', order.id); const winner = assigned.assignedDriver;
@@ -1016,4 +1025,73 @@ test('free sales permit cash, Pix and delivery without entries; activating stock
   assert.equal(dispatched.inventoryReserved, false);
   await s.base.saveInventorySettings({ stockControlEnabled: true });
   await assert.rejects(s.service.create({ ...s.input, requestId: randomUUID(), paymentMethod: 'PIX' }, cashier), /Estoque disponível insuficiente/);
+});
+
+
+test('delivery credit requires Admin approval before a driver can claim; approval and completion are idempotent', async () => {
+  for (const creator of [seller, cashier, admin]) {
+    const s = setup(); const driver = { id: 'driver', name: 'Entregador', role: 'ENTREGADOR' };
+    const order = await s.service.create({ ...s.input, paymentMethod: 'FIADO', customerId: 'customer', orderType: 'DELIVERY', customerName: 'Maria', customerPhone: '64999991234', deliveryAddress: 'Rua 10, 20, Centro, Mineiros GO' }, creator);
+    assert.equal(order.creditApprovalStatus, 'PENDING');
+    assert.equal((await s.service.listDeliveries(driver)).available.length, 0);
+    await assert.rejects(s.service.assignDelivery(order.id, driver), /disponível/);
+    await assert.rejects(s.repository.receive(order.id, actor(cashier)), /administrador/);
+    assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
+    assert.equal(s.base.inMemoryCustomers.get('customer').debtBalance, 0);
+    const approved = await s.repository.receive(order.id, actor(admin));
+    assert.equal(approved.creditApprovedBy.id, admin.id);
+    assert.equal(approved.paymentStatus, 'ON_ACCOUNT');
+    assert.equal((await s.service.listDeliveries(driver)).available.length, 1);
+    await s.service.assignDelivery(order.id, driver);
+    await s.service.completeDelivery(order.id, driver);
+    await s.service.completeDelivery(order.id, driver);
+    await s.repository.receive(order.id, actor(admin));
+    assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
+    assert.equal(s.base.inMemoryCustomers.get('customer').debtBalance, 20);
+  }
+});
+
+test('mixed credit with Pix waits for Admin and never issues a charge or records cash before approval', async () => {
+  const s = setup();
+  const order = await s.service.create({ ...s.input, customerId: 'customer', paymentParts: [{ method: 'FIADO', amount: 5 }, { method: 'DINHEIRO', amount: 5 }, { method: 'PIX', amount: 10 }] }, cashier);
+  assert.equal(order.creditApprovalStatus, 'PENDING');
+  assert.equal(order.pixData, null); assert.equal(s.chargeCalls.length, 0);
+  assert.equal(order.paymentParts.some(part => part.status === 'RECEIVED_AT_CASHIER'), false);
+  await assert.rejects(s.service.requestPixAtCashier(order.id, cashier, order.paymentParts), /Admin/);
+  const charge = await s.service.requestPixAtCashier(order.id, admin, order.paymentParts);
+  assert.equal(charge.creditApprovalStatus, 'APPROVED');
+  assert.equal(s.chargeCalls.length, 1); assert.equal(s.chargeCalls[0].amount, 10);
+  s.pix.checkReceivedPayment = async endToEndId => ({ isPaid: true, raw: { txid: charge.pixData.txid, endToEndId, chave: 'pix-key', valor: '10.00' } });
+  await s.service.handlePix(charge.pixData.txid, 'E' + '3'.repeat(31));
+  await s.service.handlePix(charge.pixData.txid, 'E' + '3'.repeat(31));
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
+  assert.equal(s.base.inMemoryCustomers.get('customer').debtBalance, 5);
+});
+
+
+test('online credit links customer account once, requires Admin, and remains in account history and ledger', async t => {
+  const s = setup(); s.base.inMemoryUsers.set(admin.id, { ...admin, pin: '9999', active: true });
+  const app = createApp({ messageService: { firestoreRepo: s.base, whatsappClient: s.whatsapp }, sicrediClient: s.pix });
+  const server = app.listen(0); t.after(() => server.close()); const origin = `http://127.0.0.1:${server.address().port}`;
+  const post = (path, body, cookie = '') => fetch(origin + path, { method: 'POST', headers: { 'Content-Type': 'application/json', cookie }, body: JSON.stringify(body) });
+  const get = (path, cookie) => fetch(origin + path, { headers: { cookie } });
+  const registration = await post('/api/auth/register', { name: 'Cliente Fiado', email: 'credito@test.com', password: 'senha123' });
+  assert.equal(registration.status, 200); const customerCookie = registration.headers.get('set-cookie').split(';')[0];
+  const payload = { customerName: 'Cliente Fiado', customerPhone: '64999991234', orderType: 'DELIVERY', paymentMethod: 'FIADO', deliveryAddress: 'Rua Teste 10, Centro, Mineiros GO', items: [{ productId: 'plant', quantity: 1 }] };
+  assert.equal((await post('/api/orders', payload)).status, 401);
+  const response = await post('/api/orders', payload, customerCookie); assert.equal(response.status, 200); const { order } = await response.json();
+  assert.equal(order.creditApprovalStatus, 'PENDING');
+  assert.equal((await app.locals.pdv.service.listDeliveries({ id: 'driver', role: 'ENTREGADOR' })).available.length, 0);
+  const login = async (id, pin) => (await post('/api/admin/auth/login', { userId: id, pin })).headers.get('set-cookie').split(';')[0];
+  const cashierCookie = await login(cashier.id, cashier.pin);
+  assert.equal((await post(`/api/caixa/orders/${order.id}/confirm`, { paymentMethod: 'FIADO' }, cashierCookie)).status, 400);
+  const adminCookie = await login(admin.id, '9999');
+  assert.equal((await post(`/api/caixa/orders/${order.id}/confirm`, { paymentMethod: 'FIADO' }, adminCookie)).status, 200);
+  assert.equal((await app.locals.pdv.service.listDeliveries({ id: 'driver', role: 'ENTREGADOR' })).available.length, 1);
+  const ledger = await (await get('/api/customer/ledger', customerCookie)).json();
+  assert.equal(ledger.balance, 10);
+  const next = await post('/api/orders', payload, customerCookie); assert.equal(next.status, 200);
+  assert.equal((await (await get('/api/customer/ledger', customerCookie)).json()).balance, 10);
+  assert.equal(s.base.inMemoryCustomers.get(order.customerId).phone, '64999991234');
+  assert.equal((await (await get('/api/customer/orders', customerCookie)).json()).orders.length, 2);
 });

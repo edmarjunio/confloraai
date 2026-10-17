@@ -98,7 +98,7 @@ export const es = {
   'cart.delivery_address_label': 'Dirección completa (Calle, Número, Barrio)',
   'cart.delivery_address_placeholder': 'Ej.: Calle Los Rosales 456, Centro',
   'cart.payment_title': 'Forma de pago',
-  'cart.pix_option': 'Pix (Aprobación Instantánea)',
+  'cart.pix_option': 'Pix · Código QR / Copiar código',
   'cart.pix_instant_badge': 'Instantáneo',
   'cart.card_option': 'Tarjeta al recibir/retirar',
   'cart.cash_option': 'Efectivo en mano',

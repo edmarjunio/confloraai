@@ -175,10 +175,13 @@ class PdvRepository {
       const order = await tx.get('orders', orderId);
       if (!isDelivery(order) || order.status === 'CANCELLED') throw new Error('Pedido de entrega não encontrado.');
       if (order.deliveryStatus === 'OUT_FOR_DELIVERY' && order.assignedDriver?.id === actor.id) return order;
-      if (order.deliveryStatus !== 'PENDING_DELIVERY' || order.assignedDriver?.id) throw new Error('Esta entrega não está disponível. Outro entregador pode ter aceitado.');
+      if ((!['PENDING_DELIVERY', 'PENDING_DISPATCH'].includes(order.deliveryStatus)) || order.creditApprovalStatus === 'PENDING' || order.assignedDriver?.id) throw new Error('Esta entrega não está disponível. Outro entregador pode ter aceitado.');
       if (order.paymentMethod === 'PIX' && !isDeliverySettled(order)) throw new Error('O pagamento Pix ainda não foi confirmado.');
+      if ((order.paymentParts || [{ method: order.paymentMethod }]).some(part => part.method === 'FIADO') && !isDeliverySettled(order)) throw new Error('O fiado aguarda aprovação de um administrador.');
       const now = new Date().toISOString();
-      const updated = { ...order, deliveryStatus: 'OUT_FOR_DELIVERY', assignedDriver: actor, acceptedAt: now, updatedAt: now };
+      const reservation = !order.inventoryReserved && !order.stockDeducted ? await prepareStockReservation(tx, order.items) : null;
+      if (reservation) applyStockReservation(tx, reservation, now);
+      const updated = { ...order, ...(reservation ? { inventoryReserved: !reservation.trackingDisabled, reservedItems: reservation.reservedItems } : {}), deliveryStatus: 'OUT_FOR_DELIVERY', assignedDriver: actor, acceptedAt: now, updatedAt: now };
       tx.set('orders', orderId, updated);
       const id = `${orderId}-delivery-${now.replace(/[^0-9]/g, '')}`;
       tx.set('pdv_outbox', id, { id, kind: 'delivery-departure', orderId, status: 'PENDING', attempts: 0 });
@@ -216,6 +219,7 @@ class PdvRepository {
       if (order.completedAt || !['AWAITING_CONFIRMATION', 'AWAITING_CASHIER', 'PENDING'].includes(order.status) || order.pixData?.txid) {
         throw new Error('Só é possível mover de esperando confirmação para esperando pagamento.');
       }
+      if (order.creditApprovalStatus === 'PENDING') throw new Error('Somente um Admin pode aprovar o fiado no recebimento.');
       const reservation = order.inventoryReserved ? null : await prepareStockReservation(tx, order.items);
       const now = new Date().toISOString();
       const ttl = Math.min(86400, Math.max(300, Number(process.env.PIX_PAYMENT_TTL_SECONDS) || 3600));
@@ -250,8 +254,10 @@ class PdvRepository {
       if (!canReceiveOrder(order, receiver)) { throw new Error('Sem permissão para gerar Pix deste pedido.'); }
       if (Date.parse(order.pixExpiresAt || order.paymentExpiresAt || '') <= Date.now()) throw new Error('O prazo de pagamento venceu. Inicie uma nova comanda.');
       if (order.paymentMethod === 'PIX' && order.pixData) { return order; }
-      if (!['AWAITING_CASHIER', 'AWAITING_PAYMENT', 'PENDING'].includes(order.status)) { throw new Error('A comanda não está aguardando recebimento no caixa.'); }
+      if (!['AWAITING_CONFIRMATION', 'AWAITING_CASHIER', 'AWAITING_PAYMENT', 'PENDING'].includes(order.status)) { throw new Error('A comanda não está aguardando recebimento no caixa.'); }
       const paymentParts = normalizePaymentParts(requestedParts, 'PIX', order.total);
+      const approvingCredit = paymentParts.some(part => part.method === 'FIADO');
+      if (approvingCredit && receiver.role !== 'ADMIN' && order.creditApprovedBy?.role !== 'ADMIN') throw new Error('Fiado exige aprovação de um Admin antes de gerar o Pix.');
       if (!paymentParts.some((part) => part.method === 'PIX') || paymentParts.some((part) => part.method === 'SALDO_CLIENTE')) throw new Error('Combine Pix com dinheiro, débito, crédito ou fiado.');
       if (paymentParts.some((part) => part.method === 'FIADO') && !order.customerId) throw new Error('Fiado exige cliente cadastrado.');
       const reservation = order.inventoryReserved ? null : await prepareStockReservation(tx, order.items);
@@ -259,7 +265,7 @@ class PdvRepository {
       const pixTtlSeconds = Math.min(86400, Math.max(300, Number(process.env.PIX_PAYMENT_TTL_SECONDS) || 3600));
       const pixData = { txid: createHash('sha256').update(order.id).digest('hex').slice(0, 32).toUpperCase(), provider: 'SICREDI', expiresInSeconds: pixTtlSeconds };
       if (reservation) applyStockReservation(tx, reservation, now);
-      const updated = { ...order, paymentMethod: 'PIX', paymentStatus: 'PENDING', status: 'CREATING_PIX', pixData, pixCopiaECola: '',
+      const updated = { ...order, ...(!approvingCredit && order.creditApprovalStatus === 'PENDING' ? { creditApprovalStatus: 'NOT_REQUIRED' } : {}), ...(approvingCredit && receiver.role === 'ADMIN' ? { creditApprovalStatus: 'APPROVED', creditApprovedBy: receiver, creditApprovedAt: now } : {}), paymentMethod: 'PIX', paymentStatus: 'PENDING', status: 'CREATING_PIX', pixData, pixCopiaECola: '',
         paymentParts: paymentParts.map((part) => ({ ...part, ...(['DINHEIRO', 'DEBITO', 'CREDITO'].includes(part.method) ? { status: 'RECEIVED_AT_CASHIER', receivedBy: receiver } : {}) })), mixedReceivedBy: receiver, deferToCashier: false,
         inventoryReserved: reservation ? !reservation.trackingDisabled : Boolean(order.inventoryReserved), reservedItems: reservation?.reservedItems || order.reservedItems,
         pixTtlSeconds, pixExpiresAt: new Date(Date.now() + pixTtlSeconds * 1000).toISOString(), updatedAt: now };
@@ -289,8 +295,9 @@ class PdvRepository {
         if (allocation(paymentParts) !== allocation(issuedParts)) throw new Error('As parcelas da cobrança Pix emitida não podem ser alteradas.');
       }
       const amountFor = (method) => paymentParts.find((part) => part.method === method)?.amount || 0;
+      if (amountFor('FIADO') && receiver?.role !== 'ADMIN' && order.creditApprovedBy?.role !== 'ADMIN') throw new Error('Fiado exige aprovação de um administrador antes de registrar a dívida.');
       const paymentMethod = amountFor('PIX') ? 'PIX' : paymentParts.length > 1 ? 'MISTO' : paymentParts[0].method;
-      if (paymentMethodOverride && !['AWAITING_CASHIER', 'AWAITING_PAYMENT', 'PENDING'].includes(order.status)) { throw new Error('A forma de pagamento só pode ser escolhida antes do recebimento.'); }
+      if (paymentMethodOverride && !['AWAITING_CONFIRMATION', 'AWAITING_CASHIER', 'AWAITING_PAYMENT', 'PENDING'].includes(order.status)) { throw new Error('A forma de pagamento só pode ser escolhida antes do recebimento.'); }
       if (paymentMethodOverride && paymentMethod === 'PIX' && verification?.verifiedVia !== 'MANUAL_CAIXA_PIX') { throw new Error('Pix exige cobrança Sicredi ou comprovante conferido pelo caixa.'); }
       if (order.paymentMethod === 'PIX' && order.pixData && paymentMethod !== 'PIX') { throw new Error('Uma cobrança Pix já emitida não pode ser convertida; aguarde a confirmação do Sicredi.'); }
       if (paymentMethod === 'PIX' && (!verification || verification.txid !== order.pixData?.txid || verification.amountMinor !== Math.round(amountFor('PIX') * 100))) {
@@ -350,6 +357,8 @@ class PdvRepository {
       const receivedBy = collectingActor.role === 'ENTREGADOR' ? order.createdBy || { id: 'ONLINE', name: 'Catálogo online', role: 'SYSTEM' } : collectingActor;
       const completed = { ...order,
         ...(collectingActor.role === 'ENTREGADOR' ? { collectedBy: collectingActor } : {}),
+        ...(order.creditApprovalStatus === 'PENDING' && !onAccount ? { creditApprovalStatus: 'NOT_REQUIRED' } : {}),
+        ...(onAccount && receiver?.role === 'ADMIN' ? { creditApprovalStatus: 'APPROVED', creditApprovedBy: receiver, creditApprovedAt: now } : {}),
         ...(isDelivery(order) && (!order.deliveryStatus || order.deliveryStatus === 'PENDING_DISPATCH') ? { deliveryStatus: 'PENDING_DELIVERY' } : {}),
         ...(finishDelivery ? { deliveryStatus: 'DELIVERED', deliveredBy: receiver, deliveredAt: now } : {}), paymentMethod, paymentParts: paymentParts.map((part) => ({ ...part, receivedBy, status: part.method === 'FIADO' ? 'ON_ACCOUNT' : 'APPROVED' })), receivedBy, cashierName: receivedBy.name, cashierEmail: receivedBy.email || '', status: 'CONFIRMED',
         paymentStatus: onAccount ? 'ON_ACCOUNT' : 'APPROVED', paidAt: onAccount ? null : now,

@@ -77,7 +77,7 @@ function validateConfig(input, tenantId) {
   ensure(
     Array.isArray(payments) &&
       payments.length > 0 &&
-      payments.every((p) => ["PIX", "CARD", "CASH"].includes(p)),
+      payments.every((p) => ["PIX", "CARD", "CASH", "CREDITO", "DEBITO", "FIADO"].includes(p)),
     "Selecione formas de pagamento válidas.",
   );
   ensure(

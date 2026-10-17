@@ -175,7 +175,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     heartbeat.unref?.();
     const unsubscribe = store.watchOpenOrders((orders) => {
       if (closed) return;
-      const visibleOrders = orders.filter((order) => (order.source === 'PDV' || order.source === 'WEB_CATALOG') && (req.user.role !== 'ENTREGADOR' || (isDelivery(order) && (order.deliveryStatus === 'PENDING_DELIVERY' || order.assignedDriver?.id === req.user.id))));
+      const visibleOrders = orders.filter((order) => (order.source === 'PDV' || order.source === 'WEB_CATALOG') && (req.user.role !== 'ENTREGADOR' || (isDelivery(order) && (['PENDING_DELIVERY', 'PENDING_DISPATCH'].includes(order.deliveryStatus) || order.assignedDriver?.id === req.user.id))));
       send('orders-changed', { orderIds: visibleOrders.map((order) => order.id), updatedAt: new Date().toISOString() });
     }, () => {
       if (!closed) send('stream-fallback', { updatedAt: new Date().toISOString() });

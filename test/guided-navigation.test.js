@@ -63,3 +63,14 @@ test("synonyms come from store data and do not leak between configurations", asy
   );
   assert.equal(searchProducts(products, "impermeavel")[0].product.id, "a");
 });
+
+
+test('natural shopping requests search all products and use registered light and environment', async () => {
+  const { searchProducts } = await load();
+  const plants = [
+    { id: 'shade', name: 'Zamioculca', isAvailable: true, searchAttributes: { light: 'Luz indireta', environment: 'Ambiente interno' } },
+    { id: 'sun', name: 'Girassol', isAvailable: true, searchAttributes: { light: 'Sol pleno', environment: 'Jardim externo' } },
+  ];
+  assert.deepEqual(searchProducts(plants, 'Preciso de ajuda para escolher uma planta de sombra').map(item => item.product.id), ['shade']);
+  assert.deepEqual(searchProducts(plants, 'Quero uma planta para sala que não precise de muito sol').map(item => item.product.id), ['shade']);
+});

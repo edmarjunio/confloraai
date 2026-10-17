@@ -33,6 +33,8 @@ function renderAdminHtml(storeConfig) {
   <title>${name} — Administração</title>
   ${GOOGLE_ANALYTICS_TAG}
   <script src="/store-assets/tab-session.js"></script>
+    <link rel="stylesheet" href="/store-assets/order-display.css" />
+    <script src="/store-assets/order-display.js"></script>
   ${FETCH_SHIM_SCRIPT}
 
   <link rel="stylesheet" href="/store-assets/admin-shell-v1.css">
