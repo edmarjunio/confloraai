@@ -362,7 +362,6 @@ for (const role of ['ADMIN', 'CLIENTE', 'ENTREGADOR']) {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.route('**/api/auth/me', route => route.fulfill({ json: { user: { id: 'profile-user', name: 'Edmar Júnio', email: 'perfil@example.com', role } } }));
     await page.goto('/'); await selectPortuguese(page);
-    if (role === 'ENTREGADOR') { await expect(page).toHaveURL(/\/caixa$/); return; }
     await page.locator('#headerAccountIdentity').click();
     const dialog = page.locator('#accountDialog');
     await expect(dialog.locator('.account-avatar')).toHaveText('EJ');

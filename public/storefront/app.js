@@ -117,16 +117,15 @@ function updateHeaderActions() {
     Object.assign(historyState, { buffer: [], cursor: '', hasMore: false, loading: false, failed: false, loaded: false });
   }
   cart?.setOwner(state.user);
-  if (existingStore && state.user?.role === 'ENTREGADOR') { location.replace('/caixa'); return; }
   const role = String(state.user?.role || "CLIENTE").toUpperCase();
   const isLoggedIn = Boolean(state.user);
   const allowedCashierRoles = ["ADMIN", "CAIXA", "VENDEDOR", "ENTREGADOR"];
   const identity = $("#headerAccountIdentity");
 
   identity.hidden = !isLoggedIn;
-  $("#customerAccountShortcut").hidden = !isLoggedIn || !existingStore || allowedCashierRoles.includes(role);
+  $("#customerAccountShortcut").hidden = !isLoggedIn || !existingStore || (allowedCashierRoles.includes(role) && role !== 'ENTREGADOR');
   $('#customerDebtBadge').hidden = true;
-  if (isLoggedIn && existingStore && role === 'CLIENTE') {
+  if (isLoggedIn && existingStore && ['CLIENTE', 'ENTREGADOR'].includes(role)) {
     const userId = state.user.id;
     state.api('/customer/ledger').then((ledger) => {
       if (state.user?.id === userId) updateDebtBadge(ledger.balance);

@@ -965,7 +965,8 @@ test('delivery HTTP isolates drivers, permits assigned payment with proof and de
   const login = async (user) => (await post('/api/admin/auth/login', { userId: user.id, pin: user.pin })).headers.get('set-cookie').split(';')[0];
   const cookie = await login(driver); const otherCookie = await login(other); const cashierCookie = await login(cashier);
   for (const path of ['/api/caixa/products', '/api/caixa/orders', '/api/caixa/customers', '/api/admin/orders']) assert.equal((await fetch(origin + path, { headers: { cookie } })).status, 403);
-  for (const path of ['/api/orders', '/api/storefront/orders', '/api/caixa/orders']) assert.equal((await post(path, {}, cookie)).status, 403);
+  assert.equal((await post('/api/caixa/orders', {}, cookie)).status, 403);
+  for (const path of ['/api/orders', '/api/storefront/orders']) assert.equal((await post(path, {}, cookie)).status, 400);
   const order = await app.locals.pdv.service.create({ ...s.input, orderType: 'DELIVERY', customerName: 'Maria', customerPhone: '64999991234', deliveryAddress: 'Rua 10, 20, Centro, Mineiros GO' }, seller);
   const base = '/api/caixa/deliveries/' + order.id;
   assert.equal((await post(base + '/dispatch', {}, cookie)).status, 403);
