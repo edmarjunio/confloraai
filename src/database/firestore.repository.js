@@ -120,7 +120,7 @@ class FirestoreRepository {
       },
     ];
 
-    for (const u of this.isInMemory ? defaultUsers : []) {
+    for (const u of defaultUsers) {
       this.inMemoryUsers.set(u.id, u);
     }
 
@@ -300,13 +300,14 @@ class FirestoreRepository {
   // --- Produtos, Estoque e integração WhatsApp ---
 
   async getAllProducts() {
-    if (this.isInMemory) {return Array.from(this.inMemoryProducts.values());}
+    if (this.isInMemory || this._firestoreClientDisabled) {return Array.from(this.inMemoryProducts.values());}
     if (!this.firestore) {throw new Error('Firestore indisponível.');}
     try {
       const snapshot = await this.firestore.collection('products').get();
       return snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }));
     } catch (err) {
       if (err && (err.code === 7 || (err.message && (err.message.includes('PERMISSION_DENIED') || err.message.includes('insufficient permissions'))))) {
+        this._firestoreClientDisabled = true;
         Logger.info('Firestore sem permissão de leitura; nenhum catálogo simulado será exibido.');
         return Array.from(this.inMemoryProducts.values());
       }
@@ -317,13 +318,14 @@ class FirestoreRepository {
   async getProductById(productId) {
     if (!productId) {return null;}
     const id = String(productId).trim();
-    if (this.isInMemory) {return this.inMemoryProducts.get(id) || null;}
+    if (this.isInMemory || this._firestoreClientDisabled) {return this.inMemoryProducts.get(id) || null;}
     if (!this.firestore) {throw new Error('Firestore indisponível.');}
     try {
       const snapshot = await this.firestore.collection('products').doc(id).get();
       return snapshot.exists ? { ...snapshot.data(), id: snapshot.id } : null;
     } catch (err) {
       if (err && (err.code === 7 || (err.message && (err.message.includes('PERMISSION_DENIED') || err.message.includes('insufficient permissions'))))) {
+        this._firestoreClientDisabled = true;
         return this.inMemoryProducts.get(id) || null;
       }
       throw err;
@@ -1054,8 +1056,9 @@ class FirestoreRepository {
         if (error?.code === 7 || error?.code === '7' || error?.code === 'permission-denied' || errorText.includes('PERMISSION_DENIED')) {
           this._firestoreClientDisabled = true;
           FirestoreRepository._globalClientDisabled = true;
+        } else {
+          Logger.warn('Falha ao consultar vendas do fechamento por data', { error: errorText });
         }
-        Logger.warn('Falha ao consultar vendas do fechamento por data', { error: errorText });
       }
     }
     const orders = await this.getAllOrders(10000);
@@ -1077,8 +1080,9 @@ class FirestoreRepository {
         if (error?.code === 7 || error?.code === '7' || error?.code === 'permission-denied' || errorText.includes('PERMISSION_DENIED')) {
           this._firestoreClientDisabled = true;
           FirestoreRepository._globalClientDisabled = true;
+        } else {
+          Logger.warn('Falha ao consultar recebimentos de dívidas do fechamento', { error: errorText });
         }
-        Logger.warn('Falha ao consultar recebimentos de dívidas do fechamento', { error: errorText });
       }
     }
     return (this.inMemoryDebtSettlements || []).filter((settlement) =>

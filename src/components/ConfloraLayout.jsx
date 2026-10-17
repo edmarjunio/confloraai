@@ -265,7 +265,7 @@ export function ConfloraLayout({
             onClick={() => setIsMobileCartOpen(false)}
           />
           <div
-            className="fixed inset-x-0 bottom-0 bg-white rounded-t-3xl shadow-2xl z-50 max-h-[90vh] overflow-y-auto lg:hidden animate-in slide-in-from-bottom duration-300 p-5 pb-8"
+            className="fixed inset-x-0 bottom-0 w-full max-w-full bg-white rounded-t-3xl shadow-2xl z-50 max-h-[88dvh] overflow-x-hidden overflow-y-auto overscroll-contain lg:hidden animate-in slide-in-from-bottom duration-300 p-4 pb-[calc(24px+env(safe-area-inset-bottom))]"
             role="dialog"
             aria-modal="true"
           >

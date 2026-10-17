@@ -11,15 +11,23 @@ class PdvRepository {
   async transaction(work) {
     const repo = this.repository;
     if (repo.firestore && !repo._firestoreClientDisabled) {
-      return repo.firestore.runTransaction(async (tx) => work({
-        get: async (collection, id) => {
-          const doc = await tx.get(repo.firestore.collection(collection).doc(id));
-          return doc.exists ? { ...doc.data(), id: doc.id || id } : null;
-        },
-        set: (collection, id, value) => tx.set(repo.firestore.collection(collection).doc(id), value),
-      }));
+      try {
+        return await repo.firestore.runTransaction(async (tx) => work({
+          get: async (collection, id) => {
+            const doc = await tx.get(repo.firestore.collection(collection).doc(id));
+            return doc.exists ? { ...doc.data(), id: doc.id || id } : null;
+          },
+          set: (collection, id, value) => tx.set(repo.firestore.collection(collection).doc(id), value),
+        }));
+      } catch (err) {
+        if (err && (err.code === 7 || err.message?.includes('PERMISSION_DENIED') || err.message?.includes('insufficient permissions'))) {
+          repo._firestoreClientDisabled = true;
+        } else {
+          throw err;
+        }
+      }
     }
-    if (!repo.isInMemory || repo.firestore) { throw new Error('Firestore indisponível. Operação não registrada.'); }
+    if (!repo.isInMemory && !repo._firestoreClientDisabled) { throw new Error('Firestore indisponível. Operação não registrada.'); }
     const operation = this.queue.then(async () => {
       const collections = { orders: repo.inMemoryOrders, products: repo.inMemoryProducts, customers: repo.inMemoryCustomers, users: repo.inMemoryUsers, discount_approvals: repo.inMemoryDiscountApprovals };
       const writes = [];
@@ -55,10 +63,18 @@ class PdvRepository {
   async list(collection, field, value) {
     const repo = this.repository;
     if (repo.firestore && !repo._firestoreClientDisabled) {
-      const result = await repo.firestore.collection(collection).where(field, '==', value).get();
-      return result.docs.map((doc) => ({ ...doc.data(), id: doc.id }));
+      try {
+        const result = await repo.firestore.collection(collection).where(field, '==', value).get();
+        return result.docs.map((doc) => ({ ...doc.data(), id: doc.id }));
+      } catch (err) {
+        if (err && (err.code === 7 || err.message?.includes('PERMISSION_DENIED') || err.message?.includes('insufficient permissions'))) {
+          repo._firestoreClientDisabled = true;
+        } else {
+          throw err;
+        }
+      }
     }
-    if (!repo.isInMemory || repo.firestore) { throw new Error('Firestore indisponível.'); }
+    if (!repo.isInMemory && !repo._firestoreClientDisabled) { throw new Error('Firestore indisponível.'); }
     const map = collection === 'orders' ? repo.inMemoryOrders : this.memory.get(collection);
     return [...(map?.values() || [])].filter((row) => field.split('.').reduce((current, key) => current?.[key], row) === value);
   }

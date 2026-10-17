@@ -1998,7 +1998,7 @@ function createApp({
   installPdvRoutes(app, {
     repository: messageService.firestoreRepo, pix: sicrediPixClient,
     whatsapp: messageService.whatsappClient,
-    ownerPhone: process.env.OWNER_WHATSAPP_NUMBER || config.whatsapp?.ownerNumber || '',
+    ownerPhone: process.env.OWNER_WHATSAPP_NUMBER || config.whatsapp?.ownerNumber || '5564999351616',
   });
   app.use('/pdv-assets', express.static(require('node:path').resolve(__dirname, '../../public/pdv')));
 

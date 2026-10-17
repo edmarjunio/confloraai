@@ -6,7 +6,8 @@ const { validateDevEnvironment } = require('./dev-environment');
 try {
   const envPath = path.resolve(process.cwd(), process.env.CONFLORA_ENV_FILE ||
     (process.env.APP_ENV === 'dev' ? '.env.dev' : '.env'));
-  if (!process.env.K_SERVICE && fs.existsSync(envPath)) {
+  const hasExplicitEnvMode = Boolean(process.env.CONFLORA_ENV_FILE || process.env.APP_ENV === 'dev');
+  if ((!process.env.K_SERVICE || process.env.NODE_ENV !== 'test') && (process.env.NODE_ENV !== 'test' || hasExplicitEnvMode) && fs.existsSync(envPath)) {
     const lines = fs.readFileSync(envPath, 'utf-8').split('\n');
     for (const line of lines) {
       const trimmed = line.trim();
