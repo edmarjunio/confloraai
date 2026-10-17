@@ -93,13 +93,14 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
   app.get('/api/customer/debt-pix/:id', requireCustomer, route(async (req, res) => res.json({ success: true, charge: await debtPix.read(req.params.id, req.user) })));
   app.use('/api/caixa', requireStaff, (req, res, next) => {
     if (req.user.role !== 'ENTREGADOR') return next();
-    if (/^\/deliveries(?:\/[^/]+\/(?:accept|release|complete|receive))?$/.test(req.path) || req.path === '/orders/stream' || /^\/payment-proofs(?:\/[^/]+)?$/.test(req.path)) return next();
+    if (/^\/deliveries(?:\/[^/]+\/(?:accept|start|release|complete|receive))?$/.test(req.path) || req.path === '/orders/stream' || /^\/payment-proofs(?:\/[^/]+)?$/.test(req.path)) return next();
     res.status(403).json({ error: 'Seu perfil permite apenas suas entregas e os recebimentos vinculados a elas.' });
   });
   const requireDeliveryStaff = (req, res, next) => ['ADMIN', 'CAIXA', 'ENTREGADOR'].includes(req.user.role) ? next() : res.status(403).json({ error: 'Sem acesso às entregas.' });
   app.get('/api/caixa/deliveries', requireDeliveryStaff, route(async (req, res) => res.json(await service.listDeliveries(req.user))));
   app.post('/api/caixa/deliveries/:id/dispatch', requireCashier, route(async (req, res) => res.json({ order: await store.dispatchDelivery(req.params.id, actor(req.user)) })));
   app.post('/api/caixa/deliveries/:id/accept', requireDeliveryStaff, route(async (req, res) => res.json({ order: await service.assignDelivery(req.params.id, req.user) })));
+  app.post('/api/caixa/deliveries/:id/start', requireDeliveryStaff, route(async (req, res) => res.json({ order: await service.startDelivery(req.params.id, req.user, req.body) })));
   app.post('/api/caixa/deliveries/:id/release', requireDeliveryStaff, route(async (req, res) => res.json({ order: await service.releaseDelivery(req.params.id, req.user) })));
   app.post('/api/caixa/deliveries/:id/complete', requireDeliveryStaff, route(async (req, res) => res.json(await service.completeDelivery(req.params.id, req.user, req.body))));
   app.post('/api/caixa/deliveries/:id/receive', requireDeliveryStaff, route(async (req, res) => {
@@ -110,7 +111,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     if (parts.some((part) => ['FIADO', 'SALDO_CLIENTE'].includes(part.method))) throw new Error('Fiado e crédito devem ser autorizados no caixa antes da entrega.');
     if (parts.some((part) => part.method === 'PIX') && !isManualPix) return res.status(202).json({ order: await service.requestPixAtCashier(existing.id, req.user, parts) });
     const verification = parts.some((part) => part.method === 'PIX') ? manualPixVerification(existing, parts, req.body) : null;
-    const order = await store.receive(existing.id, actor(req.user), verification, (req.body.receivedAmount === null || req.body.receivedAmount === undefined) ? null : Number(req.body.receivedAmount), existing.pixData?.txid ? null : method, { requestedParts: parts, finishDelivery: true, sendFinalReceipt: !verification });
+    const order = await store.receive(existing.id, actor(req.user), verification, (req.body.receivedAmount === null || req.body.receivedAmount === undefined) ? null : Number(req.body.receivedAmount), existing.pixData?.txid ? null : method, { requestedParts: parts, finishDelivery: true, actualDistanceKm: req.body.actualDistanceKm, sendFinalReceipt: !verification });
     if (verification) { for (const id of await store.ensurePaymentNotifications(order.id)) await service.deliver(id); }
     else await service.deliver(`${order.id}-final-receipt`);
     res.json({ order });
@@ -175,7 +176,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     heartbeat.unref?.();
     const unsubscribe = store.watchOpenOrders((orders) => {
       if (closed) return;
-      const visibleOrders = orders.filter((order) => (order.source === 'PDV' || order.source === 'WEB_CATALOG') && (req.user.role !== 'ENTREGADOR' || (isDelivery(order) && (['PENDING_DELIVERY', 'PENDING_DISPATCH'].includes(order.deliveryStatus) || order.assignedDriver?.id === req.user.id))));
+      const visibleOrders = orders.filter((order) => (order.source === 'PDV' || order.source === 'WEB_CATALOG') && (req.user.role !== 'ENTREGADOR' || isDelivery(order)));
       send('orders-changed', { orderIds: visibleOrders.map((order) => order.id), updatedAt: new Date().toISOString() });
     }, () => {
       if (!closed) send('stream-fallback', { updatedAt: new Date().toISOString() });

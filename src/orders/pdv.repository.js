@@ -1,3 +1,4 @@
+const { recordDeliveryEvent, completionMetrics, mergeDriverPerformance } = require('./delivery-metrics');
 const { formatOrderReceipt } = require('./receipt.util');
 const { isDelivery, isDeliverySettled, assertAssignedDelivery, canReceiveOrder } = require('./delivery-policy');
 const { requireManualProof } = require('./payment-proof');
@@ -140,13 +141,12 @@ class PdvRepository {
     return this.repository.cancelOrder(orderId, reason);
   }
 
-  async listDeliveryOrders(actor) {
+  async listDeliveryOrders(_actor) {
     const database = this.repository.firestore;
     if (database && !this.repository._firestoreClientDisabled) {
       const collection = database.collection('orders');
-      const open = collection.where('deliveryStatus', 'in', ['PENDING_DISPATCH', 'PENDING_DELIVERY', 'OUT_FOR_DELIVERY']);
-      let completed = collection.where('deliveryStatus', '==', 'DELIVERED');
-      if (actor.role === 'ENTREGADOR') completed = completed.where('assignedDriver.id', '==', actor.id);
+      const open = collection.where('deliveryStatus', 'in', ['PENDING_DISPATCH', 'PENDING_DELIVERY', 'PREPARING_DELIVERY', 'OUT_FOR_DELIVERY']);
+      const completed = collection.where('deliveryStatus', '==', 'DELIVERED');
       const snapshots = await Promise.all([open.get(), completed.orderBy('deliveredAt', 'desc').limit(100).get()]);
       return snapshots.flatMap((snapshot) => snapshot.docs.map((document) => ({ ...document.data(), id: document.id })));
     }
@@ -158,7 +158,7 @@ class PdvRepository {
     return this.transaction(async (tx) => {
       const order = await tx.get('orders', orderId);
       if (!isDelivery(order) || order.status === 'CANCELLED') throw new Error('Pedido de entrega não encontrado.');
-      if (['OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.deliveryStatus)) throw new Error('Este pedido já saiu para entrega.');
+      if (['PREPARING_DELIVERY', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.deliveryStatus)) throw new Error('Este pedido já saiu para entrega.');
       if (order.paymentMethod === 'PIX' && !isDeliverySettled(order)) throw new Error('Confirme o Pix antes de liberar a entrega.');
       const reservation = !order.inventoryReserved && !order.stockDeducted ? await prepareStockReservation(tx, order.items) : null;
       const now = new Date().toISOString();
@@ -174,16 +174,36 @@ class PdvRepository {
     return this.transaction(async (tx) => {
       const order = await tx.get('orders', orderId);
       if (!isDelivery(order) || order.status === 'CANCELLED') throw new Error('Pedido de entrega não encontrado.');
-      if (order.deliveryStatus === 'OUT_FOR_DELIVERY' && order.assignedDriver?.id === actor.id) return order;
+      if (['PREPARING_DELIVERY', 'OUT_FOR_DELIVERY'].includes(order.deliveryStatus) && order.assignedDriver?.id === actor.id) return order;
       if ((!['PENDING_DELIVERY', 'PENDING_DISPATCH'].includes(order.deliveryStatus)) || order.creditApprovalStatus === 'PENDING' || order.assignedDriver?.id) throw new Error('Esta entrega não está disponível. Outro entregador pode ter aceitado.');
       if (order.paymentMethod === 'PIX' && !isDeliverySettled(order)) throw new Error('O pagamento Pix ainda não foi confirmado.');
       if ((order.paymentParts || [{ method: order.paymentMethod }]).some(part => part.method === 'FIADO') && !isDeliverySettled(order)) throw new Error('O fiado aguarda aprovação de um administrador.');
       const now = new Date().toISOString();
       const reservation = !order.inventoryReserved && !order.stockDeducted ? await prepareStockReservation(tx, order.items) : null;
       if (reservation) applyStockReservation(tx, reservation, now);
-      const updated = { ...order, ...(reservation ? { inventoryReserved: !reservation.trackingDisabled, reservedItems: reservation.reservedItems } : {}), deliveryStatus: 'OUT_FOR_DELIVERY', assignedDriver: actor, acceptedAt: now, updatedAt: now };
+      const updated = { ...order, ...(reservation ? { inventoryReserved: !reservation.trackingDisabled, reservedItems: reservation.reservedItems } : {}), deliveryStatus: 'PREPARING_DELIVERY', assignedDriver: actor, acceptedAt: now, departedAt: null, deliveryRoute: null, deliveryMetrics: null, updatedAt: now, deliveryHistory: recordDeliveryEvent(tx, order, 'PREPARING_DELIVERY', actor, now) };
       tx.set('orders', orderId, updated);
-      const id = `${orderId}-delivery-${now.replace(/[^0-9]/g, '')}`;
+      return updated;
+    });
+  }
+
+  async startDelivery(orderId, actor, route) {
+    if (!['ADMIN', 'CAIXA', 'ENTREGADOR'].includes(actor?.role)) throw new Error('Sem permissão para iniciar entregas.');
+    return this.transaction(async tx => {
+      const order = await tx.get('orders', orderId);
+      if (!isDelivery(order) || order.status === 'CANCELLED' || (actor.role !== 'ADMIN' && order.assignedDriver?.id !== actor.id)) throw new Error('Apenas o responsável pode iniciar esta entrega.');
+      if (order.deliveryStatus === 'OUT_FOR_DELIVERY') return order;
+      if (order.deliveryStatus !== 'PREPARING_DELIVERY') throw new Error('Assuma e separe os produtos antes de sair para entrega.');
+      if (order.creditApprovalStatus === 'PENDING' || (order.paymentMethod === 'PIX' && !isDeliverySettled(order))) throw new Error('Aguarde a aprovação do pagamento antes de sair.');
+      const now = new Date().toISOString();
+      const distanceMeters = Number(route?.distanceMeters);
+      const durationSeconds = Number(route?.durationSeconds);
+      const deliveryRoute = route ? { distanceMeters, durationSeconds, source: 'GOOGLE_ROUTE_ESTIMATE', calculatedAt: now } : null;
+      if (route && (!Number.isFinite(distanceMeters) || distanceMeters <= 0 || distanceMeters > 10000000 || !Number.isFinite(durationSeconds) || durationSeconds <= 0 || durationSeconds > 604800)) throw new Error('Distância ou duração da rota inválida.');
+      const updated = { ...order, deliveryStatus: 'OUT_FOR_DELIVERY', departedAt: now, departedBy: actor, deliveryRoute, updatedAt: now,
+        deliveryHistory: recordDeliveryEvent(tx, order, 'OUT_FOR_DELIVERY', actor, now, { deliveryRoute }) };
+      tx.set('orders', orderId, updated);
+      const id = `${orderId}-departure-${order.acceptedAt.replace(/[^0-9]/g, '')}`;
       tx.set('pdv_outbox', id, { id, kind: 'delivery-departure', orderId, status: 'PENDING', attempts: 0 });
       return updated;
     });
@@ -191,20 +211,26 @@ class PdvRepository {
 
   async releaseDelivery(orderId, actor) {
     return this.transaction(async (tx) => {
-      const order = await tx.get('orders', orderId); assertAssignedDelivery(order, actor);
-      const updated = { ...order, deliveryStatus: 'PENDING_DELIVERY', assignedDriver: null, updatedAt: new Date().toISOString() };
+      const order = await tx.get('orders', orderId);
+      if (!isDelivery(order) || order.status === 'CANCELLED' || !['PREPARING_DELIVERY', 'OUT_FOR_DELIVERY'].includes(order.deliveryStatus) || (actor?.role !== 'ADMIN' && order.assignedDriver?.id !== actor?.id)) throw new Error('Apenas o responsável pode devolver esta entrega.');
+      const now = new Date().toISOString();
+      const updated = { ...order, deliveryStatus: 'PENDING_DELIVERY', assignedDriver: null, acceptedAt: null, departedAt: null, deliveryRoute: null, deliveryMetrics: null, updatedAt: now, deliveryHistory: recordDeliveryEvent(tx, order, 'PENDING_DELIVERY', actor, now, { previousDriver: order.assignedDriver || null, previousDeparture: order.departedAt || '' }) };
       tx.set('orders', orderId, updated); return updated;
     });
   }
 
-  async markDelivered(orderId, actor, notes = '') {
+  async markDelivered(orderId, actor, notes = '', actualDistanceKm) {
     return this.transaction(async (tx) => {
       const order = await tx.get('orders', orderId);
       if (order?.deliveryStatus === 'DELIVERED' && (actor.role === 'ADMIN' || order.deliveredBy?.id === actor.id)) return order;
       assertAssignedDelivery(order, actor);
       if (!isDeliverySettled(order)) throw new Error('Receba o pagamento antes de concluir a entrega.');
       const now = new Date().toISOString();
-      const updated = { ...order, deliveryStatus: 'DELIVERED', deliveredAt: now, deliveredBy: actor, deliveryNotes: String(notes).slice(0, 500), updatedAt: now };
+      const deliveryMetrics = completionMetrics(order, now, actualDistanceKm);
+      const driver = order.assignedDriver || actor;
+      const previousStats = await tx.get('delivery_driver_metrics', driver.id);
+      const updated = { ...order, deliveryStatus: 'DELIVERED', deliveredAt: now, deliveredBy: actor, deliveryNotes: String(notes).slice(0, 500), deliveryMetrics, deliveryHistory: recordDeliveryEvent(tx, order, 'DELIVERED', actor, now), updatedAt: now };
+      tx.set('delivery_driver_metrics', driver.id, mergeDriverPerformance(previousStats, updated, now));
       updated.receiptText = formatOrderReceipt(updated);
       tx.set('orders', orderId, updated); return updated;
     });
@@ -275,7 +301,7 @@ class PdvRepository {
   }
 
   /** Stock, debt, attribution, payment and notification intent commit together. */
-  async receive(orderId, receiver, verification = null, cashReceived = null, paymentMethodOverride = null, { sendFinalReceipt = false, requestedParts, finishDelivery = false } = {}) {
+  async receive(orderId, receiver, verification = null, cashReceived = null, paymentMethodOverride = null, { sendFinalReceipt = false, requestedParts, finishDelivery = false, actualDistanceKm } = {}) {
     const inventory = await this.repository.getInventorySettings();
     return this.transaction(async (tx) => {
       const order = await tx.get('orders', orderId);
@@ -346,6 +372,9 @@ class PdvRepository {
       const totalMinor = Math.round(amountFor('SALDO_CLIENTE') * 100);
       if (usingCredit && creditMinor < totalMinor) { throw new Error('O crédito disponível foi alterado e não cobre mais o total. Atualize o saldo antes de confirmar.'); }
       const manualPixProof = verification?.verifiedVia === 'MANUAL_CAIXA_PIX' ? await requireManualProof(tx, verification, receiver, 'ORDER', order.id) : null;
+      const deliveryMetrics = finishDelivery ? completionMetrics(order, now, actualDistanceKm) : null;
+      const deliveryDriver = finishDelivery ? order.assignedDriver || receiver : null;
+      const previousDeliveryStats = finishDelivery ? await tx.get('delivery_driver_metrics', deliveryDriver.id) : null;
       // No transaction reads after this point.
       for (const { id, quantity, product, stock, ownReservation } of products) {
         tx.set('products', id, { ...product, stockQuantity: stock, estoque: stock,
@@ -360,7 +389,7 @@ class PdvRepository {
         ...(order.creditApprovalStatus === 'PENDING' && !onAccount ? { creditApprovalStatus: 'NOT_REQUIRED' } : {}),
         ...(onAccount && receiver?.role === 'ADMIN' ? { creditApprovalStatus: 'APPROVED', creditApprovedBy: receiver, creditApprovedAt: now } : {}),
         ...(isDelivery(order) && (!order.deliveryStatus || order.deliveryStatus === 'PENDING_DISPATCH') ? { deliveryStatus: 'PENDING_DELIVERY' } : {}),
-        ...(finishDelivery ? { deliveryStatus: 'DELIVERED', deliveredBy: receiver, deliveredAt: now } : {}), paymentMethod, paymentParts: paymentParts.map((part) => ({ ...part, receivedBy, status: part.method === 'FIADO' ? 'ON_ACCOUNT' : 'APPROVED' })), receivedBy, cashierName: receivedBy.name, cashierEmail: receivedBy.email || '', status: 'CONFIRMED',
+        ...(finishDelivery ? { deliveryStatus: 'DELIVERED', deliveredBy: receiver, deliveredAt: now, deliveryMetrics, deliveryHistory: recordDeliveryEvent(tx, order, 'DELIVERED', receiver, now) } : {}), paymentMethod, paymentParts: paymentParts.map((part) => ({ ...part, receivedBy, status: part.method === 'FIADO' ? 'ON_ACCOUNT' : 'APPROVED' })), receivedBy, cashierName: receivedBy.name, cashierEmail: receivedBy.email || '', status: 'CONFIRMED',
         paymentStatus: onAccount ? 'ON_ACCOUNT' : 'APPROVED', paidAt: onAccount ? null : now,
         completedAt: now, stockDeducted: true, stockDeductedAt: order.stockDeductedAt || now,
         inventoryReserved: false, reservationReleasedAt: order.inventoryReserved ? now : order.reservationReleasedAt || '',
@@ -383,7 +412,10 @@ class PdvRepository {
           receivedBy, notes: 'Crédito do cliente utilizado em uma venda.', createdAt: now,
         });
       }
-      if (finishDelivery) completed.receiptText = formatOrderReceipt(completed);
+      if (finishDelivery) {
+        completed.receiptText = formatOrderReceipt(completed);
+        tx.set('delivery_driver_metrics', deliveryDriver.id, mergeDriverPerformance(previousDeliveryStats, completed, now));
+      }
       tx.set('orders', order.id, completed);
       if (verification) {
         for (const kind of ['customer-paid', 'owner-paid']) {

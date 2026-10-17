@@ -328,6 +328,7 @@ window.PdvComponents = (() => {
           <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-900">{paymentLabel(order.paymentMethod)}</span>
         </div>
         <p className="mt-2 text-[11px] font-bold text-emerald-800">{order.deliveryStatus === 'OUT_FOR_DELIVERY' ? 'Em rota · ' : ''}{window.ConfloraOrderDisplay.status(order)}</p>
+        {order.deliveryOverview && <div className="mt-2 space-y-1 rounded-lg bg-white/60 p-2 text-[11px] font-semibold text-slate-700">{order.deliveryOverview.map(line => <p key={line}>{line}</p>)}</div>}
         <p className="mt-1 font-bold text-slate-800">{order.customerName || 'Cliente Balcão'}</p>
         <p title={(order.items || []).map((item) => item.name).join(' · ')} className="mt-1 text-xs leading-5 text-slate-600">{items.map(orderItemLabel).join(' · ')}{extraItems ? ` · +${extraItems} item(ns)` : ''}</p>
         <div className="mt-3 flex items-end justify-between gap-2">

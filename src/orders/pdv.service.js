@@ -1,3 +1,4 @@
+const { driverPerformance } = require('./delivery-metrics');
 const { isDelivery, isDeliverySettled, assertAssignedDelivery } = require('./delivery-policy');
 const { createHash } = require('node:crypto');
 const { formatOrderReceipt, money } = require('./receipt.util');
@@ -247,7 +248,10 @@ class PdvService {
     if (!user || !['ADMIN', 'CAIXA', 'ENTREGADOR'].includes(user.role)) {
       throw new Error('Sem permissão para consultar entregas.');
     }
-    const orders = await this.repository.listDeliveryOrders(user);
+    const [orders, metrics] = await Promise.all([
+      this.repository.listDeliveryOrders(user),
+      this.repository.list('delivery_driver_metrics', 'scope', 'ALL_TIME'),
+    ]);
     const enriched = orders.filter((order) => isDelivery(order) && order.status !== 'CANCELLED').map((order) => ({
       ...order, deliveryStatus: order.deliveryStatus || 'PENDING_DISPATCH', isPaid: isDeliverySettled(order),
     })).sort((left, right) => String(left.createdAt || '').localeCompare(String(right.createdAt || '')));
@@ -259,14 +263,16 @@ class PdvService {
     });
     const inRoute = enriched.filter((order) =>
       order.deliveryStatus === 'OUT_FOR_DELIVERY' &&
-      (user.role === 'ADMIN' || user.role === 'CAIXA' || order.assignedDriver?.id === user.id)
+      Boolean(order.assignedDriver?.id)
     );
     const completed = enriched.filter((order) =>
       order.deliveryStatus === 'DELIVERED' &&
-      (user.role === 'ADMIN' || user.role === 'CAIXA' || order.deliveredBy?.id === user.id || order.assignedDriver?.id === user.id)
+      Boolean(order.deliveredBy?.id || order.assignedDriver?.id)
     );
     const preparing = ['ADMIN', 'CAIXA'].includes(user.role) ? enriched.filter((order) => order.deliveryStatus === 'PENDING_DISPATCH') : [];
-    return { available, inRoute, completed: completed.slice(-100).reverse(), preparing };
+    const separating = enriched.filter(order => order.deliveryStatus === 'PREPARING_DELIVERY');
+    const recentCompleted = completed.sort((a, b) => String(b.deliveredAt).localeCompare(String(a.deliveredAt))).slice(0, 100);
+    return { available, separating, inRoute, completed: recentCompleted, preparing, performance: metrics.length ? metrics : driverPerformance(recentCompleted), performanceScope: metrics.length ? 'SINCE_TRACKING' : 'RECENT_100' };
   }
 
   async assignDelivery(orderId, user) {
@@ -274,8 +280,13 @@ class PdvService {
       throw new Error('Apenas entregadores, caixa ou administrador podem assumir entregas.');
     }
     const order = await this.repository.assignDelivery(orderId, actor(user));
+    return order;
+  }
+
+  async startDelivery(orderId, user, payload = {}) {
+    const order = await this.repository.startDelivery(orderId, actor(user), payload.route);
     const jobs = await this.repository.list('pdv_outbox', 'orderId', orderId);
-    for (const job of jobs.filter((job) => job.kind === 'delivery-departure' && job.status !== 'SENT')) await this.deliver(job.id);
+    for (const job of jobs.filter(job => job.kind === 'delivery-departure' && job.status !== 'SENT')) await this.deliver(job.id);
     return order;
   }
 
@@ -295,7 +306,7 @@ class PdvService {
     if (existing.deliveryStatus === 'DELIVERED') return { order: await this.repository.markDelivered(orderId, actor(user)) };
     assertAssignedDelivery(existing, user);
     if (!isDeliverySettled(existing)) throw new Error('Registre o recebimento antes de concluir a entrega.');
-    const delivered = await this.repository.markDelivered(orderId, actor(user), payload.notes || '');
+    const delivered = await this.repository.markDelivered(orderId, actor(user), payload.notes || '', payload.actualDistanceKm);
     return { order: { ...delivered, receiptText: formatOrderReceipt(delivered) } };
   }
 

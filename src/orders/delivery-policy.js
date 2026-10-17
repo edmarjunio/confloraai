@@ -7,7 +7,7 @@ function isDeliverySettled(order) {
 function assertAssignedDelivery(order, actor) {
   if (!isDelivery(order) || order.status === 'CANCELLED' || order.deliveryStatus !== 'OUT_FOR_DELIVERY' ||
       (actor?.role !== 'ADMIN' && order.assignedDriver?.id !== actor?.id)) {
-    throw new Error('Aceite esta entrega antes de receber ou concluir. Apenas o responsável pode alterar a entrega.');
+    throw new Error('Aceite esta entrega e registre a saída da horta antes de receber ou concluir. Apenas o responsável pode alterar a entrega.');
   }
 }
 function canReceiveOrder(order, actor) {

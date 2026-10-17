@@ -927,7 +927,8 @@ test('delivery: dispatcher releases cash order, only one driver accepts and paym
   const attempts = await Promise.allSettled([s.service.assignDelivery(order.id, driver), s.service.assignDelivery(order.id, other)]);
   assert.equal(attempts.filter((result) => result.status === 'fulfilled').length, 1);
   const assigned = await s.repository.read('orders', order.id); const winner = assigned.assignedDriver;
-  assert.equal(assigned.deliveryStatus, 'OUT_FOR_DELIVERY');
+  assert.equal(assigned.deliveryStatus, 'PREPARING_DELIVERY');
+  await s.service.startDelivery(order.id, winner);
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
   await assert.rejects(s.service.completeDelivery(order.id, winner), /recebimento/);
   await assert.rejects(s.repository.receive(order.id, winner.id === driver.id ? other : driver, null, 20, 'DINHEIRO', { finishDelivery: true }), /responsável/);
@@ -936,7 +937,7 @@ test('delivery: dispatcher releases cash order, only one driver accepts and paym
   await s.repository.receive(order.id, winner, null, 20, 'DINHEIRO', { finishDelivery: true });
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18); assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 0);
   assert.equal((await s.service.listDeliveries(winner)).completed.length, 1);
-  assert.equal((await s.service.listDeliveries(winner.id === driver.id ? other : driver)).completed.length, 0);
+  assert.equal((await s.service.listDeliveries(winner.id === driver.id ? other : driver)).completed.length, 1);
 });
 
 test('delivery: verified prepaid Pix becomes available and delivery completion does not deduct stock again', async () => {
@@ -947,6 +948,7 @@ test('delivery: verified prepaid Pix becomes available and delivery completion d
   await s.service.handlePix(order.pixData.txid, 'E' + '8'.repeat(31));
   assert.equal((await s.repository.read('orders', order.id)).deliveryStatus, 'PENDING_DELIVERY');
   await s.service.assignDelivery(order.id, driver);
+  await s.service.startDelivery(order.id, driver);
   const result = await s.service.completeDelivery(order.id, driver);
   assert.equal(result.order.deliveryStatus, 'DELIVERED');
   await s.service.completeDelivery(order.id, driver);
@@ -969,6 +971,7 @@ test('delivery HTTP isolates drivers, permits assigned payment with proof and de
   assert.equal((await post(base + '/dispatch', {}, cookie)).status, 403);
   assert.equal((await post(base + '/dispatch', {}, cashierCookie)).status, 200);
   assert.equal((await post(base + '/accept', {}, cookie)).status, 200);
+  assert.equal((await post(base + '/start', {}, cookie)).status, 200);
   assert.equal((await post(base + '/accept', {}, otherCookie)).status, 400);
   assert.equal((await post(base + '/complete', {}, cookie)).status, 400);
   assert.equal((await post(base + '/receive', { paymentMethod: 'PIX_MANUAL', proofSeen: true, note: 'Pix conferido na entrega' }, cookie)).status, 400);
@@ -976,6 +979,7 @@ test('delivery HTTP isolates drivers, permits assigned payment with proof and de
   assert.equal((await post(base + '/release', {}, cookie)).status, 200);
   assert.equal((await fetch(origin + '/api/caixa/payment-proofs/' + proofId, { headers: { cookie } })).status, 404);
   assert.equal((await post(base + '/accept', {}, cookie)).status, 200);
+  assert.equal((await post(base + '/start', {}, cookie)).status, 200);
   assert.equal((await fetch(origin + '/api/caixa/payment-proofs/' + proofId, { headers: { cookie } })).status, 200);
   assert.equal((await post(base + '/receive', { paymentMethod: 'PIX_MANUAL', proofSeen: true, note: 'Pix conferido na entrega', proofId }, otherCookie)).status, 400);
   const payment = await post(base + '/receive', { paymentMethod: 'PIX_MANUAL', proofSeen: true, note: 'Pix conferido na entrega', proofId }, cookie);
@@ -993,6 +997,7 @@ test('delivery: mixed Pix at the door preserves reservation and bank confirmatio
   const s = setup(); const driver = { id: 'driver', name: 'Entregador', role: 'ENTREGADOR' };
   const order = await s.service.create({ ...s.input, orderType: 'DELIVERY', customerName: 'Maria', customerPhone: '64999991234', deliveryAddress: 'Rua 10, 20, Centro, Mineiros GO' }, seller);
   await s.repository.dispatchDelivery(order.id, actor(cashier)); await s.service.assignDelivery(order.id, driver);
+  await s.service.startDelivery(order.id, driver);
   const pending = await s.service.requestPixAtCashier(order.id, driver, [{ method: 'DINHEIRO', amount: 8 }, { method: 'PIX', amount: 12 }]);
   assert.equal(s.chargeCalls[0].amount, 12); assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 2);
   s.pix.checkReceivedPayment = async (endToEndId) => ({ isPaid: true, raw: { txid: pending.pixData.txid, endToEndId, chave: 'pix-key', valor: '12.00', devolucoes: [] } });
@@ -1043,6 +1048,7 @@ test('delivery credit requires Admin approval before a driver can claim; approva
     assert.equal(approved.paymentStatus, 'ON_ACCOUNT');
     assert.equal((await s.service.listDeliveries(driver)).available.length, 1);
     await s.service.assignDelivery(order.id, driver);
+  await s.service.startDelivery(order.id, driver);
     await s.service.completeDelivery(order.id, driver);
     await s.service.completeDelivery(order.id, driver);
     await s.repository.receive(order.id, actor(admin));
@@ -1094,4 +1100,47 @@ test('online credit links customer account once, requires Admin, and remains in 
   assert.equal((await (await get('/api/customer/ledger', customerCookie)).json()).balance, 10);
   assert.equal(s.base.inMemoryCustomers.get(order.customerId).phone, '64999991234');
   assert.equal((await (await get('/api/customer/orders', customerCookie)).json()).orders.length, 2);
+});
+
+
+test('delivery lifecycle is shared, departure and metrics are idempotent, only owner/Admin can change it', async () => {
+  const s = setup(); const driver = { id: 'driver', name: 'Primeiro', role: 'ENTREGADOR' }; const other = { id: 'other', name: 'Segundo', role: 'ENTREGADOR' };
+  const order = await s.service.create({ ...s.input, orderType: 'DELIVERY', customerName: 'Maria', customerPhone: '64999991234', deliveryAddress: 'Rua 10, 20, Centro, Mineiros GO' }, seller);
+  await assert.rejects(s.service.startDelivery(order.id, driver), /responsável/);
+  const claimed = await s.service.assignDelivery(order.id, driver);
+  assert.equal(claimed.deliveryStatus, 'PREPARING_DELIVERY');
+  assert.equal(s.sent.filter(message => message.text?.includes('saiu para entrega')).length, 0);
+  assert.equal((await s.service.listDeliveries(other)).separating[0].assignedDriver.id, driver.id);
+  await assert.rejects(s.service.startDelivery(order.id, other), /responsável/);
+  await assert.rejects(s.repository.receive(order.id, driver, null, 20, 'DINHEIRO', { finishDelivery: true }), /Aceite/);
+  const payload = { route: { distanceMeters: 4000, durationSeconds: 600 } };
+  const started = await s.service.startDelivery(order.id, driver, payload);
+  const retried = await s.service.startDelivery(order.id, driver, payload);
+  assert.equal(started.departedAt, retried.departedAt);
+  assert.equal(started.deliveryHistory.length, 2);
+  assert.equal((await s.service.listDeliveries(other)).inRoute[0].assignedDriver.id, driver.id);
+  assert.equal(s.sent.filter(message => message.text?.includes('saiu para entrega')).length, 1);
+  await assert.rejects(s.repository.receive(order.id, driver, null, 20, 'DINHEIRO', { finishDelivery: true, actualDistanceKm: -4 }), /distância/);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
+  await s.repository.receive(order.id, driver, null, 20, 'DINHEIRO', { finishDelivery: true, actualDistanceKm: 5 });
+  await s.repository.receive(order.id, driver, null, 20, 'DINHEIRO', { finishDelivery: true, actualDistanceKm: 5 });
+  const board = await s.service.listDeliveries(other);
+  assert.equal(board.completed.length, 1); assert.equal(board.completed[0].deliveryMetrics.distanceKm, 5);
+  assert.equal(board.performance[0].deliveries, 1); assert.equal(board.performance[0].actualKm, 5);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
+  assert.equal((await s.repository.list('delivery_events', 'orderId', order.id)).length, 3);
+});
+
+test('returning a delivery preserves audit and prevents another driver from changing it', async () => {
+  const s = setup(); const driver = { id: 'driver', name: 'Primeiro', role: 'ENTREGADOR' }; const other = { id: 'other', name: 'Segundo', role: 'ENTREGADOR' };
+  const order = await s.service.create({ ...s.input, orderType: 'DELIVERY', customerName: 'Maria', customerPhone: '64999991234', deliveryAddress: 'Rua 10, 20, Centro, Mineiros GO' }, seller);
+  await s.service.assignDelivery(order.id, driver); await s.service.startDelivery(order.id, driver);
+  await assert.rejects(s.service.releaseDelivery(order.id, other), /responsável/);
+  const released = await s.service.releaseDelivery(order.id, driver);
+  assert.equal(released.departedAt, null); assert.equal(released.assignedDriver, null);
+  assert.equal(released.deliveryHistory[2].previousDriver.id, driver.id);
+  assert.ok(released.deliveryHistory[2].previousDeparture);
+  await s.service.assignDelivery(order.id, other);
+  assert.equal((await s.service.listDeliveries(driver)).separating[0].assignedDriver.id, other.id);
+  assert.equal((await s.repository.list('delivery_events', 'orderId', order.id)).length, 4);
 });
