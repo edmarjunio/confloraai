@@ -70,7 +70,7 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
   await search.fill('');
   await page.keyboard.press('F2');
   await expect(page.getByRole('heading', { name: 'Comandas', exact: true })).toBeVisible();
-  for (const column of ['ESPERANDO CONFIRMAÇÃO', 'ESPERANDO PAGAMENTO', 'PAGOS / FINALIZADOS', 'FIADOS']) {
+  for (const column of ['ESPERANDO CONFIRMAÇÃO', 'ESPERANDO PAGAMENTO', 'CONFIRMADOS', 'PAGOS / FINALIZADOS']) {
     await expect(page.getByRole('region', { name: column })).toBeVisible();
   }
   await expect(page.getByText('Nenhuma comanda nesta etapa.').first()).toBeVisible();
@@ -84,8 +84,8 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
   await page.getByRole('button', { name: /Voltar ao caixa/ }).click();
   await page.keyboard.press('F3');
   await expect(page.getByRole('heading', { name: 'Relatório', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Receber pagamento', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: 'Receber pagamento do cliente' })).toBeVisible();
+  await page.getByRole('button', { name: 'Receber dívida', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Receber dívida de fiado' })).toBeVisible();
   await page.getByRole('button', { name: 'Fechar', exact: true }).click();
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: 'test-results/pdv-desktop.png', fullPage: false });

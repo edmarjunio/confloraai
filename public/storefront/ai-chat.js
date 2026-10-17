@@ -78,9 +78,8 @@ export function createChat(state, catalog) {
         if (!state.products.some((p) => p.id === product.id)) {
           state.products.push(product);
         }
-        messages.append(catalog.card(product, { chat: true }));
+        messages.append(catalog.card(product, true));
       }
-      if (response.products?.length) bubble('Digite no campo abaixo o produto específico que procura para refinar a busca.', 'assistant');
       for (const source of response.sources || []) {
         messages.append(
           element("a", {
@@ -105,17 +104,6 @@ export function createChat(state, catalog) {
       busy = false;
       form.querySelector("button").disabled = false;
     }
-  });
-
-  messages.addEventListener('chat-product-added', (event) => {
-    messages.querySelector('.chat-next-search')?.remove();
-    const actions = element('div', { class: 'suggestions chat-next-search' }, [
-      element('p', { text: `${event.detail.product.name} adicionado. Deseja pesquisar outro ou manter os produtos atuais?` }),
-      element('button', { text: 'Limpar e pesquisar outro', onclick: () => { messages.replaceChildren(); history.length = 0; bubble('Qual produto você procura agora?', 'assistant'); $('#chatInput').focus(); } }),
-      element('button', { text: 'Manter filtro atual', onclick: () => { actions.remove(); $('#chatInput').focus(); } }),
-    ]);
-    messages.append(actions);
-    messages.scrollTop = messages.scrollHeight;
   });
 
   $("#aiFab").addEventListener("click", () => {

@@ -1,6 +1,4 @@
 const { remainingStock, validateStockQuantity } = require('./order-integrity');
-const { normalizePaymentParts, partAmount } = require('./payment-parts');
-const { setInterval, clearInterval } = require('node:timers');
 
 /** PDV writes never fall back to process memory when Firestore fails. */
 class PdvRepository {
@@ -65,33 +63,6 @@ class PdvRepository {
     return [...(map?.values() || [])].filter((row) => field.split('.').reduce((current, key) => current?.[key], row) === value);
   }
 
-  watchOpenOrders(onChange, onError = () => {}) {
-    const repo = this.repository;
-    if (repo.firestore && !repo._firestoreClientDisabled) {
-      return repo.firestore.collection('orders')
-        .where('status', 'in', ['AWAITING_CASHIER', 'CREATING_PIX', 'AWAITING_PIX', 'PENDING', 'CONFIRMED', 'PAID_CONFIRMED', 'DELIVERED'])
-        .onSnapshot((snapshot) => {
-          onChange(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id })));
-        }, onError);
-    }
-    if (!repo.isInMemory || repo.firestore) {
-      onError(new Error('Firestore indisponível para acompanhar comandas em tempo real.'));
-      return () => {};
-    }
-    let active = true;
-    const notify = () => {
-      if (!active) return;
-      const orders = [...repo.inMemoryOrders.values()].filter((order) =>
-        ['AWAITING_CASHIER', 'CREATING_PIX', 'AWAITING_PIX', 'PENDING', 'CONFIRMED', 'PAID_CONFIRMED', 'DELIVERED'].includes(order.status),
-      );
-      onChange(orders);
-    };
-    const timer = setInterval(notify, 2500);
-    timer.unref?.();
-    notify();
-    return () => { active = false; clearInterval(timer); };
-  }
-
   async create(order) {
     return this.transaction(async (tx) => {
       const previous = await tx.get('orders', order.id);
@@ -99,36 +70,11 @@ class PdvRepository {
         if (previous.requestHash !== order.requestHash || previous.createdBy.id !== order.createdBy.id) { throw new Error('Identificador já utilizado por outra venda.'); }
         return previous;
       }
-      let savedOrder = order;
-      if (String(order.paymentMethod || '').toUpperCase() === 'PIX' && order.pixData) {
-        const quantities = new Map();
-        for (const item of order.items || []) {
-          const productId = String(item.productId || '');
-          if (!productId) throw new Error(`Produto sem identificador para reservar: ${item.name || 'item'}.`);
-          quantities.set(productId, Number(((quantities.get(productId) || 0) + validateStockQuantity(item)).toFixed(3)));
-        }
-        const products = [];
-        for (const [productId, quantity] of quantities) {
-          const product = await tx.get('products', productId);
-          if (!product) throw new Error(`Produto não encontrado para reservar: ${productId}.`);
-          const stock = Number(product.stockQuantity ?? product.estoque ?? 0);
-          const reservedQuantity = Number(product.reservedQuantity || 0);
-          if (stock - reservedQuantity < quantity) throw new Error(`Estoque disponível insuficiente para ${product.name || productId}.`);
-          products.push({ productId, quantity, product, reservedQuantity });
-        }
-        for (const entry of products) {
-          tx.set('products', entry.productId, { ...entry.product,
-            reservedQuantity: Number((entry.reservedQuantity + entry.quantity).toFixed(3)),
-            updatedAt: new Date().toISOString() });
-        }
-        savedOrder = { ...order, inventoryReserved: true,
-          reservedItems: [...quantities].map(([productId, quantity]) => ({ productId, quantity })) };
+      tx.set('orders', order.id, order);
+      if (order.status !== 'CREATING_PIX') {
+        tx.set('pdv_outbox', `${order.id}-receipt`, { id: `${order.id}-receipt`, orderId: order.id, kind: 'receipt', status: 'PENDING', attempts: 0 });
       }
-      tx.set('orders', savedOrder.id, savedOrder);
-      if (savedOrder.status !== 'CREATING_PIX') {
-        tx.set('pdv_outbox', `${savedOrder.id}-receipt`, { id: `${savedOrder.id}-receipt`, orderId: savedOrder.id, kind: 'receipt', status: 'PENDING', attempts: 0 });
-      }
-      return savedOrder;
+      return order;
     });
   }
 
@@ -139,7 +85,7 @@ class PdvRepository {
       const job = await tx.get('pdv_outbox', jobId);
       if (!order || order.pixData?.txid !== charge.txid) { throw new Error('Cobrança sem pedido correspondente.'); }
       if (order.status === 'CANCELLED') { throw new Error('Pedido cancelado; concilie a cobrança no Sicredi.'); }
-      if (!Number.isFinite(Number(charge.amount)) || Math.round(Number(charge.amount) * 100) !== Math.round(partAmount(order, 'PIX') * 100) || !String(charge.pixCopiaECola || '').trim() || !String(charge.qrCodeBase64 || '').startsWith('data:image/')) {
+      if (!Number.isFinite(Number(charge.amount)) || Math.round(Number(charge.amount) * 100) !== Math.round(Number(order.total) * 100) || !String(charge.pixCopiaECola || '').trim() || !String(charge.qrCodeBase64 || '').startsWith('data:image/')) {
         throw new Error('Cobrança Pix divergente do pedido ou sem QR Code válido.');
       }
       const updated = { ...order, pixData: charge, pixCopiaECola: charge.pixCopiaECola, status: order.completedAt ? order.status : 'AWAITING_PIX' };
@@ -149,141 +95,93 @@ class PdvRepository {
     });
   }
 
-  async cancelOrder(orderId, reason) {
-    return this.repository.cancelOrder(orderId, reason);
-  }
-
-  async requestPixAtCashier(orderId, receiver, requestedParts) {
+  async requestPixAtCashier(orderId, receiver) {
     return this.transaction(async (tx) => {
       const order = await tx.get('orders', orderId);
       if (!order || order.source !== 'PDV') { throw new Error('Comanda não encontrada.'); }
       if (order.completedAt || order.status === 'CANCELLED') { throw new Error('Esta comanda já foi finalizada ou cancelada.'); }
       if (!['ADMIN', 'CAIXA'].includes(receiver?.role)) { throw new Error('Somente o caixa pode gerar a cobrança Pix.'); }
-      if (order.paymentMethod === 'PIX' && order.pixData) { return order; }
+      if (order.paymentMethod === 'PIX') { return order; }
       if (order.status !== 'AWAITING_CASHIER') { throw new Error('A comanda não está aguardando recebimento no caixa.'); }
-      const paymentParts = normalizePaymentParts(requestedParts, 'PIX', order.total);
-      if (!paymentParts.some((part) => part.method === 'PIX') || paymentParts.some((part) => part.method === 'SALDO_CLIENTE')) throw new Error('Combine Pix com dinheiro, débito, crédito ou fiado.');
-      if (paymentParts.some((part) => part.method === 'FIADO') && !order.customerId) throw new Error('Fiado exige cliente cadastrado.');
-      const quantities = new Map();
-      for (const item of order.items || []) {
-        const productId = String(item.productId || '');
-        if (!productId) throw new Error(`Produto sem identificador para reservar: ${item.name || 'item'}.`);
-        quantities.set(productId, Number(((quantities.get(productId) || 0) + validateStockQuantity(item)).toFixed(3)));
-      }
-      const products = [];
-      for (const [productId, quantity] of quantities) {
-        const product = await tx.get('products', productId);
-        if (!product) throw new Error(`Produto não encontrado para reservar: ${productId}.`);
-        const stock = Number(product.stockQuantity ?? product.estoque ?? 0);
-        const reservedQuantity = Number(product.reservedQuantity || 0);
-        if (stock - reservedQuantity < quantity) throw new Error(`Estoque disponível insuficiente para ${product.name || productId}.`);
-        products.push({ productId, quantity, product, reservedQuantity });
-      }
-      const now = new Date().toISOString();
-      const pixTtlSeconds = Math.min(86400, Math.max(300, Number(process.env.PIX_PAYMENT_TTL_SECONDS) || 3600));
-      const pixData = { txid: order.id.replace(/-/g, '').toUpperCase(), provider: 'SICREDI', expiresInSeconds: pixTtlSeconds };
-      for (const entry of products) {
-        tx.set('products', entry.productId, {
-          ...entry.product,
-          reservedQuantity: Number((entry.reservedQuantity + entry.quantity).toFixed(3)),
-          updatedAt: now,
-        });
-      }
-      const updated = { ...order, paymentMethod: 'PIX', paymentStatus: 'PENDING', status: 'CREATING_PIX', pixData, pixCopiaECola: '',
-        paymentParts: paymentParts.map((part) => ({ ...part, ...(['DINHEIRO', 'DEBITO', 'CREDITO'].includes(part.method) ? { status: 'RECEIVED_AT_CASHIER', receivedBy: receiver } : {}) })), mixedReceivedBy: receiver, deferToCashier: false,
-        inventoryReserved: true, reservedItems: [...quantities].map(([productId, quantity]) => ({ productId, quantity })),
-        pixTtlSeconds, pixExpiresAt: new Date(Date.now() + pixTtlSeconds * 1000).toISOString(), updatedAt: now };
+      const pixData = { txid: order.id.replace(/-/g, '').toUpperCase(), provider: 'SICREDI' };
+      const updated = { ...order, paymentMethod: 'PIX', paymentStatus: 'PENDING', status: 'CREATING_PIX', pixData, pixCopiaECola: '', updatedAt: new Date().toISOString() };
       tx.set('orders', order.id, updated);
       return updated;
     });
   }
 
+  async queuePixChargeReceipt(orderId) {
+    return this.transaction(async (tx) => {
+      const id = `${orderId}-pix-charge`;
+      const previous = await tx.get('pdv_outbox', id);
+      if (!previous || previous.status === 'FAILED') {
+        tx.set('pdv_outbox', id, { id, orderId, kind: 'pix-charge', status: 'PENDING', attempts: 0 });
+      }
+      return id;
+    });
+  }
+
   /** Stock, debt, attribution, payment and notification intent commit together. */
-  async receive(orderId, receiver, verification = null, cashReceived = null, paymentMethodOverride = null, { sendFinalReceipt = false, requestedParts } = {}) {
+  async receive(orderId, receiver, verification = null, cashReceived = null, paymentMethodOverride = null, { sendFinalReceipt = false } = {}) {
     const inventory = await this.repository.getInventorySettings();
     return this.transaction(async (tx) => {
       const order = await tx.get('orders', orderId);
       if (!order || order.source !== 'PDV') { throw new Error('Comanda não encontrada.'); }
       if (order.status === 'CANCELLED') { throw new Error('Comanda cancelada.'); }
       if (order.completedAt) { return { ...order, alreadyConfirmed: true }; }
-      if (order.paymentMethod === 'PIX' && Number.isFinite(Date.parse(order.pixExpiresAt || '')) && Date.parse(order.pixExpiresAt) <= Date.now()) {
-        throw new Error('Esta cobrança Pix venceu. Aguarde o cancelamento e a liberação do estoque.');
-      }
-      const paymentParts = normalizePaymentParts(requestedParts || (paymentMethodOverride ? undefined : order.paymentParts), paymentMethodOverride || order.paymentMethod, order.total);
-      const amountFor = (method) => paymentParts.find((part) => part.method === method)?.amount || 0;
-      const paymentMethod = amountFor('PIX') ? 'PIX' : paymentParts.length > 1 ? 'MISTO' : paymentParts[0].method;
+      const paymentMethod = paymentMethodOverride ? String(paymentMethodOverride).toUpperCase() : order.paymentMethod;
       if (paymentMethodOverride && order.status !== 'AWAITING_CASHIER') { throw new Error('A forma de pagamento só pode ser escolhida antes do recebimento.'); }
-      if (paymentMethodOverride && paymentMethod === 'PIX') { throw new Error('Pix exige cobrança Sicredi.'); }
-      if (order.paymentMethod === 'PIX' && order.pixData && paymentMethod !== 'PIX') { throw new Error('Uma cobrança Pix já emitida não pode ser convertida; aguarde a confirmação do Sicredi.'); }
-      if (paymentMethod === 'PIX' && (!verification || verification.txid !== order.pixData?.txid || verification.amountMinor !== Math.round(amountFor('PIX') * 100))) {
+      if (paymentMethodOverride && !['DINHEIRO', 'DEBITO', 'CREDITO', 'FIADO', 'SALDO_CLIENTE'].includes(paymentMethod)) { throw new Error('Forma de pagamento inválida para recebimento manual.'); }
+      if (order.paymentMethod === 'PIX' && paymentMethod !== 'PIX') { throw new Error('Uma cobrança Pix já emitida não pode ser convertida; aguarde a confirmação do Sicredi.'); }
+      if (paymentMethod === 'PIX' && (!verification || verification.txid !== order.pixData?.txid || verification.amountMinor !== Math.round(order.total * 100))) {
         throw new Error('Pix exige confirmação do Sicredi com identificador e valor exatos.');
       }
-      if (paymentMethod === 'PIX' && verification.verifiedVia === 'MANUAL_CAIXA_PIX' &&
-        (!verification.manualPixProofSeen || String(verification.manualPixNote || '').trim().length < 8 || !['ADMIN', 'CAIXA'].includes(receiver?.role))) {
-        throw new Error('Confirmação manual do Pix exige comprovante conferido e justificativa pelo menos 8 caracteres.');
-      }
       if (paymentMethod !== 'PIX' && !['ADMIN', 'CAIXA'].includes(receiver?.role)) { throw new Error('Somente o caixa pode receber esta comanda.'); }
-      const tendered = cashReceived ?? order.cashTendered ?? amountFor('DINHEIRO');
-      if (amountFor('DINHEIRO') && (!Number.isFinite(tendered) || Math.round(tendered * 100) < Math.round(amountFor('DINHEIRO') * 100))) { throw new Error('Valor recebido em dinheiro menor que a parcela em dinheiro.'); }
+      const tendered = cashReceived ?? order.cashTendered ?? order.total;
+      if (paymentMethod === 'DINHEIRO' && (!Number.isFinite(tendered) || Math.round(tendered * 100) < Math.round(order.total * 100))) { throw new Error('Valor recebido em dinheiro menor que o total.'); }
       const now = new Date().toISOString();
       const quantities = new Map();
       for (const item of order.items) {
         const total = (quantities.get(item.productId) || 0) + validateStockQuantity(item);
         quantities.set(item.productId, Number(total.toFixed(3)));
       }
-      let hasActiveReservations = false;
-      if (!inventory.stockControlEnabled && !order.inventoryReserved) {
-        for (const id of quantities.keys()) {
-          const product = await tx.get('products', id);
-          if (Number(product?.reservedQuantity || 0) > 0) { hasActiveReservations = true; break; }
-        }
-      }
       const products = [];
-      if ((inventory.stockControlEnabled || order.inventoryReserved || hasActiveReservations) && !order.stockDeducted) {
+      if (inventory.stockControlEnabled && !order.stockDeducted) {
         for (const [id, quantity] of quantities) {
           const product = await tx.get('products', id);
           if (!product) { throw new Error('Produto não encontrado para baixa.'); }
-          const ownReservation = order.inventoryReserved
-            ? Number((order.reservedItems || []).find((item) => String(item.productId) === id)?.quantity || 0)
-            : 0;
-          const otherReservations = Math.max(0, Number(product.reservedQuantity || 0) - ownReservation);
-          const currentStock = Number(product.stockQuantity ?? product.estoque ?? 0);
-          if (currentStock - otherReservations < quantity) throw new Error(`Estoque disponível insuficiente para ${product.name || id}.`);
-          products.push({ id, quantity, product, stock: remainingStock(product, quantity), ownReservation });
+          products.push({ id, quantity, product, stock: remainingStock(product, quantity) });
         }
       }
-      const onAccount = amountFor('FIADO') > 0;
-      const usingCredit = amountFor('SALDO_CLIENTE') > 0;
+      const onAccount = paymentMethod === 'FIADO';
+      const usingCredit = paymentMethod === 'SALDO_CLIENTE';
       const customer = onAccount || usingCredit ? await tx.get('customers', order.customerId) : null;
       if ((onAccount || usingCredit) && !customer) { throw new Error('Fiado ou uso de crédito exige cliente cadastrado.'); }
       const creditMinor = Math.round(Number(customer?.creditBalance || 0) * 100);
-      const totalMinor = Math.round(amountFor('SALDO_CLIENTE') * 100);
+      const totalMinor = Math.round(Number(order.total) * 100);
       if (usingCredit && creditMinor < totalMinor) { throw new Error('O crédito disponível foi alterado e não cobre mais o total. Atualize o saldo antes de confirmar.'); }
       // No transaction reads after this point.
-      for (const { id, quantity, product, stock, ownReservation } of products) {
-        tx.set('products', id, { ...product, stockQuantity: stock, estoque: stock,
-          ...(ownReservation ? { reservedQuantity: Math.max(0, Number(product.reservedQuantity || 0) - ownReservation) } : {}), updatedAt: now });
+      for (const { id, quantity, product, stock } of products) {
+        tx.set('products', id, { ...product, stockQuantity: stock, estoque: stock, updatedAt: now });
         tx.set('stock_movements', `${order.id}-${id}`, { productId: id, productName: product.name, orderId, quantityDeducted: quantity, previousStock: stock + quantity, newStock: stock, type: 'SALE_PDV', createdAt: now });
       }
-      const receivedBy = paymentMethod === 'PIX' && verification?.verifiedVia !== 'MANUAL_CAIXA_PIX' ? (order.mixedReceivedBy || order.createdBy) : receiver;
-      const completed = { ...order, paymentMethod, paymentParts: paymentParts.map((part) => ({ ...part, receivedBy, status: part.method === 'FIADO' ? 'ON_ACCOUNT' : 'APPROVED' })), receivedBy, cashierName: receivedBy.name, cashierEmail: receivedBy.email || '', status: 'CONFIRMED',
+      const receivedBy = paymentMethod === 'PIX' ? order.createdBy : receiver;
+      const completed = { ...order, paymentMethod, receivedBy, cashierName: receivedBy.name, cashierEmail: receivedBy.email || '', status: 'CONFIRMED',
         paymentStatus: onAccount ? 'ON_ACCOUNT' : 'APPROVED', paidAt: onAccount ? null : now,
         completedAt: now, stockDeducted: true, stockDeductedAt: order.stockDeductedAt || now,
-        inventoryReserved: false, reservationReleasedAt: order.inventoryReserved ? now : order.reservationReleasedAt || '',
-        verifiedVia: verification ? (verification.verifiedVia || 'SICREDI_PIX_WEBHOOK') : 'CAIXA', updatedAt: now,
-        ...(amountFor('DINHEIRO') ? { cashReceived: tendered, changeGiven: (Math.round(tendered * 100) - Math.round(amountFor('DINHEIRO') * 100)) / 100 } : {}),
-        ...(verification ? { paymentTransactionId: verification.endToEndId || `MANUAL-${order.id}`, paymentVerifiedAmount: verification.amountMinor / 100, pixVerified: true } : {}),
-        ...(verification?.verifiedVia === 'MANUAL_CAIXA_PIX' ? { manualPixProofSeen: true, manualPixNote: String(verification.manualPixNote).trim().slice(0, 500), manualPixConfirmedBy: receiver } : {}) };
+        verifiedVia: verification ? 'SICREDI_PIX_WEBHOOK' : 'CAIXA', updatedAt: now,
+        ...(paymentMethod === 'DINHEIRO' ? { cashReceived: tendered, changeGiven: (Math.round(tendered * 100) - Math.round(order.total * 100)) / 100 } : {}),
+        ...(verification ? { paymentTransactionId: verification.endToEndId, paymentVerifiedAmount: verification.amountMinor / 100, pixVerified: true } : {}) };
       if (onAccount) {
-        tx.set('customers', order.customerId, { ...customer, debtBalance: (Math.round(Number(customer.debtBalance || 0) * 100) + Math.round(amountFor('FIADO') * 100)) / 100, ...(usingCredit ? { creditBalance: (creditMinor - totalMinor) / 100 } : {}), updatedAt: now });
-        tx.set('customer_debts', order.id, { id: order.id, orderId, customerKey: order.customerId, customerName: order.customerName, amount: amountFor('FIADO'), type: 'DEBITO_FIADO', createdBy: order.createdBy, receivedBy, createdAt: now });
+        tx.set('customers', order.customerId, { ...customer, debtBalance: (Math.round(Number(customer.debtBalance || 0) * 100) + Math.round(order.total * 100)) / 100, updatedAt: now });
+        tx.set('customer_debts', order.id, { id: order.id, orderId, customerKey: order.customerId, customerName: order.customerName, amount: order.total, type: 'DEBITO_FIADO', createdBy: order.createdBy, receivedBy, createdAt: now });
       }
       if (usingCredit) {
         const newCreditBalance = (creditMinor - totalMinor) / 100;
-        tx.set('customers', order.customerId, { ...customer, creditBalance: newCreditBalance, ...(onAccount ? { debtBalance: (Math.round(Number(customer.debtBalance || 0) * 100) + Math.round(amountFor('FIADO') * 100)) / 100 } : {}), updatedAt: now });
+        tx.set('customers', order.customerId, { ...customer, creditBalance: newCreditBalance, updatedAt: now });
         tx.set('debt_settlements', `credit-use-${order.id}`, {
           id: `credit-use-${order.id}`, orderId, customerKey: order.customerId,
-          customerName: order.customerName, amount: amountFor('SALDO_CLIENTE'), paymentMethod: 'SALDO_CLIENTE',
+          customerName: order.customerName, amount: order.total, paymentMethod: 'SALDO_CLIENTE',
           entryType: 'USO_CREDITO', type: 'USO_CREDITO', newCreditBalance,
           receivedBy, notes: 'Crédito do cliente utilizado em uma venda.', createdAt: now,
         });

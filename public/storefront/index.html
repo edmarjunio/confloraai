@@ -79,16 +79,15 @@
             <small id="headerAccountRole"></small>
           </span>
         </button>
+        <button id="historyButton" class="header-history-button" type="button" hidden>
+          <span data-icon="history" aria-hidden="true"></span><span>Histórico</span>
+        </button>
         <button id="cartButton" aria-haspopup="dialog">
           <span data-icon="cart" aria-hidden="true"></span>
           <span class="cart-label" data-i18n="header.cart">Sacola</span> <span id="cartCount">0</span>
         </button>
         <button id="cashierShortcut" type="button" aria-label="Ir para o Caixa" title="Ir para o Caixa" hidden>
           <span data-icon="register" aria-hidden="true"></span><span>IR PARA O CAIXA</span>
-        </button>
-        <button id="customerAccountShortcut" class="header-history-button" type="button" aria-label="Minha conta: saldo e histórico" hidden>
-          <span data-icon="history" aria-hidden="true"></span><span>MINHA CONTA</span>
-          <small id="customerDebtBadge" hidden></small>
         </button>
         <button id="accountButton" class="header-login-button" type="button" hidden data-i18n="header.login">Entrar</button>
         <button id="adminSettingsButton" class="admin-settings-button" type="button" title="Configurações administrativas" aria-label="Abrir configurações administrativas" hidden>
@@ -348,19 +347,31 @@
     <dialog id="historyDialog" class="history-dialog" aria-labelledby="historyTitle">
       <div class="dialog-header history-dialog-header">
         <div>
-          <span class="product-info-eyebrow">SUA CONTA CONFLORA</span>
-          <h2 id="historyTitle">Minha conta</h2>
-          <p class="muted">Seu saldo, fiados, pagamentos e histórico completo de compras.</p>
+          <span class="product-info-eyebrow">SUAS COMPRAS</span>
+          <h2 id="historyTitle">Histórico de compras</h2>
+          <p class="muted">Consulte seus pedidos e abra cada compra para ver os detalhes.</p>
         </div>
-        <button id="historyCloseButton" class="product-info-close" type="button" aria-label="Fechar minha conta" title="Fechar"><span data-icon="x" aria-hidden="true"></span></button>
+        <button id="historyCloseButton" class="product-info-close" type="button" aria-label="Fechar histórico" title="Fechar"><span data-icon="x" aria-hidden="true"></span></button>
       </div>
       <div id="historyList" class="history-list" tabindex="0" aria-live="polite">
-        <div id="ledgerContent"></div>
         <p class="muted">Carregando suas compras…</p>
         <div id="historyLoadSentinel" aria-hidden="true"></div>
       </div>
     </dialog>
 
+    <dialog id="ledgerDialog" class="history-dialog" aria-labelledby="ledgerTitle">
+      <div class="dialog-header history-dialog-header">
+        <div>
+          <span class="product-info-eyebrow">SUA CONTA CONFLORA</span>
+          <h2 id="ledgerTitle">Saldo e movimentações</h2>
+          <p class="muted">Acompanhe compras fiadas e recebimentos vinculados ao seu cadastro.</p>
+        </div>
+        <button id="ledgerCloseButton" class="product-info-close" type="button" data-close aria-label="Fechar saldo" title="Fechar"><span data-icon="x" aria-hidden="true"></span></button>
+      </div>
+      <div id="ledgerContent" class="history-list" tabindex="0" aria-live="polite">
+        <p class="muted">Carregando seu saldo…</p>
+      </div>
+    </dialog>
 
     <dialog
       id="productEntryDialog"

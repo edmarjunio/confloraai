@@ -994,50 +994,6 @@ async function sendCustomerOrderReceipt(whatsappClient, phone, receiptText) {
   }
 }
 
-async function prepareSicrediCheckoutOrder({ app, sicrediClient, taskQueueClient, order }) {
-  if (order.paymentMethod !== 'PIX') {
-    const id = `${order.id}-receipt`;
-    await app.locals.pdv.store.transaction(async (tx) => {
-      if (await tx.get('pdv_outbox', id)) return;
-      tx.set('pdv_outbox', id, { id, orderId: order.id, kind: 'receipt', status: 'PENDING', attempts: 0 });
-    });
-    await app.locals.pdv.service.deliver(id);
-    const job = await app.locals.pdv.store.read('pdv_outbox', id);
-    return { order, receiptDelivery: { sent: job?.status === 'SENT' && !job.skipped, reason: job?.lastError || '' } };
-  }
-  if (order.pixProvider !== 'SICREDI' || !order.pixData?.txid) {
-    return { order, receiptDelivery: { sent: false, reason: 'Pedido Pix anterior à integração Sicredi; não gere uma nova cobrança.' } };
-  }
-  const ttlSeconds = Number(order.pixTtlSeconds || order.pixData?.expiresInSeconds) || 3600;
-  if (process.env.NODE_ENV === 'production' && typeof taskQueueClient?.enqueuePixExpiration !== 'function') {
-    await app.locals.pdv.store.cancelOrder(order.id, 'Cloud Tasks não está disponível para expirar a reserva Pix.').catch(() => {});
-    throw new Error('Cloud Tasks não está disponível para expirar a reserva Pix.');
-  }
-  try {
-    await taskQueueClient?.enqueuePixExpiration?.(order.id, ttlSeconds);
-  } catch (error) {
-    await app.locals.pdv.store.cancelOrder(order.id, 'Não foi possível agendar a expiração da reserva Pix.').catch(() => {});
-    throw error;
-  }
-  let preparedOrder = order;
-  if (!preparedOrder.pixData?.pixCopiaECola) {
-    const charge = await sicrediClient.createCharge({
-      amount: preparedOrder.total,
-      txid: preparedOrder.pixData?.txid,
-      ticketNumber: preparedOrder.ticketNumber || preparedOrder.id,
-      expiresInSeconds: ttlSeconds,
-    });
-    preparedOrder = await app.locals.pdv.store.attachCharge(preparedOrder.id, charge);
-  }
-  const messageId = `${preparedOrder.id}-receipt`;
-  await app.locals.pdv.service.deliver(messageId);
-  const delivery = await app.locals.pdv.store.read('pdv_outbox', messageId);
-  return {
-    order: preparedOrder,
-    receiptDelivery: { sent: delivery?.status === 'SENT', reason: delivery?.lastError || '' },
-  };
-}
-
 function createApp({
   messageService,
   taskQueueClient,
@@ -1607,27 +1563,33 @@ function createApp({
           if (existingOrder.idempotencyFingerprint !== checkoutFingerprint) {
             return res.status(409).json({ error: 'Este pedido já foi enviado com dados diferentes. Confira a sacola e tente novamente.' });
           }
-          const prepared = await prepareSicrediCheckoutOrder({ app, sicrediClient: sicrediPixClient, taskQueueClient, order: existingOrder });
-          const replayOrder = prepared.order;
-          const receiptText = replayOrder.receiptText || formatOrderReceipt(replayOrder);
-          const receiptDelivery = prepared.receiptDelivery.sent ? prepared.receiptDelivery : replayOrder.receiptDelivery || prepared.receiptDelivery;
+          const receiptText = existingOrder.receiptText || formatOrderReceipt(existingOrder);
+          const receiptDelivery = existingOrder.receiptDelivery || {
+            sent: false,
+            reason: 'Pedido já registrado anteriormente.',
+          };
           return res.status(200).json({
             success: true,
-            order: { ...withoutIdempotencyFingerprint(replayOrder), receiptText, receiptDelivery },
+            order: { ...withoutIdempotencyFingerprint(existingOrder), receiptText, receiptDelivery },
             receiptDelivery,
           });
         }
       }
-      let pixData = null;
+      let mercadoPagoPreference = null;
       if (resolvedPaymentMethod === 'PIX') {
-        if (!sicrediPixClient.isOfficialApiConfigured) {
-          return res.status(503).json({ error: 'Pagamento Pix indisponível. Configure as credenciais, certificado e chave Pix do Sicredi.' });
+        if (!payments.checkoutConfigured) {
+          return res.status(503).json({
+            error: 'Pagamento PIX indisponível. Configure as credenciais e o segredo de webhook do Mercado Pago.',
+          });
         }
-        const ttlSeconds = Math.min(86400, Math.max(300, Number(process.env.PIX_PAYMENT_TTL_SECONDS) || 3600));
-        pixData = { txid: sicrediPixClient.generateTxId(), provider: 'SICREDI', expiresInSeconds: ttlSeconds };
+        mercadoPagoPreference = await payments.createPixCheckout({
+          order: { id: orderId, total: finalTotal },
+          payerEmail: req.user?.email || '',
+          notificationUrl: mercadoPagoNotificationUrl(),
+        });
       }
 
-      let order = await messageService.firestoreRepo.createDirectOrder({
+      const order = await messageService.firestoreRepo.createDirectOrder({
         id: orderId,
         customerId: req.user?.id || '',
         customerEmail: req.user?.email || '',
@@ -1644,18 +1606,11 @@ function createApp({
         cashTendered: Number(cashTendered) || 0,
         changeDue: Number(changeDue) || 0,
         ...(idempotencyKey ? { idempotencyFingerprint: checkoutFingerprint } : {}),
-        status: resolvedPaymentMethod === 'PIX' ? 'CREATING_PIX' : 'AWAITING_CASHIER',
+        status: 'PENDING',
         source: 'WEB_CATALOG',
-        paymentStatus: 'PENDING',
-        ...(pixData ? { pixData, pixProvider: 'SICREDI', paymentProvider: 'SICREDI' } : {}),
-      }, { requirePersistence: resolvedPaymentMethod === 'PIX', reserveInventory: resolvedPaymentMethod === 'PIX' });
-
-      let receiptDelivery = { sent: false, reason: 'Envio não solicitado.' };
-      if (order.source === 'WEB_CATALOG') {
-        const prepared = await prepareSicrediCheckoutOrder({ app, sicrediClient: sicrediPixClient, taskQueueClient, order });
-        order = prepared.order;
-        receiptDelivery = prepared.receiptDelivery;
-      }
+        mercadoPagoPreferenceId: mercadoPagoPreference?.id || '',
+        paymentCheckoutUrl: mercadoPagoPreference?.checkoutUrl || '',
+      }, { requirePersistence: resolvedPaymentMethod === 'PIX' });
 
       // A confirmação efetiva a baixa de estoque junto com o pagamento.
       const receiptText = formatOrderReceipt(order);
@@ -1663,6 +1618,21 @@ function createApp({
       await messageService.firestoreRepo.saveOrderReceipt(order.id, receiptText).catch((error) => {
         Logger.warn('Pedido registrado; a cópia persistente do recibo ficou indisponível.', { orderId: order.id, error: error.message });
       });
+      let receiptDelivery = { sent: false, reason: 'Envio não solicitado.' };
+      if (resolvedPaymentMethod === 'PIX') {
+        receiptDelivery = await sendCustomerOrderReceipt(
+          messageService.whatsappClient,
+          customerPhone,
+          receiptText,
+        );
+        if (!receiptDelivery.sent) {
+          Logger.warn('Pedido PIX criado; não foi possível enviar o recibo ao cliente.', {
+            orderId: order.id,
+            reason: receiptDelivery.reason,
+          });
+        }
+      }
+
       // Notificação para todos os usuários ADMIN sobre a venda finalizada
       await messageService.firestoreRepo.notifyAllAdminUsersOfSale(order, { source: 'WEB_CATALOG' }).catch((err) => {
         Logger.warn('Aviso: falha ao notificar administradores sobre nova venda web', { error: err.message });
@@ -1718,7 +1688,7 @@ function createApp({
         order: {
           ...withoutIdempotencyFingerprint(order),
           receiptText,
-          paymentCheckoutUrl: '',
+          paymentCheckoutUrl: mercadoPagoPreference?.checkoutUrl || '',
           receiptDelivery,
         },
         receiptDelivery,
@@ -1736,11 +1706,8 @@ function createApp({
     try {
       if (!req.user) {return res.status(401).json({ error: 'Entre na sua conta.' });}
       const limit = Math.max(1, Math.min(30, Number.parseInt(req.query.limit, 10) || 12));
-      const profiles = req.user.email ? await messageService.firestoreRepo.findCustomerProfilesByEmail(req.user.email) : [];
-      if (profiles.length > 1) { return res.status(409).json({ success: false, error: 'Há mais de um cadastro vinculado a este e-mail. Peça à equipe para corrigir o vínculo.' }); }
       const data = await messageService.firestoreRepo.getCustomerOrderHistoryPage({
         customerId: req.user.id,
-        customerIds: profiles.map((profile) => profile.id),
         customerEmail: req.user.email,
         cursor: String(req.query.cursor || '').slice(0, 180),
         limit,
@@ -1800,7 +1767,6 @@ function createApp({
         customerName: profile.name || req.user.name || 'Cliente',
         balance: Number(ledger.balance || 0),
         creditBalance: Number(profile.creditBalance || 0),
-        supportPhone: String(config.whatsapp.ownerNumber || '').replace(/\D/g, ''),
         transactions,
       });
     } catch (error) {
@@ -2032,7 +1998,6 @@ function createApp({
   installPdvRoutes(app, {
     repository: messageService.firestoreRepo, pix: sicrediPixClient,
     whatsapp: messageService.whatsappClient,
-    taskQueueClient,
     ownerPhone: process.env.OWNER_WHATSAPP_NUMBER || config.whatsapp?.ownerNumber || '',
   });
   app.use('/pdv-assets', express.static(require('node:path').resolve(__dirname, '../../public/pdv')));

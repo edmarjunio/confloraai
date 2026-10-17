@@ -48,7 +48,7 @@ function formatOrderReceipt(order) {
   const auditLines = [];
   if (!cashierName) {
     auditLines.push(`👤 *Pedido feito por:* ${sellerName}`);
-    auditLines.push(`⏳ *Recebimento:* ${rawPaymentMethod === 'PIX' && order.pixData ? 'Aguardando confirmação do Sicredi' : 'Aguardando caixa'}`);
+    auditLines.push(`⏳ *Recebimento:* ${rawPaymentMethod === 'PIX' ? 'Aguardando confirmação do Sicredi' : 'Aguardando caixa'}`);
   } else if (sellerName === cashierName || rawPaymentMethod === 'PIX') {
     auditLines.push(`👤 *Pedido feito por:* ${sellerName}`);
     auditLines.push(`✅ *Recebido por:* ${cashierName}${rawPaymentMethod === 'PIX' ? ' (Sicredi Pix Automático)' : ''}`);
@@ -77,20 +77,19 @@ function formatOrderReceipt(order) {
     `💰 *TOTAL FINAL:* ${money(total)}`,
     `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
     `💳 *Forma de Pagamento:* ${paymentLabel}`,
-    ...(order.paymentParts?.length > 1 ? order.paymentParts.map((part) => `• ${part.method}: ${money(part.amount)}${part.receivedBy?.name ? ' · Recebido por: ' + part.receivedBy.name : ''}${part.method === 'FIADO' ? ' (a prazo)' : ''}`) : []),
     `📌 *Situação:* ${order.paymentStatus === 'ON_ACCOUNT' ? 'Fiado registrado — saldo a pagar' : order.paidAt ? 'Pago e finalizado' : 'Aguardando recebimento'}`,
     order.paymentCheckoutUrl && !order.paidAt ? `Pagamento: ${order.paymentCheckoutUrl}` : null,
     order.cashReceived ? `💵 *Valor recebido:* ${money(order.cashReceived)} · *Troco:* ${money(order.changeGiven)}` : null,
   ];
 
   const copiaECola = order.pixCopiaECola || order.pixData?.copiaECola || order.pixCode;
-  if (rawPaymentMethod === 'PIX' && copiaECola && !order.completedAt && !order.paidAt) {
+  if (rawPaymentMethod === 'PIX' && copiaECola && !order.paidAt) {
     lines.push(
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
       `💠 *PAGAMENTO VIA PIX SICREDI*`,
       `Titular: Conflora Horta e Viveiro`,
       `Instituição: Banco Cooperativo Sicredi S.A.`,
-      `Valor exato: *${money(order.pixData?.amount || total)}* (Sem alteração de valor)`,
+      `Valor exato: *${money(total)}* (Sem alteração de valor)`,
       ``,
       `🔑 *PIX COPIA E COLA:*`,
       `${copiaECola}`,

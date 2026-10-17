@@ -54,30 +54,16 @@ function summarizePeriod({ from, to, orders = [], settlements = [] }) {
     const isPaid = !isOnAccount && (!paymentStatus || ['APPROVED', 'PAID', 'PAID_CONFIRMED'].includes(paymentStatus));
 
     salesMinor += amountMinor;
-    let orderReceivedMinor = 0;
-    if (order.paymentParts?.length > 1) {
-      for (const part of order.paymentParts) {
-        const amount = cents(part.amount);
-        const row = byPayment.get(part.method) || byPayment.get('OUTROS');
-        row.salesMinor += amount; row.orderCount++;
-        if (part.method === 'FIADO') onAccountMinor += amount;
-        else if (part.method !== 'SALDO_CLIENTE') orderReceivedMinor += amount;
-      }
-      receivedSalesMinor += orderReceivedMinor;
-    } else {
     if (isOnAccount) { onAccountMinor += amountMinor; }
     const isCashReceived = isPaid && method !== 'SALDO_CLIENTE';
-    orderReceivedMinor = isCashReceived ? amountMinor : 0;
     if (isCashReceived) { receivedSalesMinor += amountMinor; }
     const payment = byPayment.get(method);
     payment.salesMinor += isOnAccount || isPaid ? amountMinor : 0;
     payment.orderCount += isOnAccount || isPaid ? 1 : 0;
 
-    }
-
     const dateSummary = daily.get(date) || { date, salesMinor: 0, receivedMinor: 0, orderCount: 0 };
     dateSummary.salesMinor += amountMinor;
-    dateSummary.receivedMinor += orderReceivedMinor;
+    dateSummary.receivedMinor += isCashReceived ? amountMinor : 0;
     dateSummary.orderCount++;
     daily.set(date, dateSummary);
 

@@ -203,17 +203,16 @@ test("payment webhook confirms only the matching approved PIX order", async (t) 
   assert.equal(savedOrder.paymentTransactionId, String(payment.id));
 });
 
-test("storefront Sicredi PIX reserves stock and concurrent/repeated webhooks deduct once", async (t) => {
+test("storefront PIX deduction and concurrent/repeated webhooks are idempotent", async (t) => {
   const config = require("../src/config/env");
   const previousServiceUrl = config.tasks.serviceUrl;
-  const previousSecret = process.env.SICREDI_WEBHOOK_SECRET;
+  const previousReceiptTemplate = config.whatsapp.templates.customerOrder;
   config.tasks.serviceUrl = "https://conflora.example";
+  config.whatsapp.templates.customerOrder = "customer_order_test";
   t.after(() => {
     config.tasks.serviceUrl = previousServiceUrl;
-    if (previousSecret === undefined) delete process.env.SICREDI_WEBHOOK_SECRET;
-    else process.env.SICREDI_WEBHOOK_SECRET = previousSecret;
+    config.whatsapp.templates.customerOrder = previousReceiptTemplate;
   });
-  process.env.SICREDI_WEBHOOK_SECRET = "sicredi-test-webhook-secret-with-32-chars";
 
   const repository = new FirestoreRepository({ isInMemory: true });
   repository.inMemoryProducts.set("plant", {
@@ -226,43 +225,36 @@ test("storefront Sicredi PIX reserves stock and concurrent/repeated webhooks ded
   const createDirectOrder = repository.createDirectOrder.bind(repository);
   // Em produção, requirePersistence é garantido pelo Firestore. Aqui o teste
   // usa o mesmo fluxo de rota com o armazenamento em memória.
-  repository.createDirectOrder = (data, options = {}) =>
-    createDirectOrder(data, { ...options, requirePersistence: false });
+  repository.createDirectOrder = (data) => createDirectOrder(data);
   let paymentOrderId = "";
-  let chargeRequest;
-  let qrSends = 0;
-  const txid = "0123456789ABCDEF0123456789ABCDEF";
-  const endToEndId = "E1234567890123456789012345678901";
+  let payment = approvedPayment();
+  let receiptSends = 0;
   const app = createApp({
     messageService: {
       firestoreRepo: repository,
       whatsappClient: {
-        sendTextMessage: async () => ({ messages: [{ id: "wamid-test" }] }),
-        sendImageBuffer: async () => { qrSends += 1; return { messages: [{ id: "wamid-image-test" }] }; },
+        sendTemplate: async () => {
+          receiptSends += 1;
+          return { success: true };
+        },
+        sendTextMessage: async () => ({ success: true }),
       },
     },
-    sicrediClient: {
-      pixKey: "pix-key-test",
-      isOfficialApiConfigured: true,
-      generateTxId: () => txid,
-      createCharge: async (input) => {
-        chargeRequest = input;
-        paymentOrderId = input.ticketNumber;
+    mercadoPagoClient: {
+      checkoutConfigured: true,
+      createPixCheckout: async ({ order: checkoutOrder }) => {
+        paymentOrderId = checkoutOrder.id;
+        payment = approvedPayment({
+          external_reference: paymentOrderId,
+          transaction_amount: checkoutOrder.total,
+        });
         return {
-          txid: input.txid,
-          amount: input.amount,
-          provider: "SICREDI",
-          mode: "API_SICREDI_FIXED_AMOUNT",
-          pixCopiaECola: "000201PIX-VALOR-FIXO-51.00",
-          qrCodeBase64: "data:image/png;base64,aGVsbG8=",
+          id: "preference-test",
+          checkoutUrl: "https://www.mercadopago.com.br/checkout/test",
         };
       },
-      checkReceivedPayment: async (receivedEndToEndId) => ({
-        isPaid: receivedEndToEndId === endToEndId,
-        raw: {
-          txid, endToEndId, chave: "pix-key-test", valor: "51.00", devolucoes: [],
-        },
-      }),
+      verifyWebhookSignature: () => true,
+      getPayment: async () => payment,
     },
   });
   const server = app.listen(0, "127.0.0.1");
@@ -282,22 +274,16 @@ test("storefront Sicredi PIX reserves stock and concurrent/repeated webhooks ded
   });
   assert.equal(createResponse.status, 200);
   const created = await createResponse.json();
-  paymentOrderId = created.order.id;
-  assert.equal(chargeRequest.amount, 51);
-  assert.equal(created.order.pixData.pixCopiaECola, "000201PIX-VALOR-FIXO-51.00");
-  assert.match(created.order.pixData.qrCodeBase64, /^data:image\/png;base64,/);
-  assert.equal(created.order.pixData.mode, "API_SICREDI_FIXED_AMOUNT");
+  assert.equal(paymentOrderId, created.order.id);
   assert.equal(created.order.stockDeducted, undefined);
   assert.equal(repository.inMemoryProducts.get("plant").stockQuantity, 10);
-  assert.equal(repository.inMemoryProducts.get("plant").reservedQuantity, 2);
-  assert.equal(qrSends, 1);
+  assert.equal(receiptSends, 1);
 
-  const webhookUrl = `${baseUrl}/webhooks/sicredi-pix/${process.env.SICREDI_WEBHOOK_SECRET}`;
+  const webhookUrl = `${baseUrl}/webhooks/mercadopago?type=payment&data.id=${payment.id}`;
   const sendWebhook = () =>
     fetch(webhookUrl, {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ pix: [{ txid, endToEndId }] }),
+      headers: { "x-signature": "test", "x-request-id": "request-123" },
     });
   const concurrentResponses = await Promise.all([sendWebhook(), sendWebhook()]);
   for (const response of concurrentResponses) {assert.equal(response.status, 200);}
@@ -307,8 +293,7 @@ test("storefront Sicredi PIX reserves stock and concurrent/repeated webhooks ded
   assert.equal(savedOrder.status, "CONFIRMED");
   assert.equal(savedOrder.paymentStatus, "APPROVED");
   assert.equal(repository.inMemoryProducts.get("plant").stockQuantity, 8);
-  assert.equal(repository.inMemoryProducts.get("plant").reservedQuantity, 0);
-  assert.equal(qrSends, 1);
+  assert.equal(receiptSends, 2);
 });
 
 test("payment webhook does not confirm an order when stock deduction fails", async (t) => {

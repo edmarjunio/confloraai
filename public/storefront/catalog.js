@@ -47,7 +47,7 @@ export function createCatalog(state, add, navigate) {
     return Number((minimum + Math.max(0, steps) * increment).toFixed(3));
   }
 
-  function openWeightQuantityDialog(product, onAdded) {
+  function openWeightQuantityDialog(product) {
     const minimum = Number(product.saleUnit?.minimum) || 0.1;
     const increment = Number(product.saleUnit?.increment) || 0.1;
     const maxStock = product.stock?.tracked ? Number(product.stock.quantity) : Infinity;
@@ -87,7 +87,6 @@ export function createCatalog(state, add, navigate) {
       if (!Number.isFinite(quantity) || quantity < minimum || quantity > maxStock) return;
       add(product, quantity);
       dialog.close();
-      onAdded?.();
     });
     dialog.append(
       element("div", { class: "product-weight-content" }, [
@@ -106,13 +105,12 @@ export function createCatalog(state, add, navigate) {
     input.focus();
   }
 
-  function addFromCard(product, defaultQuantity = product.saleUnit?.minimum || 1, onAdded) {
+  function addFromCard(product, defaultQuantity = product.saleUnit?.minimum || 1) {
     if (isSoldByKg(product)) {
-      openWeightQuantityDialog(product, onAdded);
+      openWeightQuantityDialog(product);
       return;
     }
     add(product, defaultQuantity);
-    onAdded?.();
   }
   const pageObserver = typeof IntersectionObserver === "function"
     ? new IntersectionObserver((entries) => {
@@ -387,7 +385,7 @@ export function createCatalog(state, add, navigate) {
     );
   }
 
-  function renderCard(product, { compact = false, chat = false } = {}) {
+  function renderCard(product, { compact = false } = {}) {
     const open = () =>
       navigate(
         `${state.basePath ?? `/shop/${state.slug}`}/products/${encodeURIComponent(product.id)}`,
@@ -406,14 +404,14 @@ export function createCatalog(state, add, navigate) {
       unavailable,
     };
     const card = element("render-product-card", {
-      variant: chat ? "cashier" : compact ? "recommendation" : "storefront",
+      variant: compact ? "recommendation" : "storefront",
       "product-data": JSON.stringify(cardProduct),
       favorite: String(favorites.has(product.id)),
     });
     card.addEventListener("cf-product-card-action", (event) => {
       const { action } = event.detail || {};
       if (action === "open") open();
-      if (action === "add" && !unavailable) addFromCard(product, product.saleUnit?.minimum || 1, chat ? () => card.dispatchEvent(new CustomEvent('chat-product-added', { bubbles: true, detail: { product } })) : null);
+      if (action === "add") addFromCard(product, product.saleUnit?.minimum || 1);
       if (action === "favorite" && toggleFavorite(product) && !showingFavorites) render();
       if (action === "info") openProductInformation(product);
     });

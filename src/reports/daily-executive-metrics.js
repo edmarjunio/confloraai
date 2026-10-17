@@ -115,24 +115,6 @@ function summarizeDailyExecutiveMetrics({ date, orders = [], settlements = [], u
     const isPaid = !isOnAccount && (!paymentStatus || ['APPROVED', 'PAID', 'PAID_CONFIRMED'].includes(paymentStatus));
 
     totalRevenueMinor += orderMinor;
-    let receiptMinor = isPaid && paymentMethod !== 'SALDO_CLIENTE' ? orderMinor : 0;
-    if (order.paymentParts?.length > 1) {
-      receiptMinor = 0;
-      for (const part of order.paymentParts) {
-        const amount = currencyToMinor(part.amount);
-        const method = part.method;
-        const row = byPayment.get(method) || { method, count: 0, totalMinor: 0 };
-        row.count++; row.totalMinor += amount; byPayment.set(method, row);
-        if (method === 'FIADO') onAccountSalesMinor += amount;
-        else if (method !== 'SALDO_CLIENTE') receiptMinor += amount;
-        if (method === 'DINHEIRO') {
-          cashSalesMinor += amount;
-          cashTenderedMinor += currencyToMinor(order.cashReceived ?? order.cashTendered ?? part.amount);
-          changeMinor += currencyToMinor(order.changeGiven);
-        }
-      }
-      totalReceivedSalesMinor += receiptMinor;
-    } else {
     if (isOnAccount) { onAccountSalesMinor += orderMinor; }
     if (isPaid && paymentMethod !== 'SALDO_CLIENTE') { totalReceivedSalesMinor += orderMinor; }
 
@@ -147,8 +129,6 @@ function summarizeDailyExecutiveMetrics({ date, orders = [], settlements = [], u
       changeMinor += currencyToMinor(order.changeGiven);
     }
 
-    }
-
     const creator = order.createdBy || {
       id: order.operatorId,
       name: order.sellerName || order.operatorName,
@@ -159,10 +139,10 @@ function summarizeDailyExecutiveMetrics({ date, orders = [], settlements = [], u
     seller.salesTotalMinor += orderMinor;
 
     const receiver = order.receivedBy || (paymentMethod === 'PIX' ? creator : null);
-    if (receiver && receiptMinor > 0) {
+    if (receiver && isPaid && paymentMethod !== 'SALDO_CLIENTE') {
       const cashier = getCollaborator(receiver, receiver.id, receiver.name || order.cashierName, receiver.role);
       cashier.receivedCount++;
-      cashier.receivedTotalMinor += receiptMinor;
+      cashier.receivedTotalMinor += orderMinor;
     }
 
     for (const item of Array.isArray(order.items) ? order.items : []) {

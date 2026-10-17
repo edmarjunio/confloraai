@@ -256,9 +256,6 @@ const { useState, useEffect, useRef, useMemo } = React;
       const [activeModal, setActiveModal] = useState(null); // 'pay' | 'discount' | 'freight' | 'receipt' | 'customer' | 'debt_settle'
       const [cashierPage, setCashierPage] = useState(null);
       const [paymentMethod, setPaymentMethod] = useState('pix');
-      const [deferToCashier, setDeferToCashier] = useState(false);
-      const [splitPayment, setSplitPayment] = useState(false);
-      const [paymentParts, setPaymentParts] = useState([{ method: 'DINHEIRO', amount: '' }, { method: 'CREDITO', amount: '' }]);
       const [cashReceived, setCashReceived] = useState('');
 
       // Atribuição de venda e recebimento vem da sessão autenticada.
@@ -737,7 +734,7 @@ const { useState, useEffect, useRef, useMemo } = React;
         else if (paymentMethod === 'cartao') normalizedPayMethod = 'CARTAO';
         else normalizedPayMethod = 'DINHEIRO';
 
-        const payload = { items: cart.map(i => ({ productId: String(i.id), quantity: i.quantity })), discountPercent, deferToCashier, paymentParts: splitPayment ? paymentParts.map((part) => ({ ...part, amount: Number(part.amount) })) : undefined, paymentMethod: normalizedPayMethod, freightValue: isDelivery ? Number(freightValue) || 0 : 0, orderType, cashReceived: paymentMethod === 'dinheiro' && cashReceived !== '' ? Number(cashReceived) : null, customerId, customerName, customerPhone, customerCpf, deliveryAddress: customerAddress, notes: customerNotes };
+        const payload = { items: cart.map(i => ({ productId: String(i.id), quantity: i.quantity })), discountPercent, paymentMethod: normalizedPayMethod, freightValue: isDelivery ? Number(freightValue) || 0 : 0, orderType, cashReceived: paymentMethod === 'dinheiro' && cashReceived !== '' ? Number(cashReceived) : null, customerId, customerName, customerPhone, customerCpf, deliveryAddress: customerAddress, notes: customerNotes };
         const fingerprint = JSON.stringify(payload);
         if (!operationRef.current || operationRef.current.fingerprint !== fingerprint) operationRef.current = { fingerprint, id: crypto.randomUUID() };
         try {
@@ -770,8 +767,6 @@ const { useState, useEffect, useRef, useMemo } = React;
         setCustomerCreditBalance(0);
         setTempCustomerEmail('');
         setCompletedOrder(null);
-        setDeferToCashier(false);
-        setSplitPayment(false);
         setCart([]);
         setDiscountPercent(0);
         setCashReceived('');
@@ -1734,7 +1729,7 @@ const { useState, useEffect, useRef, useMemo } = React;
 
               {/* MODAL: PAGAR - F1 */}
               {activeModal === 'pay' && (
-                <div className="bg-white rounded-3xl max-w-md w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl border border-slate-100">
+                <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
                   <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                     <div>
                       <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full">
@@ -1788,7 +1783,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                   <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
                     Forma de Pagamento
                   </p>
-                  <div hidden={splitPayment} className={splitPayment ? 'hidden' : 'grid grid-cols-3 gap-1.5 mb-3 sm:grid-cols-6'}>
+                  <div className="grid grid-cols-3 gap-1.5 mb-3 sm:grid-cols-6">
                     {[
                       { id: 'pix', label: 'PIX Sicredi', icon: QrCode },
                       { id: 'debito', label: 'Débito', icon: CreditCard },
@@ -1833,9 +1828,6 @@ const { useState, useEffect, useRef, useMemo } = React;
                     </div>
                   </div>
 
-                  <label className="my-3 flex items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={deferToCashier} onChange={(event) => setDeferToCashier(event.target.checked)} />Somente criar comanda e encaminhar ao caixa (inclusive Pix)</label>
-                  <label className="my-3 flex items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={splitPayment} onChange={(event) => setSplitPayment(event.target.checked)} />Usar mais de uma forma de pagamento</label>
-                  {splitPayment && <PdvComponents.PaymentPartsEditor parts={paymentParts} onChange={setPaymentParts} total={finalTotal} customerId={customerId} />}
                   {paymentMethod === 'fiado' && (
                     <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-medium mb-3">
                       ⚠️ <strong>Venda Fiada:</strong> O valor de {formatBRL(finalTotal)} será registrado no saldo devedor de <strong>{customerName}</strong>.
@@ -1848,7 +1840,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                     </div>
                   )}
 
-                  {paymentMethod === 'pix' && !splitPayment && !deferToCashier && (
+                  {paymentMethod === 'pix' && (
                     <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-medium mb-3">
                       💠 <strong>Pix Sicredi:</strong> QR Code e chave Pix Copia e Cola com o valor fixo travado de <strong>{formatBRL(finalTotal)}</strong>. Pedido baixado automaticamente quando pago!
                     </div>
@@ -1885,12 +1877,12 @@ const { useState, useEffect, useRef, useMemo } = React;
                       Voltar
                     </button>
                     <button
-                      disabled={isSubmittingSale || (splitPayment && (paymentParts.some((part) => Number(part.amount) <= 0) || paymentParts.reduce((sum, part) => sum + Math.round(Number(part.amount) * 100), 0) !== Math.round(finalTotal * 100))) || (!splitPayment && !deferToCashier && paymentMethod === 'credito_cliente' && customerCreditBalance < finalTotal)}
+                      disabled={isSubmittingSale || (paymentMethod === 'credito_cliente' && customerCreditBalance < finalTotal)}
                       onClick={handleCompleteSale}
                       className={primaryActionButtonClass + ' w-2/3 px-4 py-3 text-sm active:scale-98'}
                     >
                       <Check className="w-4 h-4" />
-                      <span>{isSubmittingSale ? 'Processando...' : deferToCashier ? 'Enviar comanda ao caixa' : splitPayment ? 'Confirmar pagamentos' : currentUser.role === 'VENDEDOR' && paymentMethod !== 'pix' ? 'Enviar comanda ao caixa' : paymentMethod === 'pix' ? 'Gerar Pix Sicredi' : paymentMethod === 'credito_cliente' ? 'Usar saldo do cliente' : customerId ? 'Finalizar venda' : customerName && customerName !== 'Cliente Balcão' ? 'Adicionar cliente e finalizar venda' : 'Finalizar venda'}</span>
+                      <span>{isSubmittingSale ? 'Processando...' : currentUser.role === 'VENDEDOR' && paymentMethod !== 'pix' ? 'Enviar comanda ao caixa' : paymentMethod === 'pix' ? 'Gerar Pix Sicredi' : paymentMethod === 'credito_cliente' ? 'Usar saldo do cliente' : customerId ? 'Finalizar venda' : customerName && customerName !== 'Cliente Balcão' ? 'Adicionar cliente e finalizar venda' : 'Finalizar venda'}</span>
                     </button>
                   </div>
                 </div>

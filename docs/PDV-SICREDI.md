@@ -1,25 +1,5 @@
 # PDV: vendas, caixa, Sicredi e WhatsApp
 
-## Confirmação do pedido no WhatsApp
-
-`src/orders/customer-order-message.js` formata a mensagem inicial do cliente com a marca Conflora, número do pedido, cliente, itens em linhas compactas, total, forma de pagamento e agradecimento. A orientação varia entre espera do Pix, envio da maquininha e preparação de troco. Débito e crédito usam o rótulo Cartão. A mensagem inicial é usada na fila dos pedidos pendentes, incluindo pedidos web de dinheiro/cartão; o comprovante financeiro persistido e as confirmações de pagamento continuam separados. Para Pix, o código copia e cola acompanha a legenda da imagem do QR Code.
-
-O formato usa `*texto*` para o negrito do WhatsApp. Envios como mensagens livres preservam as quebras de linha; o template genérico existente normaliza espaços nos parâmetros. Para reproduzir o layout integral fora da janela de atendimento, o template Utility aprovado na Meta também precisa ser compatível com o conteúdo desejado.
-
-## Conta do cliente e pagamentos combinados
-
-Clientes autenticados acessam **Minha conta**, com saldo devedor no botão do cabeçalho quando houver dívida. A tela reúne compras, datas de pagamento, fiados, quitações e crédito. O vínculo financeiro é resolvido no servidor pelo e-mail da sessão; identificadores de cliente enviados na requisição não selecionam a conta financeira.
-
-`CustomerDebtPixService` cria cobranças parciais ou totais em `customer_debt_pix`, com txid de namespace exclusivo `DBT`. O cliente informa o valor até o limite da dívida atual e recebe QR Code/copia e cola. O navegador somente consulta o status: apenas o webhook autenticado e a consulta oficial `GET /pix/{endToEndId}` permitem confirmar. A transação grava quitação, novo saldo e notificações sem movimentar estoque nem gerar venda. Se outra quitação reduzir a dívida antes da confirmação, o excedente vira crédito e fica identificado no lançamento. O botão **Falar com a loja** abre o WhatsApp configurado para divergências.
-
-No PDV, **Somente criar comanda e encaminhar ao caixa** deixa a venda em `AWAITING_CASHIER`, inclusive para intenção de Pix, sem emitir cobrança, reservar ou baixar estoque. O caixa escolhe a forma ao receber. `deferToCashier` faz parte da identificação idempotente da operação.
-
-`paymentParts` armazena cada forma e valor. A soma em centavos precisa coincidir com o total, sem formas repetidas. Dinheiro, débito, crédito e fiado podem ser combinados; fiado exige cadastro. Pix pode ser combinado com esses meios e cobra apenas sua parcela. A parte não Pix é conferida pelo caixa, o Pix é validado pelo banco e o estoque é baixado uma única vez na conclusão. Vendedores encaminham pagamentos com parcelas não Pix ao caixa. Saldo antecipado do cliente pode ser combinado com meios manuais; sua combinação com Pix é recusada, pois exigiria reserva financeira adicional.
-
-Se a parcela Pix vencer após recebimento de dinheiro/cartão, o estoque reservado é liberado e a comanda mantém os valores recebidos, marcada para conciliação/estorno; o dinheiro não é tratado como uma venda finalizada. Relatórios do caixa e executivos distribuem as parcelas por forma, mantendo uma única venda para o vendedor e atribuindo o recebimento ao caixa identificado.
-
-O chat usa o mesmo renderer compacto do caixa. Ao listar produtos orienta o cliente a digitar um nome específico; após adicionar, oferece limpar a busca ou manter a seleção. Limpar a busca preserva a sacola.
-
 ## Arquitetura
 
 A página `/pdv` (também `/caixa`) carrega os componentes React de `public/pdv/`. A estrutura visual existente foi preservada, sem a faixa de simulação, login automático, produtos fictícios ou carrinho preenchido. O catálogo é carregado do servidor e apresentado em lotes de 60 produtos.

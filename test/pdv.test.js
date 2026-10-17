@@ -37,91 +37,6 @@ function setup() {
   return { base, repository, service, sent, input, pix, whatsapp, chargeCalls };
 }
 
-test('deferred Pix creates only a command; mixed receipts allocate amounts, debt and stock once', async () => {
-  const s = setup();
-  const order = await s.service.create({ ...s.input, paymentMethod: 'PIX', deferToCashier: true }, cashier);
-  assert.equal(order.status, 'AWAITING_CASHIER');
-  assert.equal(order.pixData, null);
-  assert.equal(s.chargeCalls.length, 0);
-  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
-  const parts = [{ method: 'DINHEIRO', amount: 5 }, { method: 'CREDITO', amount: 10 }, { method: 'FIADO', amount: 5 }];
-  const mixed = await s.service.create({ ...s.input, requestId: randomUUID(), customerId: 'customer', paymentParts: parts }, cashier);
-  assert.equal(mixed.paymentMethod, 'MISTO');
-  assert.equal(mixed.paymentStatus, 'ON_ACCOUNT');
-  assert.equal(s.base.inMemoryCustomers.get('customer').debtBalance, 5);
-  assert.equal(mixed.paymentParts.length, 3);
-  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
-  await s.repository.receive(mixed.id, actor(cashier));
-  assert.equal(s.base.inMemoryCustomers.get('customer').debtBalance, 5);
-  await assert.rejects(s.service.create({ ...s.input, requestId: randomUUID(), paymentParts: [{ method: 'DINHEIRO', amount: 1 }] }, cashier), /soma/);
-});
-
-test('mixed Pix charges only the Pix share and finalizes the full sale after bank verification', async () => {
-  const s = setup();
-  const order = await s.service.create({ ...s.input, paymentParts: [{ method: 'DINHEIRO', amount: 8 }, { method: 'PIX', amount: 12 }] }, cashier);
-  assert.equal(s.chargeCalls[0].amount, 12);
-  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
-  s.pix.checkReceivedPayment = async (endToEndId) => ({ isPaid: true, raw: { txid: order.pixData.txid, endToEndId, chave: 'pix-key', valor: '12.00' } });
-  await s.service.handlePix(order.pixData.txid, 'E' + '2'.repeat(31));
-  assert.equal((await s.repository.read('orders', order.id)).paymentStatus, 'APPROVED');
-  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
-});
-
-test('customer debt Pix applies once, validates Sicredi, isolates accounts and preserves concurrent surplus as credit', async () => {
-  const s = setup();
-  const { CustomerDebtPixService } = require('../src/orders/customer-debt-pix.service');
-  const user = { id: 'client-login', email: 'client@example.com', name: 'Cliente' };
-  Object.assign(s.base.inMemoryCustomers.get('customer'), { email: user.email, debtBalance: 20 });
-  const service = new CustomerDebtPixService({ store: s.repository, pix: s.pix, pdv: s.service });
-  s.service.debtPix = service;
-  const charge = await service.create({ requestId: randomUUID(), amount: 20 }, user);
-  await assert.rejects(service.read(charge.id, { id: 'other', email: user.email }), /não encontrada/);
-  s.base.inMemoryCustomers.get('customer').debtBalance = 5;
-  s.pix.checkReceivedPayment = async (endToEndId) => ({ isPaid: true, raw: { txid: charge.txid, endToEndId, chave: 'wrong', valor: '20' } });
-  await assert.rejects(s.service.handlePix(charge.txid, 'E' + '3'.repeat(31)), /divergente/);
-  assert.equal(s.base.inMemoryCustomers.get('customer').debtBalance, 5);
-  s.pix.checkReceivedPayment = async (endToEndId) => ({ isPaid: true, raw: { txid: charge.txid, endToEndId, chave: 'pix-key', valor: '20' } });
-  await Promise.all([s.service.handlePix(charge.txid, 'E' + '3'.repeat(31)), s.service.handlePix(charge.txid, 'E' + '3'.repeat(31))]);
-  assert.equal(s.base.inMemoryCustomers.get('customer').debtBalance, 0);
-  assert.equal(s.base.inMemoryCustomers.get('customer').creditBalance, 15);
-  assert.equal(s.base.inMemoryDebtSettlements.length, 1);
-  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
-  assert.equal(s.sent.length, 2);
-});
-
-test('HTTP autonomous debt payment updates the logged-in customer through the official webhook only', async (t) => {
-  const s = setup();
-  const previous = process.env.SICREDI_WEBHOOK_SECRET;
-  const secret = 'debt-pix-test-secret-01234567890123456789';
-  process.env.SICREDI_WEBHOOK_SECRET = secret;
-  t.after(() => { if (previous === undefined) delete process.env.SICREDI_WEBHOOK_SECRET; else process.env.SICREDI_WEBHOOK_SECRET = previous; });
-  const app = createApp({ messageService: { firestoreRepo: s.base, whatsappClient: s.whatsapp }, sicrediClient: s.pix });
-  const server = app.listen(0); t.after(() => server.close());
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const post = (path, body, cookie = '') => fetch(base + path, { method: 'POST', headers: { 'Content-Type': 'application/json', cookie }, body: JSON.stringify(body) });
-  assert.equal((await post('/api/customer/debt-pix', { amount: 20 })).status, 401);
-  await post('/api/auth/register', { email: 'debt@test.com', name: 'Cliente dívida', password: 'senha123' });
-  const login = await post('/api/auth/login', { email: 'debt@test.com', password: 'senha123' });
-  const cookie = login.headers.get('set-cookie').split(';')[0];
-  Object.assign(s.base.inMemoryCustomers.get('customer'), { email: 'debt@test.com', debtBalance: 20 });
-  const response = await post('/api/customer/debt-pix', { requestId: randomUUID(), amount: 20, customerKey: 'forged-customer' }, cookie);
-  const { charge } = await response.json();
-  assert.ok(charge?.pixData);
-  assert.equal(charge.customerKey, 'customer');
-  assert.equal(s.base.inMemoryCustomers.get('customer').debtBalance, 20);
-  const endToEndId = 'E' + '4'.repeat(31);
-  s.pix.checkReceivedPayment = async () => ({ isPaid: true, raw: { txid: charge.txid, endToEndId, chave: 'pix-key', valor: '20' } });
-  assert.equal((await post('/webhooks/sicredi-pix', { pix: [{ txid: charge.txid, endToEndId }] })).status, 401);
-  const webhook = () => post('/webhooks/sicredi-pix/' + secret + '/pix', { pix: [{ txid: charge.txid, endToEndId }] });
-  assert.equal((await webhook()).status, 200);
-  assert.equal((await webhook()).status, 200);
-  const ledger = await (await fetch(base + '/api/customer/ledger', { headers: { cookie } })).json();
-  assert.equal(ledger.balance, 0);
-  assert.equal(ledger.transactions.length, 1);
-  assert.equal(ledger.transactions[0].paymentMethod, 'PIX');
-  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
-});
-
 test('seller creates a pending order; cashier receives once and attribution survives', async () => {
   const s = setup();
   const order = await s.service.create({ ...s.input, sellerName: 'Forged', receivedBy: actor(cashier) }, seller);
@@ -145,17 +60,15 @@ test('Pix receipt includes image; bank verification finalizes exactly once under
   const s = setup();
   const order = await s.service.create({ ...s.input, paymentMethod: 'PIX', customerId: 'customer' }, seller);
   assert.equal(s.sent.length, 2);
-  assert.match(s.sent[0].text, /CONFLORA \| HORTA E VIVEIRO/);
-  assert.match(s.sent[0].text, /Aguardamos a confirmação do pagamento via Pix/);
-  assert.match(s.sent[1].caption, /PIX COPIA E COLA:\npix-code/);
+  assert.match(s.sent[0].text, /Valor exato: \*R\$\s20,00\* \(Sem alteração de valor\)/);
+  assert.match(s.sent[0].text, /PIX COPIA E COLA/);
+  assert.match(s.sent[0].text, /pix-code/);
   assert.ok(s.sent[1].image);
   assert.equal(s.sent[1].imageBase64, 'aGVsbG8=');
   assert.match(s.sent[1].caption, /R\$\s20,00/);
   assert.match(order.qrCodeBase64, /^data:image\/png;base64,/);
   assert.equal(order.pixCopiaECola, 'pix-code');
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
-  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 2);
-  assert.equal(order.inventoryReserved, true);
   s.pix.checkReceivedPayment = async (endToEndId) => ({ isPaid: true, raw: { txid: order.pixData.txid, endToEndId, chave: 'pix-key', valor: '20.00', devolucoes: [] } });
   await Promise.all(Array.from({ length: 4 }, () => s.service.handlePix(order.pixData.txid, 'E' + '1'.repeat(31))));
   const paid = await s.repository.read('orders', order.id);
@@ -163,46 +76,7 @@ test('Pix receipt includes image; bank verification finalizes exactly once under
   assert.equal(paid.paymentStatus, 'APPROVED');
   assert.equal(paid.verifiedVia, 'SICREDI_PIX_WEBHOOK');
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
-  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 0);
   assert.equal(s.sent.length, 4);
-});
-
-test('Pix generated at the cashier reserves stock and blocks a competing receipt until payment', async () => {
-  const s = setup();
-  const order = await s.service.create(s.input, seller);
-  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity || 0, 0);
-
-  const pixOrder = await s.repository.requestPixAtCashier(order.id, actor(cashier));
-  assert.equal(pixOrder.inventoryReserved, true);
-  assert.ok(pixOrder.pixExpiresAt);
-  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 2);
-
-  const competing = await s.service.create({ ...s.input, requestId: randomUUID(), items: [{ productId: 'plant', quantity: 18 }] }, seller);
-  await s.repository.receive(competing.id, actor(cashier));
-  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 2);
-  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 2);
-
-  const verified = { txid: pixOrder.pixData.txid, amountMinor: 2000, verifiedVia: 'MANUAL_CAIXA_PIX',
-    manualPixProofSeen: true, manualPixNote: 'Comprovante conferido', endToEndId: '' };
-  const paid = await s.repository.receive(order.id, actor(cashier), verified);
-  assert.equal(paid.status, 'CONFIRMED');
-  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 0);
-  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 0);
-});
-
-test('Pix expiration cancels the unpaid command and releases held stock without a deduction', async () => {
-  const s = setup();
-  const order = await s.service.create({ ...s.input, paymentMethod: 'PIX', customerId: 'customer' }, seller);
-  await s.repository.transaction(async (tx) => tx.set('orders', order.id, {
-    ...order, pixExpiresAt: new Date(Date.now() - 1000).toISOString(),
-  }));
-
-  assert.equal(await s.service.expirePixOrder(order.id), true);
-  assert.equal(await s.service.expirePixOrder(order.id), false);
-  const expired = await s.repository.read('orders', order.id);
-  assert.equal(expired.status, 'CANCELLED');
-  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
-  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 0);
 });
 
 test('Pix never trusts webhook amounts, altered bank values or manual confirmation', async () => {
@@ -240,7 +114,7 @@ test('order retries reuse ID; insufficient stock leaves debt and inventory uncha
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
   await assert.rejects(s.service.create({ ...s.input, items: [{ productId: 'plant', quantity: 1 }] }, cashier), /outra venda/);
   const chargeCountBeforeInsufficientOrder = s.chargeCalls.length;
-  await assert.rejects(s.service.create({ ...s.input, requestId: randomUUID(), paymentMethod: 'PIX', customerId: 'customer', items: [{ productId: 'plant', quantity: 100 }] }, seller), /Estoque disponível insuficiente/);
+  await assert.rejects(s.service.create({ ...s.input, requestId: randomUUID(), paymentMethod: 'PIX', customerId: 'customer', items: [{ productId: 'plant', quantity: 100 }] }, seller), /Estoque insuficiente/);
   assert.equal(s.chargeCalls.length, chargeCountBeforeInsufficientOrder);
   assert.equal(s.base.inMemoryCustomers.get('customer').debtBalance, 0);
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
@@ -480,62 +354,6 @@ test('HTTP sale flow sends fixed Pix receipt and QR, confirms by Sicredi webhook
   const duplicateReceive = await receive();
   assert.equal((await duplicateReceive.json()).order.alreadyConfirmed, true);
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 17);
-});
-
-test('cashier can manually confirm a Pix only after recording proof review; audit and stock are atomic', async (t) => {
-  const s = setup();
-  await s.base.saveUser(seller);
-  await s.base.saveUser(cashier);
-  const app = createApp({ messageService: { firestoreRepo: s.base, whatsappClient: s.whatsapp }, sicrediClient: s.pix });
-  const server = app.listen(0); t.after(() => server.close());
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const login = async (user) => {
-    const response = await fetch(base + '/api/admin/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: user.id, pin: user.pin }) });
-    return response.headers.get('set-cookie').split(';')[0];
-  };
-  const sellerCookie = await login(seller);
-  const cashierCookie = await login(cashier);
-  const order = await app.locals.pdv.service.create({ ...s.input, paymentMethod: 'PIX' }, seller);
-  const post = (body) => fetch(`${base}/api/caixa/orders/${order.id}/confirm-manual-pix`, {
-    method: 'POST', headers: { cookie: cashierCookie, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-  });
-  assert.equal((await post({ proofSeen: true, note: 'Comprovante conferido no caixa' })).status, 200);
-  const saved = await s.base.getOrderById(order.id);
-  assert.equal(saved.paymentStatus, 'APPROVED');
-  assert.equal(saved.verifiedVia, 'MANUAL_CAIXA_PIX');
-  assert.equal(saved.manualPixConfirmedBy.id, cashier.id);
-  assert.equal(saved.receivedBy.id, cashier.id);
-  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
-  const duplicate = await post({ proofSeen: true, note: 'Comprovante conferido no caixa' });
-  assert.equal(duplicate.status, 400);
-  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
-  const sellerAttempt = await fetch(`${base}/api/caixa/orders/${order.id}/confirm-manual-pix`, {
-    method: 'POST', headers: { cookie: sellerCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ proofSeen: true, note: 'Comprovante conferido no caixa' }),
-  });
-  assert.equal(sellerAttempt.status, 403);
-});
-
-test('cashier order stream emits a change immediately after a new command is created', async (t) => {
-  const s = setup();
-  await s.base.saveUser(seller);
-  await s.base.saveUser(cashier);
-  const app = createApp({ messageService: { firestoreRepo: s.base, whatsappClient: s.whatsapp }, sicrediClient: s.pix });
-  const server = app.listen(0); t.after(() => server.close());
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const login = await fetch(base + '/api/admin/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: cashier.id, pin: cashier.pin }) });
-  const cookie = login.headers.get('set-cookie').split(';')[0];
-  const stream = await fetch(`${base}/api/caixa/orders/stream`, { headers: { cookie } });
-  assert.equal(stream.status, 200);
-  assert.match(stream.headers.get('content-type'), /text\/event-stream/);
-  const reader = stream.body.getReader();
-  await reader.read();
-  const order = await app.locals.pdv.service.create({ ...s.input }, seller);
-  const event = await Promise.race([
-    reader.read(),
-    new Promise((_, reject) => setTimeout(() => reject(new Error('Comanda não apareceu no stream em tempo hábil.')), 5000)),
-  ]);
-  assert.match(new TextDecoder().decode(event.value), new RegExp(order.id));
-  await reader.cancel();
 });
 
 test('Cashier board filters history, separates pending stages, and calculates closing totals', async (t) => {
