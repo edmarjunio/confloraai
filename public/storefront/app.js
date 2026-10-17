@@ -109,7 +109,7 @@ const cashierShortcut = $("#cashierShortcut");
 function updateHeaderActions() {
   const role = String(state.user?.role || "CLIENTE").toUpperCase();
   const isLoggedIn = Boolean(state.user);
-  const allowedCashierRoles = ["ADMIN", "CAIXA", "VENDEDOR"];
+  const allowedCashierRoles = ["ADMIN", "CAIXA", "VENDEDOR", "ENTREGADOR"];
   const identity = $("#headerAccountIdentity");
 
   identity.hidden = !isLoggedIn;

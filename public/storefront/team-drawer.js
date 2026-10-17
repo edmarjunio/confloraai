@@ -59,6 +59,7 @@ export function initTeamDrawer() {
   }
 
   function updateDrawerUI() {
+    const isDriver = String(currentOperator.role).toUpperCase() === 'ENTREGADOR';
     const isCaixa = String(currentOperator.role).toUpperCase() === 'CAIXA';
     const isAdmin = String(currentOperator.role).toUpperCase() === 'ADMIN';
 
@@ -69,23 +70,23 @@ export function initTeamDrawer() {
 
     if (opNameEl) {opNameEl.textContent = currentOperator.name;}
     if (opBadgeEl) {
-      opBadgeEl.textContent = isCaixa ? 'CARGO: CAIXA' : (isAdmin ? 'CARGO: ADMIN' : 'COLABORADOR');
+      opBadgeEl.textContent = isDriver ? 'CARGO: ENTREGADOR' : isCaixa ? 'CARGO: CAIXA' : (isAdmin ? 'CARGO: ADMIN' : 'COLABORADOR');
       opBadgeEl.className = 'team-role-badge ' + (isAdmin ? 'admin' : 'caixa');
     }
     if (subtitleEl) {
-      subtitleEl.textContent = isCaixa
+      subtitleEl.textContent = isDriver ? 'Entregas e recebimentos na rota' : isCaixa
         ? 'Caixa Liberado · Acesso exclusivo às suas vendas de hoje'
         : 'Administração Geral Liberada';
     }
     if (caixaDescEl) {
-      caixaDescEl.textContent = isCaixa
+      caixaDescEl.textContent = isDriver ? 'Aceitar pedidos, abrir a rota e confirmar entregas' : isCaixa
         ? 'Acesso estrito às suas vendas e números de hoje'
         : 'Frente de Caixa Geral e Balcão';
     }
 
     // Se for CAIXA: Esconde completamente todas as ferramentas de administração e Looker
     if (adminSection) {
-      adminSection.style.display = isCaixa ? 'none' : 'block';
+      adminSection.style.display = isAdmin ? 'block' : 'none';
     }
 
     if (teamLinkCaixa) {

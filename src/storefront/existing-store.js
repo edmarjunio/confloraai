@@ -605,11 +605,12 @@ async function normalizeExistingCheckout(req, repository) {
   if (input.fulfillment === "delivery" && input.deliveryLocation && typeof input.deliveryLocation === "object") {
     const lat = Number(input.deliveryLocation.lat);
     const lng = Number(input.deliveryLocation.lng);
-    if (Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+    if (input.deliveryLocation.lat !== null && input.deliveryLocation.lng !== null && input.deliveryLocation.lat !== '' && input.deliveryLocation.lng !== '' && Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
       deliveryLocation = {
         lat: Number(lat.toFixed(6)),
         lng: Number(lng.toFixed(6)),
-        formattedAddress: String(input.deliveryLocation.formattedAddress || input.address || "").trim().slice(0, 300),
+        reference: String(input.deliveryLocation.reference || "").trim().slice(0, 200),
+        formattedAddress: String(input.deliveryLocation.formattedAddress || input.deliveryLocation.address || input.address || "").trim().slice(0, 300),
         placeId: String(input.deliveryLocation.placeId || "").trim().slice(0, 160),
         capturedVia: ["gps", "search", "pin"].includes(input.deliveryLocation.capturedVia) ? input.deliveryLocation.capturedVia : "pin",
       };

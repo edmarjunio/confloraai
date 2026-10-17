@@ -3,6 +3,7 @@ const { createWebSessions, safeUser } = require('../security/web-session');
 const { rankProductSales } = require('../catalog/product-sales');
 const { resolveHdProductImage } = require('../catalog/image-resolver');
 const { getCashierProductDetails } = require('../catalog/cashier-product-details');
+const { normalizeDeliveryLocation } = require('../orders/pdv.service');
 let expressModule = null;
 function getExpress() {
   if (!expressModule) {
@@ -1113,6 +1114,8 @@ function createApp({
   app.get('/api/maps-config', (_req, res) => {
     res.json({
       apiKey: config.maps?.apiKey || '',
+      mapId: process.env.GOOGLE_MAPS_MAP_ID || '',
+      originConfigured: Number.isFinite(Number(process.env.STORE_LAT)) && Number.isFinite(Number(process.env.STORE_LNG)) && Boolean(process.env.STORE_LAT && process.env.STORE_LNG),
       storeLocation: {
         lat: config.maps?.storeLat ?? -17.5694,
         lng: config.maps?.storeLng ?? -52.5511,
@@ -1132,7 +1135,7 @@ function createApp({
     if (req.path === '/auth/login' || (req.path === '/auth/users' && req.method === 'GET')) {return next();}
     if (!req.user) {return res.status(401).json({ error: 'Entre na sua conta.' });}
     const cashierRoute = /^(?:\/orders(?:\/manual)?|\/daily-metrics|\/stock\/quick-entry|\/alterations|\/notifications(?:\/[^/]+\/read)?)$/.test(req.path);
-    if (req.user.role !== 'ADMIN' && !(['CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(req.user.role) && cashierRoute)) {
+    if (req.user.role !== 'ADMIN' && !(['CAIXA', 'VENDEDOR'].includes(req.user.role) && cashierRoute)) {
       return res.status(403).json({ error: 'Acesso não autorizado para este perfil.' });
     }
     next();
@@ -1604,6 +1607,7 @@ function createApp({
       const finalTotal = Math.max(0, calculatedSubtotal - appliedDiscount);
       const resolvedPaymentMethod = String(paymentMethod || 'PIX').toUpperCase();
       if (orderType === 'DELIVERY' && (!String(customerName || '').trim() || !/^\d{10,13}$/.test(String(customerPhone || '').replace(/\D/g, '')) || String(deliveryAddress || '').trim().length < 8)) return res.status(400).json({ error: 'Entrega exige nome, WhatsApp com DDD e endereço completo (rua, número, bairro e cidade).' });
+      const normalizedLocation = normalizeDeliveryLocation(deliveryLocation);
       const checkoutFingerprint = idempotencyKey
         ? createHash('sha256').update(JSON.stringify({
           customerName: String(customerName).trim(),
@@ -1617,6 +1621,7 @@ function createApp({
             price: Number(item.price),
           })),
           total: finalTotal,
+          deliveryLocation: normalizedLocation,
           cashTendered: Number(cashTendered) || 0,
         })).digest('hex')
         : '';
@@ -1655,8 +1660,8 @@ function createApp({
         customerPhone,
         orderType: orderType || 'DELIVERY',
         deliveryAddress: deliveryAddress || 'Retirada no Viveiro Conflora',
-        ...(deliveryLocation && typeof deliveryLocation === 'object' ? { deliveryLocation } : {}),
-        ...((orderType || 'DELIVERY') === 'DELIVERY' ? { deliveryStatus: 'PENDING_DELIVERY' } : {}),
+        ...(normalizedLocation ? { deliveryLocation: normalizedLocation } : {}),
+        ...((orderType || 'DELIVERY') === 'DELIVERY' ? { deliveryStatus: 'PENDING_DISPATCH' } : {}),
         paymentMethod: resolvedPaymentMethod,
         items: orderItems,
         subtotal: calculatedSubtotal,

@@ -233,6 +233,8 @@ const { useState, useEffect, useRef, useMemo } = React;
       const [customerPhone, setCustomerPhone] = useState('');
       const [customerCpf, setCustomerCpf] = useState('');
       const [customerAddress, setCustomerAddress] = useState('');
+      const [customerLocation, setCustomerLocation] = useState(null);
+      const [tempCustomerLocation, setTempCustomerLocation] = useState(null);
       const [customerNotes, setCustomerNotes] = useState('');
 
       // Customer Modal Form & Search state
@@ -275,11 +277,11 @@ const { useState, useEffect, useRef, useMemo } = React;
 
       useEffect(() => {
         fetch('/api/auth/me').then((res) => res.ok ? res.json() : null).then((data) => {
-          if (data?.user && ['ADMIN', 'CAIXA', 'VENDEDOR'].includes(data.user.role)) setCurrentUser(data.user);
+          if (data?.user && ['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(data.user.role)) setCurrentUser(data.user);
         }).finally(() => setAuthReady(true));
       }, []);
       useEffect(() => {
-        if (!currentUser) return;
+        if (!currentUser || currentUser.role === 'ENTREGADOR') return;
         let cancelled = false;
         fetch('/api/caixa/favorites')
           .then(async (response) => {
@@ -309,7 +311,7 @@ const { useState, useEffect, useRef, useMemo } = React;
         });
       }, [favoriteProductIds]);
       useEffect(() => {
-        if (!currentUser) return;
+        if (!currentUser || currentUser.role === 'ENTREGADOR') return;
         fetch('/api/caixa/products').then((res) => { if (!res.ok) throw new Error('Não foi possível carregar produtos.'); return res.json(); }).then((rows) => {
           const storefrontImagesById = readStorefrontProductImages();
           setProducts(rows.map((item) => {
@@ -379,6 +381,7 @@ const { useState, useEffect, useRef, useMemo } = React;
         setTempCustomerEmail(customerId ? tempCustomerEmail : '');
         setTempCustomerCpf(customerCpf);
         setTempCustomerAddress(customerAddress);
+        setTempCustomerLocation(customerLocation);
         setTempCustomerNotes(customerNotes);
         setSelectedCustomerId(customerId);
         setCustomerNotification('');
@@ -389,7 +392,7 @@ const { useState, useEffect, useRef, useMemo } = React;
         setSelectedCustomerId(cust.id);
         setTempCustomerName(cust.name || ''); setTempCustomerPhone(cust.phone || '');
         setTempCustomerEmail(cust.email || ''); setTempCustomerAddress(cust.address || cust.deliveryAddress || '');
-        setTempCustomerCpf(cust.cpfCnpj || ''); setTempCustomerNotes(cust.notes || '');
+        setTempCustomerLocation(cust.deliveryLocation || null); setTempCustomerCpf(cust.cpfCnpj || ''); setTempCustomerNotes(cust.notes || '');
         setCustomerSearchOpen(false); setCustomerNotification('Dados preenchidos. Confira e selecione o cliente.');
       };
 
@@ -402,6 +405,7 @@ const { useState, useEffect, useRef, useMemo } = React;
         setCustomerName(name);
         setCustomerPhone(tempCustomerPhone.trim());
         setCustomerAddress(tempCustomerAddress.trim());
+        setCustomerLocation(tempCustomerLocation);
         setCustomerCpf(tempCustomerCpf.trim());
         setCustomerNotes(tempCustomerNotes.trim());
 
@@ -431,6 +435,7 @@ const { useState, useEffect, useRef, useMemo } = React;
               cpfCnpj: tempCustomerCpf.trim(),
               address: tempCustomerAddress.trim(),
               deliveryAddress: tempCustomerAddress.trim(),
+              deliveryLocation: tempCustomerLocation,
               notes: tempCustomerNotes.trim(),
             })
           });
@@ -444,6 +449,7 @@ const { useState, useEffect, useRef, useMemo } = React;
           setCustomerName(name);
           setCustomerPhone(tempCustomerPhone.trim());
           setCustomerAddress(tempCustomerAddress.trim());
+          setCustomerLocation(tempCustomerLocation);
           setCustomerCpf(tempCustomerCpf.trim());
           setCustomerNotes(tempCustomerNotes.trim());
           setCustomerId(saved.customer.id);
@@ -700,7 +706,7 @@ const { useState, useEffect, useRef, useMemo } = React;
         else if (paymentMethod === 'cartao') normalizedPayMethod = 'CARTAO';
         else normalizedPayMethod = 'DINHEIRO';
 
-        const payload = { items: cart.map(i => ({ productId: String(i.id), quantity: i.quantity })), discountPercent, deferToCashier, paymentParts: splitPayment ? paymentParts.map((part) => ({ ...part, amount: Number(part.amount) })) : undefined, paymentMethod: normalizedPayMethod, freightValue: isDelivery ? Number(freightValue) || 0 : 0, orderType, cashReceived: paymentMethod === 'dinheiro' && cashReceived !== '' ? Number(cashReceived) : null, customerId, customerName, customerPhone, customerCpf, deliveryAddress: customerAddress, notes: customerNotes };
+        const payload = { items: cart.map(i => ({ productId: String(i.id), quantity: i.quantity })), discountPercent, deferToCashier, paymentParts: splitPayment ? paymentParts.map((part) => ({ ...part, amount: Number(part.amount) })) : undefined, paymentMethod: normalizedPayMethod, freightValue: isDelivery ? Number(freightValue) || 0 : 0, orderType, cashReceived: paymentMethod === 'dinheiro' && cashReceived !== '' ? Number(cashReceived) : null, customerId, customerName, customerPhone, customerCpf, deliveryAddress: customerAddress, deliveryLocation: isDelivery ? customerLocation : null, notes: customerNotes };
         const fingerprint = JSON.stringify(payload);
         if (!operationRef.current || operationRef.current.fingerprint !== fingerprint) operationRef.current = { fingerprint, id: crypto.randomUUID() };
         try {
@@ -742,6 +748,7 @@ const { useState, useEffect, useRef, useMemo } = React;
         setCustomerName('Cliente Balcão');
         setCustomerPhone('');
         setCustomerAddress('');
+        setCustomerLocation(null);
         setCustomerCpf('');
         setCustomerNotes('');
         setActiveModal(null);
@@ -1196,6 +1203,7 @@ const { useState, useEffect, useRef, useMemo } = React;
 
       if (!authReady) return <PdvComponents.Loading />;
       if (!currentUser) return <PdvComponents.Login onLogin={setCurrentUser} />;
+      if (currentUser.role === 'ENTREGADOR' || cashierPage === 'deliveries') return <PdvDelivery user={currentUser} onBack={() => setCashierPage(null)} />;
       if (cashierPage) return <PdvComponents.CashierQueue user={currentUser} view={cashierPage} onBack={() => setCashierPage(null)} onDebt={() => { setCashierPage(null); setActiveModal('debt_settle'); }} />;
       return (
         <div className="min-h-screen bg-[#F4F6F5] text-slate-800 flex flex-col font-sans select-none">
@@ -1269,6 +1277,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                 </div>
 
                 {/* Right Status Actions */}
+                {['ADMIN', 'CAIXA'].includes(currentUser.role) && <button type="button" className="cf-button !rounded-full text-xs" onClick={() => setCashierPage('deliveries')}>🛵 Entregas</button>}
                 <div className="order-3 ml-auto flex items-center gap-2 sm:order-4">
                   <div className="max-w-36 text-right sm:max-w-52">
                     <p className="truncate text-xs font-extrabold text-slate-800">{currentUser.name || currentUser.email}</p>
@@ -1586,6 +1595,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                         />
                       </div>
                     </div>
+                  {orderType === 'DELIVERY' && <PdvComponents.LocationPicker key={selectedCustomerId || 'new'} value={tempCustomerLocation} address={tempCustomerAddress} onChange={(location) => { setTempCustomerLocation(location); if (!tempCustomerAddress.trim() && location.address) setTempCustomerAddress(location.address); }} />}
                   </div>
 
                   {/* Actions Bar matching user prompt:

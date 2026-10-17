@@ -2221,6 +2221,7 @@ class FirestoreRepository {
         cpfCnpj: profile.cpfCnpj || '',
         address: profile.address || profile.deliveryAddress || '',
         deliveryAddress: profile.deliveryAddress || profile.address || '',
+        deliveryLocation: profile.deliveryLocation || null,
         notes: profile.notes || '',
         debtBalance: Number(profile.debtBalance || 0),
         creditBalance: Number(profile.creditBalance || 0),
@@ -2469,10 +2470,6 @@ class FirestoreRepository {
       try {
         const snap = await this.firestore.collection('users').get();
         const docs = snap.docs.map(d => ({ ...d.data(), id: d.id }));
-        if (!docs.some(u => u.role === 'ENTREGADOR')) {
-          const defaultDriver = this.inMemoryUsers.get('usr-entregador1');
-          if (defaultDriver) docs.push(defaultDriver);
-        }
         return docs;
       } catch (err) {
         if (err && (err.code === 7 || err.code === 'permission-denied' || String(err.message || '').includes('PERMISSION_DENIED'))) {

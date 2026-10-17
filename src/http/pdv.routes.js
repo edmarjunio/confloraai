@@ -1,3 +1,4 @@
+const { isDelivery, assertAssignedDelivery, canReceiveOrder } = require('../orders/delivery-policy');
 const { PaymentProofStorage } = require('../orders/payment-proof');
 const { timingSafeEqual, randomUUID } = require('node:crypto');
 const { PdvRepository } = require('../orders/pdv.repository');
@@ -13,7 +14,7 @@ function secureEqual(left, right) {
 }
 function requireStaff(req, res, next) {
   if (!req.user) { return res.status(401).json({ error: 'Entre na sua conta para acessar o PDV.' }); }
-  if (!['ADMIN', 'CAIXA', 'VENDEDOR'].includes(req.user.role)) { return res.status(403).json({ error: 'Perfil sem acesso ao PDV.' }); }
+  if (!['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(req.user.role)) { return res.status(403).json({ error: 'Perfil sem acesso ao PDV.' }); }
   next();
 }
 function requireCashier(req, res, next) {
@@ -90,7 +91,30 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
   const requireCustomer = (req, res, next) => req.user ? next() : res.status(401).json({ error: 'Entre na sua conta.' });
   app.post('/api/customer/debt-pix', requireCustomer, route(async (req, res) => res.json({ success: true, charge: await debtPix.create(req.body, req.user) })));
   app.get('/api/customer/debt-pix/:id', requireCustomer, route(async (req, res) => res.json({ success: true, charge: await debtPix.read(req.params.id, req.user) })));
-  app.use('/api/caixa', requireStaff);
+  app.use('/api/caixa', requireStaff, (req, res, next) => {
+    if (req.user.role !== 'ENTREGADOR') return next();
+    if (/^\/deliveries(?:\/[^/]+\/(?:accept|release|complete|receive))?$/.test(req.path) || req.path === '/orders/stream' || /^\/payment-proofs(?:\/[^/]+)?$/.test(req.path)) return next();
+    res.status(403).json({ error: 'Seu perfil permite apenas suas entregas e os recebimentos vinculados a elas.' });
+  });
+  const requireDeliveryStaff = (req, res, next) => ['ADMIN', 'CAIXA', 'ENTREGADOR'].includes(req.user.role) ? next() : res.status(403).json({ error: 'Sem acesso às entregas.' });
+  app.get('/api/caixa/deliveries', requireDeliveryStaff, route(async (req, res) => res.json(await service.listDeliveries(req.user))));
+  app.post('/api/caixa/deliveries/:id/dispatch', requireCashier, route(async (req, res) => res.json({ order: await store.dispatchDelivery(req.params.id, actor(req.user)) })));
+  app.post('/api/caixa/deliveries/:id/accept', requireDeliveryStaff, route(async (req, res) => res.json({ order: await service.assignDelivery(req.params.id, req.user) })));
+  app.post('/api/caixa/deliveries/:id/release', requireDeliveryStaff, route(async (req, res) => res.json({ order: await service.releaseDelivery(req.params.id, req.user) })));
+  app.post('/api/caixa/deliveries/:id/complete', requireDeliveryStaff, route(async (req, res) => res.json(await service.completeDelivery(req.params.id, req.user, req.body))));
+  app.post('/api/caixa/deliveries/:id/receive', requireDeliveryStaff, route(async (req, res) => {
+    const existing = await store.read('orders', req.params.id); assertAssignedDelivery(existing, req.user);
+    const isManualPix = req.body.manualPix === true || req.body.paymentMethod === 'PIX_MANUAL';
+    const method = req.body.paymentMethod === 'PIX_MANUAL' ? 'PIX' : req.body.paymentMethod;
+    const parts = normalizePaymentParts(req.body.paymentParts, method || existing.paymentMethod, existing.total);
+    if (parts.some((part) => ['FIADO', 'SALDO_CLIENTE'].includes(part.method))) throw new Error('Fiado e crédito devem ser autorizados no caixa antes da entrega.');
+    if (parts.some((part) => part.method === 'PIX') && !isManualPix) return res.status(202).json({ order: await service.requestPixAtCashier(existing.id, req.user, parts) });
+    const verification = parts.some((part) => part.method === 'PIX') ? manualPixVerification(existing, parts, req.body) : null;
+    const order = await store.receive(existing.id, actor(req.user), verification, (req.body.receivedAmount === null || req.body.receivedAmount === undefined) ? null : Number(req.body.receivedAmount), existing.pixData?.txid ? null : method, { requestedParts: parts, finishDelivery: true, sendFinalReceipt: !verification });
+    if (verification) { for (const id of await store.ensurePaymentNotifications(order.id)) await service.deliver(id); }
+    else await service.deliver(`${order.id}-final-receipt`);
+    res.json({ order });
+  }));
 
   app.get('/api/caixa/favorites', route(async (req, res) => {
     const user = await store.read('users', String(req.user.id));
@@ -128,7 +152,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     const customer = await store.transaction(async (tx) => {
       const previous = await tx.get('customers', id);
       const nameSearch = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-      const saved = { ...previous, id, name, nameSearch, phone, phoneDigits: phone, email, cpfCnpj: String(req.body.cpfCnpj || '').slice(0, 30), address: String(req.body.address || '').slice(0, 250), notes: String(req.body.notes || '').slice(0, 250), updatedAt: new Date().toISOString() };
+      const saved = { ...previous, id, name, nameSearch, phone, phoneDigits: phone, email, ...(req.body.deliveryLocation ? { deliveryLocation: require('../orders/pdv.service').normalizeDeliveryLocation(req.body.deliveryLocation) } : {}), cpfCnpj: String(req.body.cpfCnpj || '').slice(0, 30), address: String(req.body.address || '').slice(0, 250), notes: String(req.body.notes || '').slice(0, 250), updatedAt: new Date().toISOString() };
       tx.set('customers', id, saved);
       return saved;
     });
@@ -151,7 +175,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     heartbeat.unref?.();
     const unsubscribe = store.watchOpenOrders((orders) => {
       if (closed) return;
-      const visibleOrders = orders.filter((order) => order.source === 'PDV' || order.source === 'WEB_CATALOG');
+      const visibleOrders = orders.filter((order) => (order.source === 'PDV' || order.source === 'WEB_CATALOG') && (req.user.role !== 'ENTREGADOR' || (isDelivery(order) && (order.deliveryStatus === 'PENDING_DELIVERY' || order.assignedDriver?.id === req.user.id))));
       send('orders-changed', { orderIds: visibleOrders.map((order) => order.id), updatedAt: new Date().toISOString() });
     }, () => {
       if (!closed) send('stream-fallback', { updatedAt: new Date().toISOString() });
@@ -233,21 +257,22 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     return order;
   };
   app.get('/api/caixa/orders/:id', route(async (req, res) => res.json(await findOrder(req))));
-  app.post('/api/caixa/payment-proofs', requireCashier, route(async (req, res) => {
+  app.post('/api/caixa/payment-proofs', requireDeliveryStaff, route(async (req, res) => {
     const { targetType, targetId, dataUrl } = req.body;
     if (!['ORDER', 'DEBT'].includes(targetType) || !/^[a-zA-Z0-9_-]{1,128}$/.test(targetId || '')) throw new Error('Selecione o pagamento do comprovante.');
     if (targetType === 'ORDER') {
       const order = await store.read('orders', targetId);
-      if (!order || order.completedAt || order.status === 'CANCELLED') throw new Error('Pagamento não está pendente.');
+      if (!order || order.completedAt || order.status === 'CANCELLED' || !canReceiveOrder(order, req.user)) throw new Error('Pagamento não está pendente ou não pertence a você.');
     }
+    if (req.user.role === 'ENTREGADOR' && targetType !== 'ORDER') throw new Error('Entregador só pode anexar comprovante da própria entrega.');
     const file = await proofStorage.save(dataUrl);
     const proof = { ...file, fileName: String(req.body.fileName || 'comprovante').replace(/[^\p{L}\p{N}._ -]/gu, '').slice(0, 100), targetType, targetId, uploadedBy: req.user.id, createdAt: new Date().toISOString() };
     await store.transaction(async (tx) => tx.set('payment_proofs', proof.id, proof));
     res.status(201).json({ id: proof.id, fileName: proof.fileName, size: proof.size });
   }));
-  app.get('/api/caixa/payment-proofs/:id', requireCashier, route(async (req, res) => {
+  app.get('/api/caixa/payment-proofs/:id', requireDeliveryStaff, route(async (req, res) => {
     const proof = await store.read('payment_proofs', req.params.id);
-    if (!proof) return res.sendStatus(404);
+    if (!proof || (req.user.role === 'ENTREGADOR' && proof.uploadedBy !== req.user.id)) return res.sendStatus(404);
     const buffer = await proofStorage.read(proof.path);
     if (!buffer) return res.sendStatus(404);
     res.set({ 'Content-Type': proof.contentType, 'Content-Disposition': 'inline', 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' }).send(buffer);

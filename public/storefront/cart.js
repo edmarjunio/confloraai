@@ -19,6 +19,9 @@ export function createCart(state) {
   const key = `store:${state.slug}:cart:v1`;
   const stored = storageGet(key, []);
   let items = normalizeStoredCart(stored);
+  let deliveryLocation = null;
+  const locationPicker = $("#deliveryLocationPicker");
+  locationPicker?.addEventListener("locationchange", (event) => { deliveryLocation = event.detail; if (!form.elements.address.value.trim() && deliveryLocation.address) form.elements.address.value = deliveryLocation.address; });
   let sending = false;
   let confirmationAccepted = false;
   let pending = storageGet(`${key}:pending`, null);
@@ -250,6 +253,7 @@ export function createCart(state) {
     const delivery = form.elements.fulfillment?.value === "delivery";
     const payment = form.elements.payment?.value;
     $("#deliveryFields").hidden = !delivery;
+    if (locationPicker) { locationPicker.hidden = !delivery; locationPicker.setAttribute("address", form.elements.address?.value || ""); }
     if (form.elements.address) {
       form.elements.address.required = delivery;
       form.elements.address.minLength = delivery ? 8 : 0;
@@ -275,6 +279,7 @@ export function createCart(state) {
   }
 
   form.addEventListener("change", updateCheckout);
+  form.elements.address?.addEventListener("input", () => { if (locationPicker) locationPicker.setAttribute("address", form.elements.address.value); });
   form.elements.phone?.addEventListener("input", (event) => {
     const digits = event.target.value.replace(/\D/g, "").slice(0, 11);
     event.target.value =
@@ -366,6 +371,7 @@ export function createCart(state) {
         name: form.elements.name.value,
         phone: form.elements.phone.value,
       },
+      deliveryLocation: form.elements.fulfillment?.value === "delivery" ? deliveryLocation : null,
       address: form.elements.address ? form.elements.address.value : "",
       serviceArea: form.elements.serviceArea ? form.elements.serviceArea.value : "",
       paymentMethod: form.elements.payment ? form.elements.payment.value : "PIX",

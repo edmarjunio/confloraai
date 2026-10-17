@@ -39,7 +39,8 @@
     <link rel="stylesheet" href="/store-assets/site-header.css" />
     <link rel="stylesheet" href="/store-assets/design-system.css" />
     <link id="storeIcon" rel="icon" href="data:," />
-  </head>
+    <link rel="stylesheet" href="/store-assets/delivery.css" />
+</head>
   <body>
     <a class="skip" href="#main" data-i18n="nav.skip_to_products">Ir para os produtos</a>
     <header class="header conflora-site-header">
@@ -229,6 +230,7 @@
             ></textarea>
           </label>
         </div>
+        <delivery-location-picker id="deliveryLocationPicker" hidden></delivery-location-picker>
         <p id="pickupAddress" class="muted"></p>
         <fieldset>
           <legend>
@@ -475,7 +477,8 @@
       </div>
     </div>
 
-    <script src="/store-assets/render-image.js"></script>
+    <script src="/store-assets/delivery-maps.js"></script>
+  <script src="/store-assets/render-image.js"></script>
     <script src="/store-assets/product-card.js"></script>
     <script type="module" src="/store-assets/v5/app.js"></script>
   </body>

@@ -651,6 +651,7 @@ function renderAdminHtml(storeConfig) {
             <option value="CLIENTE">CLIENTE (Perfil de Compras da Loja)</option>
             <option value="CAIXA">CAIXA (Acesso Somente ao Caixa e Vendas de Hoje)</option>
             <option value="VENDEDOR">VENDEDOR (Comandas e Pix)</option>
+            <option value="ENTREGADOR">ENTREGADOR (Entregas)</option>
             <option value="ADMIN">ADMIN (Acesso Total: Analytics, Aprovação Diff, Produtos)</option>
           </select>
         </div>
@@ -1269,6 +1270,7 @@ function renderAdminHtml(storeConfig) {
               <option value="CLIENTE" \${role === 'CLIENTE' ? 'selected' : ''}>👤 CLIENTE (Padrão)</option>
               <option value="VENDEDOR" \${role === 'VENDEDOR' ? 'selected' : ''}>VENDEDOR (Comandas)</option>
               <option value="CAIXA" \${role === 'CAIXA' ? 'selected' : ''}>🛒 CAIXA (Balcão)</option>
+              <option value="ENTREGADOR" \${role === 'ENTREGADOR' ? 'selected' : ''}>🛵 ENTREGADOR (Entregas)</option>
               <option value="ADMIN" \${role === 'ADMIN' ? 'selected' : ''}>👑 ADMIN (Total)</option>
             </select>
           </td>

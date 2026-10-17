@@ -1,3 +1,5 @@
+const { formatOrderReceipt } = require('./receipt.util');
+const { isDelivery, isDeliverySettled, assertAssignedDelivery, canReceiveOrder } = require('./delivery-policy');
 const { requireManualProof } = require('./payment-proof');
 const { createHash } = require('node:crypto');
 const { remainingStock, validateStockQuantity } = require('./order-integrity');
@@ -137,6 +139,73 @@ class PdvRepository {
     return this.repository.cancelOrder(orderId, reason);
   }
 
+  async listDeliveryOrders(actor) {
+    const database = this.repository.firestore;
+    if (database && !this.repository._firestoreClientDisabled) {
+      const collection = database.collection('orders');
+      const open = collection.where('deliveryStatus', 'in', ['PENDING_DISPATCH', 'PENDING_DELIVERY', 'OUT_FOR_DELIVERY']);
+      let completed = collection.where('deliveryStatus', '==', 'DELIVERED');
+      if (actor.role === 'ENTREGADOR') completed = completed.where('assignedDriver.id', '==', actor.id);
+      const snapshots = await Promise.all([open.get(), completed.orderBy('deliveredAt', 'desc').limit(100).get()]);
+      return snapshots.flatMap((snapshot) => snapshot.docs.map((document) => ({ ...document.data(), id: document.id })));
+    }
+    return this.list('orders', 'orderType', 'DELIVERY');
+  }
+
+  async dispatchDelivery(orderId, actor) {
+    if (!['ADMIN', 'CAIXA'].includes(actor?.role)) throw new Error('Somente Caixa/Admin podem liberar pedidos para entrega.');
+    return this.transaction(async (tx) => {
+      const order = await tx.get('orders', orderId);
+      if (!isDelivery(order) || order.status === 'CANCELLED') throw new Error('Pedido de entrega não encontrado.');
+      if (['OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.deliveryStatus)) throw new Error('Este pedido já saiu para entrega.');
+      if (order.paymentMethod === 'PIX' && !isDeliverySettled(order)) throw new Error('Confirme o Pix antes de liberar a entrega.');
+      const reservation = !order.inventoryReserved && !order.stockDeducted ? await prepareStockReservation(tx, order.items) : null;
+      const now = new Date().toISOString();
+      if (reservation) applyStockReservation(tx, reservation, now);
+      const updated = { ...order, deliveryStatus: 'PENDING_DELIVERY', dispatchedBy: actor, dispatchedAt: order.dispatchedAt || now, updatedAt: now,
+        ...(reservation ? { inventoryReserved: true, reservedItems: reservation.reservedItems } : {}) };
+      tx.set('orders', orderId, updated); return updated;
+    });
+  }
+
+  async assignDelivery(orderId, actor) {
+    if (!['ADMIN', 'CAIXA', 'ENTREGADOR'].includes(actor?.role)) throw new Error('Sem permissão para assumir entregas.');
+    return this.transaction(async (tx) => {
+      const order = await tx.get('orders', orderId);
+      if (!isDelivery(order) || order.status === 'CANCELLED') throw new Error('Pedido de entrega não encontrado.');
+      if (order.deliveryStatus === 'OUT_FOR_DELIVERY' && order.assignedDriver?.id === actor.id) return order;
+      if (order.deliveryStatus !== 'PENDING_DELIVERY' || order.assignedDriver?.id) throw new Error('Esta entrega não está disponível. Outro entregador pode ter aceitado.');
+      if (order.paymentMethod === 'PIX' && !isDeliverySettled(order)) throw new Error('O pagamento Pix ainda não foi confirmado.');
+      const now = new Date().toISOString();
+      const updated = { ...order, deliveryStatus: 'OUT_FOR_DELIVERY', assignedDriver: actor, acceptedAt: now, updatedAt: now };
+      tx.set('orders', orderId, updated);
+      const id = `${orderId}-delivery-${now.replace(/[^0-9]/g, '')}`;
+      tx.set('pdv_outbox', id, { id, kind: 'delivery-departure', orderId, status: 'PENDING', attempts: 0 });
+      return updated;
+    });
+  }
+
+  async releaseDelivery(orderId, actor) {
+    return this.transaction(async (tx) => {
+      const order = await tx.get('orders', orderId); assertAssignedDelivery(order, actor);
+      const updated = { ...order, deliveryStatus: 'PENDING_DELIVERY', assignedDriver: null, updatedAt: new Date().toISOString() };
+      tx.set('orders', orderId, updated); return updated;
+    });
+  }
+
+  async markDelivered(orderId, actor, notes = '') {
+    return this.transaction(async (tx) => {
+      const order = await tx.get('orders', orderId);
+      if (order?.deliveryStatus === 'DELIVERED' && (actor.role === 'ADMIN' || order.deliveredBy?.id === actor.id)) return order;
+      assertAssignedDelivery(order, actor);
+      if (!isDeliverySettled(order)) throw new Error('Receba o pagamento antes de concluir a entrega.');
+      const now = new Date().toISOString();
+      const updated = { ...order, deliveryStatus: 'DELIVERED', deliveredAt: now, deliveredBy: actor, deliveryNotes: String(notes).slice(0, 500), updatedAt: now };
+      updated.receiptText = formatOrderReceipt(updated);
+      tx.set('orders', orderId, updated); return updated;
+    });
+  }
+
   async advanceToPayment(orderId, receiver) {
     if (!['ADMIN', 'CAIXA'].includes(receiver?.role)) throw new Error('Somente Caixa/Admin podem confirmar comandas.');
     return this.transaction(async (tx) => {
@@ -177,7 +246,7 @@ class PdvRepository {
       const order = await tx.get('orders', orderId);
       if (!order || !['PDV', 'WEB_CATALOG'].includes(order.source)) { throw new Error('Comanda não encontrada.'); }
       if (order.completedAt || order.status === 'CANCELLED') { throw new Error('Esta comanda já foi finalizada ou cancelada.'); }
-      if (!['ADMIN', 'CAIXA'].includes(receiver?.role)) { throw new Error('Somente o caixa pode gerar a cobrança Pix.'); }
+      if (!canReceiveOrder(order, receiver)) { throw new Error('Sem permissão para gerar Pix deste pedido.'); }
       if (Date.parse(order.pixExpiresAt || order.paymentExpiresAt || '') <= Date.now()) throw new Error('O prazo de pagamento venceu. Inicie uma nova comanda.');
       if (order.paymentMethod === 'PIX' && order.pixData) { return order; }
       if (!['AWAITING_CASHIER', 'AWAITING_PAYMENT', 'PENDING'].includes(order.status)) { throw new Error('A comanda não está aguardando recebimento no caixa.'); }
@@ -199,12 +268,15 @@ class PdvRepository {
   }
 
   /** Stock, debt, attribution, payment and notification intent commit together. */
-  async receive(orderId, receiver, verification = null, cashReceived = null, paymentMethodOverride = null, { sendFinalReceipt = false, requestedParts } = {}) {
+  async receive(orderId, receiver, verification = null, cashReceived = null, paymentMethodOverride = null, { sendFinalReceipt = false, requestedParts, finishDelivery = false } = {}) {
     const inventory = await this.repository.getInventorySettings();
     return this.transaction(async (tx) => {
       const order = await tx.get('orders', orderId);
       if (!order || !['PDV', 'WEB_CATALOG'].includes(order.source)) { throw new Error('Comanda não encontrada.'); }
       if (order.status === 'CANCELLED') { throw new Error('Comanda cancelada.'); }
+      if (finishDelivery && order.deliveryStatus === 'DELIVERED' && order.deliveredBy?.id === receiver?.id) return { ...order, alreadyConfirmed: true };
+      if (finishDelivery) assertAssignedDelivery(order, receiver);
+      if (receiver?.role === 'ENTREGADOR' && !canReceiveOrder(order, receiver)) throw new Error('Sem permissão para receber esta entrega.');
       if (order.completedAt) { return { ...order, alreadyConfirmed: true }; }
       if (Date.parse(order.pixExpiresAt || order.paymentExpiresAt || '') <= Date.now()) {
         throw new Error('O prazo de pagamento venceu. Aguarde o cancelamento e a liberação do estoque.');
@@ -224,12 +296,13 @@ class PdvRepository {
         throw new Error('Pix exige confirmação do Sicredi com identificador e valor exatos.');
       }
       if (paymentMethod === 'PIX' && verification.verifiedVia === 'MANUAL_CAIXA_PIX' &&
-        (!verification.manualPixProofSeen || String(verification.manualPixNote || '').trim().length < 8 || !['ADMIN', 'CAIXA'].includes(receiver?.role))) {
+        (!verification.manualPixProofSeen || String(verification.manualPixNote || '').trim().length < 8 || !canReceiveOrder(order, receiver))) {
         throw new Error('Confirmação manual do Pix exige comprovante conferido e justificativa pelo menos 8 caracteres.');
       }
-      if (paymentMethod !== 'PIX' && !['ADMIN', 'CAIXA'].includes(receiver?.role)) { throw new Error('Somente o caixa pode receber esta comanda.'); }
+      if (paymentMethod !== 'PIX' && !canReceiveOrder(order, receiver)) { throw new Error('Somente o caixa pode receber esta comanda.'); }
       const tendered = cashReceived ?? order.cashTendered ?? amountFor('DINHEIRO');
       if (amountFor('DINHEIRO') && (!Number.isFinite(tendered) || Math.round(tendered * 100) < Math.round(amountFor('DINHEIRO') * 100))) { throw new Error('Valor recebido em dinheiro menor que a parcela em dinheiro.'); }
+      if (receiver?.role === 'ENTREGADOR' && paymentParts.some((part) => ['FIADO', 'SALDO_CLIENTE'].includes(part.method))) throw new Error('Fiado e saldo do cliente precisam ser autorizados no caixa.');
       const now = new Date().toISOString();
       const quantities = new Map();
       for (const item of order.items) {
@@ -273,7 +346,9 @@ class PdvRepository {
       }
       const receivedBy = paymentMethod === 'PIX' && verification?.verifiedVia !== 'MANUAL_CAIXA_PIX'
         ? (order.mixedReceivedBy || order.createdBy || { id: 'SICREDI', name: 'Sicredi · confirmação automática', role: 'SYSTEM' }) : receiver;
-      const completed = { ...order, paymentMethod, paymentParts: paymentParts.map((part) => ({ ...part, receivedBy, status: part.method === 'FIADO' ? 'ON_ACCOUNT' : 'APPROVED' })), receivedBy, cashierName: receivedBy.name, cashierEmail: receivedBy.email || '', status: 'CONFIRMED',
+      const completed = { ...order,
+        ...(isDelivery(order) && (!order.deliveryStatus || order.deliveryStatus === 'PENDING_DISPATCH') ? { deliveryStatus: 'PENDING_DELIVERY' } : {}),
+        ...(finishDelivery ? { deliveryStatus: 'DELIVERED', deliveredBy: receiver, deliveredAt: now } : {}), paymentMethod, paymentParts: paymentParts.map((part) => ({ ...part, receivedBy, status: part.method === 'FIADO' ? 'ON_ACCOUNT' : 'APPROVED' })), receivedBy, cashierName: receivedBy.name, cashierEmail: receivedBy.email || '', status: 'CONFIRMED',
         paymentStatus: onAccount ? 'ON_ACCOUNT' : 'APPROVED', paidAt: onAccount ? null : now,
         completedAt: now, stockDeducted: true, stockDeductedAt: order.stockDeductedAt || now,
         inventoryReserved: false, reservationReleasedAt: order.inventoryReserved ? now : order.reservationReleasedAt || '',
@@ -296,6 +371,7 @@ class PdvRepository {
           receivedBy, notes: 'Crédito do cliente utilizado em uma venda.', createdAt: now,
         });
       }
+      if (finishDelivery) completed.receiptText = formatOrderReceipt(completed);
       tx.set('orders', order.id, completed);
       if (verification) {
         for (const kind of ['customer-paid', 'owner-paid']) {

@@ -1,3 +1,4 @@
+const { isDelivery, isDeliverySettled, assertAssignedDelivery } = require('./delivery-policy');
 const { createHash } = require('node:crypto');
 const { formatOrderReceipt, money } = require('./receipt.util');
 const { normalizePaymentParts, partAmount } = require('./payment-parts');
@@ -33,7 +34,7 @@ function messageChunks(text, limit) {
 }
 
 function normalizeDeliveryLocation(raw) {
-  if (!raw || typeof raw !== 'object') return null;
+  if (!raw || typeof raw !== 'object' || raw.lat === null || raw.lng === null || raw.lat === '' || raw.lng === '') return null;
   const lat = Number(raw.lat);
   const lng = Number(raw.lng);
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
@@ -240,35 +241,14 @@ class PdvService {
     return { ...order, receiptText: formatOrderReceipt(order), qrCodeBase64: order.pixData?.qrCodeBase64 || '', receiptDelivery: { sent: delivery?.status === 'SENT' && Boolean(order.customerPhone), reason: delivery?.lastError || (order.customerPhone ? '' : 'Sem WhatsApp informado.') } };
   }
 
-  async listDeliveries(user, query = {}) {
+  async listDeliveries(user) {
     if (!user || !['ADMIN', 'CAIXA', 'ENTREGADOR'].includes(user.role)) {
       throw new Error('Sem permissão para consultar entregas.');
     }
-    const { orders } = await this.repository.listCashierOrders({
-      from: query.from || '2000-01-01',
-      to: query.to || '2099-12-31',
-    });
-    const isDeliveryOrder = (order) =>
-      order.orderType === 'DELIVERY' ||
-      order.fulfillment === 'delivery' ||
-      Boolean(order.deliveryAddress && String(order.deliveryAddress).trim()) ||
-      Boolean(order.deliveryLocation);
-    const deliveryOrders = orders.filter((order) => isDeliveryOrder(order) && order.status !== 'CANCELLED');
-    const getDeliveryStatus = (order) => {
-      if (order.deliveryStatus) return order.deliveryStatus;
-      if (order.deliveredAt) return 'DELIVERED';
-      if (order.assignedDriver?.id) return 'OUT_FOR_DELIVERY';
-      return 'PENDING_DELIVERY';
-    };
-    const enriched = deliveryOrders.map((order) => ({
-      ...order,
-      deliveryStatus: getDeliveryStatus(order),
-      isPaid: Boolean(
-        order.paidAt ||
-        (order.paymentStatus === 'APPROVED' && (order.paidAt || order.completedAt)) ||
-        order.paymentStatus === 'ON_ACCOUNT'
-      ),
-    }));
+    const orders = await this.repository.listDeliveryOrders(user);
+    const enriched = orders.filter((order) => isDelivery(order) && order.status !== 'CANCELLED').map((order) => ({
+      ...order, deliveryStatus: order.deliveryStatus || 'PENDING_DISPATCH', isPaid: isDeliverySettled(order),
+    })).sort((left, right) => String(left.createdAt || '').localeCompare(String(right.createdAt || '')));
     const available = enriched.filter((order) => order.deliveryStatus === 'PENDING_DELIVERY');
     const inRoute = enriched.filter((order) =>
       order.deliveryStatus === 'OUT_FOR_DELIVERY' &&
@@ -278,14 +258,18 @@ class PdvService {
       order.deliveryStatus === 'DELIVERED' &&
       (user.role === 'ADMIN' || user.role === 'CAIXA' || order.deliveredBy?.id === user.id || order.assignedDriver?.id === user.id)
     );
-    return { available, inRoute, completed };
+    const preparing = ['ADMIN', 'CAIXA'].includes(user.role) ? enriched.filter((order) => order.deliveryStatus === 'PENDING_DISPATCH') : [];
+    return { available, inRoute, completed: completed.slice(-100).reverse(), preparing };
   }
 
   async assignDelivery(orderId, user) {
     if (!user || !['ADMIN', 'CAIXA', 'ENTREGADOR'].includes(user.role)) {
       throw new Error('Apenas entregadores, caixa ou administrador podem assumir entregas.');
     }
-    return this.repository.assignDelivery(orderId, actor(user));
+    const order = await this.repository.assignDelivery(orderId, actor(user));
+    const jobs = await this.repository.list('pdv_outbox', 'orderId', orderId);
+    for (const job of jobs.filter((job) => job.kind === 'delivery-departure' && job.status !== 'SENT')) await this.deliver(job.id);
+    return order;
   }
 
   async releaseDelivery(orderId, user) {
@@ -301,35 +285,11 @@ class PdvService {
     }
     const existing = await this.repository.read('orders', orderId);
     if (!existing) throw new Error('Pedido não encontrado.');
-    const alreadyPaid = Boolean(
-      existing.paidAt ||
-      (existing.paymentStatus === 'APPROVED' && (existing.paidAt || existing.completedAt)) ||
-      existing.paymentStatus === 'ON_ACCOUNT'
-    );
-    if (alreadyPaid && !payload.receivePayment) {
-      const updated = await this.repository.markDelivered(orderId, actor(user), payload.notes || '');
-      return { order: { ...updated, receiptText: formatOrderReceipt(updated) } };
-    }
-    const method = String(payload.paymentMethod || existing.paymentMethod || 'DINHEIRO').toUpperCase();
-    if (method === 'PIX' && payload.generatePixQr) {
-      const updated = await this.receiveInCashier(orderId, user, { paymentMethod: 'PIX' });
-      return { order: updated, awaitingPix: true };
-    }
-    if (method === 'PIX' && payload.manualPixConfirm) {
-      await this.confirmManualPixInCashier(orderId, user, {
-        proofSeen: Boolean(payload.proofSeen),
-        note: payload.note || 'Pix conferido pelo entregador na entrega',
-      });
-      const delivered = await this.repository.markDelivered(orderId, actor(user), payload.notes || '');
-      return { order: { ...delivered, receiptText: formatOrderReceipt(delivered) } };
-    }
-    const paidOrder = await this.receiveInCashier(orderId, user, {
-      paymentMethod: method,
-      receivedAmount: payload.receivedAmount,
-      paymentParts: payload.paymentParts,
-    });
+    if (existing.deliveryStatus === 'DELIVERED') return { order: await this.repository.markDelivered(orderId, actor(user)) };
+    assertAssignedDelivery(existing, user);
+    if (!isDeliverySettled(existing)) throw new Error('Registre o recebimento antes de concluir a entrega.');
     const delivered = await this.repository.markDelivered(orderId, actor(user), payload.notes || '');
-    return { order: { ...(delivered || paidOrder), receiptText: formatOrderReceipt(delivered || paidOrder) } };
+    return { order: { ...delivered, receiptText: formatOrderReceipt(delivered) } };
   }
 
   async handlePix(txid, endToEndId) {
@@ -383,7 +343,8 @@ class PdvService {
       if (!phone && isOwner) { throw new Error('WhatsApp da horta não configurado.'); }
       if (!phone) { await this.repository.updateMessage(id, { status: 'SENT', skipped: true, leaseUntil: 0 }); return; }
       let text;
-      if (job.kind === 'receipt' || job.kind === 'customer-paid' || job.kind === 'pix-charge') {
+      if (job.kind === 'delivery-departure') { text = `Seu pedido #${order.ticketNumber || order.id.slice(-6)} saiu para entrega! Responsável: ${order.assignedDriver?.name || 'Equipe Conflora'}. ${isDeliverySettled(order) ? 'Pagamento já registrado.' : 'Pagamento será recebido na entrega.'}`; }
+      else if (job.kind === 'receipt' || job.kind === 'customer-paid' || job.kind === 'pix-charge') {
         text = !order.completedAt && !order.paidAt && job.kind !== 'customer-paid' ? formatCustomerOrderMessage(order) : formatOrderReceipt(order);
       }
       else if (settlement?.entryType === 'CREDITO_CLIENTE') { text = `CONFLORA — CRÉDITO DO CLIENTE\nCliente: ${settlement.customerName}\nValor recebido: ${money(settlement.amount)}\nCrédito disponível: ${money(settlement.newCreditBalance)}\nRecebido por: ${settlement.receivedBy.name}\nForma: ${settlementMethods}`; }

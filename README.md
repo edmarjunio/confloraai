@@ -110,6 +110,28 @@ Não use credencial privada de conta de serviço no navegador. O backend deve us
 - Clicar fora das janelas fecha o diálogo. Fechar o diálogo de pagamento não cancela a comanda nem confirma recebimento.
 - O backend precisa de acesso ao bucket configurado em `FIREBASE_STORAGE_BUCKET` para guardar comprovantes. Falha no envio bloqueia a confirmação manual; os testes usam armazenamento isolado em memória.
 
+## Entregador, localização e navegação
+
+### Fluxo operacional
+
+1. **Cliente / caixa:** ao escolher Entrega, informe nome, WhatsApp e endereço. Use **Usar minha localização**, **Selecionar no mapa** ou **Buscar endereço**; ajuste o pino no portão e informe a referência. O ponto acompanha o pedido. E-mail e CPF continuam opcionais no caixa.
+2. **Caixa/Admin:** abra **Entregas → Preparando**, confira e separe os itens; use **Pedido separado · liberar entrega**. Pix pendente não é liberado. Quando o Pix é confirmado, o pedido pago já fica disponível para entrega.
+3. **Entregador:** entre em `/caixa` com o PIN do usuário de cargo **ENTREGADOR**, cadastrado em **Admin → Equipe**. A sessão abre a aba Entregas. Em **Disponíveis**, abra o pedido e toque em **Aceitar e sair para entrega**. A aceitação é transacional: apenas um responsável assume o pedido. O WhatsApp do cliente recebe o aviso de saída pela fila de mensagens configurada.
+4. **Rota:** em **Minhas entregas**, abra o pedido para ver endereço, referência, mapa, estimativa de distância/tempo e botões **Abrir no Google Maps / Abrir no Waze**. A rota integrada parte da loja configurada ou do GPS usado explicitamente pelo entregador. A navegação curva a curva acontece no aplicativo Google Maps/Waze.
+5. **Na casa do cliente:** pedido já pago exige apenas **Confirmar entrega ao cliente**. Pedido pendente permite dinheiro, débito, crédito, pagamentos divididos, QR Pix na hora ou Pix manual com comprovante obrigatório. Receber e concluir gravam pagamento, operador, entregador e baixa em uma única transação. Se o Pix da porta for confirmado pelo banco, falta apenas confirmar a entrega física. Fiado precisa ser autorizado previamente pelo caixa; o entregador não lança novas dívidas.
+6. **Devolver à fila:** use quando precisar transferir a entrega. O pagamento e a reserva do pedido permanecem; outro entregador pode assumir. Pedidos cancelados desaparecem da fila. Pedidos Pix vencidos continuam sujeitos ao cancelamento e à liberação da reserva.
+
+O entregador acessa pedidos disponíveis e suas próprias entregas; não acessa vendas gerais, estoque, clientes, relatórios financeiros ou administração. A aba atualiza por eventos do servidor e possui atualização de apoio. O histórico de entregas é limitado aos 100 registros mais recentes.
+
+### Configurar Google Maps
+
+- Configure `GOOGLE_MAPS_API_KEY` no backend publicado. A chave anteriormente fornecida foi mantida no `.env` local; não há chave fixa no código. No Google Cloud do projeto da chave, habilite **Maps JavaScript API**, **Geocoding API** e **Routes API**, com faturamento ativo.
+- Restrinja a chave aos domínios de produção e desenvolvimento usados pela loja e às APIs acima. Use `GOOGLE_MAPS_MAP_ID` para o Map ID da loja; sem ele, a integração usa o ID de demonstração dos exemplos oficiais.
+- Configure `STORE_LAT` e `STORE_LNG` com o ponto real da Conflora. Sem essas coordenadas, a rota integrada solicita o GPS do entregador; ela não usa o centro de Mineiros como se fosse a loja.
+- GPS exige HTTPS (localhost funciona para desenvolvimento) e autorização do navegador. Falha do mapa não bloqueia informar endereço ou abrir navegação externa. A API de mapas só é carregada quando o usuário abre o mapa; a posição do entregador não é acompanhada continuamente.
+- Os índices de `deliveryStatus`, `assignedDriver.id` e `deliveredAt` estão em `firestore.indexes.json`. Em novos ambientes, publique-os com `firebase deploy --only firestore:indexes --project SEU_PROJETO`.
+- Referências: [rotas na Maps JavaScript API](https://developers.google.com/maps/documentation/javascript/routes/get-a-route), [marcador arrastável](https://developers.google.com/maps/documentation/javascript/advanced-markers/draggable-markers), [navegação Waze](https://developers.google.com/waze/deeplinks/).
+
 ## Vincular a API Pix do Sicredi
 
 O catálogo principal e o PDV usam a **API Pix Sicredi**. A conexão real depende de adesão, credenciais e certificado emitidos para a Conflora. Os testes locais usam integrações simuladas.
