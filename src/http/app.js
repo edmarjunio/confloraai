@@ -1110,6 +1110,17 @@ function createApp({
     repository: messageService.firestoreRepo,
     assistant: storeAssistant || new StoreAssistant({ client: messageService.agentService?.getAiClient?.(), model: config.gemini.model }),
   });
+  app.get('/api/maps-config', (_req, res) => {
+    res.json({
+      apiKey: config.maps?.apiKey || '',
+      storeLocation: {
+        lat: config.maps?.storeLat ?? -17.5694,
+        lng: config.maps?.storeLng ?? -52.5511,
+        name: config.maps?.storeName || 'Conflora Horta e Viveiro',
+        address: config.maps?.storeAddress || 'Mineiros - GO',
+      },
+    });
+  });
   app.get('/api/auth/me', (req, res) => {
     res.status(req.user ? 200 : 401).json({ user: req.user || null });
   });
@@ -1121,7 +1132,7 @@ function createApp({
     if (req.path === '/auth/login' || (req.path === '/auth/users' && req.method === 'GET')) {return next();}
     if (!req.user) {return res.status(401).json({ error: 'Entre na sua conta.' });}
     const cashierRoute = /^(?:\/orders(?:\/manual)?|\/daily-metrics|\/stock\/quick-entry|\/alterations|\/notifications(?:\/[^/]+\/read)?)$/.test(req.path);
-    if (req.user.role !== 'ADMIN' && !(['CAIXA', 'VENDEDOR'].includes(req.user.role) && cashierRoute)) {
+    if (req.user.role !== 'ADMIN' && !(['CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(req.user.role) && cashierRoute)) {
       return res.status(403).json({ error: 'Acesso não autorizado para este perfil.' });
     }
     next();
@@ -1516,6 +1527,7 @@ function createApp({
         customerPhone,
         orderType,
         deliveryAddress,
+        deliveryLocation,
         paymentMethod,
         items,
         coupon,
@@ -1642,6 +1654,8 @@ function createApp({
         customerPhone,
         orderType: orderType || 'DELIVERY',
         deliveryAddress: deliveryAddress || 'Retirada no Viveiro Conflora',
+        ...(deliveryLocation && typeof deliveryLocation === 'object' ? { deliveryLocation } : {}),
+        ...((orderType || 'DELIVERY') === 'DELIVERY' ? { deliveryStatus: 'PENDING_DELIVERY' } : {}),
         paymentMethod: resolvedPaymentMethod,
         items: orderItems,
         subtotal: calculatedSubtotal,
@@ -2524,7 +2538,7 @@ function createApp({
   app.get('/api/admin/auth/users', async (req, res) => {
     try {
       const users = await messageService.firestoreRepo.getAllUsers();
-      res.status(200).json(req.user?.role === 'ADMIN' ? users.map(safeUser) : users.filter(u => u.active !== false && ['ADMIN', 'CAIXA', 'VENDEDOR'].includes(u.role)).map(u => ({ id: u.id, name: u.name, role: u.role })));
+      res.status(200).json(req.user?.role === 'ADMIN' ? users.map(safeUser) : users.filter(u => u.active !== false && ['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(u.role)).map(u => ({ id: u.id, name: u.name, role: u.role })));
     } catch (err) {
       Logger.error('Erro ao listar usuários', err);
       res.status(500).json({ error: err.message });

@@ -249,6 +249,7 @@ function installStorefront(app, { express, firestore, repository, assistant }) {
           paymentMethod: body.paymentMethod,
           fulfillment: body.fulfillment,
           cashTenderedMinor,
+          ...(body.deliveryLocation && typeof body.deliveryLocation === "object" ? { deliveryLocation: body.deliveryLocation } : {}),
         },
         req.storeUser?.id || null,
         identifier(req.headers["idempotency-key"]),

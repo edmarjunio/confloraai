@@ -601,11 +601,26 @@ async function normalizeExistingCheckout(req, repository) {
     input.paymentMethod !== "CASH" || cashTenderedMinor >= orderTotalMinor,
     "Informe o valor recebido para calcular o troco.",
   );
+  let deliveryLocation = null;
+  if (input.fulfillment === "delivery" && input.deliveryLocation && typeof input.deliveryLocation === "object") {
+    const lat = Number(input.deliveryLocation.lat);
+    const lng = Number(input.deliveryLocation.lng);
+    if (Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      deliveryLocation = {
+        lat: Number(lat.toFixed(6)),
+        lng: Number(lng.toFixed(6)),
+        formattedAddress: String(input.deliveryLocation.formattedAddress || input.address || "").trim().slice(0, 300),
+        placeId: String(input.deliveryLocation.placeId || "").trim().slice(0, 160),
+        capturedVia: ["gps", "search", "pin"].includes(input.deliveryLocation.capturedVia) ? input.deliveryLocation.capturedVia : "pin",
+      };
+    }
+  }
   req.body = {
     customerName: String(input.customer?.name || "").trim(),
     customerPhone: String(input.customer?.phone || "").replace(/\D/g, ""),
     orderType: input.fulfillment === "delivery" ? "DELIVERY" : "PICKUP",
     deliveryAddress: input.address,
+    ...(deliveryLocation ? { deliveryLocation } : {}),
     paymentMethod: { PIX: "PIX", CARD: "CARTAO", CASH: "DINHEIRO" }[
       input.paymentMethod
     ],

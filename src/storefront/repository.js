@@ -183,6 +183,8 @@ class StoreRepository {
         address: input.address,
         serviceArea: input.serviceArea,
         fulfillment: input.fulfillment,
+        ...(input.deliveryLocation ? { deliveryLocation: input.deliveryLocation } : {}),
+        ...(input.fulfillment === "delivery" ? { deliveryStatus: "PENDING_DELIVERY" } : {}),
         paymentMethod: input.paymentMethod,
         items,
         subtotalMinor,

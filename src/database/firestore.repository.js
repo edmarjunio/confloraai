@@ -119,9 +119,18 @@ class FirestoreRepository {
         active: true,
         createdAt: new Date().toISOString(),
       },
+      {
+        id: 'usr-entregador1',
+        name: 'Entregador Conflora',
+        email: 'entregador1@conflora.com.br',
+        role: 'ENTREGADOR',
+        pin: '2222',
+        active: true,
+        createdAt: new Date().toISOString(),
+      },
     ];
 
-    for (const u of this.isInMemory ? defaultUsers : []) {
+    for (const u of defaultUsers) {
       this.inMemoryUsers.set(u.id, u);
     }
 
@@ -2456,11 +2465,24 @@ class FirestoreRepository {
   // --- Colaboradores e Controle de Acesso (RBAC) ---
 
   async getAllUsers() {
-    if (this.firestore) {
-      const snap = await this.firestore.collection('users').get();
-      return snap.docs.map(d => ({ ...d.data(), id: d.id }));
+    if (this.firestore && !this._firestoreClientDisabled) {
+      try {
+        const snap = await this.firestore.collection('users').get();
+        const docs = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+        if (!docs.some(u => u.role === 'ENTREGADOR')) {
+          const defaultDriver = this.inMemoryUsers.get('usr-entregador1');
+          if (defaultDriver) docs.push(defaultDriver);
+        }
+        return docs;
+      } catch (err) {
+        if (err && (err.code === 7 || err.code === 'permission-denied' || String(err.message || '').includes('PERMISSION_DENIED'))) {
+          this._firestoreClientDisabled = true;
+          return Array.from(this.inMemoryUsers.values());
+        }
+        throw err;
+      }
     }
-    if (!this.isInMemory) {throw new Error('Cadastro de usuários indisponível.');}
+    if (!this.isInMemory && !this._firestoreClientDisabled) {throw new Error('Cadastro de usuários indisponível.');}
     return Array.from(this.inMemoryUsers.values());
   }
 
@@ -2476,7 +2498,7 @@ class FirestoreRepository {
       .toUpperCase();
 
     if (
-      !['ADMIN', 'CAIXA', 'VENDEDOR', 'CLIENTE'].includes(role)
+      !['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR', 'CLIENTE'].includes(role)
     ) {
       role = 'CLIENTE';
     }
@@ -2491,7 +2513,7 @@ class FirestoreRepository {
       updatedAt: new Date().toISOString(),
     };
 
-    if (this.firestore) {
+    if (this.firestore && !this._firestoreClientDisabled) {
       try {
         await this.firestore
           .collection('users')
@@ -2680,12 +2702,12 @@ class FirestoreRepository {
       .toUpperCase();
 
     if (
-      !['ADMIN', 'CAIXA', 'VENDEDOR', 'CLIENTE'].includes(normalizedRole)
+      !['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR', 'CLIENTE'].includes(normalizedRole)
     ) {
       return {
         success: false,
         error:
-          'Perfil inválido. Escolha ADMIN, CAIXA, VENDEDOR ou CLIENTE.',
+          'Perfil inválido. Escolha ADMIN, CAIXA, VENDEDOR, ENTREGADOR ou CLIENTE.',
       };
     }
 
@@ -2720,7 +2742,7 @@ class FirestoreRepository {
       return false;
     }
 
-    if (this.firestore) {
+    if (this.firestore && !this._firestoreClientDisabled) {
       try {
         await this.firestore
           .collection('users')
@@ -2762,7 +2784,7 @@ class FirestoreRepository {
       };
     }
 
-    if (!['ADMIN', 'CAIXA', 'VENDEDOR'].includes(user.role) || !pin ||
+    if (!['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(user.role) || !pin ||
       !((user.pin && String(user.pin) === String(pin)) ||
         (user.password && String(user.password) === String(pin)))) {
       return {

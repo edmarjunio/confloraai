@@ -112,6 +112,13 @@ const config = Object.freeze({
   },
 
   adminSecret: process.env.ADMIN_SECRET || '',
+  maps: {
+    apiKey: (process.env.GOOGLE_MAPS_API_KEY || 'AIzaSyB8nHeWaeTMTLUoViRk2Kpt5dVxAPYq3po').trim(),
+    storeLat: parseFloat(process.env.STORE_LAT || '-17.5694'),
+    storeLng: parseFloat(process.env.STORE_LNG || '-52.5511'),
+    storeName: process.env.STORE_NAME || 'Conflora Horta e Viveiro',
+    storeAddress: process.env.STORE_ADDRESS || 'Mineiros - GO',
+  },
   firebase: {
     apiKey: process.env.FIREBASE_API_KEY || '',
     authDomain: process.env.FIREBASE_AUTH_DOMAIN || '',

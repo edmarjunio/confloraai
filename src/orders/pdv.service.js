@@ -32,6 +32,27 @@ function messageChunks(text, limit) {
   return chunks;
 }
 
+function normalizeDeliveryLocation(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const lat = Number(raw.lat);
+  const lng = Number(raw.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    return null;
+  }
+  const address = String(raw.address || '').trim().slice(0, 300);
+  const reference = String(raw.reference || '').trim().slice(0, 200);
+  const accuracy = Number.isFinite(Number(raw.accuracy)) ? Math.round(Number(raw.accuracy)) : null;
+  return {
+    lat: Number(lat.toFixed(6)),
+    lng: Number(lng.toFixed(6)),
+    address,
+    reference,
+    ...(accuracy !== null ? { accuracy } : {}),
+    mapsUrl: `https://www.google.com/maps/dir/?api=1&destination=${lat.toFixed(6)},${lng.toFixed(6)}`,
+    wazeUrl: `https://waze.com/ul?ll=${lat.toFixed(6)},${lng.toFixed(6)}&navigate=yes`,
+  };
+}
+
 class PdvService {
   constructor({ repository, pix, whatsapp, ownerPhone = '', taskQueueClient = null }) { Object.assign(this, { repository, pix, whatsapp, ownerPhone, taskQueueClient }); }
 
@@ -39,6 +60,7 @@ class PdvService {
   async create(input, user, { approvedDiscount = false } = {}) {
     const createdBy = actor(user);
     const id = requestId(input.requestId);
+    const deliveryLocation = input.orderType === 'DELIVERY' ? normalizeDeliveryLocation(input.deliveryLocation) : null;
     const requestPayload = {
       requestId: input.requestId,
       items: input.items,
@@ -55,6 +77,7 @@ class PdvService {
       notes: input.notes,
       deferToCashier: input.deferToCashier === true,
       paymentParts: input.paymentParts,
+      ...(deliveryLocation ? { deliveryLocation } : {}),
     };
     const requestHash = createHash('sha256').update(JSON.stringify(requestPayload)).digest('hex');
     const previous = await this.repository.read('orders', id);
@@ -133,11 +156,14 @@ class PdvService {
     }
     const ticketNumber = id.replace(/-/g, '').slice(0, 10).toUpperCase();
     const pixData = hasPix && !deferToCashier ? { txid: id.replace(/-/g, '').toUpperCase(), provider: 'SICREDI' } : null;
+    const isDelivery = input.orderType === 'DELIVERY';
     const order = await this.repository.create({
       id, requestHash, source: 'PDV', ticketNumber, items, subtotal: subtotalMinor / 100,
       discountPercent, discountAmount: discountMinor / 100, freightValue, total,
       customerId, customerName: String(input.customerName || customer?.name || 'Cliente Balcão').slice(0, 100), customerPhone: phone,
-      orderType: input.orderType === 'DELIVERY' ? 'DELIVERY' : 'PICKUP', deliveryAddress: String(input.deliveryAddress || '').slice(0, 250), notes: String(input.notes || '').slice(0, 500),
+      orderType: isDelivery ? 'DELIVERY' : 'PICKUP', deliveryAddress: String(input.deliveryAddress || '').slice(0, 250), notes: String(input.notes || '').slice(0, 500),
+      ...(isDelivery ? { deliveryStatus: 'PENDING_DISPATCH' } : {}),
+      ...(deliveryLocation ? { deliveryLocation } : {}),
       createdBy, sellerName: createdBy.name, sellerEmail: createdBy.email, operatorId: user.id, operatorName: createdBy.name, operatorEmail: createdBy.email,
       receivedBy: null, paymentMethod, paymentStatus: 'PENDING', status: pixData ? 'CREATING_PIX' : deferToCashier ? 'AWAITING_PAYMENT' : 'AWAITING_CASHIER',
       cashTendered,
@@ -211,6 +237,98 @@ class PdvService {
     await this.deliver(`${order.id}-receipt`);
     const delivery = await this.repository.read('pdv_outbox', `${order.id}-receipt`);
     return { ...order, receiptText: formatOrderReceipt(order), qrCodeBase64: order.pixData?.qrCodeBase64 || '', receiptDelivery: { sent: delivery?.status === 'SENT' && Boolean(order.customerPhone), reason: delivery?.lastError || (order.customerPhone ? '' : 'Sem WhatsApp informado.') } };
+  }
+
+  async listDeliveries(user, query = {}) {
+    if (!user || !['ADMIN', 'CAIXA', 'ENTREGADOR'].includes(user.role)) {
+      throw new Error('Sem permissão para consultar entregas.');
+    }
+    const { orders } = await this.repository.listCashierOrders({
+      from: query.from || '2000-01-01',
+      to: query.to || '2099-12-31',
+    });
+    const isDeliveryOrder = (order) =>
+      order.orderType === 'DELIVERY' ||
+      order.fulfillment === 'delivery' ||
+      Boolean(order.deliveryAddress && String(order.deliveryAddress).trim()) ||
+      Boolean(order.deliveryLocation);
+    const deliveryOrders = orders.filter((order) => isDeliveryOrder(order) && order.status !== 'CANCELLED');
+    const getDeliveryStatus = (order) => {
+      if (order.deliveryStatus) return order.deliveryStatus;
+      if (order.deliveredAt) return 'DELIVERED';
+      if (order.assignedDriver?.id) return 'OUT_FOR_DELIVERY';
+      return 'PENDING_DELIVERY';
+    };
+    const enriched = deliveryOrders.map((order) => ({
+      ...order,
+      deliveryStatus: getDeliveryStatus(order),
+      isPaid: Boolean(
+        order.paidAt ||
+        (order.paymentStatus === 'APPROVED' && (order.paidAt || order.completedAt)) ||
+        order.paymentStatus === 'ON_ACCOUNT'
+      ),
+    }));
+    const available = enriched.filter((order) => order.deliveryStatus === 'PENDING_DELIVERY');
+    const inRoute = enriched.filter((order) =>
+      order.deliveryStatus === 'OUT_FOR_DELIVERY' &&
+      (user.role === 'ADMIN' || user.role === 'CAIXA' || order.assignedDriver?.id === user.id)
+    );
+    const completed = enriched.filter((order) =>
+      order.deliveryStatus === 'DELIVERED' &&
+      (user.role === 'ADMIN' || user.role === 'CAIXA' || order.deliveredBy?.id === user.id || order.assignedDriver?.id === user.id)
+    );
+    return { available, inRoute, completed };
+  }
+
+  async assignDelivery(orderId, user) {
+    if (!user || !['ADMIN', 'CAIXA', 'ENTREGADOR'].includes(user.role)) {
+      throw new Error('Apenas entregadores, caixa ou administrador podem assumir entregas.');
+    }
+    return this.repository.assignDelivery(orderId, actor(user));
+  }
+
+  async releaseDelivery(orderId, user) {
+    if (!user || !['ADMIN', 'CAIXA', 'ENTREGADOR'].includes(user.role)) {
+      throw new Error('Sem permissão para devolver entrega.');
+    }
+    return this.repository.releaseDelivery(orderId, actor(user));
+  }
+
+  async completeDelivery(orderId, user, payload = {}) {
+    if (!user || !['ADMIN', 'CAIXA', 'ENTREGADOR'].includes(user.role)) {
+      throw new Error('Sem permissão para concluir entrega.');
+    }
+    const existing = await this.repository.read('orders', orderId);
+    if (!existing) throw new Error('Pedido não encontrado.');
+    const alreadyPaid = Boolean(
+      existing.paidAt ||
+      (existing.paymentStatus === 'APPROVED' && (existing.paidAt || existing.completedAt)) ||
+      existing.paymentStatus === 'ON_ACCOUNT'
+    );
+    if (alreadyPaid && !payload.receivePayment) {
+      const updated = await this.repository.markDelivered(orderId, actor(user), payload.notes || '');
+      return { order: { ...updated, receiptText: formatOrderReceipt(updated) } };
+    }
+    const method = String(payload.paymentMethod || existing.paymentMethod || 'DINHEIRO').toUpperCase();
+    if (method === 'PIX' && payload.generatePixQr) {
+      const updated = await this.receiveInCashier(orderId, user, { paymentMethod: 'PIX' });
+      return { order: updated, awaitingPix: true };
+    }
+    if (method === 'PIX' && payload.manualPixConfirm) {
+      const updated = await this.confirmManualPixInCashier(orderId, user, {
+        proofSeen: Boolean(payload.proofSeen),
+        note: payload.note || 'Pix conferido pelo entregador na entrega',
+      });
+      const delivered = await this.repository.markDelivered(orderId, actor(user), payload.notes || '');
+      return { order: { ...delivered, receiptText: formatOrderReceipt(delivered) } };
+    }
+    const paidOrder = await this.receiveInCashier(orderId, user, {
+      paymentMethod: method,
+      receivedAmount: payload.receivedAmount,
+      paymentParts: payload.paymentParts,
+    });
+    const delivered = await this.repository.markDelivered(orderId, actor(user), payload.notes || '');
+    return { order: { ...(delivered || paidOrder), receiptText: formatOrderReceipt(delivered || paidOrder) } };
   }
 
   async handlePix(txid, endToEndId) {
@@ -310,4 +428,4 @@ class PdvService {
   }
 }
 
-module.exports = { PdvService, actor, normalizePhone, requestId, ORDER_PAYMENT_METHODS };
+module.exports = { PdvService, actor, normalizePhone, requestId, ORDER_PAYMENT_METHODS, normalizeDeliveryLocation };
