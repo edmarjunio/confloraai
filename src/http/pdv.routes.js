@@ -171,8 +171,8 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     const canViewOpenOrder = (order) => canViewPersonalOrder(order) || (req.user.role === 'CAIXA' && !order.completedAt && order.status !== 'CANCELLED');
     const openOrders = orders.filter((order) => !order.completedAt && order.status !== 'CANCELLED' &&
       canViewOpenOrder(order));
-    const pendingConfirmation = openOrders.filter((order) => order.status === 'AWAITING_CASHIER' || (order.status === 'PENDING' && order.paymentMethod !== 'PIX'));
-    const pendingPayment = openOrders.filter((order) => ['AWAITING_PAYMENT', 'CREATING_PIX', 'AWAITING_PIX'].includes(order.status) || (order.status === 'PENDING' && order.paymentMethod === 'PIX'));
+    const pendingConfirmation = openOrders.filter((order) => order.status === 'AWAITING_CONFIRMATION');
+    const pendingPayment = openOrders.filter((order) => ['AWAITING_CASHIER', 'AWAITING_PAYMENT', 'CREATING_PIX', 'AWAITING_PIX', 'PENDING'].includes(order.status));
     const history = orders.filter((order) => canViewPersonalOrder(order) && isWithinRange(order.paidAt || order.completedAt || order.createdAt, range));
     const completed = history.filter((order) => order.completedAt && order.status !== 'CANCELLED');
     const confirmed = completed.filter((order) => order.paymentStatus === 'ON_ACCOUNT');
@@ -232,8 +232,8 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
   app.post('/api/caixa/orders/:id/move', requireCashier, route(async (req, res) => {
     const order = await findOrder(req);
     const { from, to } = req.body || {};
-    const stage = ['AWAITING_CASHIER', 'PENDING'].includes(order.status) && !order.pixData?.txid ? 'confirmation'
-      : (['AWAITING_PAYMENT', 'CREATING_PIX', 'AWAITING_PIX'].includes(order.status) || (order.status === 'PENDING' && order.pixData?.txid)) ? 'payment' : 'closed';
+    const stage = order.status === 'AWAITING_CONFIRMATION' ? 'confirmation'
+      : !order.completedAt && ['AWAITING_CASHIER', 'AWAITING_PAYMENT', 'CREATING_PIX', 'AWAITING_PIX', 'PENDING'].includes(order.status) ? 'payment' : 'closed';
     if (from !== stage || !((from === 'confirmation' && to === 'payment') || (from === 'payment' && to === 'paid'))) {
       throw new Error('Movimento permitido: confirmação → pagamento → pago. Atualize a comanda se ela mudou.');
     }

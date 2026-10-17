@@ -1068,7 +1068,7 @@ class FirestoreRepository {
         continue;
       }
 
-      if (ord.status === 'AWAITING_CASHIER') {
+      if (['AWAITING_CASHIER', 'AWAITING_PAYMENT', 'AWAITING_CONFIRMATION'].includes(ord.status)) {
         pendingCashier.push(ord);
       } else if (ord.status === 'AWAITING_PIX') {
         pendingPix.push(ord);

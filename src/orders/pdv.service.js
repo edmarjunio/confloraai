@@ -139,7 +139,7 @@ class PdvService {
       customerId, customerName: String(input.customerName || customer?.name || 'Cliente Balcão').slice(0, 100), customerPhone: phone,
       orderType: input.orderType === 'DELIVERY' ? 'DELIVERY' : 'PICKUP', deliveryAddress: String(input.deliveryAddress || '').slice(0, 250), notes: String(input.notes || '').slice(0, 500),
       createdBy, sellerName: createdBy.name, sellerEmail: createdBy.email, operatorId: user.id, operatorName: createdBy.name, operatorEmail: createdBy.email,
-      receivedBy: null, paymentMethod, paymentStatus: 'PENDING', status: pixData ? 'CREATING_PIX' : 'AWAITING_CASHIER',
+      receivedBy: null, paymentMethod, paymentStatus: 'PENDING', status: pixData ? 'CREATING_PIX' : deferToCashier ? 'AWAITING_PAYMENT' : 'AWAITING_CASHIER',
       cashTendered,
       paymentParts: paymentParts.map((part) => ({ ...part, ...(hasPix && !deferToCashier && ['DINHEIRO', 'DEBITO', 'CREDITO'].includes(part.method) ? { status: 'RECEIVED_AT_CASHIER', receivedBy: createdBy } : {}) })), deferToCashier,
       ...(hasPix && !deferToCashier && paymentParts.length > 1 ? { mixedReceivedBy: createdBy } : {}),

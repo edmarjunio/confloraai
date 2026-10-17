@@ -224,11 +224,11 @@ test('cash PDV creation remains pending if stock confirmation fails', async () =
 
 test('Firestore transaction: command reservation and settlement roll back together on failed commit', async () => {
   const { PdvRepository } = require('../src/orders/pdv.repository');
-  const state = setup('transaction', { source: 'PDV', status: 'AWAITING_CASHIER', paymentMethod: 'DINHEIRO' });
+  const state = setup('transaction', { source: 'PDV', status: 'AWAITING_CONFIRMATION', paymentMethod: 'DINHEIRO' });
   const pdv = new PdvRepository(state.repo); const cashier = { id: 'cashier', name: 'Caixa', role: 'CAIXA' };
   state.store.failCommit = true;
   await assert.rejects(pdv.advanceToPayment('sale', cashier), /Commit/);
-  assert.equal(state.order().status, 'AWAITING_CASHIER');
+  assert.equal(state.order().status, 'AWAITING_CONFIRMATION');
   assert.equal(state.store.read('products/plant').reservedQuantity, undefined);
   state.store.failCommit = false; await pdv.advanceToPayment('sale', cashier);
   assert.equal(state.stock(), 10); assert.equal(state.store.read('products/plant').reservedQuantity, 2);

@@ -1651,11 +1651,11 @@ function createApp({
         cashTendered: Number(cashTendered) || 0,
         changeDue: Number(changeDue) || 0,
         ...(idempotencyKey ? { idempotencyFingerprint: checkoutFingerprint } : {}),
-        status: resolvedPaymentMethod === 'PIX' ? 'CREATING_PIX' : 'AWAITING_CASHIER',
+        status: resolvedPaymentMethod === 'PIX' ? 'CREATING_PIX' : 'AWAITING_PAYMENT',
         source: 'WEB_CATALOG',
         paymentStatus: 'PENDING',
         ...(pixData ? { pixData, pixProvider: 'SICREDI', paymentProvider: 'SICREDI' } : {}),
-      }, { requirePersistence: resolvedPaymentMethod === 'PIX', reserveInventory: resolvedPaymentMethod === 'PIX' });
+      }, { requirePersistence: resolvedPaymentMethod === 'PIX', reserveInventory: true });
 
       let receiptDelivery = { sent: false, reason: 'Envio não solicitado.' };
       if (order.source === 'WEB_CATALOG') {

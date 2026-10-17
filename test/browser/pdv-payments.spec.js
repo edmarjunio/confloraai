@@ -47,7 +47,7 @@ test('caixa divide pagamento e pode encaminhar uma comanda Pix sem emitir cobran
   const result = page.waitForResponse((response) => response.url().endsWith('/api/caixa/orders') && response.request().method() === 'POST');
   await page.getByRole('button', { name: 'Enviar comanda ao caixa', exact: true }).click();
   const { order } = await (await result).json();
-  expect(order.status).toBe('AWAITING_CASHIER');
+  expect(order.status).toBe('AWAITING_PAYMENT');
   expect(order.pixData).toBeNull();
   await expect(page.getByRole('dialog', { name: 'Pedido registrado', exact: true })).toBeVisible();
 });
@@ -58,16 +58,11 @@ test('quadro permite apenas avançar etapas e abre recebimento ao arrastar para 
   const creation = await page.request.post('/api/caixa/orders', { data: { requestId: require('node:crypto').randomUUID(), items: [{ productId: 'test-plant', quantity: 1 }], paymentMethod: 'DINHEIRO', deferToCashier: true, customerName: 'Arrastar Teste' } });
   expect(creation.ok()).toBe(true); const { order } = await creation.json();
   await page.goto('/pdv'); await expect(page.getByPlaceholder('Nome, categoria ou descrição (Ex.: plantas de sombra, plantas para jardim, flores, e etc)')).toBeVisible(); await page.keyboard.press('F2');
-  const confirmation = page.getByRole('region', { name: 'ESPERANDO CONFIRMAÇÃO', exact: true });
   const payment = page.getByRole('region', { name: 'ESPERANDO PAGAMENTO', exact: true });
   const paid = page.getByRole('region', { name: 'PAGOS / FINALIZADOS', exact: true });
   const card = (region) => region.locator('cf-card').filter({ hasText: 'Arrastar Teste' });
-  await expect(card(confirmation)).toHaveAttribute('draggable', 'true');
-  await expect(card(confirmation)).toHaveCSS('background-color', 'rgba(254, 225, 104, 0.38)');
-  await card(confirmation).dragTo(payment.locator('header'));
+  await expect(card(payment)).toHaveAttribute('draggable', 'true');
   const dialog = page.getByRole('dialog', { name: `Comanda #${order.ticketNumber}` });
-  await expect(dialog.getByRole('heading', { name: 'Receber no caixa' })).toBeVisible();
-  await dialog.getByRole('button', { name: 'Fechar', exact: true }).click();
   await expect(card(payment)).toHaveCSS('background-color', 'rgba(125, 211, 252, 0.3)');
   await card(payment).dragTo(paid.locator('header'));
   await expect(dialog.getByRole('heading', { name: 'Receber no caixa' })).toBeVisible();

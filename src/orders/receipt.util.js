@@ -48,7 +48,7 @@ function formatOrderReceipt(order) {
   const auditLines = [];
   if (!cashierName) {
     auditLines.push(`👤 *Pedido feito por:* ${sellerName}`);
-    auditLines.push(`⏳ *Recebimento:* ${rawPaymentMethod === 'PIX' && order.pixData ? 'Aguardando confirmação do Sicredi' : 'Aguardando caixa'}`);
+    auditLines.push(`⏳ *Recebimento:* ${rawPaymentMethod === 'PIX' && order.pixData ? 'Aguardando confirmação do Sicredi' : 'Aguardando pagamento'}`);
   } else if (sellerName === cashierName || rawPaymentMethod === 'PIX') {
     auditLines.push(`👤 *Pedido feito por:* ${sellerName}`);
     const pixConfirmation = order.verifiedVia === 'MANUAL_CAIXA_PIX'

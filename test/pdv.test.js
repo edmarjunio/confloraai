@@ -42,7 +42,7 @@ function setup() {
 test('deferred Pix creates only a command; mixed receipts allocate amounts, debt and stock once', async () => {
   const s = setup();
   const order = await s.service.create({ ...s.input, paymentMethod: 'PIX', deferToCashier: true }, cashier);
-  assert.equal(order.status, 'AWAITING_CASHIER');
+  assert.equal(order.status, 'AWAITING_PAYMENT');
   assert.equal(order.pixData, null);
   assert.equal(s.chargeCalls.length, 0);
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
@@ -167,7 +167,7 @@ test('HTTP autonomous debt payment updates the logged-in customer through the of
 test('seller creates a pending order; cashier receives once and attribution survives', async () => {
   const s = setup();
   const order = await s.service.create({ ...s.input, sellerName: 'Forged', receivedBy: actor(cashier) }, seller);
-  assert.equal(order.status, 'AWAITING_CASHIER');
+  assert.equal(order.status, 'AWAITING_PAYMENT');
   assert.equal(order.createdBy.name, seller.name);
   assert.equal(order.createdBy.email, seller.email);
   assert.equal(Object.hasOwn(order, 'assignedCashier'), false);
@@ -224,7 +224,7 @@ test('Pix receipt includes image; bank verification finalizes exactly once under
 test('Pix generated at the cashier reserves stock and blocks a competing receipt until payment', async () => {
   const s = setup();
   const order = await s.service.create(s.input, seller);
-  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity || 0, 0);
+  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 2);
 
   const pixOrder = await s.repository.requestPixAtCashier(order.id, actor(cashier));
   assert.equal(pixOrder.inventoryReserved, true);
@@ -396,7 +396,7 @@ test('Firestore transaction rolls back stock, debt and order together on failed 
   await assert.rejects(s.repository.receive(order.id, actor(cashier)), /Commit failed/);
   assert.equal(documents.get('customers/customer').debtBalance, 0);
   assert.equal(documents.get('products/plant').stockQuantity, 20);
-  assert.equal(documents.get('orders/' + order.id).status, 'AWAITING_CASHIER');
+  assert.equal(documents.get('orders/' + order.id).status, 'AWAITING_PAYMENT');
   fail = false;
   const results = await Promise.all([s.repository.receive(order.id, actor(cashier)), s.repository.receive(order.id, actor(cashier))]);
   assert.equal(results.filter((result) => !result.alreadyConfirmed).length, 1);
@@ -522,7 +522,7 @@ test('HTTP sale flow sends fixed Pix receipt and QR, confirms by Sicredi webhook
   }, sellerCookie);
   assert.equal(cashOrderResponse.status, 200);
   const cashOrder = (await cashOrderResponse.json()).order;
-  assert.equal(cashOrder.status, 'AWAITING_CASHIER');
+  assert.equal(cashOrder.status, 'AWAITING_PAYMENT');
   const receive = () => post(`/api/caixa/orders/${cashOrder.id}/confirm`, {}, cashierCookie);
   const received = await receive();
   assert.equal(received.status, 200);
@@ -660,8 +660,8 @@ test('Cashier board filters history, separates pending stages, and calculates cl
   const response = await fetch(`${base}/api/caixa/orders?from=${today}&to=${today}`, { headers: { cookie: cashierCookie } });
   assert.equal(response.status, 200);
   const board = await response.json();
-  assert.deepEqual(board.pendingConfirmation.map((order) => order.id), [awaitingCash.id]);
-  assert.deepEqual(board.pendingPayment.map((order) => order.id), [pixOrder.id]);
+  assert.deepEqual(board.pendingConfirmation, []);
+  assert.deepEqual(board.pendingPayment.map((order) => order.id).sort(), [awaitingCash.id, pixOrder.id].sort());
   assert.deepEqual(board.confirmed.map((order) => order.id), [onAccount.id]);
   assert.deepEqual(board.paid.map((order) => order.id), [paidOrder.id]);
   assert.equal(board.closing.salesReceived, 20);
@@ -674,8 +674,8 @@ test('Cashier board filters history, separates pending stages, and calculates cl
   const secondCashierResponse = await fetch(`${base}/api/caixa/orders?from=${today}&to=${today}`, { headers: { cookie: secondCashierCookie } });
   assert.equal(secondCashierResponse.status, 200);
   const secondCashierBoard = await secondCashierResponse.json();
-  assert.deepEqual(secondCashierBoard.pendingConfirmation.map((order) => order.id), [awaitingCash.id]);
-  assert.deepEqual(secondCashierBoard.pendingPayment.map((order) => order.id), [pixOrder.id]);
+  assert.deepEqual(secondCashierBoard.pendingConfirmation, []);
+  assert.deepEqual(secondCashierBoard.pendingPayment.map((order) => order.id).sort(), [awaitingCash.id, pixOrder.id].sort());
   assert.deepEqual(secondCashierBoard.history, []);
   assert.equal(secondCashierBoard.closing.totalReceived, 0);
 
@@ -703,6 +703,8 @@ test('Cashier board filters history, separates pending stages, and calculates cl
 test('command progression holds inventory atomically, final payment deducts once, expiry releases only the hold', async () => {
   const s = setup();
   const order = await s.service.create({ ...s.input, deferToCashier: true }, seller);
+  assert.equal(order.status, 'AWAITING_PAYMENT');
+  await s.repository.transaction(async (tx) => { const row = await tx.get('orders', order.id); tx.set('orders', order.id, { ...row, status: 'AWAITING_CONFIRMATION' }); });
   await assert.rejects(s.repository.advanceToPayment(order.id, actor(seller)), /Caixa/);
   const [pending] = await Promise.all([s.repository.advanceToPayment(order.id, actor(cashier)), s.repository.advanceToPayment(order.id, actor(cashier))]);
   assert.equal(pending.status, 'AWAITING_PAYMENT');
@@ -747,6 +749,8 @@ test('HTTP restricts board moves and manually receives direct Pix without creati
   const sellerCookie = await login(seller); const cookie = await login(cashier);
   const response = await post('/api/caixa/orders', { ...s.input, deferToCashier: true }, sellerCookie);
   const { order } = await response.json(); assert.ok(order?.id);
+  assert.equal(order.status, 'AWAITING_PAYMENT');
+  await app.locals.pdv.store.transaction(async (tx) => { const row = await tx.get('orders', order.id); tx.set('orders', order.id, { ...row, status: 'AWAITING_CONFIRMATION' }); });
   const move = `/api/caixa/orders/${order.id}/move`;
   assert.equal((await post(move, { from: 'confirmation', to: 'paid' }, cookie)).status, 400);
   assert.equal((await post(move, { from: 'confirmation', to: 'payment' }, sellerCookie)).status, 403);
@@ -781,4 +785,47 @@ test('mixed debt receipts are allocated to actual payment methods in executive r
   assert.equal(report.current.byPayment.DINHEIRO.receipts, 40);
   assert.equal(report.current.byPayment.PIX.receipts, 60);
   assert.equal(report.current.totalCashIn, 100);
+});
+
+
+for (const orderType of ['PICKUP', 'DELIVERY']) {
+  for (const paymentMethod of ['DINHEIRO', 'CREDITO']) {
+    test(`seller ${orderType} ${paymentMethod}: choosing payment does not receive money or deduct stock`, async () => {
+      const s = setup();
+      const order = await s.service.create({ ...s.input, paymentMethod, orderType }, seller);
+      assert.equal(order.status, 'AWAITING_PAYMENT'); assert.equal(order.paymentStatus, 'PENDING');
+      assert.equal(order.completedAt, undefined); assert.equal(order.receivedBy, null);
+      assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
+      assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 2);
+      assert.equal(s.chargeCalls.length, 0);
+      const paid = await s.repository.receive(order.id, actor(cashier));
+      assert.equal(paid.paymentStatus, 'APPROVED'); assert.ok(paid.completedAt);
+      assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
+      assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 0);
+    });
+  }
+}
+
+test('online pickup and delivery cash/card orders appear directly in payment queue without automatic confirmation', async (t) => {
+  const s = setup(); const app = createApp({ messageService: { firestoreRepo: s.base, whatsappClient: s.whatsapp }, sicrediClient: s.pix });
+  const server = app.listen(0); t.after(() => server.close()); const origin = `http://127.0.0.1:${server.address().port}`;
+  const post = (path, body, cookie = '') => fetch(origin + path, { method: 'POST', headers: { 'Content-Type': 'application/json', cookie }, body: JSON.stringify(body) });
+  const login = await post('/api/admin/auth/login', { userId: cashier.id, pin: cashier.pin });
+  const cookie = login.headers.get('set-cookie').split(';')[0]; const ids = [];
+  for (const orderType of ['PICKUP', 'DELIVERY']) {
+    for (const paymentMethod of ['DINHEIRO', 'CARTAO']) {
+      const response = await post('/api/orders', { customerName: 'Cliente online', customerPhone: '64999991234', orderType, paymentMethod, deliveryAddress: 'Rua Teste 10', items: [{ productId: 'plant', quantity: 1 }] });
+      assert.equal(response.status, 200); const { order } = await response.json(); ids.push(order.id);
+      assert.equal(order.status, 'AWAITING_PAYMENT'); assert.equal(order.paymentStatus, 'PENDING');
+      assert.equal(order.completedAt, undefined); assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
+    }
+  }
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+  const board = await (await fetch(`${origin}/api/caixa/orders?from=${today}&to=${today}`, { headers: { cookie } })).json();
+  assert.deepEqual(board.pendingConfirmation, []);
+  assert.deepEqual(board.pendingPayment.map((order) => order.id).sort(), ids.sort());
+  assert.equal(s.chargeCalls.length, 0); assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 4);
+  const response = await post(`/api/caixa/orders/${ids[0]}/confirm`, { paymentMethod: 'DINHEIRO', receivedAmount: 10 }, cookie);
+  assert.equal(response.status, 200); assert.equal((await response.json()).order.paymentStatus, 'APPROVED');
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 19);
 });

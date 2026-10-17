@@ -71,7 +71,7 @@ class PdvRepository {
     const repo = this.repository;
     if (repo.firestore && !repo._firestoreClientDisabled) {
       return repo.firestore.collection('orders')
-        .where('status', 'in', ['AWAITING_CASHIER', 'AWAITING_PAYMENT', 'CREATING_PIX', 'AWAITING_PIX', 'PENDING', 'CONFIRMED', 'PAID_CONFIRMED', 'DELIVERED'])
+        .where('status', 'in', ['AWAITING_CONFIRMATION', 'AWAITING_CASHIER', 'AWAITING_PAYMENT', 'CREATING_PIX', 'AWAITING_PIX', 'PENDING', 'CONFIRMED', 'PAID_CONFIRMED', 'DELIVERED'])
         .onSnapshot((snapshot) => {
           onChange(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id })));
         }, onError);
@@ -84,7 +84,7 @@ class PdvRepository {
     const notify = () => {
       if (!active) return;
       const orders = [...repo.inMemoryOrders.values()].filter((order) =>
-        ['AWAITING_CASHIER', 'AWAITING_PAYMENT', 'CREATING_PIX', 'AWAITING_PIX', 'PENDING', 'CONFIRMED', 'PAID_CONFIRMED', 'DELIVERED'].includes(order.status),
+        ['AWAITING_CONFIRMATION', 'AWAITING_CASHIER', 'AWAITING_PAYMENT', 'CREATING_PIX', 'AWAITING_PIX', 'PENDING', 'CONFIRMED', 'PAID_CONFIRMED', 'DELIVERED'].includes(order.status),
       );
       onChange(orders);
     };
@@ -102,7 +102,7 @@ class PdvRepository {
         return previous;
       }
       let savedOrder = order;
-      if (String(order.paymentMethod || '').toUpperCase() === 'PIX' && order.pixData) {
+      if (order.status === 'AWAITING_PAYMENT' || (String(order.paymentMethod || '').toUpperCase() === 'PIX' && order.pixData)) {
         const reservation = await prepareStockReservation(tx, order.items);
         applyStockReservation(tx, reservation, new Date().toISOString());
         savedOrder = { ...order, inventoryReserved: true, reservedItems: reservation.reservedItems };
@@ -142,7 +142,7 @@ class PdvRepository {
       const order = await tx.get('orders', orderId);
       if (!order || !['PDV', 'WEB_CATALOG'].includes(order.source)) throw new Error('Comanda não encontrada.');
       if (order.status === 'AWAITING_PAYMENT' && !order.completedAt) return order;
-      if (order.completedAt || !['AWAITING_CASHIER', 'PENDING'].includes(order.status) || order.pixData?.txid) {
+      if (order.completedAt || !['AWAITING_CONFIRMATION', 'AWAITING_CASHIER', 'PENDING'].includes(order.status) || order.pixData?.txid) {
         throw new Error('Só é possível mover de esperando confirmação para esperando pagamento.');
       }
       const reservation = order.inventoryReserved ? null : await prepareStockReservation(tx, order.items);
@@ -179,7 +179,7 @@ class PdvRepository {
       if (!['ADMIN', 'CAIXA'].includes(receiver?.role)) { throw new Error('Somente o caixa pode gerar a cobrança Pix.'); }
       if (Date.parse(order.pixExpiresAt || order.paymentExpiresAt || '') <= Date.now()) throw new Error('O prazo de pagamento venceu. Inicie uma nova comanda.');
       if (order.paymentMethod === 'PIX' && order.pixData) { return order; }
-      if (!['AWAITING_CASHIER', 'AWAITING_PAYMENT'].includes(order.status)) { throw new Error('A comanda não está aguardando recebimento no caixa.'); }
+      if (!['AWAITING_CASHIER', 'AWAITING_PAYMENT', 'PENDING'].includes(order.status)) { throw new Error('A comanda não está aguardando recebimento no caixa.'); }
       const paymentParts = normalizePaymentParts(requestedParts, 'PIX', order.total);
       if (!paymentParts.some((part) => part.method === 'PIX') || paymentParts.some((part) => part.method === 'SALDO_CLIENTE')) throw new Error('Combine Pix com dinheiro, débito, crédito ou fiado.');
       if (paymentParts.some((part) => part.method === 'FIADO') && !order.customerId) throw new Error('Fiado exige cliente cadastrado.');
@@ -216,7 +216,7 @@ class PdvRepository {
       }
       const amountFor = (method) => paymentParts.find((part) => part.method === method)?.amount || 0;
       const paymentMethod = amountFor('PIX') ? 'PIX' : paymentParts.length > 1 ? 'MISTO' : paymentParts[0].method;
-      if (paymentMethodOverride && !['AWAITING_CASHIER', 'AWAITING_PAYMENT'].includes(order.status)) { throw new Error('A forma de pagamento só pode ser escolhida antes do recebimento.'); }
+      if (paymentMethodOverride && !['AWAITING_CASHIER', 'AWAITING_PAYMENT', 'PENDING'].includes(order.status)) { throw new Error('A forma de pagamento só pode ser escolhida antes do recebimento.'); }
       if (paymentMethodOverride && paymentMethod === 'PIX' && verification?.verifiedVia !== 'MANUAL_CAIXA_PIX') { throw new Error('Pix exige cobrança Sicredi ou comprovante conferido pelo caixa.'); }
       if (order.paymentMethod === 'PIX' && order.pixData && paymentMethod !== 'PIX') { throw new Error('Uma cobrança Pix já emitida não pode ser convertida; aguarde a confirmação do Sicredi.'); }
       if (paymentMethod === 'PIX' && (!verification || verification.txid !== order.pixData?.txid || verification.amountMinor !== Math.round(amountFor('PIX') * 100))) {
