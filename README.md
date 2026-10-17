@@ -9,7 +9,7 @@ Aplicação atual da Conflora para catálogo público, pedidos, frente de caixa,
 | `/` | Catálogo público, busca, informações de produto, sacola, login Google e checkout |
 | `/caixa` e `/pdv` | Frente de caixa, venda por vendedor/caixa, comandas, PIX Sicredi, fiado e relatórios |
 | `/admin` | Produtos, estoque, equipe, vendas, conexões e configurações |
-| `/admin/gerencial` | Painel administrativo gerencial |
+| `/admin-gerencial` e `/admin/gerencial` | Painel gerencial diário e comparação de vendas por período |
 | `/health` | Diagnóstico básico do serviço e do ambiente |
 | `/webhook` | Recebimento de mensagens da WhatsApp Cloud API/Meta |
 
@@ -17,19 +17,25 @@ Aplicação atual da Conflora para catálogo público, pedidos, frente de caixa,
 
 ### Catálogo público
 
-O servidor confere produtos, preços e quantidades. O checkout PIX público atual usa **Mercado Pago**: cria um pagamento pendente, recebe a notificação assinada em `/webhooks/mercadopago`, consulta o pagamento no provedor e só então confirma o pedido e baixa o estoque. O Sicredi ainda não substitui o provedor do checkout público.
+O servidor confere produtos, preços e quantidades. O checkout Pix do catálogo principal usa **Sicredi**: reserva as unidades no Firestore, gera a cobrança de valor fixo e mostra QR Code e Pix Copia e Cola no recibo. O webhook avisa o servidor, que consulta o pagamento no banco antes de confirmar e baixar o estoque. Pedidos de dinheiro/cartão aguardam recebimento pelo caixa. Recibos e notificações usam a fila durável `pdv_outbox`.
+
+Clientes autenticados acessam **Minha conta** para consultar compras, recibos, fiados, recebimentos e crédito. O Pix de quitação parcial ou total da dívida usa um identificador próprio e não cria outra venda nem baixa estoque.
 
 ### Frente de caixa
 
 1. **VENDEDOR** cria a venda. PIX gera uma cobrança Sicredi; dinheiro, cartão e fiado ficam como comanda para o caixa. A venda permanece atribuída ao vendedor que a abriu.
-2. **CAIXA/ADMIN** pode receber dinheiro, débito, crédito ou fiado. A confirmação, o registro do pagamento e a baixa do estoque ocorrem juntos em uma transação do Firestore. Pix não pode ser confirmado manualmente.
+2. **CAIXA/ADMIN** pode receber dinheiro, débito, crédito ou fiado, inclusive pagamentos divididos. A confirmação, o registro do pagamento e a baixa do estoque ocorrem juntos em uma transação do Firestore. Antes do vencimento, Pix também pode ser confirmado manualmente após conferir comprovante, valor e conta recebedora, registrando a justificativa e o operador. Vendedores não têm essa permissão.
 3. Para **PIX Sicredi**, o servidor recalcula o total, envia uma cobrança dinâmica com `modalidadeAlteracao: 0` e mostra o QR Code e o Pix Copia e Cola. O recibo com o código é enviado por WhatsApp e o QR vai como imagem quando há telefone e as credenciais/modelos de WhatsApp estão configurados.
 4. O webhook Sicredi serve como aviso. O servidor consulta `GET /pix/{endToEndId}` e confere transação, `txid`, chave recebedora, valor exato e ausência de devolução. Só após essas validações marca o pedido como pago, finaliza e baixa o estoque.
 5. Repetições do mesmo webhook ou da confirmação não repetem a baixa. Notificações de pagamento são enviadas após o registro transacional. Vendas e recebimentos aparecem conforme o papel e a autoria no relatório de caixa.
 
-O código do pedido e a chave de idempotência impedem que uma repetição da mesma solicitação crie outra cobrança. Se o navegador perder a resposta, consulte a venda/comanda antes de iniciar uma nova. **Não há reserva de estoque para vendas PIX pendentes**: a quantidade é conferida ao criar e revalidada na confirmação. Vendas simultâneas sobre o mesmo saldo podem deixar um pagamento já recebido pendente para conciliação; faça primeiro o teste real controlado com um produto de saldo suficiente.
+O código do pedido e a chave de idempotência impedem que uma repetição da mesma solicitação crie outra cobrança. Se o navegador perder a resposta, consulte a venda/comanda antes de iniciar uma nova. **Pix emitido reserva estoque**: com saldo físico 10 e reserva 2, ficam 8 disponíveis. A confirmação converte a reserva em baixa; o vencimento cancela o pedido e libera a reserva, sem aumentar o saldo físico. A reserva Pix permanece obrigatória mesmo com o controle legado de estoque desativado.
 
-O fluxo de aprovação de desconto do PDV cria a cobrança Sicredi após a aprovação. O checkout público e o pedido manual PIX iniciado pela tela de administração usam Mercado Pago atualmente; vincular Sicredi ao PDV não altera esses dois percursos.
+A tela de comandas recebe mudanças em tempo real e destaca pedidos novos. Sem cobrança emitida, **Somente criar comanda e encaminhar ao caixa** não reserva nem baixa estoque. Pagamentos divididos com Pix cobram somente a parcela Pix; se vencerem após receber dinheiro/cartão, o cancelamento preserva esses valores e marca conciliação/estorno. Pix recebido para pedido já cancelado é registrado para conciliação, sem reabrir a venda automaticamente.
+
+Em produção, a expiração é agendada no Cloud Tasks. Configure `TASK_SECRET`, `SERVICE_URL`, projeto, região e fila; conceda ao backend permissão para criar tarefas. O serviço recusa iniciar a cobrança quando não consegue garantir esse agendamento. Localmente há uma varredura de expiração enquanto o servidor está ativo.
+
+O fluxo de aprovação de desconto do PDV cria a cobrança Sicredi após a aprovação. Os endpoints legados de pedido manual e aprovação fora do PDV em `src/http/app.js` ainda mantêm Mercado Pago; não devem ser confundidos com o checkout principal ou com o PDV. A vitrine de cada tenant em `src/storefront` também tem seu próprio contrato de checkout.
 
 ## Componentes principais
 
@@ -39,7 +45,7 @@ src/orders/pdv.service.js          Venda/PIX do caixa, recibo e notificações
 src/orders/pdv.repository.js       Transação de pagamento, pedido e estoque
 src/orders/order-integrity.js      Validações de estoque e confirmação
 src/integrations/sicredi-pix.client.js  OAuth mTLS, cobrança e consulta Sicredi
-src/integrations/mercado-pago.client.js Checkout público atual
+src/integrations/mercado-pago.client.js Compatibilidade dos endpoints legados
 src/database/firestore.repository.js    Firestore, estoque e pedidos da loja
 src/catalog/                       Catálogo e fotos do Firebase Storage
 public/pdv/                         Interface web da frente de caixa
@@ -88,7 +94,7 @@ Não use credencial privada de conta de serviço no navegador. O backend deve us
 
 ## Vincular a API Pix do Sicredi
 
-O código está preparado para a **API Pix Sicredi** no PDV. A conexão real depende de adesão, credenciais e certificado emitidos para a Conflora; não foi feita cobrança real neste trabalho.
+O catálogo principal e o PDV usam a **API Pix Sicredi**. A conexão real depende de adesão, credenciais e certificado emitidos para a Conflora. Os testes locais usam integrações simuladas.
 
 1. Solicite à cooperativa a adesão à API Pix e a habilitação de cobrança imediata. Confirme a chave Pix da conta recebedora e guarde o ID de adesão.
 2. No Portal do Desenvolvedor Sicredi, abra o chamado de acesso à API Pix com o ID de adesão. Para integração própria, registre um CSR, aguarde a assinatura, baixe o certificado e a chave privada e gere Client ID/Client Secret sobre o certificado.
@@ -105,12 +111,16 @@ SICREDI_KEY_PEM=
 SICREDI_PIX_KEY=
 SICREDI_WEBHOOK_SECRET=
 SERVICE_URL=https://seu-dominio-publicado
+TASK_SECRET=
+CLOUD_TASKS_QUEUE=conflora-jobs
+GCP_REGION=southamerica-east1
+PIX_PAYMENT_TTL_SECONDS=3600
 ```
 
 `SICREDI_PIX_KEY` é a chave Pix registrada na conta Sicredi (CPF/CNPJ, e-mail, telefone ou EVP), não o Client ID. O certificado e a chave privada devem formar o par emitido para esta integração. O cliente Sicredi usa mTLS e OAuth2 Client Credentials; a credencial precisa dos escopos `cob.write`, `cob.read`, `pix.read` e `webhook.write` (e `webhook.read` se habilitado para consulta). O aplicativo envia o valor travado (`modalidadeAlteracao: 0`).
 
 5. Gere um segredo aleatório exclusivo, com pelo menos 32 caracteres, para `SICREDI_WEBHOOK_SECRET`. Publique primeiro o backend com esse segredo e `SERVICE_URL` HTTPS público. O endpoint registra o evento e consulta o pagamento ao Sicredi antes de atualizar Firestore.
-6. Com o host de produção e as credenciais de produção autorizadas, execute `npm run check:sicredi -- --connect` para testar autenticação sem gerar Pix. Depois rode `npm run sicredi:webhook` para registrar a URL `/webhooks/sicredi-pix/{segredo}` na chave Pix.
+6. Configure a fila Cloud Tasks no projeto/região usados pelo backend e o mesmo `TASK_SECRET` no serviço. Publique Cloud Run e os rewrites do Firebase Hosting para `/api/**`, `/tasks/**` e `/webhooks/**`. Com as credenciais autorizadas, execute `npm run check:sicredi -- --connect` para testar autenticação sem gerar Pix. Depois rode `npm run sicredi:webhook` para registrar a URL `/webhooks/sicredi-pix/{segredo}` na chave Pix.
 7. Confira o cadastro do webhook no Sicredi. Faça uma cobrança real pequena, de valor e estoque controlados, usando a tela `/caixa`. Confirme no pedido: recibo e QR entregues, valor do pedido idêntico ao valor pago, status `APPROVED`/`CONFIRMED`, `paymentTransactionId`, uma única movimentação de estoque e uma única baixa após reenviar o webhook.
 
 Para endurecer o recebimento do webhook, use um gateway HTTPS que valide o certificado cliente Sicredi e injete `SICREDI_WEBHOOK_GATEWAY_SECRET`; o backend só deve confiar nesse header quando ele for inserido pelo gateway após a validação mTLS. Não permita que um cliente externo envie esse mesmo header. A alternativa da URL com segredo aleatório deve ser tratada como proteção por segredo, não como validação criptográfica do certificado Sicredi.

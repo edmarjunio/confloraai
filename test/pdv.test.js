@@ -68,6 +68,46 @@ test('mixed Pix charges only the Pix share and finalizes the full sale after ban
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
 });
 
+test('expiration scheduling failure releases the reservation and preserves cash already received', async () => {
+  const s = setup();
+  s.service.taskQueueClient = { enqueuePixExpiration: async () => { throw new Error('Fila indisponível'); } };
+  const input = { ...s.input, paymentParts: [
+    { method: 'DINHEIRO', amount: 8 }, { method: 'PIX', amount: 12 },
+  ] };
+  await assert.rejects(s.service.create(input, cashier), /Fila indisponível/);
+  const order = await s.repository.read('orders', s.input.requestId);
+  assert.equal(order.status, 'CANCELLED');
+  assert.equal(order.paymentStatus, 'PARTIAL_RECONCILIATION');
+  assert.equal(order.refundDue, 8);
+  assert.equal(order.requiresRefund, true);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
+  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 0);
+  assert.equal(s.chargeCalls.length, 0);
+  s.service.taskQueueClient = { enqueuePixExpiration: async () => ({ name: 'task-recovered' }) };
+  await assert.rejects(s.service.create(input, cashier), /cancelada/);
+  assert.equal(s.chargeCalls.length, 0);
+});
+
+test('confirmed web Pix recovers missing notification intents without staff fields or duplicate sends', async () => {
+  const s = setup();
+  const txid = 'A'.repeat(32);
+  const endToEndId = 'E' + '1'.repeat(31);
+  const order = await s.base.createDirectOrder({
+    id: randomUUID(), ticketNumber: 'WEB-RECOVERY', source: 'WEB_CATALOG', status: 'CONFIRMED',
+    paymentMethod: 'PIX', paymentStatus: 'APPROVED', verifiedVia: 'SICREDI_PIX_WEBHOOK',
+    paymentTransactionId: endToEndId, completedAt: new Date().toISOString(),
+    customerName: 'Cliente Online', customerPhone: '5564999991234', total: 20,
+    pixData: { txid }, items: [{ productId: 'plant', name: 'Muda', quantity: 2, price: 10 }],
+  });
+  await s.service.handlePix(txid, endToEndId);
+  assert.equal(s.sent.length, 2);
+  assert.match(s.sent[1].text, /Sicredi · confirmação automática/);
+  assert.equal((await s.repository.read('pdv_outbox', `${order.id}-owner-paid`)).status, 'SENT');
+  await s.service.handlePix(txid, endToEndId);
+  assert.equal(s.sent.length, 2);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
+});
+
 test('customer debt Pix applies once, validates Sicredi, isolates accounts and preserves concurrent surplus as credit', async () => {
   const s = setup();
   const { CustomerDebtPixService } = require('../src/orders/customer-debt-pix.service');
@@ -514,6 +554,46 @@ test('cashier can manually confirm a Pix only after recording proof review; audi
     method: 'POST', headers: { cookie: sellerCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ proofSeen: true, note: 'Comprovante conferido no caixa' }),
   });
   assert.equal(sellerAttempt.status, 403);
+});
+
+test('manual mixed Pix uses the Pix installment and concurrent confirmations send one receipt', async (t) => {
+  const s = setup();
+  const app = createApp({ messageService: { firestoreRepo: s.base, whatsappClient: s.whatsapp }, sicrediClient: s.pix });
+  const server = app.listen(0); t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const login = await fetch(base + '/api/admin/auth/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId: cashier.id, pin: cashier.pin }),
+  });
+  const cookie = login.headers.get('set-cookie').split(';')[0];
+  const order = await app.locals.pdv.service.create({ ...s.input, customerId: 'customer',
+    paymentParts: [{ method: 'DINHEIRO', amount: 8 }, { method: 'PIX', amount: 12 }],
+  }, cashier);
+  const sentBefore = s.sent.length;
+  const receive = app.locals.pdv.store.receive.bind(app.locals.pdv.store);
+  let release;
+  const bothRequestsReadPending = new Promise((resolve) => { release = resolve; });
+  let attempts = 0;
+  app.locals.pdv.store.receive = async (...args) => {
+    if (++attempts === 2) release();
+    await bothRequestsReadPending;
+    return receive(...args);
+  };
+  const confirm = () => fetch(`${base}/api/caixa/orders/${order.id}/confirm-manual-pix`, {
+    method: 'POST', headers: { cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ proofSeen: true, note: 'Comprovante da parcela de doze reais' }),
+  });
+  const responses = await Promise.all([confirm(), confirm()]);
+  for (const response of responses) assert.equal(response.status, 200);
+  const saved = await s.base.getOrderById(order.id);
+  assert.equal(saved.paymentVerifiedAmount, 12);
+  assert.equal(saved.paymentStatus, 'APPROVED');
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
+  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 0);
+  assert.equal(s.sent.length - sentBefore, 2);
+  const receipt = require('../src/orders/receipt.util').formatOrderReceipt(saved);
+  assert.match(receipt, /Pix conferido manualmente/);
+  assert.doesNotMatch(receipt, /Sicredi Pix Automático/);
 });
 
 test('cashier order stream emits a change immediately after a new command is created', async (t) => {

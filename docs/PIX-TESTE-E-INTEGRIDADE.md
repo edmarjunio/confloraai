@@ -1,67 +1,50 @@
-# PIX: integridade e roteiro de teste
+# Pix: integridade e roteiro de teste
 
-## Arquitetura implementada
+O catálogo principal (`/api/orders` e o adaptador `/api/storefront/orders`) e o PDV usam Sicredi. As rotas legadas de pedido manual e aprovação fora do PDV ainda contêm Mercado Pago; os testes de compatibilidade desse provedor continuam na suíte. A vitrine de tenants em `src/storefront` tem um checkout próprio e não deve ser tratada como integração Sicredi por este documento.
 
-Escopo: checkout Mercado Pago em `src/http/app.js`, loja em `/api/orders`, PDV e confirmação em `FirestoreRepository`.
+## Pedido, reserva e pagamento
 
-1. O servidor calcula o pedido com os produtos cadastrados e gera a preferência no Mercado Pago.
-2. O pedido PIX é persistido pendente. A criação não altera o estoque.
-3. O webhook valida a assinatura e consulta o pagamento na API do Mercado Pago. Exige PIX aprovado, BRL, referência do pedido e valor correspondente.
-4. Uma transação relê o pedido e os produtos, valida quantidades, soma linhas do mesmo produto e verifica o estoque. Pagamento, baixa, marca `stockDeducted` e movimentos são gravados juntos.
-5. Reenvios não repetem a baixa. Pedidos antigos com `stockDeducted: true` mantêm a baixa anterior. Pedidos entregues não voltam a confirmados.
-6. Confirmação administrativa usa a mesma operação. Cancelamento disputa a mesma transação e não pode apagar pagamento/baixa existente. Falhas do Firestore não resultam em confirmação apenas em memória.
+1. O servidor recalcula produtos, quantidades, preços, parcelas e total. O pedido e seu txid são persistidos antes da cobrança.
+2. A emissão do Pix reserva unidades em uma transação. O saldo físico não muda: físico 10, reservado 2, disponível 8. Outras vendas não podem consumir as unidades reservadas.
+3. O servidor agenda o vencimento no Cloud Tasks e solicita a cobrança de valor fixo ao Sicredi. Em pagamento dividido, cobra apenas a parcela Pix. A resposta contém QR Code e copia e cola.
+4. O webhook autenticado registra o evento durável e consulta o Pix no banco. Txid, endToEndId, chave recebedora, valor exato e ausência de devolução precisam corresponder ao pedido.
+5. A confirmação relê pedido e produtos na transação: grava pagamento, conclusão, uma baixa de estoque e liberação da reserva. Repetições não repetem os efeitos.
+6. Caixa/Admin também podem confirmar manualmente antes do vencimento, com comprovante conferido e justificativa. O operador e o método de confirmação ficam no pedido e no recibo. Vendedor não confirma recebimento.
+7. No vencimento, a comanda é cancelada e a reserva liberada. Se dinheiro/cartão já foi recebido, o mesmo commit mantém as parcelas e grava `PARTIAL_RECONCILIATION`, `requiresRefund` e `refundDue`. Isso também vale para falha no agendamento. Não há reembolso bancário automático.
+8. Pix constatado para pedido cancelado/vencido é registrado em `pdv_pix_late_payments` para conciliação; não reabre a venda nem consome estoque liberado.
 
-As regras de validação estão separadas em `src/orders/order-integrity.js`. Movimentos novos incluem `orderId` para rastreabilidade.
+Sem cobrança, a opção de encaminhar ao caixa deixa somente a comanda. Fiado finalizado registra a dívida; quitar depois não gera outra venda nem baixa novamente. O Pix autônomo da dívida usa `customer_debt_pix`, com txid próprio, e consulta oficial do banco. Pagamento acima da dívida remanescente por quitação concorrente vira crédito identificado.
 
-## Credenciais
+## Configuração operacional
 
-Você precisa obter os dois segredos na sua conta Mercado Pago. Preencha o `.env` local; na hospedagem, use variáveis protegidas/Secret Manager. Não envie os valores no chat nem os versione.
+Use `.env.example` como referência de nomes. Não versione valores reais de tokens, certificados, chave privada ou segredos.
 
-```dotenv
-MERCADO_PAGO_ACCESS_TOKEN=preencha_com_o_access_token_do_ambiente
-MERCADO_PAGO_WEBHOOK_SECRET=preencha_com_a_assinatura_secreta_do_webhook
-SERVICE_URL=https://seu-backend-de-homologacao
-```
+- Sicredi: `SICREDI_CLIENT_ID`, `SICREDI_CLIENT_SECRET`, `SICREDI_CERT_PEM`, `SICREDI_KEY_PEM`, `SICREDI_PIX_KEY` e os hosts autorizados para o ambiente.
+- Webhook: `SERVICE_URL` HTTPS e segredo de rota `SICREDI_WEBHOOK_SECRET` com pelo menos 32 caracteres, ou gateway mTLS configurado. O evento sempre exige consulta posterior à API bancária.
+- Expiração: `TASK_SECRET`, `CLOUD_TASKS_QUEUE`, `GCP_PROJECT_ID` e `GCP_REGION`. A fila precisa existir e a conta de execução deve poder criar tarefas. `PIX_PAYMENT_TTL_SECONDS` define o prazo entre 300 e 86400 segundos; o padrão é 3600.
+- Publicação: Cloud Run e Firebase Hosting com os rewrites `/api/**`, `/tasks/**` e `/webhooks/**`. O endpoint de expiração exige o mesmo `TASK_SECRET` usado pela tarefa.
+- Recibos: credenciais WhatsApp e modelos aprovados, conforme [PDV-SICREDI.md](PDV-SICREDI.md). Falhas de envio permanecem em `pdv_outbox`; não desfazem uma venda confirmada. Uma rotina externa pode acionar o worker protegido por `PDV_WORKER_SECRET` quando não houver instâncias ativas.
 
-- **Access Token:** aplicação em [Suas integrações](https://www.mercadopago.com.br/developers/panel/app). Para homologação, use as credenciais e contas de teste indicadas para Checkout Pro via Preferences API. Não deduza o ambiente apenas pelo prefixo do token.
-- **Webhook secret:** na mesma aplicação, Webhooks → Configurar notificação. Cadastre eventos de pagamento e a URL `https://seu-backend-de-homologacao/webhooks/mercadopago`. Copie a assinatura secreta gerada para `MERCADO_PAGO_WEBHOOK_SECRET`.
-- **SERVICE_URL:** endereço HTTPS público do backend que recebe o webhook. `localhost` não é acessível pelo Mercado Pago. Um túnel HTTPS para o backend local ou uma implantação de homologação atende essa finalidade.
-- **Firestore:** o backend precisa de credenciais de serviço e permissão de leitura/gravação no banco de homologação. Uma Firebase API Key sozinha não substitui essa autorização.
-- `PIX_KEY`, `PIX_TITULAR` e `STORE_PIX_KEY` pertencem a fluxos de PIX estático existentes no projeto. Não substituem os segredos do Mercado Pago neste checkout. Public Key não é consumida por este fluxo de redirecionamento.
-- Para enviar recibos por WhatsApp, configure também `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID` e um modelo aprovado em `WHATSAPP_CUSTOMER_ORDER_TEMPLATE`.
-
-Referência: [configuração e assinatura de notificações](https://www.mercadopago.com.br/developers/pt/docs/checkout-pro-preferences/payment-notifications). A assinatura aceita timestamp em milissegundos ou segundos e rejeita assinaturas inválidas/expiradas.
-
-## Teste local sem dinheiro real
+## Validação local sem dinheiro real
 
 ```powershell
-npm run test:pix
 npm run check:pix
+npm run test:pix
 ```
 
-`test:pix` usa pagamentos simulados, HTTP local e armazenamento em memória/double transacional. Não precisa de token nem movimenta dinheiro. Cobre duplicidade, concorrência, valor divergente, assinatura, cancelamento, estoque insuficiente, produto ausente e falha no commit.
+`check:pix` e `check:sicredi` conferem a configuração do Sicredi e da expiração. Sem `--connect`, não chamam serviços externos nem exibem segredos. Esse diagnóstico não comprova credenciais válidas, permissões, fila existente ou webhook acessível.
 
-`check:pix` informa apenas preenchido/pendente, sem revelar segredos. Não valida os valores na API nem a conectividade/permissões do Firestore. Na inspeção inicial, os três campos acima estavam ausentes/vazios.
+`test:pix` usa HTTP local, armazenamento em memória e um double transacional. Verifica concorrência, idempotência, parcelas Pix, confirmação manual, divergência de valor, reserva, cancelamento, baixa e falha de commit. Não movimenta dinheiro nem envia WhatsApp real.
 
-## Homologação com Mercado Pago
+## Roteiro de homologação
 
-1. Configure as credenciais de teste, webhook e banco separado; rode `npm run check:pix` e inicie com `npm run dev`.
-2. Cadastre um produto com estoque 10 e preço conhecido. Deixe o controle de estoque habilitado.
-3. Crie um pedido de 2 unidades na loja. Verifique que está pendente, tem link de checkout e o estoque permanece 10.
-4. Abra o checkout em janela anônima com a conta compradora de teste. Confira preço e referência.
-5. Para Checkout Pro via Preferences API, a documentação considera bem-sucedido o teste de PIX offline que permanece **pendente**. Não espere aprovação bancária automática nesse teste: [compras de teste](https://www.mercadopago.com.br/developers/pt/docs/checkout-pro-preferences/integration-test/test-purchases).
-6. A aprovação e as repetições são exercitadas por `test:pix`. Para homologar o ciclo financeiro real, programe separadamente uma transação real controlada; isso ainda não foi executado.
-7. Repita a criação no PDV: PIX continua aguardando aprovação; dinheiro/cartão é confirmado pelo caixa. Após uma aprovação válida, o esperado é estoque 8, um movimento e pedido confirmado. Reenvios mantêm estoque 8.
+1. Configure um ambiente separado com Firestore, Storage, autenticação, fila, WhatsApp de teste e os hosts/credenciais de homologação fornecidos pelo Sicredi.
+2. Cadastre um produto com saldo 10. Gere um Pix de 2 unidades: o esperado é saldo físico 10, reserva 2 e disponível 8.
+3. Confira no QR/copia e cola o valor fixo. Confirme a entrega do recibo e do QR no telefone autorizado.
+4. Após pagamento validado pelo banco, confira pedido finalizado, transação identificada, saldo 8, reserva 0 e um movimento de estoque. Repetir o evento deve preservar esses valores.
+5. Gere outro Pix e deixe vencer: pedido cancelado, reserva liberada e saldo físico inalterado. Confira o processamento da tarefa mesmo após a instância do servidor encerrar.
+6. Teste dinheiro/cartão mais Pix: o QR deve cobrar somente a parcela Pix. A conferência manual usa esse mesmo valor. Se o Pix vencer, as parcelas recebidas continuam identificadas para conciliação.
+7. Teste dois operadores tentando confirmar a mesma venda: deve haver uma baixa e um conjunto de notificações.
+8. Valide os papéis: vendedor lança; Caixa/Admin recebem; cliente acessa apenas sua conta e seus pedidos.
 
-## Limites e conciliação
-
-- Não há reserva antecipada neste fluxo. Se o estoque acabar entre a criação e o pagamento, a confirmação falha sem baixar parcialmente. O pagamento externo pode já ter ocorrido: exige conciliação e eventual reembolso, não entrega automática.
-- Cancelar no sistema não cancela uma cobrança no Mercado Pago. PIX recebido depois do cancelamento exige conciliação. Reembolso automático não está implementado.
-- Pedidos históricos que sofreram baixa sem a marca `stockDeducted` precisam de auditoria antes de confirmar novamente. Não foi feita migração nem alteração dos pedidos e estoques reais.
-- Falha de envio de recibo não desfaz pagamento confirmado; não existe fila durável de reenvio de recibos neste ajuste.
-- Os testes transacionais usam um double com commit/rollback e exigência de leituras antes de escritas. Ainda é necessária homologação com Firestore real/emulador e com as credenciais do provedor.
-- A vitrine SaaS em `src/storefront` tem um fluxo próprio de reserva/PIX estático; este documento não a certifica como integrada ao Mercado Pago.
-
-## Validação
-
-Suíte automatizada completa passou após o ajuste dos cenários antigos. Uploads reais do Storage foram bloqueados em modo de teste; o repositório em memória usa imagens locais ou o storage injetado pelo teste. Nenhum deploy ou cobrança foi realizado por esta entrega.
+Essas etapas com serviços reais ainda exigem homologação. O double transacional não substitui a validação no Firestore real/emulador, nem comprova entrega Meta ou disponibilidade do banco. Uma cobrança externa não é estornada ao cancelar no aplicativo; divergências e recebimentos tardios exigem conciliação.

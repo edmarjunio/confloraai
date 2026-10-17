@@ -252,6 +252,8 @@ window.PdvComponents = (() => {
     const [splitPayment, setSplitPayment] = useState(order.paymentParts?.length > 1);
     const [paymentParts, setPaymentParts] = useState(order.paymentParts?.length > 1 ? order.paymentParts : [{ method: 'DINHEIRO', amount: '' }, { method: 'CREDITO', amount: '' }]);
     const pixCopyPaste = order.pixData?.pixCopiaECola || order.pixCopiaECola || '';
+    const pixAmount = (order.paymentParts || [{ method: order.paymentMethod, amount: order.total }])
+      .filter((part) => part.method === 'PIX').reduce((sum, part) => sum + Number(part.amount || 0), 0);
     const copyPixCode = async () => {
       try { await navigator.clipboard.writeText(pixCopyPaste); setCopied(true); }
       catch { setCopied(false); }
@@ -281,7 +283,7 @@ window.PdvComponents = (() => {
           {!order.pixData?.qrCodeBase64 && !pixCopyPaste && <p className="mt-2 text-xs text-sky-900">A cobrança está sendo preparada. Atualize em alguns instantes.</p>}
           {canConfirmManualPix && <div className="mt-4 space-y-2 border-t border-sky-200 pt-3">
             <p className="text-xs font-bold text-sky-950">O Sicredi ainda não confirmou?</p>
-            <label className="flex items-start gap-2 text-xs text-slate-700"><input type="checkbox" checked={manualProofSeen} onChange={(event) => setManualProofSeen(event.target.checked)} /><span>Conferi no comprovante o valor exato de {money(order.total)} e a conta recebedora da Conflora.</span></label>
+            <label className="flex items-start gap-2 text-xs text-slate-700"><input type="checkbox" checked={manualProofSeen} onChange={(event) => setManualProofSeen(event.target.checked)} /><span>Conferi no comprovante o valor exato de {money(pixAmount)} e a conta recebedora da Conflora.</span></label>
             <label className="block text-xs font-bold text-slate-700">Observação do comprovante<textarea className={field} rows={2} value={manualPixNote} onChange={(event) => setManualPixNote(event.target.value)} placeholder="Ex.: comprovante apresentado no caixa" /></label>
             <button type="button" className={button + ' w-full'} disabled={busy || !manualProofSeen || manualPixNote.trim().length < 8} onClick={() => onManualPix(order, manualPixNote)}>Confirmar Pix manualmente e finalizar</button>
           </div>}

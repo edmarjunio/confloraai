@@ -83,6 +83,27 @@ for (const mode of ['memory', 'transaction']) {
     assert.equal(state.stock(), 10);
     assert.equal(state.order().status, 'CANCELLED');
   });
+  test(`${mode}: cancellation preserves received installments for reconciliation`, async () => {
+    const state = setup(mode, { status: 'AWAITING_PIX', paymentParts: [
+      { method: 'PIX', amount: 12 },
+      { method: 'DINHEIRO', amount: 5.35, status: 'RECEIVED_AT_CASHIER' },
+      { method: 'CREDITO', amount: 2.65, status: 'RECEIVED_AT_CASHIER' },
+    ] });
+    if (state.store) {
+      state.store.failCommit = true;
+      await assert.rejects(state.repo.cancelOrder('sale', 'Falha no agendamento'));
+      assert.equal(state.order().status, 'AWAITING_PIX');
+      assert.equal(state.order().requiresRefund, undefined);
+      state.store.failCommit = false;
+    }
+    await state.repo.cancelOrder('sale', 'Falha no agendamento');
+    await state.repo.cancelOrder('sale', 'Repetição');
+    assert.equal(state.order().status, 'CANCELLED');
+    assert.equal(state.order().paymentStatus, 'PARTIAL_RECONCILIATION');
+    assert.equal(state.order().requiresRefund, true);
+    assert.equal(state.order().refundDue, 8);
+    assert.equal(state.stock(), 10);
+  });
   test(`${mode}: cancellation cannot hide an approved payment`, async () => {
     const state = setup(mode);
     await state.repo.confirmOrderPayment('sale', verification);

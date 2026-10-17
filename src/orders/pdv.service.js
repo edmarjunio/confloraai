@@ -60,6 +60,8 @@ class PdvService {
     const previous = await this.repository.read('orders', id);
     if (previous) {
       if (previous.createdBy?.id !== user.id || previous.requestHash !== requestHash) { throw new Error('Esta operação já pertence a outra venda.'); }
+      if (previous.status === 'CANCELLED') throw new Error('Esta comanda foi cancelada. Inicie uma nova venda.');
+      if (previous.pixData && !previous.completedAt) await this.schedulePixExpiration(previous);
       return this.finishCreation(await this.preparePix(previous), user, approvedDiscount);
     }
     let paymentMethod = String(input.paymentMethod || '').toUpperCase();
@@ -169,13 +171,6 @@ class PdvService {
     const expiresAt = Date.parse(order.pixExpiresAt || '');
     if (!Number.isFinite(expiresAt) || expiresAt > Date.now()) return false;
     await this.repository.repository.cancelOrder(order.id, 'Prazo de pagamento Pix expirado');
-    const partialReceived = (order.paymentParts || []).filter((part) => part.status === 'RECEIVED_AT_CASHIER').reduce((sum, part) => sum + Math.round(part.amount * 100), 0) / 100;
-    if (partialReceived > 0) {
-      await this.repository.transaction(async (tx) => {
-        const current = await tx.get('orders', order.id);
-        if (current?.status === 'CANCELLED') tx.set('orders', order.id, { ...current, paymentStatus: 'PARTIAL_RECONCILIATION', requiresRefund: true, refundDue: partialReceived });
-      });
-    }
     return true;
   }
 
@@ -187,6 +182,12 @@ class PdvService {
   }
 
   async preparePix(order) {
+    if (order.status === 'CANCELLED') throw new Error('Esta comanda foi cancelada. Inicie uma nova venda.');
+    if (order.completedAt || order.paidAt) return order;
+    if (order.pixData && Date.parse(order.pixExpiresAt || '') <= Date.now()) {
+      await this.expirePixOrder(order.id);
+      throw new Error('Esta cobrança Pix venceu. Inicie uma nova venda.');
+    }
     if (order.paymentMethod !== 'PIX' || !order.pixData || order.pixData.pixCopiaECola) { return order; }
     const charge = await this.pix.createCharge({ amount: partAmount(order, 'PIX'), txid: order.pixData.txid, ticketNumber: order.ticketNumber,
       expiresInSeconds: Number(order.pixTtlSeconds || order.pixData?.expiresInSeconds) || 3600 });
@@ -233,24 +234,16 @@ class PdvService {
       if (order.source === 'PDV') {
         await this.repository.receive(order.id, null, verification);
       } else {
-        const result = await this.repository.repository.confirmOrderPayment(order.id, {
+        await this.repository.repository.confirmOrderPayment(order.id, {
           verifiedVia: verification.verifiedVia,
           paymentTransactionId: endToEndId,
           paymentAmount: Number(payment.valor),
           pixTxid: txid,
         });
-        if (!result.alreadyConfirmed) {
-          await this.repository.transaction(async (tx) => {
-            for (const kind of ['customer-paid', 'owner-paid']) {
-              const id = `${order.id}-${kind}`;
-              tx.set('pdv_outbox', id, { id, kind, orderId: order.id, status: 'PENDING', attempts: 0 });
-            }
-          });
-        }
       }
     }
-    await this.deliver(`${order.id}-customer-paid`);
-    await this.deliver(`${order.id}-owner-paid`);
+    const notificationIds = await this.repository.ensurePaymentNotifications(order.id);
+    for (const id of notificationIds) await this.deliver(id);
     return true;
   }
 
@@ -279,7 +272,11 @@ class PdvService {
       }
       else if (settlement?.entryType === 'CREDITO_CLIENTE') { text = `CONFLORA — CRÉDITO DO CLIENTE\nCliente: ${settlement.customerName}\nValor recebido: ${money(settlement.amount)}\nCrédito disponível: ${money(settlement.newCreditBalance)}\nRecebido por: ${settlement.receivedBy.name}\nForma: ${settlement.paymentMethod}`; }
       else if (settlement) { text = `CONFLORA — QUITAÇÃO DE FIADO\nCliente: ${settlement.customerName}\nValor: ${money(settlement.amount)}\nSaldo devedor: ${money(settlement.newBalance)}${settlement.excessCredit ? '\nExcedente registrado como crédito: ' + money(settlement.excessCredit) : ''}\nRecebido por: ${settlement.receivedBy.name}\nForma: ${settlement.paymentMethod}`; }
-      else { text = `CONFLORA — PIX CONFIRMADO\nPedido #${order.ticketNumber}\nCliente: ${order.customerName}\nTotal da venda: ${money(order.total)}\nValor Pix: ${money(partAmount(order, 'PIX'))}\nPedido feito por: ${order.createdBy.name}\nRecebido por: ${order.receivedBy.name}\nPedido finalizado. Estoque atualizado.`; }
+      else {
+        const author = order.createdBy?.name || order.customerName || 'Catálogo online';
+        const receiver = order.receivedBy?.name || (order.verifiedVia === 'SICREDI_PIX_WEBHOOK' ? 'Sicredi · confirmação automática' : 'Equipe Conflora');
+        text = `CONFLORA — PIX CONFIRMADO\nPedido #${order.ticketNumber}\nCliente: ${order.customerName}\nTotal da venda: ${money(order.total)}\nValor Pix: ${money(partAmount(order, 'PIX'))}\nPedido feito por: ${author}\nRecebido por: ${receiver}\nPedido finalizado. Estoque atualizado.`;
+      }
       const chunks = messageChunks(text, this.whatsapp.sendPdvText ? 900 : 3500);
       for (let index = job.textChunksSent || 0; index < chunks.length; index++) {
         const send = this.whatsapp.sendPdvText || this.whatsapp.sendTextMessage;

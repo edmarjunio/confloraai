@@ -1008,6 +1008,13 @@ async function prepareSicrediCheckoutOrder({ app, sicrediClient, taskQueueClient
   if (order.pixProvider !== 'SICREDI' || !order.pixData?.txid) {
     return { order, receiptDelivery: { sent: false, reason: 'Pedido Pix anterior à integração Sicredi; não gere uma nova cobrança.' } };
   }
+  if (order.status === 'CANCELLED' || order.completedAt || order.paidAt) {
+    return { order, receiptDelivery: order.receiptDelivery || { sent: false, reason: 'Pedido já encerrado; nenhuma cobrança adicional foi emitida.' } };
+  }
+  if (Date.parse(order.pixExpiresAt || '') <= Date.now()) {
+    await app.locals.pdv.service.expirePixOrder(order.id);
+    throw new Error('Esta cobrança Pix venceu. Inicie um novo pedido.');
+  }
   const ttlSeconds = Number(order.pixTtlSeconds || order.pixData?.expiresInSeconds) || 3600;
   if (process.env.NODE_ENV === 'production' && typeof taskQueueClient?.enqueuePixExpiration !== 'function') {
     await app.locals.pdv.store.cancelOrder(order.id, 'Cloud Tasks não está disponível para expirar a reserva Pix.').catch(() => {});

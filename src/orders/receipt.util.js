@@ -51,7 +51,10 @@ function formatOrderReceipt(order) {
     auditLines.push(`⏳ *Recebimento:* ${rawPaymentMethod === 'PIX' && order.pixData ? 'Aguardando confirmação do Sicredi' : 'Aguardando caixa'}`);
   } else if (sellerName === cashierName || rawPaymentMethod === 'PIX') {
     auditLines.push(`👤 *Pedido feito por:* ${sellerName}`);
-    auditLines.push(`✅ *Recebido por:* ${cashierName}${rawPaymentMethod === 'PIX' ? ' (Sicredi Pix Automático)' : ''}`);
+    const pixConfirmation = order.verifiedVia === 'MANUAL_CAIXA_PIX'
+      ? ' (Pix conferido manualmente)'
+      : order.verifiedVia === 'SICREDI_PIX_WEBHOOK' ? ' (Sicredi Pix Automático)' : '';
+    auditLines.push(`✅ *Recebido por:* ${cashierName}${rawPaymentMethod === 'PIX' ? pixConfirmation : ''}`);
   } else {
     auditLines.push(`👤 *Pedido feito por:* ${sellerName} (Venda creditada para ele)`);
     auditLines.push(`🏦 *Recebido por:* ${cashierName} (Operador de Caixa que recebeu)`);

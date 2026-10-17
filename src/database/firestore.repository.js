@@ -975,6 +975,17 @@ class FirestoreRepository {
   async transitionOrder(orderId, status, extra = {}) {
     const id = String(orderId);
     const updates = { ...extra, status, updatedAt: new Date().toISOString() };
+    const resolveUpdates = (order) => {
+      if (status !== 'CANCELLED') return updates;
+      const receivedMinor = (order.paymentParts || []).reduce((sum, part) => {
+        if (part.status !== 'RECEIVED_AT_CASHIER' || !['DINHEIRO', 'DEBITO', 'CREDITO'].includes(part.method)) return sum;
+        const amount = Math.round(Number(part.amount) * 100);
+        return Number.isSafeInteger(amount) && amount > 0 ? sum + amount : sum;
+      }, 0);
+      return receivedMinor > 0
+        ? { ...updates, paymentStatus: 'PARTIAL_RECONCILIATION', requiresRefund: true, refundDue: receivedMinor / 100 }
+        : updates;
+    };
     const validate = (order) => {
       if (!order) {throw new Error('Pedido não encontrado.');}
       if (order.status === status) {return;}
@@ -1005,7 +1016,7 @@ class FirestoreRepository {
           transaction.update(productRefs[index], { reservedQuantity: Math.max(0, reservedQuantity - releaseQuantity), updatedAt: updates.updatedAt });
         });
         transaction.update(ref, {
-          ...updates,
+          ...resolveUpdates(order),
           ...(reservations.length ? { inventoryReserved: false, reservationReleasedAt: updates.updatedAt } : {}),
         });
       });
@@ -1020,8 +1031,8 @@ class FirestoreRepository {
           const product = this.inMemoryProducts.get(String(item.productId));
           if (product) product.reservedQuantity = Math.max(0, Number(product.reservedQuantity || 0) - Number(item.quantity || 0));
         }
-        Object.assign(local, { ...updates, inventoryReserved: false, reservationReleasedAt: updates.updatedAt });
-      } else { Object.assign(local, updates); }
+        Object.assign(local, { ...resolveUpdates(local), inventoryReserved: false, reservationReleasedAt: updates.updatedAt });
+      } else { Object.assign(local, resolveUpdates(local)); }
     }
     return { success: true, orderId: id, status };
   }

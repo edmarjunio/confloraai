@@ -19,6 +19,10 @@ const checks = [
   ['SICREDI_WEBHOOK_SECRET ou SICREDI_WEBHOOK_GATEWAY_SECRET', (process.env.SICREDI_WEBHOOK_SECRET || '').length >= 32 || (process.env.SICREDI_WEBHOOK_GATEWAY_SECRET || '').length >= 32],
   ['SICREDI_WEBHOOK_URL (HTTPS público) ou SERVICE_URL', isPublicHttps(process.env.SICREDI_WEBHOOK_URL || config.tasks.serviceUrl)],
   ['SERVICE_URL (HTTPS público)', isPublicHttps(config.tasks.serviceUrl)],
+  ['TASK_SECRET', Boolean(config.tasks.taskSecret)],
+  ['GCP_PROJECT_ID', Boolean(config.gcp.projectId)],
+  ['GCP_REGION', Boolean(config.gcp.region)],
+  ['CLOUD_TASKS_QUEUE', Boolean(config.tasks.queue)],
   ['PDV_WORKER_SECRET', Boolean(process.env.PDV_WORKER_SECRET)],
 ];
 
@@ -40,6 +44,6 @@ if (process.argv.includes('--connect')) {
       });
   }
 } else {
-  console.log('Verificação local apenas; use --connect depois de configurar as credenciais para validar OAuth sem gerar cobrança.');
+  console.log('Verificação local de preenchimento; não valida existência da fila Cloud Tasks, permissões ou funcionamento do webhook. Use --connect para validar OAuth sem gerar cobrança.');
   if (checks.some(([, configured]) => !configured)) process.exitCode = 1;
 }

@@ -32,14 +32,14 @@ O navegador envia IDs e quantidades. Preços são recalculados no servidor; cada
 
 1. **VENDEDOR:** cria Pix ou comanda aguardando caixa. Não recebe dinheiro, cartão nem registra fiado diretamente. Tem acesso às próprias comandas e números.
 2. **CAIXA/ADMIN:** podem criar e receber vendas. A tela “Comandas e meus números” também recebe comandas de outros vendedores, preservando a autoria. Dinheiro registra valor recebido e troco. Débito e crédito são distintos.
-3. **Pix:** antes de criar a cobrança, o servidor verifica o saldo atual quando o controle de estoque está ativo. O pedido e seu identificador são persistidos antes de criar a cobrança imediata `PUT /cob/{txid}` no Sicredi. A cobrança usa o valor calculado no servidor e `modalidadeAlteracao: 0`; o QR Code e o Pix Copia e Cola retornados pelo Sicredi não permitem ajustar o valor. O QR é enviado como imagem junto com o recibo.
-4. **Confirmação:** somente o webhook autenticado inicia a conciliação. O servidor consulta `GET /pix/{endToEndId}` na API Sicredi e verifica identificador do pedido, chave beneficiária, valor exato e ausência de devoluções. O botão de consulta apenas lê o status do pedido, sem confirmar manualmente.
+3. **Pix:** antes de emitir a cobrança, o servidor reserva as unidades disponíveis, inclusive com o controle legado de estoque desativado. Pedido, identificador e vencimento são persistidos antes de criar a cobrança imediata `PUT /cob/{txid}` no Sicredi. A cobrança usa o valor calculado no servidor (ou somente a parcela Pix) e `modalidadeAlteracao: 0`. O QR é enviado como imagem junto com o código copia e cola. Em produção, Cloud Tasks agenda a expiração com `TASK_SECRET`; falha no agendamento impede emitir a cobrança e libera a reserva.
+4. **Confirmação:** o webhook autenticado inicia a conciliação. O servidor consulta `GET /pix/{endToEndId}` e verifica identificador, chave beneficiária, valor exato e ausência de devoluções. Caixa/Admin também podem confirmar Pix manualmente antes do vencimento, registrando comprovante conferido e justificativa. Em pagamento dividido, conferem a parcela Pix; o recibo identifica a confirmação manual. O botão de consulta apenas lê o status.
 5. **Baixa:** recebimento, estoque, autoria, fiado e intenção de notificação são gravados juntos. Repetições não baixam estoque nem lançam dívida novamente. “CONFIRMED” mantém a compatibilidade com o catálogo; `completedAt` indica conclusão. Pix/cash/cartão usam `paymentStatus: APPROVED`; fiado usa `ON_ACCOUNT` e `paidAt: null`.
 6. **Fiado:** exige cliente cadastrado. A quitação parcial ou total é registrada separadamente, com o recebedor, sem criar nova venda ou baixar estoque novamente. A interface de quitação aceita dinheiro, débito e crédito. Valores acima do saldo são recusados atomicamente.
 7. **WhatsApp:** sem número, não há envio ao cliente. Números brasileiros são normalizados com 55 e DDD. Falhas ficam em `pdv_outbox`, com tentativas e última mensagem de erro. Eventos Pix recebidos ficam em `pdv_pix_events`, para reprocessamento se a consulta ao banco ou o estoque falhar. Mensagens à horta usam apenas `OWNER_WHATSAPP_NUMBER` configurado.
 8. **Descontos:** acima de 5%, vendedores/caixas solicitam aprovação do administrador. A aprovação mantém o vendedor e exige recebimento posterior no caixa para formas não Pix.
 
-O identificador da operação é reutilizado no navegador em tentativas com o mesmo conteúdo. Reutilizá-lo com dados diferentes é recusado. Após recarregar o navegador, consulte as comandas antes de refazer uma operação cujo resultado ficou incerto.
+O identificador da operação é reutilizado no navegador em tentativas com o mesmo conteúdo. Reutilizá-lo com dados diferentes é recusado. Após recarregar o navegador, consulte as comandas antes de refazer uma operação cujo resultado ficou incerto. Cancelamento, liberação da reserva e registro dos valores parciais recebidos para conciliação são gravados na mesma transação, inclusive em falha do agendamento. Confirmações manuais simultâneas não recriam mensagens já enviadas na fila.
 
 ## Configuração necessária para pagamentos reais
 
@@ -59,7 +59,7 @@ A baixa de estoque é exatamente uma vez por pedido. Mensagens externas têm ent
 ## Validação
 
 - `npm run test:pdv`
-- `npm run test:pix` (inclui o PDV Sicredi, checkout Mercado Pago e integridade do estoque)
+- `npm run test:pix` (inclui catálogo/PDV Sicredi, compatibilidade legada Mercado Pago e integridade do estoque)
 - `npx playwright test test/browser/pdv.spec.js` (pode usar `CHROMIUM_PATH` para o navegador instalado).
 - Testes de transação usam um double que recusa leituras após escritas e simula falha de commit. Não substituem homologação no Firestore e Sicredi reais.
 

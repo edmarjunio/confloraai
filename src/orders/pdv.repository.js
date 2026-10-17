@@ -153,6 +153,20 @@ class PdvRepository {
     return this.repository.cancelOrder(orderId, reason);
   }
 
+  async ensurePaymentNotifications(orderId) {
+    const kinds = ['customer-paid', 'owner-paid'];
+    return this.transaction(async (tx) => {
+      const ids = kinds.map((kind) => `${orderId}-${kind}`);
+      const jobs = await Promise.all(ids.map((id) => tx.get('pdv_outbox', id)));
+      kinds.forEach((kind, index) => {
+        if (jobs[index]) return;
+        const id = ids[index];
+        tx.set('pdv_outbox', id, { id, kind, orderId, status: 'PENDING', attempts: 0 });
+      });
+      return ids;
+    });
+  }
+
   async requestPixAtCashier(orderId, receiver, requestedParts) {
     return this.transaction(async (tx) => {
       const order = await tx.get('orders', orderId);

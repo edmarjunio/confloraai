@@ -263,7 +263,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     const verification = {
       verifiedVia: 'MANUAL_CAIXA_PIX',
       txid: existing.pixData?.txid,
-      amountMinor: Math.round(Number(existing.total) * 100),
+      amountMinor: Math.round(partAmount(existing, 'PIX') * 100),
       endToEndId: String(req.body?.endToEndId || '').trim().slice(0, 80),
       manualPixProofSeen: true,
       manualPixNote: note,
@@ -276,13 +276,8 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
         paymentAmount: Number(existing.total), pixTxid: verification.txid,
         receivedBy: receiver, manualPixProofSeen: true, manualPixNote: note,
       });
-    for (const kind of ['customer-paid', 'owner-paid']) {
-      await store.transaction(async (tx) => {
-        const id = `${order.id}-${kind}`;
-        tx.set('pdv_outbox', id, { id, kind, orderId: order.id, status: 'PENDING', attempts: 0 });
-      });
-      await service.deliver(`${order.id}-${kind}`);
-    }
+    const notificationIds = await store.ensurePaymentNotifications(order.id);
+    for (const id of notificationIds) await service.deliver(id);
     res.json({ success: true, order, receiptText: formatOrderReceipt(order) });
   }));
   // This compatibility endpoint only reads persisted status; it cannot confirm payment.
