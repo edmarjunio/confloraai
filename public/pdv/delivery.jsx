@@ -71,7 +71,7 @@ function PdvDelivery({ user, onBack }) {
   const duration = seconds => seconds == null || !Number.isFinite(seconds) ? 'Sem registro' : seconds < 60 ? 'menos de 1 min' : seconds < 3600 ? `${Math.floor(seconds / 60)} min` : `${Math.floor(seconds / 3600)} h ${Math.floor(seconds % 3600 / 60)} min`;
   const since = timestamp => { const seconds = (Date.now() - Date.parse(timestamp)) / 1000; return Number.isFinite(seconds) && seconds >= 0 ? duration(seconds) : 'Sem registro'; };
   const decorate = orders => (orders || []).map(order => ({ ...order, deliveryOverview: [
-    `Entregador: ${order.assignedDriver?.name || 'Aguardando responsável'}`,
+    ...(!order.assignedDriver && !order.deliveredBy ? ['Aguardando responsável'] : []),
     ...(order.deliveryStatus === 'PREPARING_DELIVERY' ? [`Separando há ${since(order.acceptedAt)}`] : []),
     ...(order.deliveryStatus === 'OUT_FOR_DELIVERY' ? [`${order.departedAt ? 'Saiu da horta há' : 'Em rota · horário antigo estimado há'} ${since(order.departedAt || order.acceptedAt)}`] : []),
     ...(order.deliveryStatus === 'DELIVERED' ? [`Tempo em rota: ${duration(order.deliveryMetrics?.durationSeconds ?? (Date.parse(order.deliveredAt) - Date.parse(order.departedAt || order.acceptedAt)) / 1000)}`] : []),

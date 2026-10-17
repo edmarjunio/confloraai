@@ -321,6 +321,7 @@ window.PdvComponents = (() => {
   function OrderCard({ order, tone, selected, attention, onDetails, stage, canMove, onDragStart, onDragEnd }) {
     const items = (order.items || []).slice(0, 2);
     const extraItems = Math.max(0, (order.items || []).length - items.length);
+    const deliveryDriver = order.assignedDriver || order.deliveredBy;
     return <cf-card padding="sm" draggable={canMove && ['confirmation', 'payment'].includes(stage) ? 'true' : undefined} onDragStart={(event) => { event.dataTransfer.setData('application/x-conflora-order', JSON.stringify({ id: order.id, from: stage })); event.dataTransfer.effectAllowed = 'move'; onDragStart?.(stage); }} onDragEnd={onDragEnd} class={`cf-order-card cf-order-card--${tone || 'amber'} ${selected ? 'cf-order-card--selected' : ''} ${attention ? 'cf-order-card--attention' : ''}`}>
       <button type="button" className="w-full cursor-pointer text-left" onClick={() => onDetails(order)} aria-label={`Abrir recibo e detalhes da comanda ${order.ticketNumber}`}>
         <div className="flex items-start justify-between gap-2">
@@ -328,6 +329,7 @@ window.PdvComponents = (() => {
           <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-900">{paymentLabel(order.paymentMethod)}</span>
         </div>
         <p className="mt-2 text-[11px] font-bold text-emerald-800">{order.deliveryStatus === 'OUT_FOR_DELIVERY' ? 'Em rota · ' : ''}{window.ConfloraOrderDisplay.status(order)}</p>
+        {deliveryDriver && <span data-delivery-driver className="mt-2 inline-flex max-w-full items-start gap-1.5 rounded-full border border-emerald-200 bg-white/90 px-3 py-1 text-[11px] font-bold leading-5 text-emerald-900" title={`Entregador responsável: ${deliveryDriver.name || 'Entregador'}`} aria-label={`Entregador responsável: ${deliveryDriver.name || 'Entregador'}`}><span aria-hidden="true">🛵</span><span className="min-w-0 break-words">Entregador: {deliveryDriver.name || 'Entregador'}</span></span>}
         {order.deliveryOverview && <div className="mt-2 space-y-1 rounded-lg bg-white/60 p-2 text-[11px] font-semibold text-slate-700">{order.deliveryOverview.map(line => <p key={line}>{line}</p>)}</div>}
         <p className="mt-1 font-bold text-slate-800">{order.customerName || 'Cliente Balcão'}</p>
         <p title={(order.items || []).map((item) => item.name).join(' · ')} className="mt-1 text-xs leading-5 text-slate-600">{items.map(orderItemLabel).join(' · ')}{extraItems ? ` · +${extraItems} item(ns)` : ''}</p>
