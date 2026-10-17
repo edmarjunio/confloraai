@@ -1,3 +1,4 @@
+const { requireManualProof } = require('./payment-proof');
 const { createHash } = require('node:crypto');
 const { remainingStock, validateStockQuantity } = require('./order-integrity');
 const { normalizePaymentParts, partAmount } = require('./payment-parts');
@@ -263,6 +264,7 @@ class PdvRepository {
       const creditMinor = Math.round(Number(customer?.creditBalance || 0) * 100);
       const totalMinor = Math.round(amountFor('SALDO_CLIENTE') * 100);
       if (usingCredit && creditMinor < totalMinor) { throw new Error('O crédito disponível foi alterado e não cobre mais o total. Atualize o saldo antes de confirmar.'); }
+      const manualPixProof = verification?.verifiedVia === 'MANUAL_CAIXA_PIX' ? await requireManualProof(tx, verification, receiver, 'ORDER', order.id) : null;
       // No transaction reads after this point.
       for (const { id, quantity, product, stock, ownReservation } of products) {
         tx.set('products', id, { ...product, stockQuantity: stock, estoque: stock,
@@ -278,7 +280,7 @@ class PdvRepository {
         verifiedVia: verification ? (verification.verifiedVia || 'SICREDI_PIX_WEBHOOK') : 'CAIXA', updatedAt: now,
         ...(amountFor('DINHEIRO') ? { cashReceived: tendered, changeGiven: (Math.round(tendered * 100) - Math.round(amountFor('DINHEIRO') * 100)) / 100 } : {}),
         ...(verification ? { paymentTransactionId: verification.endToEndId || `MANUAL-${order.id}`, paymentVerifiedAmount: verification.amountMinor / 100, pixVerified: true } : {}),
-        ...(verification?.verifiedVia === 'MANUAL_CAIXA_PIX' ? { manualPixProofSeen: true, manualPixNote: String(verification.manualPixNote).trim().slice(0, 500), manualPixConfirmedBy: receiver,
+        ...(verification?.verifiedVia === 'MANUAL_CAIXA_PIX' ? { manualPixProof, manualPixProofId: manualPixProof.id, manualPixProofSeen: true, manualPixNote: String(verification.manualPixNote).trim().slice(0, 500), manualPixConfirmedBy: receiver,
           paymentVerificationStoppedAt: now, paymentVerificationStopReason: 'MANUAL_CONFIRMATION' } : {}) };
       if (onAccount) {
         tx.set('customers', order.customerId, { ...customer, debtBalance: (Math.round(Number(customer.debtBalance || 0) * 100) + Math.round(amountFor('FIADO') * 100)) / 100, ...(usingCredit ? { creditBalance: (creditMinor - totalMinor) / 100 } : {}), updatedAt: now });
@@ -323,6 +325,7 @@ class PdvRepository {
         if (previous.customerKey !== customerKey || previous.amount !== amount || JSON.stringify(previousParts) !== JSON.stringify(parts) || previous.entryType !== entryType || previous.receivedBy.id !== receivedBy.id) { throw new Error('Identificador de recebimento já utilizado.'); }
         return previous;
       }
+      const manualPixProof = parts.some((part) => part.method === 'PIX') ? await requireManualProof(tx, verification, receivedBy, 'DEBT', id) : null;
       const customer = await tx.get('customers', customerKey);
       const balanceMinor = Math.round(Number(customer?.debtBalance || 0) * 100);
       const amountMinor = Math.round(amount * 100);
@@ -335,7 +338,7 @@ class PdvRepository {
         : Number(customer.creditBalance || 0);
       const settlement = { id, customerKey, customerName: customer.name, customerPhone: customer.phone || '', amount,
         paymentMethod: method, paymentParts: parts, notes, receivedBy, operatorName: receivedBy.name, newBalance, newCreditBalance, entryType, type: entryType, createdAt: now,
-        ...(verification ? { verifiedVia: 'MANUAL_CAIXA_PIX', manualPixProofSeen: true, manualPixNote: verification.manualPixNote } : {}) };
+        ...(manualPixProof ? { manualPixProof, manualPixProofId: manualPixProof.id, verifiedVia: 'MANUAL_CAIXA_PIX', manualPixProofSeen: true, manualPixNote: verification.manualPixNote } : {}) };
       tx.set('customers', customerKey, { ...customer, debtBalance: newBalance, creditBalance: newCreditBalance, updatedAt: now });
       tx.set('debt_settlements', id, settlement);
       tx.set('pdv_outbox', id, { id, settlementId: id, kind: 'debt-receipt', status: 'PENDING', attempts: 0 });

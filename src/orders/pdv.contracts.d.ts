@@ -21,6 +21,6 @@ export interface DebtSettlementInput {
   id: string; customerKey: string; amount: number;
   paymentMethod: 'DINHEIRO' | 'DEBITO' | 'CREDITO' | 'PIX' | 'MISTO';
   paymentParts?: Array<{ method: 'DINHEIRO' | 'DEBITO' | 'CREDITO' | 'PIX'; amount: number }>;
-  verification?: { manualPixProofSeen: boolean; manualPixNote: string };
+  verification?: { manualPixProofSeen: boolean; manualPixNote: string; manualPixProofId: string };
   receivedBy: StaffActor; notes: string;
 }

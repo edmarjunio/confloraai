@@ -15,6 +15,17 @@ const cashier = { id: 'cashier', name: 'Caixa', email: 'caixa@conflora.test', ro
 const secondCashier = { id: 'cashier-2', name: 'Outro Caixa', email: 'caixa2@conflora.test', role: 'CAIXA', pin: '5678' };
 const actor = ({ id, name, email, role }) => ({ id, name, email, role });
 
+const proofData = 'data:application/pdf;base64,' + Buffer.from('%PDF-1.4\nComprovante de teste\n%%EOF').toString('base64');
+async function uploadProof(base, cookie, targetId, targetType = 'ORDER') {
+  const response = await fetch(base + '/api/caixa/payment-proofs', { method: 'POST', headers: { cookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ targetType, targetId, dataUrl: proofData, fileName: 'comprovante.pdf' }) });
+  assert.equal(response.status, 201); return (await response.json()).id;
+}
+async function seedProof(repository, targetId, targetType = 'ORDER') {
+  const id = randomUUID();
+  await repository.transaction(async (tx) => tx.set('payment_proofs', id, { id, targetId, targetType, uploadedBy: cashier.id, fileName: 'comprovante.pdf', contentType: 'application/pdf', size: 35 }));
+  return id;
+}
+
 function setup() {
   const base = new FirestoreRepository({ isInMemory: true });
   base.inMemoryUsers.set(seller.id, { ...seller, active: true });
@@ -237,7 +248,7 @@ test('Pix generated at the cashier reserves stock and blocks a competing receipt
   assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 2);
 
   const verified = { txid: pixOrder.pixData.txid, amountMinor: 2000, verifiedVia: 'MANUAL_CAIXA_PIX',
-    manualPixProofSeen: true, manualPixNote: 'Comprovante conferido', endToEndId: '' };
+    manualPixProofId: await seedProof(s.repository, order.id), manualPixProofSeen: true, manualPixNote: 'Comprovante conferido', endToEndId: '' };
   const paid = await s.repository.receive(order.id, actor(cashier), verified);
   assert.equal(paid.status, 'CONFIRMED');
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 0);
@@ -553,7 +564,9 @@ test('cashier can manually confirm a Pix only after recording proof review; audi
   const post = (body) => fetch(`${base}/api/caixa/orders/${order.id}/confirm-manual-pix`, {
     method: 'POST', headers: { cookie: cashierCookie, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   });
-  assert.equal((await post({ proofSeen: true, note: 'Comprovante conferido no caixa' })).status, 200);
+  assert.equal((await post({ proofSeen: true, note: 'Comprovante conferido no caixa' })).status, 400);
+  const proofId = await uploadProof(base, cashierCookie, order.id);
+  assert.equal((await post({ proofSeen: true, proofId, note: 'Comprovante conferido no caixa' })).status, 200);
   const saved = await s.base.getOrderById(order.id);
   assert.equal(saved.paymentStatus, 'APPROVED');
   assert.equal(saved.verifiedVia, 'MANUAL_CAIXA_PIX');
@@ -582,6 +595,7 @@ test('manual mixed Pix uses the Pix installment and concurrent confirmations sen
   const order = await app.locals.pdv.service.create({ ...s.input, customerId: 'customer',
     paymentParts: [{ method: 'DINHEIRO', amount: 8 }, { method: 'PIX', amount: 12 }],
   }, cashier);
+  const proofId = await uploadProof(base, cookie, order.id);
   const sentBefore = s.sent.length;
   const receive = app.locals.pdv.store.receive.bind(app.locals.pdv.store);
   let release;
@@ -594,7 +608,7 @@ test('manual mixed Pix uses the Pix installment and concurrent confirmations sen
   };
   const confirm = () => fetch(`${base}/api/caixa/orders/${order.id}/confirm-manual-pix`, {
     method: 'POST', headers: { cookie, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ proofSeen: true, note: 'Comprovante da parcela de doze reais' }),
+    body: JSON.stringify({ proofSeen: true, proofId, note: 'Comprovante da parcela de doze reais' }),
   });
   const responses = await Promise.all([confirm(), confirm()]);
   for (const response of responses) assert.equal(response.status, 200);
@@ -733,6 +747,7 @@ test('debt accepts successive and mixed receipts without changing stock or dupli
   assert.equal((await s.repository.settle(first)).newBalance, 100);
   assert.equal((await s.repository.settle(first)).newBalance, 100);
   const remainder = { id: randomUUID(), customerKey: 'customer', amount: 100, paymentParts: [{ method: 'DEBITO', amount: 40 }, { method: 'PIX', amount: 60 }], receivedBy: actor(cashier), verification: { manualPixProofSeen: true, manualPixNote: 'Transferência conferida na conta' } };
+  remainder.verification.manualPixProofId = await seedProof(s.repository, remainder.id, 'DEBT');
   const settled = await s.repository.settle(remainder);
   assert.equal(settled.newBalance, 0); assert.equal(settled.paymentMethod, 'MISTO');
   await s.repository.settle(remainder);
@@ -759,7 +774,8 @@ test('HTTP restricts board moves and manually receives direct Pix without creati
   const drop = await (await post(move, { from: 'payment', to: 'paid' }, cookie)).json(); assert.equal(drop.requiresPayment, true);
   const confirm = `/api/caixa/orders/${order.id}/confirm`;
   assert.equal((await post(confirm, { paymentMethod: 'PIX_MANUAL' }, cookie)).status, 400);
-  const result = await post(confirm, { paymentMethod: 'PIX_MANUAL', proofSeen: true, note: 'Pix recebido na chave da loja' }, cookie);
+  const proofId = await uploadProof(origin, cookie, order.id);
+  const result = await post(confirm, { paymentMethod: 'PIX_MANUAL', proofSeen: true, proofId, note: 'Pix recebido na chave da loja' }, cookie);
   assert.equal(result.status, 200); const { order: paid } = await result.json();
   assert.equal(paid.paymentStatus, 'APPROVED'); assert.equal(paid.manualPixConfirmedBy.id, cashier.id);
   assert.equal(paid.paymentVerificationStopReason, 'MANUAL_CONFIRMATION'); assert.equal(s.chargeCalls.length, 0);
@@ -769,7 +785,7 @@ test('HTTP restricts board moves and manually receives direct Pix without creati
 
 test('manual confirmation stops subsequent Sicredi checks and fixes issued payment allocation', async () => {
   const s = setup(); const order = await s.service.create({ ...s.input, paymentParts: [{ method: 'DINHEIRO', amount: 8 }, { method: 'PIX', amount: 12 }] }, cashier);
-  const verification = { txid: order.pixData.txid, amountMinor: 1200, verifiedVia: 'MANUAL_CAIXA_PIX', manualPixProofSeen: true, manualPixNote: 'Comprovante conferido no caixa' };
+  const verification = { manualPixProofId: await seedProof(s.repository, order.id), txid: order.pixData.txid, amountMinor: 1200, verifiedVia: 'MANUAL_CAIXA_PIX', manualPixProofSeen: true, manualPixNote: 'Comprovante conferido no caixa' };
   await assert.rejects(s.repository.receive(order.id, actor(cashier), { ...verification, amountMinor: 1100 }, null, null, { requestedParts: [{ method: 'DINHEIRO', amount: 9 }, { method: 'PIX', amount: 11 }] }), /parcelas/);
   await s.repository.receive(order.id, actor(cashier), verification);
   let checks = 0; s.pix.checkReceivedPayment = async () => { checks++; throw new Error('Não consultar após confirmação manual'); };
@@ -792,7 +808,7 @@ for (const orderType of ['PICKUP', 'DELIVERY']) {
   for (const paymentMethod of ['DINHEIRO', 'CREDITO']) {
     test(`seller ${orderType} ${paymentMethod}: choosing payment does not receive money or deduct stock`, async () => {
       const s = setup();
-      const order = await s.service.create({ ...s.input, paymentMethod, orderType }, seller);
+      const order = await s.service.create({ ...s.input, paymentMethod, orderType, customerName: 'Cliente Teste', customerPhone: '64999991234', deliveryAddress: 'Rua das Flores, 10, Centro, Mineiros GO' }, seller);
       assert.equal(order.status, 'AWAITING_PAYMENT'); assert.equal(order.paymentStatus, 'PENDING');
       assert.equal(order.completedAt, undefined); assert.equal(order.receivedBy, null);
       assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
@@ -828,4 +844,65 @@ test('online pickup and delivery cash/card orders appear directly in payment que
   const response = await post(`/api/caixa/orders/${ids[0]}/confirm`, { paymentMethod: 'DINHEIRO', receivedAmount: 10 }, cookie);
   assert.equal(response.status, 200); assert.equal((await response.json()).order.paymentStatus, 'APPROVED');
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 19);
+});
+
+
+test('manual Pix requires a stored proof bound to this order and cashier before any stock deduction', async () => {
+  const s = setup(); const order = await s.service.create({ ...s.input, deferToCashier: true }, seller);
+  const verification = { verifiedVia: 'MANUAL_CAIXA_PIX', amountMinor: 2000, manualPixProofSeen: true, manualPixNote: 'Comprovante conferido no banco' };
+  await assert.rejects(s.repository.receive(order.id, actor(cashier), verification, null, 'PIX'), /Anexe obrigatoriamente/);
+  verification.manualPixProofId = await seedProof(s.repository, randomUUID());
+  await assert.rejects(s.repository.receive(order.id, actor(cashier), verification, null, 'PIX'), /Anexe obrigatoriamente/);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
+  verification.manualPixProofId = await seedProof(s.repository, order.id);
+  const paid = await s.repository.receive(order.id, actor(cashier), verification, null, 'PIX');
+  assert.equal(paid.manualPixProofId, verification.manualPixProofId);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
+});
+
+test('payment proof upload validates content, protects files, and rejects seller uploads', async (t) => {
+  const s = setup(); const app = createApp({ messageService: { firestoreRepo: s.base, whatsappClient: s.whatsapp }, sicrediClient: s.pix });
+  const server = app.listen(0); t.after(() => server.close()); const origin = `http://127.0.0.1:${server.address().port}`;
+  const post = (path, body, cookie = '') => fetch(origin + path, { method: 'POST', headers: { cookie, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const login = async (user) => (await post('/api/admin/auth/login', { userId: user.id, pin: user.pin })).headers.get('set-cookie').split(';')[0];
+  const cookie = await login(cashier); const sellerCookie = await login(seller);
+  const order = await app.locals.pdv.service.create({ ...s.input, deferToCashier: true }, seller);
+  const body = { targetType: 'ORDER', targetId: order.id, dataUrl: proofData, fileName: 'comprovante.pdf' };
+  assert.equal((await post('/api/caixa/payment-proofs', body, sellerCookie)).status, 403);
+  assert.equal((await post('/api/caixa/payment-proofs', { ...body, dataUrl: 'data:image/png;base64,' + Buffer.from('<html>fake</html>').toString('base64') }, cookie)).status, 400);
+  const proofId = await uploadProof(origin, cookie, order.id);
+  assert.equal((await fetch(origin + '/api/caixa/payment-proofs/' + proofId)).status, 401);
+  const proof = await fetch(origin + '/api/caixa/payment-proofs/' + proofId, { headers: { cookie } });
+  assert.equal(proof.status, 200); assert.equal(proof.headers.get('content-type'), 'application/pdf');
+  assert.match(proof.headers.get('cache-control'), /no-store/);
+  assert.match(await proof.text(), /%PDF/);
+  const { decodeProof } = require('../src/orders/payment-proof');
+  assert.throws(() => decodeProof('data:application/pdf;base64,' + Buffer.alloc(3 * 1024 * 1024 + 1, 65).toString('base64')), /inválido/);
+});
+
+test('delivery refuses incomplete customer information and allows optional CPF and email', async () => {
+  const s = setup();
+  for (const missing of ['customerName', 'customerPhone', 'deliveryAddress']) {
+    const input = { ...s.input, requestId: randomUUID(), orderType: 'DELIVERY', customerName: 'Maria', customerPhone: '64999991234', deliveryAddress: 'Rua 10, 123, Centro, Mineiros GO', [missing]: '' };
+    await assert.rejects(s.service.create(input, seller), /Entrega exige/);
+  }
+  assert.equal(s.base.inMemoryOrders.size, 0);
+});
+
+test('cashier customer selection keeps the existing record and email optional; delivery API rejects missing data', async (t) => {
+  const s = setup(); const app = createApp({ messageService: { firestoreRepo: s.base, whatsappClient: s.whatsapp }, sicrediClient: s.pix });
+  const server = app.listen(0); t.after(() => server.close()); const origin = `http://127.0.0.1:${server.address().port}`;
+  const post = (path, body, cookie = '') => fetch(origin + path, { method: 'POST', headers: { cookie, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const login = await post('/api/admin/auth/login', { userId: cashier.id, pin: cashier.pin }); const cookie = login.headers.get('set-cookie').split(';')[0];
+  const created = await post('/api/caixa/customers', { name: 'Cliente sem email', phone: '64977771234', address: 'Rua 10, 20, Centro, Mineiros GO' }, cookie);
+  assert.equal(created.status, 201); const { customer } = await created.json(); assert.equal(customer.email, '');
+  const selected = await post('/api/caixa/customers', { customerId: customer.id, name: customer.name, phone: '64966661234', address: customer.address }, cookie);
+  assert.equal(selected.status, 201); assert.equal((await selected.json()).customer.id, customer.id);
+  assert.equal(s.base.inMemoryCustomers.size, 2);
+  for (const missing of ['customerName', 'customerPhone', 'deliveryAddress']) {
+    const data = { customerName: 'Cliente Web', customerPhone: '64999991234', deliveryAddress: 'Rua 10, 20, Centro, Mineiros GO', orderType: 'DELIVERY', paymentMethod: 'DINHEIRO', items: [{ productId: 'plant', quantity: 1 }], [missing]: '' };
+    assert.equal((await post('/api/orders', data)).status, 400);
+  }
+  assert.equal(s.base.inMemoryOrders.size, 0);
+  assert.equal((await fetch(origin + '/api/customer/profile')).status, 401);
 });

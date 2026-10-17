@@ -59,6 +59,7 @@ class PdvService {
   /** @param {import('./pdv.contracts').SaleInput} input @param {import('./pdv.contracts').StaffActor} user */
   async create(input, user, { approvedDiscount = false } = {}) {
     const createdBy = actor(user);
+    if (input.orderType === 'DELIVERY' && (!String(input.customerName || '').trim() || input.customerName === 'Cliente Balcão' || !normalizePhone(input.customerPhone) || String(input.deliveryAddress || '').trim().length < 8)) throw new Error('Entrega exige nome, WhatsApp com DDD e endereço completo (rua, número, bairro e cidade).');
     const id = requestId(input.requestId);
     const deliveryLocation = input.orderType === 'DELIVERY' ? normalizeDeliveryLocation(input.deliveryLocation) : null;
     const requestPayload = {
@@ -315,7 +316,7 @@ class PdvService {
       return { order: updated, awaitingPix: true };
     }
     if (method === 'PIX' && payload.manualPixConfirm) {
-      const updated = await this.confirmManualPixInCashier(orderId, user, {
+      await this.confirmManualPixInCashier(orderId, user, {
         proofSeen: Boolean(payload.proofSeen),
         note: payload.note || 'Pix conferido pelo entregador na entrega',
       });

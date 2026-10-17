@@ -474,6 +474,20 @@ export function createCart(state) {
   function open() {
     const dialog = $("#cartDialog");
     if (!dialog.open) dialog.show();
+    if (!state.existingStore) return;
+    const customerSessionId = state.user?.id;
+    const before = Object.fromEntries(['name', 'phone', 'address'].map((field) => [field, form.elements[field]?.value || '']));
+    fetch('/api/customer/profile').then(async (response) => {
+      if (!response.ok) return;
+      const profile = await response.json();
+      if (customerSessionId !== state.user?.id) return;
+      for (const field of ['name', 'phone', 'address']) {
+        if (form.elements[field] && !before[field] && !form.elements[field].value) {
+          form.elements[field].value = field === 'phone' ? String(profile[field] || '').replace(/^55(?=\d{10,11}$)/, '') : profile[field] || '';
+        }
+      }
+    }).catch(() => {});
+
   }
 
   function close() {

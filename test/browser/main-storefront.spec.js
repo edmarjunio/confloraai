@@ -324,3 +324,13 @@ test('mobile chat searches the full catalog after selecting a category and keeps
   expect(await actions.evaluate((node) => parseFloat(window.getComputedStyle(node).paddingLeft))).toBeGreaterThanOrEqual(14);
   await page.screenshot({ path: 'test-results/chat-search-mobile.png' });
 });
+
+test('registered customer data completes checkout without overwriting typed data', async ({ page }) => {
+  await page.route('**/api/customer/profile', route => route.fulfill({ json: { name: 'Cliente cadastrado', phone: '5564999991234', address: 'Rua das Flores, 20, Centro, Mineiros GO', email: 'cliente@test.com' } }));
+  await page.goto('/'); await selectPortuguese(page);
+  if (await page.locator('#coachSkip').isVisible()) await page.locator('#coachSkip').click();
+  await page.locator('#cartButton').click();
+  await expect(page.locator('#checkoutCustomer [name=name]')).toHaveValue('Cliente cadastrado');
+  await expect(page.locator('#checkoutCustomer [name=phone]')).toHaveValue('64999991234');
+  await expect(page.locator('#checkoutForm [name=address]')).toHaveValue('Rua das Flores, 20, Centro, Mineiros GO');
+});

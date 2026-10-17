@@ -242,8 +242,8 @@ const { useState, useEffect, useRef, useMemo } = React;
       const [tempCustomerCpf, setTempCustomerCpf] = useState('');
       const [tempCustomerAddress, setTempCustomerAddress] = useState('');
       const [tempCustomerNotes, setTempCustomerNotes] = useState('');
-      const [customerSearchQuery, setCustomerSearchQuery] = useState('');
-      const [customerSearchResults, setCustomerSearchResults] = useState([]);
+      const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
+      const [selectedCustomerId, setSelectedCustomerId] = useState('');
       const [customerNotification, setCustomerNotification] = useState('');
       const [isSavingCustomer, setIsSavingCustomer] = useState(false);
 
@@ -380,70 +380,30 @@ const { useState, useEffect, useRef, useMemo } = React;
         setTempCustomerCpf(customerCpf);
         setTempCustomerAddress(customerAddress);
         setTempCustomerNotes(customerNotes);
-        setCustomerSearchQuery('');
-        setCustomerSearchResults([]);
+        setSelectedCustomerId(customerId);
         setCustomerNotification('');
         setActiveModal('customer');
-        fetch('/api/caixa/customers')
-          .then((res) => (res.ok ? res.json() : []))
-          .then((list) => {
-            if (Array.isArray(list)) setCustomerSearchResults(list);
-          })
-          .catch(() => {});
-      };
-
-      const handleSearchCustomer = (q) => {
-        setCustomerSearchQuery(q);
-        if (!q || !q.trim()) {
-          fetch('/api/caixa/customers')
-            .then((res) => (res.ok ? res.json() : []))
-            .then((list) => {
-              if (Array.isArray(list)) setCustomerSearchResults(list);
-            })
-            .catch(() => {});
-          return;
-        }
-        fetch('/api/caixa/customers?q=' + encodeURIComponent(q.trim()))
-          .then((res) => (res.ok ? res.json() : []))
-          .then((list) => {
-            if (Array.isArray(list)) setCustomerSearchResults(list);
-          })
-          .catch(() => {});
       };
 
       const selectCustomerFromList = (cust) => {
-        setCustomerId(cust.id);
-        setCustomerCreditBalance(Number(cust.creditBalance || 0));
-        const name = cust.name || 'Cliente';
-        const phone = cust.phone || '';
-        const email = cust.email || '';
-        const address = cust.address || cust.deliveryAddress || '';
-        const cpf = cust.cpfCnpj || '';
-        const notes = cust.notes || '';
-
-        setCustomerName(name);
-        setCustomerPhone(phone);
-        setTempCustomerPhone(phone);
-        setTempCustomerEmail(email);
-        setCustomerAddress(address);
-        setCustomerCpf(cpf);
-        setCustomerNotes(notes);
-        setCustomerNotification('Cliente "' + name + '" selecionado! ✅');
-        setTimeout(() => {
-          setActiveModal(null);
-        }, 500);
+        setSelectedCustomerId(cust.id);
+        setTempCustomerName(cust.name || ''); setTempCustomerPhone(cust.phone || '');
+        setTempCustomerEmail(cust.email || ''); setTempCustomerAddress(cust.address || cust.deliveryAddress || '');
+        setTempCustomerCpf(cust.cpfCnpj || ''); setTempCustomerNotes(cust.notes || '');
+        setCustomerSearchOpen(false); setCustomerNotification('Dados preenchidos. Confira e selecione o cliente.');
       };
 
       const handleQuickPurchaseCustomer = () => {
+        if (orderType === 'DELIVERY' && (!tempCustomerName.trim() || !/^\d{10,13}$/.test(tempCustomerPhone.replace(/\D/g, '')) || tempCustomerAddress.trim().length < 8)) { setCustomerNotification('Preencha nome, WhatsApp e endereço completo para entrega.'); return; }
         setCustomerId('');
         setCustomerCreditBalance(0);
         setTempCustomerEmail('');
         const name = tempCustomerName.trim() || 'Cliente Balcão';
         setCustomerName(name);
-        if (tempCustomerPhone) setCustomerPhone(tempCustomerPhone.trim());
-        if (tempCustomerAddress) setCustomerAddress(tempCustomerAddress.trim());
-        if (tempCustomerCpf) setCustomerCpf(tempCustomerCpf.trim());
-        if (tempCustomerNotes) setCustomerNotes(tempCustomerNotes.trim());
+        setCustomerPhone(tempCustomerPhone.trim());
+        setCustomerAddress(tempCustomerAddress.trim());
+        setCustomerCpf(tempCustomerCpf.trim());
+        setCustomerNotes(tempCustomerNotes.trim());
 
         setCustomerNotification('Cliente identificado para compra rápida (sem salvar na base).');
         setTimeout(() => {
@@ -465,6 +425,7 @@ const { useState, useEffect, useRef, useMemo } = React;
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               name,
+              customerId: selectedCustomerId || undefined,
               phone: tempCustomerPhone.trim(),
               email: tempCustomerEmail.trim(),
               cpfCnpj: tempCustomerCpf.trim(),
@@ -488,7 +449,7 @@ const { useState, useEffect, useRef, useMemo } = React;
           setCustomerId(saved.customer.id);
           setCustomerCreditBalance(Number(saved.customer.creditBalance || 0));
           setTempCustomerEmail(saved.customer.email || tempCustomerEmail.trim());
-          setCustomerNotification('Cliente "' + name + '" cadastrado na base para futuras compras! ✅');
+          setCustomerNotification(selectedCustomerId ? 'Cliente selecionado.' : 'Cliente adicionado.');
           setTimeout(() => {
             setActiveModal(null);
             setIsSavingCustomer(false);
@@ -500,6 +461,7 @@ const { useState, useEffect, useRef, useMemo } = React;
       };
 
       const handleAddCustomer = async () => {
+        if (orderType === 'DELIVERY' && (!tempCustomerName.trim() || !/^\d{10,13}$/.test(tempCustomerPhone.replace(/\D/g, '')) || tempCustomerAddress.trim().length < 8)) { setCustomerNotification('Para entrega, informe nome, WhatsApp com DDD e endereço completo: rua, número, bairro e cidade.'); return; }
         const name = tempCustomerName.trim();
         if (!name) {
           alert('Por favor, informe ao menos o nome do cliente.');
@@ -509,7 +471,7 @@ const { useState, useEffect, useRef, useMemo } = React;
           tempCustomerPhone.trim() || tempCustomerEmail.trim() || tempCustomerAddress.trim() || tempCustomerCpf.trim()
         );
 
-        if (hasAdditionalData) {
+        if (hasAdditionalData || selectedCustomerId) {
           await handleSaveCustomerToDatabase();
         } else {
           handleQuickPurchaseCustomer();
@@ -724,6 +686,7 @@ const { useState, useEffect, useRef, useMemo } = React;
       };
 
       const handleCompleteSale = async () => {
+        if (orderType === 'DELIVERY' && (!customerName.trim() || customerName === 'Cliente Balcão' || !/^\d{10,13}$/.test(customerPhone.replace(/\D/g, '')) || customerAddress.trim().length < 8)) { openCustomerModal(); setCustomerNotification('Complete os dados obrigatórios para entrega.'); return; }
         if (cart.length === 0 || isSubmittingSale || !currentUser) return;
         setIsSubmittingSale(true);
         const isDelivery = orderType === 'DELIVERY';
@@ -923,7 +886,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                       onClick={() => {
                         const next = orderType === 'PICKUP' ? 'DELIVERY' : 'PICKUP';
                         setOrderType(next);
-                        if (next === 'DELIVERY' && !customerAddress) {
+                        if (next === 'DELIVERY') {
                           openCustomerModal();
                         }
                       }}
@@ -937,10 +900,10 @@ const { useState, useEffect, useRef, useMemo } = React;
                     {/* Botão Adicionar Cliente */}
                     <button
                       onClick={openCustomerModal}
-                      className="px-2.5 py-1 rounded-full bg-white border border-emerald-200 text-emerald-800 font-bold flex items-center gap-1 shrink-0 shadow-2xs hover:bg-emerald-50"
+                      className="cf-button !px-3 !py-2 !rounded-full text-xs font-extrabold flex items-center gap-2 shrink-0 shadow-md transition hover:-translate-y-0.5"
                     >
-                      <UserPlus className="w-3 h-3 text-emerald-600" />
-                      <span className="truncate max-w-[85px]">{customerName !== 'Cliente Balcão' ? customerName : 'Cliente'}</span>
+                      <UserPlus className="w-3 h-3" />
+                      <span className="truncate max-w-[130px]">{customerId ? 'Selecionar cliente' : 'Adicionar cliente'}</span>
                     </button>
 
                     <button
@@ -1029,7 +992,7 @@ const { useState, useEffect, useRef, useMemo } = React;
             </div>
 
             {/* Segmented Control: Balcão vs Entrega */}
-            <div className="flex items-center bg-slate-200/70 p-0.5 rounded-xl text-xs font-bold">
+            <div className="flex items-center gap-2 bg-slate-100 p-2 rounded-xl text-xs font-bold">
               <button
                 onClick={() => setOrderType('PICKUP')}
                 aria-pressed={orderType === 'PICKUP'}
@@ -1042,9 +1005,7 @@ const { useState, useEffect, useRef, useMemo } = React;
               <button
                 onClick={() => {
                   setOrderType('DELIVERY');
-                  if (!customerAddress && customerName === 'Cliente Balcão') {
-                    openCustomerModal();
-                  }
+                  openCustomerModal();
                 }}
                 aria-pressed={orderType === 'DELIVERY'}
                 className={"flex-1 py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition border " + (orderType === 'DELIVERY'
@@ -1072,10 +1033,10 @@ const { useState, useEffect, useRef, useMemo } = React;
 
               <button
                 onClick={openCustomerModal}
-                className="px-2.5 py-1 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[11px] font-bold border border-emerald-200/80 flex items-center gap-1 shrink-0 transition"
+                className="cf-button !px-4 !py-2 !rounded-xl text-xs font-extrabold flex items-center gap-2 shrink-0 shadow-md hover:-translate-y-0.5 transition"
               >
                 <UserPlus className="w-3 h-3" />
-                <span>{customerName && customerName !== 'Cliente Balcão' ? 'Alterar' : 'Adicionar Cliente'}</span>
+                <span>{customerId ? 'Selecionar cliente' : 'Adicionar cliente'}</span>
               </button>
             </div>
           </div>
@@ -1497,12 +1458,13 @@ const { useState, useEffect, useRef, useMemo } = React;
 
           {/* MODALS */}
           {weightProduct && <PdvComponents.WeightPrompt product={weightProduct} onCancel={() => setWeightProduct(null)} onConfirm={confirmWeightAdd} />}
+          {customerSearchOpen && <PdvComponents.CustomerSearch onClose={() => setCustomerSearchOpen(false)} onSelect={selectCustomerFromList} />}
           {infoProduct && <PdvComponents.ProductInformation product={infoProduct} onClose={() => setInfoProduct(null)} />}
           {activeModal && !['queue', 'debt_settle', 'approval'].includes(activeModal) && (
-            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setActiveModal(null); }}>
               {/* MODAL: IDENTIFICAR / ADICIONAR CLIENTE */}
               {activeModal === 'customer' && (
-                <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 max-h-[90vh] flex flex-col">
+                <div role="dialog" aria-modal="true" aria-label="Identificar cliente" className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 max-h-[90vh] flex flex-col">
                   {/* Modal Header */}
                   <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                     <div className="flex items-center gap-2.5">
@@ -1535,45 +1497,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                   )}
 
                   <div className="flex-1 overflow-y-auto py-3 space-y-3.5 pr-1">
-                    {/* Live Search registered customers */}
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        🔍 Buscar Cliente Cadastrado:
-                      </label>
-                      <div className="relative">
-                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                        <input
-                          type="text"
-                          value={customerSearchQuery}
-                          onChange={(e) => handleSearchCustomer(e.target.value)}
-                          placeholder="Digite nome ou telefone para buscar..."
-                          className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-600 focus:outline-none"
-                        />
-                      </div>
-
-                      {/* Search Results Dropdown/List */}
-                      {customerSearchResults.length > 0 && (
-                        <div className="mt-2 max-h-36 overflow-y-auto rounded-xl border border-emerald-100 bg-emerald-50/40 divide-y divide-emerald-100/60">
-                          {customerSearchResults.map((cust) => (
-                            <div
-                              key={cust.id || cust.phone || cust.name}
-                              onClick={() => selectCustomerFromList(cust)}
-                              className="p-2.5 hover:bg-emerald-100/60 cursor-pointer flex items-center justify-between transition text-xs"
-                            >
-                              <div className="min-w-0 flex-1 pr-2">
-                                <span className="font-bold text-slate-900 block truncate">{cust.name}</span>
-                                <span className="text-[11px] text-slate-500 block truncate">
-                                  {cust.phone ? `📞 ${cust.phone}` : ''} {cust.address ? `• 📍 ${cust.address}` : ''}
-                                </span>
-                              </div>
-                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full shrink-0">
-                                Selecionar
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                    <button type="button" className="cf-button w-full !rounded-xl !py-3" onClick={() => setCustomerSearchOpen(true)}><Search className="w-4 h-4" />BUSCAR CLIENTE</button>
 
                     <div className="border-t border-slate-100 pt-3 space-y-3">
                       <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
@@ -1587,7 +1511,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                         </label>
                         <input
                           type="text"
-                          value={tempCustomerName}
+                          id="customer-name" aria-label="Nome do Cliente" value={tempCustomerName}
                           onChange={(e) => setTempCustomerName(e.target.value)}
                           placeholder="Ex: Maria Santos ou Cliente Balcão"
                           className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-600 focus:outline-none font-semibold text-slate-800"
@@ -1605,7 +1529,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                           </label>
                           <input
                             type="text"
-                            value={tempCustomerPhone}
+                            id="customer-phone" aria-label="Telefone / WhatsApp" value={tempCustomerPhone}
                             onChange={(e) => setTempCustomerPhone(e.target.value)}
                             placeholder="Ex: (11) 98765-4321"
                             className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-600 focus:outline-none text-slate-800"
@@ -1629,7 +1553,7 @@ const { useState, useEffect, useRef, useMemo } = React;
 
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1">
-                          E-mail da conta do cliente:
+                          E-mail da conta do cliente (opcional):
                         </label>
                         <input
                           type="email"
@@ -1655,7 +1579,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                         </label>
                         <textarea
                           rows="2"
-                          value={tempCustomerAddress}
+                          id="customer-address" aria-label="Endereço de entrega" value={tempCustomerAddress}
                           onChange={(e) => setTempCustomerAddress(e.target.value)}
                           placeholder="Rua, Número, Bairro, Cidade, Complemento / Ponto de Referência..."
                           className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-600 focus:outline-none text-slate-800 resize-none"
@@ -1702,10 +1626,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                       <UserPlus className="w-4 h-4" />
                       <span>
                         {isSavingCustomer
-                          ? 'Cadastrando na base...'
-                          : (tempCustomerPhone.trim() || tempCustomerAddress.trim() || tempCustomerCpf.trim())
-                          ? 'Adicionar Cliente (Cadastrar na Base)'
-                          : 'Adicionar Cliente (Compra Rápida)'}
+                          ? 'Salvando…' : selectedCustomerId ? 'Selecionar cliente' : 'Adicionar cliente'}
                       </span>
                     </button>
 
@@ -1717,7 +1638,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                       >
                         Cancelar
                       </button>
-                      {tempCustomerName.trim() && (tempCustomerPhone.trim() || tempCustomerAddress.trim()) && (
+                      {orderType !== 'DELIVERY' && tempCustomerName.trim() && (tempCustomerPhone.trim() || tempCustomerAddress.trim()) && (
                         <button
                           type="button"
                           onClick={handleQuickPurchaseCustomer}

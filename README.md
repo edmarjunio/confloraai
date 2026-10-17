@@ -97,9 +97,18 @@ Não use credencial privada de conta de serviço no navegador. O backend deve us
 - **Amarelo:** reservado para pedidos com uma etapa explícita de confirmação prévia. Comandas comuns do vendedor e pedidos de retirada/entrega entram diretamente no **azul**, esperando pagamento. Vendedor apenas lança e acompanha.
 - **Azul → verde:** arrastar abre o recebimento; nenhuma baixa ocorre ao arrastar. Escolha uma ou mais formas, confira os valores e confirme. As demais movimentações são bloqueadas no servidor.
 - **Vermelho:** fiados registrados. Os recebimentos são lançados na conta do cliente, sem repetir a baixa da venda original.
-- **Pix recebido diretamente na chave:** em Esperando pagamento, escolha **Pix já recebido (conferir comprovante)**; confira o valor e a conta, marque a conferência e registre a observação. Para cobrança já emitida, use **Confirmar Pix manualmente e finalizar**. Somente Caixa/Admin confirma. Após a confirmação manual, eventos seguintes não consultam o Sicredi nem repetem a baixa. As parcelas de uma cobrança emitida permanecem fixas para preservar a conciliação.
+- **Pix recebido diretamente na chave:** em Esperando pagamento, escolha **Pix já recebido (conferir comprovante)**; confira o valor e a conta, marque a conferência, anexe obrigatoriamente a foto ou o PDF do comprovante e registre a observação. JPG, PNG, WebP e PDF são aceitos até 3 MB; o arquivo é salvo no Storage e vinculado ao pagamento. O recibo da comanda oferece **Ver comprovante Pix anexado** para Caixa/Admin. Para cobrança já emitida, use **Confirmar Pix manualmente e finalizar**. Somente Caixa/Admin confirma. Após a confirmação manual, eventos seguintes não consultam o Sicredi nem repetem a baixa. As parcelas de uma cobrança emitida permanecem fixas para preservar a conciliação.
 - **Recebimento parcial:** abra Receber pagamento, selecione o cliente e informe o valor recebido. Em dívida de R$ 200, receber R$ 100 deixa R$ 100 pendentes. Use **Receber valor restante** para registrar outro recebimento com nova identificação. Cada recebimento também pode ser dividido entre dinheiro, débito, crédito e Pix conferido.
 - O chat mantém a navegação por categorias nos botões; texto digitado busca em todo o catálogo. Os resultados usam o cartão compartilhado, com uma coluna no celular e até três em telas maiores.
+
+## Clientes, entrega e recebimento no caixa
+
+- Abra a comanda, toque no botão da forma de pagamento e confirme o recebimento. O mesmo conjunto de botões atende pagamentos divididos e recebimentos de dívida.
+- Ao selecionar **Entrega**, a identificação do cliente abre automaticamente. Nome, WhatsApp com DDD e endereço completo (rua, número, bairro e cidade) são obrigatórios. CPF e e-mail são opcionais no caixa; o e-mail serve para vincular o cadastro ao login do cliente, não para gerar a cobrança Pix.
+- No diálogo de identificação, **BUSCAR CLIENTE** abre uma janela própria. A busca começa após quatro letras do nome. Selecione um resultado para preencher os dados e confirme em **Selecionar cliente**. Para um cadastro novo, use **Adicionar cliente**.
+- No catálogo, o cadastro vinculado ao e-mail do login preenche os campos vazios da sacola. Dados já digitados permanecem preservados.
+- Clicar fora das janelas fecha o diálogo. Fechar o diálogo de pagamento não cancela a comanda nem confirma recebimento.
+- O backend precisa de acesso ao bucket configurado em `FIREBASE_STORAGE_BUCKET` para guardar comprovantes. Falha no envio bloqueia a confirmação manual; os testes usam armazenamento isolado em memória.
 
 ## Vincular a API Pix do Sicredi
 

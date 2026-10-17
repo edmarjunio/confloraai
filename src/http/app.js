@@ -1603,6 +1603,7 @@ function createApp({
       }
       const finalTotal = Math.max(0, calculatedSubtotal - appliedDiscount);
       const resolvedPaymentMethod = String(paymentMethod || 'PIX').toUpperCase();
+      if (orderType === 'DELIVERY' && (!String(customerName || '').trim() || !/^\d{10,13}$/.test(String(customerPhone || '').replace(/\D/g, '')) || String(deliveryAddress || '').trim().length < 8)) return res.status(400).json({ error: 'Entrega exige nome, WhatsApp com DDD e endereço completo (rua, número, bairro e cidade).' });
       const checkoutFingerprint = idempotencyKey
         ? createHash('sha256').update(JSON.stringify({
           customerName: String(customerName).trim(),
@@ -1777,6 +1778,16 @@ function createApp({
       Logger.error('Erro ao buscar pedidos do cliente', err);
       res.status(500).json({ success: false, error: err.message });
     }
+  });
+
+  app.get('/api/customer/profile', async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: 'Entre na sua conta.' });
+    try {
+      const profiles = req.user.email ? await messageService.firestoreRepo.findCustomerProfilesByEmail(req.user.email) : [];
+      if (profiles.length > 1) return res.status(409).json({ error: 'Confira o vínculo do cadastro com a loja.' });
+      const profile = profiles[0];
+      res.json({ name: profile?.name || req.user.name || '', phone: profile?.phone || req.user.phone || '', address: profile?.address || profile?.deliveryAddress || '', email: req.user.email || '' });
+    } catch { res.status(503).json({ error: 'Não foi possível consultar seu cadastro.' }); }
   });
 
   app.get('/api/customer/ledger', async (req, res) => {

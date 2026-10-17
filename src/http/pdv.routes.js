@@ -1,3 +1,4 @@
+const { PaymentProofStorage } = require('../orders/payment-proof');
 const { timingSafeEqual, randomUUID } = require('node:crypto');
 const { PdvRepository } = require('../orders/pdv.repository');
 const { PdvService, actor, requestId, normalizePhone } = require('../orders/pdv.service');
@@ -26,7 +27,7 @@ function manualPixVerification(order, parts, body) {
   if (note.length < 8) throw new Error('Registre uma observação sobre o comprovante (mínimo 8 caracteres).');
   return { verifiedVia: 'MANUAL_CAIXA_PIX', txid: order.pixData?.txid,
     amountMinor: Math.round(parts.filter((part) => part.method === 'PIX').reduce((sum, part) => sum + part.amount, 0) * 100),
-    endToEndId: String(body.endToEndId || '').trim().slice(0, 80), manualPixProofSeen: true, manualPixNote: note };
+    manualPixProofId: String(body.proofId || ''), endToEndId: String(body.endToEndId || '').trim().slice(0, 80), manualPixProofSeen: true, manualPixNote: note };
 }
 
 function businessDate(value) {
@@ -77,6 +78,7 @@ function paymentTotals(orders, settlements) {
 
 function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueueClient }) {
   const store = new PdvRepository(repository);
+  const proofStorage = new PaymentProofStorage({ inMemory: repository.isInMemory && !repository.firestore });
   const service = new PdvService({ repository: store, pix, whatsapp, ownerPhone, taskQueueClient });
   const { CustomerDebtPixService } = require('../orders/customer-debt-pix.service');
   const debtPix = new CustomerDebtPixService({ store, pix, pdv: service });
@@ -116,7 +118,9 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     const phone = normalizePhone(req.body.phone);
     const email = String(req.body.email || '').trim().toLowerCase();
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { throw new Error('Informe um e-mail válido para vincular a conta do cliente.'); }
-    const id = phone || randomUUID();
+    const selectedId = String(req.body.customerId || '');
+    if (selectedId && (!/^[a-zA-Z0-9_-]{1,128}$/.test(selectedId) || !await store.read('customers', selectedId))) throw new Error('Cliente selecionado não encontrado.');
+    const id = selectedId || phone || randomUUID();
     if (email) {
       const matches = await repository.findCustomerProfilesByEmail(email);
       if (matches.some((profile) => String(profile.id) !== id)) { throw new Error('Este e-mail já está vinculado a outro cadastro de cliente.'); }
@@ -229,6 +233,25 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     return order;
   };
   app.get('/api/caixa/orders/:id', route(async (req, res) => res.json(await findOrder(req))));
+  app.post('/api/caixa/payment-proofs', requireCashier, route(async (req, res) => {
+    const { targetType, targetId, dataUrl } = req.body;
+    if (!['ORDER', 'DEBT'].includes(targetType) || !/^[a-zA-Z0-9_-]{1,128}$/.test(targetId || '')) throw new Error('Selecione o pagamento do comprovante.');
+    if (targetType === 'ORDER') {
+      const order = await store.read('orders', targetId);
+      if (!order || order.completedAt || order.status === 'CANCELLED') throw new Error('Pagamento não está pendente.');
+    }
+    const file = await proofStorage.save(dataUrl);
+    const proof = { ...file, fileName: String(req.body.fileName || 'comprovante').replace(/[^\p{L}\p{N}._ -]/gu, '').slice(0, 100), targetType, targetId, uploadedBy: req.user.id, createdAt: new Date().toISOString() };
+    await store.transaction(async (tx) => tx.set('payment_proofs', proof.id, proof));
+    res.status(201).json({ id: proof.id, fileName: proof.fileName, size: proof.size });
+  }));
+  app.get('/api/caixa/payment-proofs/:id', requireCashier, route(async (req, res) => {
+    const proof = await store.read('payment_proofs', req.params.id);
+    if (!proof) return res.sendStatus(404);
+    const buffer = await proofStorage.read(proof.path);
+    if (!buffer) return res.sendStatus(404);
+    res.set({ 'Content-Type': proof.contentType, 'Content-Disposition': 'inline', 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' }).send(buffer);
+  }));
   app.post('/api/caixa/orders/:id/move', requireCashier, route(async (req, res) => {
     const order = await findOrder(req);
     const { from, to } = req.body || {};
