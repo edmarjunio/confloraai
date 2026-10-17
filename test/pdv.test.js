@@ -584,7 +584,7 @@ test('cashier can manually confirm a Pix only after recording proof review; audi
   const sellerAttempt = await fetch(`${base}/api/caixa/orders/${order.id}/confirm-manual-pix`, {
     method: 'POST', headers: { cookie: sellerCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ proofSeen: true, note: 'Comprovante conferido no caixa' }),
   });
-  assert.equal(sellerAttempt.status, 403);
+  assert.equal(sellerAttempt.status, 400);
 });
 
 test('manual mixed Pix uses the Pix installment and concurrent confirmations send one receipt', async (t) => {
@@ -869,7 +869,7 @@ test('manual Pix requires a stored proof bound to this order and cashier before 
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
 });
 
-test('payment proof upload validates content, protects files, and rejects seller uploads', async (t) => {
+test('payment proof upload validates content and protects files', async (t) => {
   const s = setup(); const app = createApp({ messageService: { firestoreRepo: s.base, whatsappClient: s.whatsapp }, sicrediClient: s.pix });
   const server = app.listen(0); t.after(() => server.close()); const origin = `http://127.0.0.1:${server.address().port}`;
   const post = (path, body, cookie = '') => fetch(origin + path, { method: 'POST', headers: { cookie, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -877,7 +877,7 @@ test('payment proof upload validates content, protects files, and rejects seller
   const cookie = await login(cashier); const sellerCookie = await login(seller);
   const order = await app.locals.pdv.service.create({ ...s.input, deferToCashier: true }, seller);
   const body = { targetType: 'ORDER', targetId: order.id, dataUrl: proofData, fileName: 'comprovante.pdf' };
-  assert.equal((await post('/api/caixa/payment-proofs', body, sellerCookie)).status, 403);
+  assert.equal((await post('/api/caixa/payment-proofs', { ...body, targetType: 'DEBT' }, sellerCookie)).status, 400);
   assert.equal((await post('/api/caixa/payment-proofs', { ...body, dataUrl: 'data:image/png;base64,' + Buffer.from('<html>fake</html>').toString('base64') }, cookie)).status, 400);
   const proofId = await uploadProof(origin, cookie, order.id);
   assert.equal((await fetch(origin + '/api/caixa/payment-proofs/' + proofId)).status, 401);
@@ -1144,4 +1144,82 @@ test('returning a delivery preserves audit and prevents another driver from chan
   await s.service.assignDelivery(order.id, other);
   assert.equal((await s.service.listDeliveries(driver)).separating[0].assignedDriver.id, other.id);
   assert.equal((await s.repository.list('delivery_events', 'orderId', order.id)).length, 4);
+});
+
+
+test('seller confirms only own manual Pix with uploaded proof; cash and other orders stay forbidden', async t => {
+  const s = setup();
+  const app = createApp({ messageService: { firestoreRepo: s.base, whatsappClient: s.whatsapp }, sicrediClient: s.pix });
+  const server = app.listen(0); t.after(() => server.close());
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const login = await fetch(origin + '/api/admin/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: seller.id, pin: seller.pin }) });
+  const cookie = login.headers.get('set-cookie').split(';')[0];
+  const post = (path, body) => fetch(origin + path, { method: 'POST', headers: { cookie, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const order = await app.locals.pdv.service.create({ ...s.input, deferToCashier: true }, seller);
+  const endpoint = `/api/caixa/orders/${order.id}/confirm-manual-pix`;
+  assert.equal((await post(endpoint, { proofSeen: true, note: 'Valor conferido na conta' })).status, 400);
+  assert.equal((await post(`/api/caixa/orders/${order.id}/confirm`, { paymentMethod: 'DINHEIRO' })).status, 403);
+  const proofId = await uploadProof(origin, cookie, order.id);
+  assert.equal((await post(endpoint, { proofId, proofSeen: true, note: 'Valor conferido na conta' })).status, 200);
+  const saved = await s.repository.read('orders', order.id);
+  assert.equal(saved.paymentStatus, 'APPROVED');
+  assert.equal(saved.manualPixConfirmedBy.id, seller.id);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
+  assert.equal(s.chargeCalls.length, 0);
+  assert.equal((await post(endpoint, { proofId, proofSeen: true, note: 'Valor conferido na conta' })).status, 400);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
+  const other = await app.locals.pdv.service.create({ ...s.input, requestId: randomUUID(), deferToCashier: true }, cashier);
+  assert.equal((await post(`/api/caixa/orders/${other.id}/confirm-manual-pix`, { proofId, proofSeen: true, note: 'Valor conferido na conta' })).status, 400);
+  assert.equal((await post('/api/caixa/payment-proofs', { targetType: 'ORDER', targetId: other.id, dataUrl: proofData })).status, 400);
+});
+
+test('paid bank response cannot finalize unavailable reserved stock; retry completes once after stock correction', async () => {
+  const s = setup();
+  const order = await s.service.create({ ...s.input, paymentMethod: 'PIX' }, seller);
+  const endToEndId = 'E' + '7'.repeat(31);
+  s.pix.checkReceivedPayment = async () => ({ isPaid: true, raw: { txid: order.pixData.txid, endToEndId, chave: 'pix-key', valor: '20.00', devolucoes: [] } });
+  const product = s.base.inMemoryProducts.get('plant');
+  s.base.inMemoryProducts.set('plant', { ...product, stockQuantity: 1 });
+  await assert.rejects(s.service.handlePix(order.pixData.txid, endToEndId), /insuficiente/);
+  assert.equal((await s.repository.read('orders', order.id)).completedAt, undefined);
+  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 2);
+  s.base.inMemoryProducts.set('plant', product);
+  await s.service.handlePix(order.pixData.txid, endToEndId);
+  await s.service.handlePix(order.pixData.txid, endToEndId);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
+  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 0);
+});
+
+
+test('pending WhatsApp charge is skipped after expiration instead of sending a cancelled QR', async () => {
+  const s = setup();
+  s.whatsapp.sendImageBuffer = async () => { throw new Error('offline'); };
+  const order = await s.service.create({ ...s.input, paymentMethod: 'PIX', customerId: 'customer' }, seller);
+  await s.repository.transaction(async tx => tx.set('orders', order.id, { ...await tx.get('orders', order.id), pixExpiresAt: new Date(Date.now() - 1000).toISOString() }));
+  await s.service.expirePixOrder(order.id);
+  let sent = false;
+  s.whatsapp.sendImageBuffer = async () => { sent = true; return { messages: [{ id: 'image' }] }; };
+  await s.repository.updateMessage(`${order.id}-receipt`, { nextAttemptAt: 0 });
+  await s.service.retryMessages();
+  assert.equal(sent, false);
+  assert.equal((await s.repository.read('pdv_outbox', `${order.id}-receipt`)).status, 'SKIPPED');
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
+  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 0);
+});
+
+test('concurrent Sicredi requests share authentication and recover after token failure', async () => {
+  let calls = 0;
+  const client = new SicrediPixClient({ clientId: 'id', clientSecret: 'secret', certificate: 'cert', privateKey: 'key', pixKey: 'key', request: async () => {
+    calls++;
+    await new Promise(resolve => setTimeout(resolve, 5));
+    if (calls === 1) throw new Error('temporarily unavailable');
+    return { access_token: 'test-token', expires_in: 3600 };
+  } });
+  const failed = await Promise.allSettled(Array.from({ length: 10 }, () => client.getAccessToken()));
+  assert.ok(failed.every(result => result.status === 'rejected'));
+  assert.equal(calls, 1);
+  assert.deepEqual(await Promise.all(Array.from({ length: 10 }, () => client.getAccessToken())), Array(10).fill('test-token'));
+  assert.equal(calls, 2);
+  assert.equal(await client.getAccessToken(), 'test-token');
+  assert.equal(calls, 2);
 });

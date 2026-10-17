@@ -353,6 +353,11 @@ class PdvService {
     if (!job) { return; }
     try {
       const order = job.orderId ? await this.repository.read('orders', job.orderId) : null;
+      const staleDeparture = job.kind === 'delivery-departure' && order?.deliveryStatus !== 'OUT_FOR_DELIVERY';
+      if (order?.status === 'CANCELLED' || staleDeparture) {
+        await this.repository.updateMessage(id, { status: 'SKIPPED', skipped: true, leaseUntil: 0, lastError: 'Mensagem substituída pelo estado atual do pedido.' });
+        return;
+      }
       const settlement = job.settlementId ? await this.repository.read('debt_settlements', job.settlementId) : null;
       const settlementMethods = settlement ? (settlement.paymentParts || [{ method: settlement.paymentMethod, amount: settlement.amount }])
         .map((part) => `${part.method}: ${money(part.amount)}`).join(' + ') : '';

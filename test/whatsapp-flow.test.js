@@ -56,3 +56,27 @@ test('WhatsApp sends the correct API payload using a simulated Meta response', a
   assert.equal(sent.body.text.body, 'Teste Conflora');
   assert.equal(result.messages[0].id, 'wamid.simulated');
 });
+
+
+test('WhatsApp rejects expired credentials instead of reporting a successful delivery', async t => {
+  t.mock.method(globalThis, 'fetch', async () => new globalThis.Response(JSON.stringify({ error: { code: 190 } }), { status: 401 }));
+  await assert.rejects(new WhatsAppClient().sendTextMessage('5564999990000', 'Recibo'), /token recusado/);
+});
+
+test('WhatsApp uploads QR image and sends its media ID; failed upload never sends a message', async t => {
+  const calls = [];
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    calls.push({ url, options });
+    return new globalThis.Response(JSON.stringify(url.endsWith('/media') ? { id: 'qr-media' } : { messages: [{ id: 'wamid.qr' }] }), { status: 200 });
+  });
+  const client = new WhatsAppClient();
+  await client.sendImageBuffer('5564999990000', Buffer.from('image'), 'Pix R$ 20,00');
+  assert.equal(calls.length, 2);
+  assert.ok(calls[0].options.body instanceof FormData);
+  const payload = JSON.parse(calls[1].options.body);
+  assert.equal(payload.image?.id || payload.template?.components[0].parameters[0].image.id, 'qr-media');
+  calls.length = 0;
+  t.mock.method(globalThis, 'fetch', async url => { calls.push(url); return new globalThis.Response('{}', { status: 503 }); });
+  await assert.rejects(client.sendImageBuffer('5564999990000', Buffer.from('image')), /HTTP 503/);
+  assert.equal(calls.length, 1);
+});

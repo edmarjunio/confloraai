@@ -15,9 +15,14 @@ function canReceiveOrder(order, actor) {
   if (actor?.role !== 'ENTREGADOR') return false;
   try { assertAssignedDelivery(order, actor); return true; } catch { return false; }
 }
+function canConfirmManualPix(order, actor) {
+  if (canReceiveOrder(order, actor)) return true;
+  if (actor?.role !== 'VENDEDOR' || !actor.id || order?.createdBy?.id !== actor.id) return false;
+  return !order.pixData?.txid || (order.paymentParts || [{ method: order.paymentMethod }]).every(part => part.method === 'PIX');
+}
 function financialReceiver(order) {
   return order?.receivedBy?.role === 'ENTREGADOR'
     ? order.createdBy || { id: 'ONLINE', name: 'Catálogo online', role: 'SYSTEM' }
     : order?.receivedBy;
 }
-module.exports = { financialReceiver, isDelivery, isDeliverySettled, assertAssignedDelivery, canReceiveOrder };
+module.exports = { canConfirmManualPix, financialReceiver, isDelivery, isDeliverySettled, assertAssignedDelivery, canReceiveOrder };

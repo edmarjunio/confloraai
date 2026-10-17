@@ -433,29 +433,8 @@ cf-list-item + cf-list-item { border-top: 1px solid #f1f5f9; }
 cf-list-item[interactive] { cursor: pointer; }
 cf-list-item[interactive]:hover { background: #f0fdf4; }
 
-cf-card.cf-order-card {
-  border-width: 1px;
-  box-shadow: 0 5px 12px rgb(15 56 30 / 9%);
-  transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease, border-color 160ms ease;
-}
-cf-card.cf-order-card:hover { transform: translateY(-3px); box-shadow: 0 12px 22px rgb(15 56 30 / 15%); }
-cf-card.cf-order-card--amber { border-color: #fcd34d; background: rgb(254 225 104 / 38%) !important; }
-cf-card.cf-order-card--blue { border-color: #7dd3fc; background: rgb(125 211 252 / 30%) !important; }
-cf-card.cf-order-card--green { border-color: #6ee7b7; background: rgb(110 231 183 / 30%) !important; }
-cf-card.cf-order-card--red { border-color: #fda4af; background: rgb(253 164 175 / 30%) !important; }
-cf-card.cf-order-card[draggable="true"] { cursor: grab; }
-cf-card.cf-order-card[draggable="true"]:active { cursor: grabbing; }
+/* Order-card states are scoped in /pdv-assets/order-card.styles.js. */
 .cf-order-column--drop { outline: 2px dashed #109e46; outline-offset: 2px; background: #ecfdf5 !important; }
-cf-card.cf-order-card--selected { border-color: #0ea5e9; box-shadow: 0 0 0 3px rgb(14 165 233 / 20%), 0 8px 18px rgb(15 56 30 / 12%); }
-cf-card.cf-order-card--attention { animation: cf-order-arrival 1.35s ease-in-out 5; }
-@keyframes cf-order-arrival {
-  0%, 100% { transform: translateY(0) scale(1); box-shadow: 0 5px 12px rgb(15 56 30 / 9%); }
-  50% { transform: translateY(-4px) scale(1.015); box-shadow: 0 0 0 5px rgb(245 158 11 / 22%), 0 14px 24px rgb(15 56 30 / 22%); }
-}
-
 @media (prefers-reduced-motion: reduce) {
   cf-card[interactive], .cf-button { transition: none; }
-  cf-card.cf-order-card { transition: none; }
-  cf-card.cf-order-card:hover { transform: none; }
-  cf-card.cf-order-card--attention { animation: none; }
 }

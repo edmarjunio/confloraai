@@ -52,6 +52,11 @@ test('driver receives new orders live without dispatch, accepts an order, sees r
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.getByText('Desempenho dos entregadores', { exact: true }).click();
   await expect(page.locator('main')).toContainText('Km informados: 2,5 km');
+  const action = page.getByRole('button', { name: 'Abrir recibo e detalhes da comanda ' + order.ticketNumber });
+  await action.hover();
+  await expect(action).toHaveCSS('box-shadow', 'none');
+  await expect(action).toHaveCSS('transform', 'none');
+  await expect(action.locator('..')).not.toHaveCSS('box-shadow', 'none');
   await page.screenshot({ path: 'test-results/delivery-team-board-desktop.png', fullPage: true });
 });
 

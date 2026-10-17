@@ -2086,6 +2086,7 @@ function createApp({
     taskQueueClient,
     ownerPhone: process.env.OWNER_WHATSAPP_NUMBER || config.whatsapp?.ownerNumber || '',
   });
+  app.get('/pdv-assets/vendor/styled-components.js', (_req, res) => res.sendFile(require('node:path').join(require('node:path').dirname(require.resolve('styled-components')), 'styled-components.min.js')));
   app.use('/pdv-assets', express.static(require('node:path').resolve(__dirname, '../../public/pdv')));
 
   // --- API DO CAIXA & PDV RÁPIDO (CELULAR & BALCÃO) ---

@@ -1,6 +1,6 @@
 const { recordDeliveryEvent, completionMetrics, mergeDriverPerformance } = require('./delivery-metrics');
 const { formatOrderReceipt } = require('./receipt.util');
-const { isDelivery, isDeliverySettled, assertAssignedDelivery, canReceiveOrder } = require('./delivery-policy');
+const { isDelivery, isDeliverySettled, assertAssignedDelivery, canReceiveOrder, canConfirmManualPix } = require('./delivery-policy');
 const { requireManualProof } = require('./payment-proof');
 const { createHash } = require('node:crypto');
 const { remainingStock, validateStockQuantity } = require('./order-integrity');
@@ -330,7 +330,7 @@ class PdvRepository {
         throw new Error('Pix exige confirmação do Sicredi com identificador e valor exatos.');
       }
       if (paymentMethod === 'PIX' && verification.verifiedVia === 'MANUAL_CAIXA_PIX' &&
-        (!verification.manualPixProofSeen || String(verification.manualPixNote || '').trim().length < 8 || !canReceiveOrder(order, receiver))) {
+        (!verification.manualPixProofSeen || String(verification.manualPixNote || '').trim().length < 8 || !canConfirmManualPix(order, receiver))) {
         throw new Error('Confirmação manual do Pix exige comprovante conferido e justificativa pelo menos 8 caracteres.');
       }
       if (paymentMethod !== 'PIX' && !canReceiveOrder(order, receiver)) { throw new Error('Somente o caixa pode receber esta comanda.'); }
@@ -469,7 +469,7 @@ class PdvRepository {
   async claimMessage(id) {
     return this.transaction(async (tx) => {
       const job = await tx.get('pdv_outbox', id);
-      if (!job || job.status === 'SENT' || job.nextAttemptAt > Date.now() || job.leaseUntil > Date.now()) { return null; }
+      if (!job || job.status !== 'PENDING' || job.nextAttemptAt > Date.now() || job.leaseUntil > Date.now()) { return null; }
       const claimed = { ...job, leaseUntil: Date.now() + 120000, attempts: job.attempts + 1 };
       tx.set('pdv_outbox', id, claimed);
       return claimed;

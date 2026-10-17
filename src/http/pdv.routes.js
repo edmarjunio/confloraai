@@ -1,4 +1,4 @@
-const { financialReceiver, isDelivery, assertAssignedDelivery, canReceiveOrder } = require('../orders/delivery-policy');
+const { financialReceiver, isDelivery, assertAssignedDelivery, canConfirmManualPix } = require('../orders/delivery-policy');
 const { PaymentProofStorage } = require('../orders/payment-proof');
 const { timingSafeEqual, randomUUID } = require('node:crypto');
 const { PdvRepository } = require('../orders/pdv.repository');
@@ -258,22 +258,22 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     return order;
   };
   app.get('/api/caixa/orders/:id', route(async (req, res) => res.json(await findOrder(req))));
-  app.post('/api/caixa/payment-proofs', requireDeliveryStaff, route(async (req, res) => {
+  app.post('/api/caixa/payment-proofs', requireStaff, route(async (req, res) => {
     const { targetType, targetId, dataUrl } = req.body;
     if (!['ORDER', 'DEBT'].includes(targetType) || !/^[a-zA-Z0-9_-]{1,128}$/.test(targetId || '')) throw new Error('Selecione o pagamento do comprovante.');
     if (targetType === 'ORDER') {
       const order = await store.read('orders', targetId);
-      if (!order || order.completedAt || order.status === 'CANCELLED' || !canReceiveOrder(order, req.user)) throw new Error('Pagamento não está pendente ou não pertence a você.');
+      if (!order || order.completedAt || order.status === 'CANCELLED' || !canConfirmManualPix(order, req.user)) throw new Error('Pagamento não está pendente ou não pertence a você.');
     }
-    if (req.user.role === 'ENTREGADOR' && targetType !== 'ORDER') throw new Error('Entregador só pode anexar comprovante da própria entrega.');
+    if (['ENTREGADOR', 'VENDEDOR'].includes(req.user.role) && targetType !== 'ORDER') throw new Error('Este perfil só pode anexar comprovante de uma comanda própria.');
     const file = await proofStorage.save(dataUrl);
     const proof = { ...file, fileName: String(req.body.fileName || 'comprovante').replace(/[^\p{L}\p{N}._ -]/gu, '').slice(0, 100), targetType, targetId, uploadedBy: req.user.id, createdAt: new Date().toISOString() };
     await store.transaction(async (tx) => tx.set('payment_proofs', proof.id, proof));
     res.status(201).json({ id: proof.id, fileName: proof.fileName, size: proof.size });
   }));
-  app.get('/api/caixa/payment-proofs/:id', requireDeliveryStaff, route(async (req, res) => {
+  app.get('/api/caixa/payment-proofs/:id', requireStaff, route(async (req, res) => {
     const proof = await store.read('payment_proofs', req.params.id);
-    if (!proof || (req.user.role === 'ENTREGADOR' && proof.uploadedBy !== req.user.id)) return res.sendStatus(404);
+    if (!proof || (['ENTREGADOR', 'VENDEDOR'].includes(req.user.role) && proof.uploadedBy !== req.user.id)) return res.sendStatus(404);
     if (req.user.role === 'ENTREGADOR') {
       const order = proof.targetType === 'ORDER' ? await store.read('orders', proof.targetId) : null;
       if (!order || order.assignedDriver?.id !== req.user.id || order.status === 'CANCELLED') return res.sendStatus(404);
@@ -318,16 +318,17 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     const delivery = await store.read('pdv_outbox', receiptId);
     res.json({ success: true, order, receiptText: formatOrderReceipt(order), receiptDelivery: { sent: delivery?.status === 'SENT' && Boolean(order.customerPhone), reason: delivery?.lastError || (order.customerPhone ? '' : 'Sem WhatsApp informado.') } });
   }));
-  app.post('/api/caixa/orders/:id/confirm-manual-pix', requireCashier, route(async (req, res) => {
+  app.post('/api/caixa/orders/:id/confirm-manual-pix', requireStaff, route(async (req, res) => {
     const existing = await findOrder(req);
-    if (existing.paymentMethod !== 'PIX' || !['CREATING_PIX', 'AWAITING_PIX'].includes(existing.status)) { throw new Error('Este pedido não está aguardando confirmação Pix.'); }
+    if (!canConfirmManualPix(existing, req.user) || !['CREATING_PIX', 'AWAITING_PIX', 'AWAITING_CASHIER', 'AWAITING_PAYMENT', 'PENDING'].includes(existing.status)) { throw new Error('Este pedido não está aguardando confirmação Pix.'); }
     if (Number.isFinite(Date.parse(existing.pixExpiresAt || '')) && Date.parse(existing.pixExpiresAt) <= Date.now()) {
       await service.expirePixOrder(existing.id);
       throw new Error('Esta cobrança Pix venceu e o estoque está sendo liberado. Confira o histórico do pedido.');
     }
     const receiver = actor(req.user);
-    const verification = manualPixVerification(existing, existing.paymentParts || [{ method: 'PIX', amount: existing.total }], req.body);
-    const order = await store.receive(existing.id, receiver, verification);
+    const parts = existing.pixData?.txid ? existing.paymentParts || [{ method: 'PIX', amount: existing.total }] : [{ method: 'PIX', amount: existing.total }];
+    const verification = manualPixVerification(existing, parts, req.body);
+    const order = await store.receive(existing.id, receiver, verification, null, existing.pixData?.txid ? null : 'PIX', { requestedParts: parts });
     const notificationIds = await store.ensurePaymentNotifications(order.id);
     for (const id of notificationIds) await service.deliver(id);
     res.json({ success: true, order, receiptText: formatOrderReceipt(order) });

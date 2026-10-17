@@ -48,6 +48,11 @@ class SicrediPixClient {
   async getAccessToken() {
     if (!this.isOfficialApiConfigured) { throw new Error('Configure credenciais, certificado, chave privada e chave Pix do Sicredi.'); }
     if (this.token && Date.now() < this.tokenExpiresAt) { return this.token; }
+    if (this.tokenRequest) return this.tokenRequest;
+    this.tokenRequest = this.requestAccessToken().finally(() => { this.tokenRequest = null; });
+    return this.tokenRequest;
+  }
+  async requestAccessToken() {
     const data = await this.request(this.authUrl, {
       method: 'POST', cert: this.certificate, key: this.privateKey,
       headers: { Authorization: 'Basic ' + Buffer.from(this.clientId + ':' + this.clientSecret).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' },
