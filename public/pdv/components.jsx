@@ -1,7 +1,7 @@
 /* Shared PDV components loaded before the sales screen. */
 window.PdvComponents = (() => {
   const { useState, useEffect, useRef } = React;
-  const { OrderCardSurface } = window.PdvStyled;
+  const OrderCardSurface = window.PdvStyled?.OrderCardSurface || 'cf-card';
   const money = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   const button = 'cf-button';
   const field = 'w-full p-3 border rounded-xl my-2';

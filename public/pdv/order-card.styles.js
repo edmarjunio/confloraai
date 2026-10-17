@@ -1,7 +1,8 @@
 /* global window */
 /* One styled surface for cashier and delivery cards, including keyboard/motion states. */
 window.PdvStyled = (() => {
-  const styled = window.styled.default;
+  const styled = window.styled?.default;
+  if (typeof styled !== 'function') return Object.freeze({ OrderCardSurface: 'cf-card' });
   const OrderCardSurface = styled('cf-card')`
     &.cf-order-card {
       position: relative;

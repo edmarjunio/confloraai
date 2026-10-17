@@ -117,3 +117,18 @@ test('all drivers follow separation and routes live, while only the assigned dri
     await expect(page.getByRole('region', { name: 'PEDIDOS FINALIZADOS/ENTREGUE', exact: true })).toContainText('Entrega de outro entregador');
   } finally { await operator.close(); }
 });
+
+
+test('delivery screen survives unavailable card styling scripts', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.route('**/pdv-assets/vendor/styled-components.js', route => route.fulfill({ status: 404, body: '' }));
+  expect((await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-entregador1', pin: '2222' } })).ok()).toBe(true);
+  await page.goto('/caixa');
+  await expect(page.getByRole('heading', { name: '🛵 Entregas', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'AGUARDANDO ENTREGADOR', exact: true })).toBeVisible();
+  await page.route('**/pdv-assets/order-card.styles.js', route => route.fulfill({ status: 404, body: '' }));
+  await page.reload();
+  await expect(page.getByRole('heading', { name: '🛵 Entregas', exact: true })).toBeVisible();
+  expect(errors).toEqual([]);
+});
