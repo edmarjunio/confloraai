@@ -148,11 +148,18 @@ class WhatsAppClient {
 
       const data = await response.json();
       if (!response.ok) {
-        Logger.error('Erro na resposta da Meta Graph API', null, { status: response.status, data });
+        const code = Number(data?.error?.code) || null;
+        const authenticationFailed = response.status === 401 || code === 190;
+        const message = authenticationFailed
+          ? 'WhatsApp: token recusado pela Meta. Atualize WHATSAPP_TOKEN com um token válido e reinicie o servidor.'
+          : `WhatsApp: solicitação recusada pela Meta (HTTP ${response.status}${code ? `, código ${code}` : ''}).`;
+        const error = Object.assign(new Error(message), { status: response.status, code });
+        Logger.error(message, null, { status: response.status, code });
+        throw error;
       }
       return data;
     } catch (error) {
-      Logger.error('Falha de conexão com a Meta Graph API', error);
+      if (!error.status) Logger.error('Falha de conexão com a Meta Graph API', error);
       throw error;
     }
   }

@@ -392,6 +392,12 @@ class PdvService {
   }
 
   async retryMessages() {
+    if (this.retryMessagesPromise) return this.retryMessagesPromise;
+    this.retryMessagesPromise = this.retryPendingMessages().finally(() => { this.retryMessagesPromise = null; });
+    return this.retryMessagesPromise;
+  }
+
+  async retryPendingMessages() {
     const events = await this.repository.list('pdv_pix_events', 'status', 'PENDING');
     for (const event of events.slice(0, 100)) {
       try { await this.processPixEvent(event.txid, event.endToEndId); }
