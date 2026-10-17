@@ -15,4 +15,9 @@ function canReceiveOrder(order, actor) {
   if (actor?.role !== 'ENTREGADOR') return false;
   try { assertAssignedDelivery(order, actor); return true; } catch { return false; }
 }
-module.exports = { isDelivery, isDeliverySettled, assertAssignedDelivery, canReceiveOrder };
+function financialReceiver(order) {
+  return order?.receivedBy?.role === 'ENTREGADOR'
+    ? order.createdBy || { id: 'ONLINE', name: 'Catálogo online', role: 'SYSTEM' }
+    : order?.receivedBy;
+}
+module.exports = { financialReceiver, isDelivery, isDeliverySettled, assertAssignedDelivery, canReceiveOrder };

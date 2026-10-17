@@ -106,7 +106,18 @@ if (existingStore) {
 }
 
 const cashierShortcut = $("#cashierShortcut");
+let accountVersion = 0;
+let accountOwner;
 function updateHeaderActions() {
+  const nextOwner = state.user?.id || null;
+  if (accountOwner !== nextOwner) {
+    accountOwner = nextOwner; accountVersion += 1;
+    $('#historyDialog').close(); $('#ledgerContent').replaceChildren();
+    document.querySelectorAll('.history-order-card').forEach(node => node.remove());
+    Object.assign(historyState, { buffer: [], cursor: '', hasMore: false, loading: false, failed: false, loaded: false });
+  }
+  cart?.setOwner(state.user);
+  if (existingStore && state.user?.role === 'ENTREGADOR') { location.replace('/caixa'); return; }
   const role = String(state.user?.role || "CLIENTE").toUpperCase();
   const isLoggedIn = Boolean(state.user);
   const allowedCashierRoles = ["ADMIN", "CAIXA", "VENDEDOR", "ENTREGADOR"];
@@ -487,12 +498,14 @@ function renderHistoryBatch() {
 
 async function loadHistoryPage() {
   if (historyState.loading || (!historyState.hasMore && historyState.loaded)) return;
+  const version = accountVersion;
   historyState.loading = true;
   historySentinel.textContent = "Carregando mais compras…";
   try {
     const query = new URLSearchParams({ limit: "12" });
     if (historyState.cursor) query.set("cursor", historyState.cursor);
     const page = await state.api(`/customer/orders?${query}`);
+    if (version !== accountVersion) return;
     historyState.buffer.push(...(page.orders || []));
     historyState.cursor = page.nextCursor || "";
     historyState.hasMore = Boolean(page.hasMore);
@@ -504,13 +517,16 @@ async function loadHistoryPage() {
     }
     renderHistoryBatch();
   } catch (error) {
+    if (version !== accountVersion) return;
     historyState.failed = true;
     historySentinel.replaceChildren(element("button", { type: "button", class: "quiet", text: "Tentar novamente", onclick: () => { historyState.failed = false; loadHistoryPage(); } }));
     if (!historyList.querySelector(".history-order-card")) historyList.insertBefore(element("p", { class: "error", text: error.message }), historySentinel);
   } finally {
-    historyState.loading = false;
-    if (!historyState.buffer.length && historyState.hasMore) loadHistoryPage();
-    else if (!historyState.buffer.length) renderHistoryBatch();
+    if (version === accountVersion) {
+      historyState.loading = false;
+      if (!historyState.buffer.length && historyState.hasMore) loadHistoryPage();
+      else if (!historyState.buffer.length) renderHistoryBatch();
+    }
   }
 }
 
@@ -551,6 +567,7 @@ let debtPixTimer;
 historyDialog.addEventListener('close', () => clearTimeout(debtPixTimer));
 
 function renderDebtPayment(ledger) {
+  const version = accountVersion;
   const section = element('section', { class: 'ledger-payment' });
   if (Number(ledger.balance) > 0) {
     const amount = element('input', { type: 'number', min: '0.01', max: String(ledger.balance), step: '0.01', value: Number(ledger.balance).toFixed(2), 'aria-label': 'Valor da dívida a pagar' });
@@ -558,9 +575,10 @@ function renderDebtPayment(ledger) {
     const result = element('div');
     let operation;
     const poll = async (id) => {
-      if (!historyDialog.open || !state.user) return;
+      if (!historyDialog.open || !state.user || version !== accountVersion) return;
       try {
         const { charge } = await state.api('/customer/debt-pix/' + id);
+        if (version !== accountVersion) return;
         if (charge.status === 'PAID') {
           status.textContent = 'Pagamento confirmado pelo Sicredi. Seu saldo foi atualizado.';
           clearTimeout(debtPixTimer);
@@ -580,6 +598,7 @@ function renderDebtPayment(ledger) {
       status.textContent = 'Gerando cobrança Sicredi…';
       try {
         const { charge } = await state.api('/customer/debt-pix', { method: 'POST', body: operation });
+        if (version !== accountVersion) return;
         if (charge.status === 'PAID') { await poll(charge.id); return; }
         result.replaceChildren(element('img', { src: charge.pixData.qrCodeBase64, alt: 'QR Code Pix para pagamento da dívida', width: '220', height: '220' }), element('textarea', { readonly: '', 'aria-label': 'Pix copia e cola da dívida', text: charge.pixData.pixCopiaECola }), element('button', { type: 'button', class: 'quiet', text: 'Copiar Pix', onclick: () => navigator.clipboard.writeText(charge.pixData.pixCopiaECola).then(() => { status.textContent = 'Pix copiado. Aguardando pagamento.'; }).catch(() => { status.textContent = 'Selecione e copie o código acima.'; }) }));
         status.textContent = 'Pague pelo seu banco. A baixa será automática após a confirmação do Sicredi.';
@@ -662,10 +681,14 @@ async function loadCustomerLedger() {
     notify("Entre na sua conta para consultar seu saldo.");
     return;
   }
+  const version = accountVersion;
   ledgerContent.replaceChildren(element("p", { class: "muted", text: "Carregando seu saldo…" }));
   try {
-    renderCustomerLedger(await state.api("/customer/ledger"));
+    const ledger = await state.api("/customer/ledger");
+    if (version !== accountVersion) return;
+    renderCustomerLedger(ledger);
   } catch (error) {
+    if (version !== accountVersion) return;
     ledgerContent.replaceChildren(element("p", { class: "error", role: "alert", text: error.message }));
     if (error.status === 404) {
       ledgerContent.append(element("p", { class: "muted", text: "Para vincular sua conta, informe ao caixa o mesmo e-mail usado no seu login. A equipe consegue atualizar o cadastro na tela do caixa." }));

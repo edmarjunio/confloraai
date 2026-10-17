@@ -15,7 +15,15 @@ function safeUser(user) {
 function createWebSessions(repo) {
   const memory = new Map();
   const hash = (token) => createHash("sha256").update(token).digest("hex");
-  const cookieToken = (req) => readSessionToken(req, "web", "conflora_session");
+  const isolated = (req) => ['1', 'bootstrap'].includes(req.headers['x-conflora-tab-session']);
+  const cookieToken = (req) => {
+    if (isolated(req)) {
+      const bearer = /^Bearer ([a-f0-9]{64})$/.exec(req.headers.authorization || '');
+      if (bearer) return bearer[1];
+      if (req.headers['x-conflora-tab-session'] !== 'bootstrap' || String(req.originalUrl || req.url).split('?')[0] !== '/api/auth/me') return null;
+    }
+    return readSessionToken(req, "web", "conflora_session");
+  };
   const cookie = (req, token, age) =>
     sessionCookie(req, { scope: "web", token, path: "/", maxAge: age });
   async function remove(req) {
@@ -31,7 +39,7 @@ function createWebSessions(repo) {
   }
   return {
     async issue(req, res, user) {
-      await remove(req);
+      if (!isolated(req)) await remove(req);
       const token = randomBytes(32).toString("hex");
       const session = {
         userId: user.id,
@@ -45,11 +53,13 @@ function createWebSessions(repo) {
       } else {
         memory.set(hash(token), session);
       }
+      if (isolated(req)) res.setHeader('X-Conflora-Session', token);
       res.setHeader("Set-Cookie", cookie(req, token, 12 * 3600));
     },
     async logout(req, res) {
       await remove(req);
-      res.setHeader("Set-Cookie", cookie(req, "", 0));
+      if (isolated(req)) res.setHeader('X-Conflora-Session', '');
+      else res.setHeader("Set-Cookie", cookie(req, "", 0));
     },
     async resolve(req, _res, next) {
       try {

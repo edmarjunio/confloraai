@@ -10,13 +10,19 @@ import {
 } from "./ui.js";
 import { icon } from "./icons.js";
 import { onLanguageChange } from "./i18n/index.js";
-import { cartStore } from "./store/index.js";
 import { storeQueries } from "./query/tanstackQuery.js";
 import { renderOrderReceipt } from "./receipt.js";
 import { normalizeStoredCart } from "./cart-storage.mjs";
 
 export function createCart(state) {
-  const key = `store:${state.slug}:cart:v1`;
+  try {
+    localStorage.removeItem(`store:${state.slug}:cart:v1`);
+    localStorage.removeItem('conflora_cart_items_v2'); localStorage.removeItem('conflora_customer_info_v2');
+  } catch { /* Existing shared drafts cannot be attributed safely to an account. */ }
+  const tabId = window.ConfloraSession?.tabId || crypto.randomUUID();
+  const ownerId = (user) => user?.id ? `user:${user.id}` : `guest:${tabId}`;
+  let owner = ownerId(state.user);
+  let key = `store:${state.slug}:cart:v2:${owner}`;
   const stored = storageGet(key, []);
   let items = normalizeStoredCart(stored);
   let deliveryLocation = null;
@@ -84,8 +90,7 @@ export function createCart(state) {
       value: Number(product.price?.amountMinor || 0) / 100,
     });
 
-    // Sync into Zustand cart store
-    cartStore.getState().addItem(product, quantity);
+
 
   }
 
@@ -107,7 +112,7 @@ export function createCart(state) {
           items = items.filter((i) => i !== item);
           persist();
           render();
-          cartStore.getState().removeItem(item.productId);
+
         };
         const quantity = element("input", {
           type: "number",
@@ -133,7 +138,7 @@ export function createCart(state) {
           item.quantity = value;
           persist();
           render();
-          cartStore.getState().updateQuantity(item.productId, value);
+
         });
         return element("article", { class: "cart-item" }, [
           element("render-image", {
@@ -191,6 +196,7 @@ export function createCart(state) {
           value: option.value,
           required: "",
         });
+        input.defaultChecked = index === 0;
         input.checked = index === 0;
         return element("label", {}, [
           input,
@@ -337,6 +343,7 @@ export function createCart(state) {
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    const submittingOwner = owner;
     if (sending || !items.length) {
       return;
     }
@@ -390,6 +397,7 @@ export function createCart(state) {
     )
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
+    if (owner !== submittingOwner) return;
     if (!pending || pending.fingerprint !== fingerprint) {
       pending = { fingerprint, key: crypto.randomUUID() };
       storageSet(`${key}:pending`, pending);
@@ -401,6 +409,7 @@ export function createCart(state) {
     try {
       // Execute order via TanStack Query mutation
       const order = await storeQueries.submitOrder(payload, state.api, pending.key);
+      if (owner !== submittingOwner) return;
       state.trackEvent?.("purchase", {
         orderId: order.id,
         value: Number(order.totalMinor || subtotal()) / 100,
@@ -421,7 +430,7 @@ export function createCart(state) {
       persist();
       pending = null;
       storageSet(`${key}:pending`, null);
-      cartStore.getState().clearCart();
+
       render();
       form.hidden = true;
       $("#checkoutCustomer").hidden = true;
@@ -458,6 +467,7 @@ export function createCart(state) {
         }),
       );
     } catch (error) {
+      if (owner !== submittingOwner) return;
       $("#checkoutError").textContent = error.message;
     } finally {
       sending = false;
@@ -505,7 +515,7 @@ export function createCart(state) {
     items = [];
     confirmationAccepted = false;
     persist();
-    cartStore.getState().clearCart();
+
     render();
   }
 
@@ -515,5 +525,25 @@ export function createCart(state) {
   $("#cartCloseButton").addEventListener("click", close);
   $("#cartClearButton").addEventListener("click", clear);
 
-  return { add, render, configure, open, close };
+  function setOwner(user) {
+    const nextOwner = ownerId(user);
+    if (owner === nextOwner) return;
+    persist(); owner = nextOwner; key = `store:${state.slug}:cart:v2:${owner}`;
+    items = normalizeStoredCart(storageGet(key, []));
+    pending = storageGet(`${key}:pending`, null);
+    confirmationAccepted = false; deliveryLocation = null;
+    form.reset(); form.hidden = false; $('#checkoutCustomer').hidden = false;
+    $('#receipt').replaceChildren(); $('#receipt').hidden = true;
+    for (const field of ['name', 'phone', 'address', 'cash']) if (form.elements[field]) form.elements[field].value = '';
+    locationPicker?.clearLocation?.();
+    $('#checkoutError').textContent = '';
+    $('#orderConfirmDialog').close();
+    render();
+  }
+  window.addEventListener('storage', (event) => {
+    if (event.key !== key || sending) return;
+    items = normalizeStoredCart(storageGet(key, [])); confirmationAccepted = false;
+    $('#orderConfirmDialog').close(); render();
+  });
+  return { add, render, configure, open, close, setOwner };
 }

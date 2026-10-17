@@ -59,6 +59,7 @@ class PdvService {
 
   /** @param {import('./pdv.contracts').SaleInput} input @param {import('./pdv.contracts').StaffActor} user */
   async create(input, user, { approvedDiscount = false } = {}) {
+    if (!['ADMIN', 'CAIXA', 'VENDEDOR'].includes(user?.role)) throw new Error('Seu perfil não pode criar pedidos.');
     const createdBy = actor(user);
     if (input.orderType === 'DELIVERY' && (!String(input.customerName || '').trim() || input.customerName === 'Cliente Balcão' || !normalizePhone(input.customerPhone) || String(input.deliveryAddress || '').trim().length < 8)) throw new Error('Entrega exige nome, WhatsApp com DDD e endereço completo (rua, número, bairro e cidade).');
     const id = requestId(input.requestId);
@@ -249,7 +250,7 @@ class PdvService {
     const enriched = orders.filter((order) => isDelivery(order) && order.status !== 'CANCELLED').map((order) => ({
       ...order, deliveryStatus: order.deliveryStatus || 'PENDING_DISPATCH', isPaid: isDeliverySettled(order),
     })).sort((left, right) => String(left.createdAt || '').localeCompare(String(right.createdAt || '')));
-    const available = enriched.filter((order) => order.deliveryStatus === 'PENDING_DELIVERY');
+    const available = enriched.filter((order) => order.deliveryStatus === 'PENDING_DELIVERY').map(order => user.role === 'ENTREGADOR' ? { id: order.id, ticketNumber: order.ticketNumber, deliveryStatus: order.deliveryStatus, availableForClaim: true } : order);
     const inRoute = enriched.filter((order) =>
       order.deliveryStatus === 'OUT_FOR_DELIVERY' &&
       (user.role === 'ADMIN' || user.role === 'CAIXA' || order.assignedDriver?.id === user.id)

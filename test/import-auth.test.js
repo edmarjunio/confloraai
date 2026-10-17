@@ -390,3 +390,21 @@ test("Fluxo caixa: venda, solicitação, aprovação/recusa de admin e notifica�
   ).json();
   assert.equal(metrics.totalRevenue, 20);
 });
+
+test('tab credentials isolate accounts, refresh and logout despite a cookie from another login', async (t) => {
+  const { base } = await appContext(t);
+  const login = async (userId, pin, token = '') => {
+    const response = await fetch(base + '/api/admin/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Conflora-Tab-Session': '1', ...(token ? { Authorization: 'Bearer ' + token } : {}) }, body: JSON.stringify({ userId, pin }) });
+    assert.equal(response.status, 200);
+    return { token: response.headers.get('x-conflora-session'), cookie: response.headers.get('set-cookie').split(';')[0] };
+  };
+  const admin = await login('usr-edmar', '1234'); const cashier = await login('usr-caixa1', '0000', admin.token);
+  const headers = { 'X-Conflora-Tab-Session': '1', Authorization: 'Bearer ' + admin.token, cookie: cashier.cookie };
+  const me = await (await fetch(base + '/api/auth/me', { headers })).json();
+  assert.equal(me.user.id, 'usr-edmar');
+  assert.equal((await fetch(base + '/api/auth/me', { headers: { 'X-Conflora-Tab-Session': '1', cookie: admin.cookie } })).status, 401);
+  assert.equal((await fetch(base + '/api/admin/users', { headers: { 'X-Conflora-Tab-Session': '1', Authorization: 'Bearer ' + cashier.token, cookie: admin.cookie } })).status, 403);
+  await fetch(base + '/api/auth/logout', { method: 'POST', headers: { 'X-Conflora-Tab-Session': '1', Authorization: 'Bearer ' + cashier.token } });
+  assert.equal((await fetch(base + '/api/auth/me', { headers })).status, 200);
+  assert.equal((await fetch(base + '/api/auth/me', { headers: { 'X-Conflora-Tab-Session': '1', Authorization: 'Bearer ' + cashier.token, cookie: admin.cookie } })).status, 401);
+});

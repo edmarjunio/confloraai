@@ -9,11 +9,12 @@ function renderFirebaseAuthScript() {
       if (!firebaseConfig.apiKey || !firebaseConfig.authDomain) {
         throw new Error('Login Google indisponível: configure o Firebase Authentication.');
       }
-      const [{ initializeApp }, { getAuth, GoogleAuthProvider, signInWithPopup, signOut }] = await Promise.all([
+      const [{ initializeApp }, { getAuth, GoogleAuthProvider, signInWithPopup, signOut, setPersistence, browserSessionPersistence }] = await Promise.all([
         import('https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js'),
         import('https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js')
       ]);
       const auth = getAuth(initializeApp(firebaseConfig));
+      await setPersistence(auth, browserSessionPersistence);
       window.signOutGoogle = () => signOut(auth);
       window.authenticateGoogle = async () => {
         const result = await signInWithPopup(auth, new GoogleAuthProvider());

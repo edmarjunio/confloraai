@@ -1106,6 +1106,7 @@ function createApp({
 
   const sessions = createWebSessions(messageService.firestoreRepo);
   app.use('/api', sessions.resolve);
+  app.use('/api/customer', (req, res, next) => req.user?.role === 'ENTREGADOR' ? res.status(403).json({ error: 'Seu acesso é exclusivo às entregas.' }) : next());
   const { installExistingStore, normalizeExistingCheckout } = require('../storefront/existing-store');
   installExistingStore(app, {
     repository: messageService.firestoreRepo,
@@ -1124,7 +1125,8 @@ function createApp({
       },
     });
   });
-  app.get('/api/auth/me', (req, res) => {
+  app.get('/api/auth/me', async (req, res, next) => {
+    try { if (req.user && req.get('X-Conflora-Tab-Session') === 'bootstrap') await sessions.issue(req, res, req.user); } catch (error) { return next(error); }
     res.status(req.user ? 200 : 401).json({ user: req.user || null });
   });
   app.post('/api/auth/logout', async (req, res) => {
@@ -1515,6 +1517,7 @@ function createApp({
 
   // Client Web Orders API
   app.post(['/api/orders', '/api/storefront/orders'], async (req, res) => {
+    if (req.user?.role === 'ENTREGADOR') return res.status(403).json({ error: 'Entregadores acessam apenas suas entregas e não podem criar pedidos.' });
     const isStorefrontOrder = req.path === '/api/storefront/orders';
     const idempotencyKey = String(req.get('Idempotency-Key') || '').trim();
     if (isStorefrontOrder && !/^[a-zA-Z0-9_-]{1,128}$/.test(idempotencyKey)) {

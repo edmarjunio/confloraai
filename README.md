@@ -190,3 +190,11 @@ Em **Admin → Estoque**, o botão **Ativar estoque / Estoque ativo · Desativar
 - **Desativado (venda livre):** permite vender sem cadastrar entradas, inclusive gerar e receber Pix, sem reservar nem alterar o saldo de novos pedidos.
 - **Ativado:** exige saldo disponível, reserva os itens dos pedidos pendentes e baixa o estoque na confirmação do pagamento.
 - Reservas criadas antes da desativação são preservadas até o pagamento ou cancelamento do respectivo pedido. A mudança não apaga entradas, saldos ou movimentações anteriores. Atualize uma tela de venda já aberta para recarregar a disponibilidade do catálogo.
+
+## Login por aba, sacolas e permissões de entrega
+
+Cada aba mantém sua sessão autenticada em `sessionStorage`. Atualizar a página preserva o usuário daquela aba; trocar ou sair em outra aba não troca essa identidade. Google Auth usa persistência por sessão. Tokens não são enviados em URLs, e as atualizações em tempo real usam o mesmo acesso autenticado da aba.
+
+A sacola é separada por loja e usuário. Ao trocar de conta, itens, dados do cliente, localização, troco e confirmação pendente são substituídos pelos dados da conta selecionada. Sacolas antigas sem identificação de usuário não são migradas automaticamente para evitar associar produtos à pessoa errada.
+
+Entregadores entram diretamente nas entregas e não criam pedidos nem acessam o financeiro de clientes. A fila disponível mostra somente o identificador para assumir a entrega; endereço, telefone, itens e valores só aparecem depois de aceitar. Eles veem suas entregas em andamento e concluídas. O recebimento na porta é registrado em `collectedBy`, com a receita atribuída ao autor da venda em `receivedBy`; o entregador permanece identificado em `deliveredBy` e no comprovante.

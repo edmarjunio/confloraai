@@ -23,11 +23,10 @@ test('driver accepts a released order, sees route and records payment and delive
   await page.goto('/caixa'); await page.getByLabel('Usuário').selectOption('usr-entregador1'); await page.getByLabel('PIN', { exact: true }).fill('2222'); await page.getByRole('button', { name: 'Entrar', exact: true }).click();
   await expect(page.getByRole('heading', { name: '🛵 Entregas', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: /PAGAR - F1/ })).toHaveCount(0);
-  await page.getByRole('button').filter({ hasText: 'Cliente Rota E2E' }).click();
+  await page.getByRole('button').filter({ hasText: 'Entrega #' + order.ticketNumber }).click();
   const dialog = page.getByRole('dialog', { name: `Comanda #${order.ticketNumber}` });
   await expect(dialog.getByRole('link', { name: 'Abrir no Waze', exact: true })).toHaveAttribute('href', /ll=-17.56%2C-52.54/);
   await expect(dialog).toContainText('2.1 km');
-  await dialog.getByRole('button', { name: 'Aceitar e sair para entrega', exact: true }).click();
   await expect(dialog.getByRole('heading', { name: 'Receber na entrega', exact: true })).toBeVisible();
   await dialog.getByRole('button', { name: '💵 Dinheiro', exact: true }).click();
   await dialog.getByRole('button', { name: 'Confirmar pagamento e finalizar', exact: true }).click();

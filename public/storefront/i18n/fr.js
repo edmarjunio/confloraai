@@ -76,6 +76,8 @@ export const fr = {
   'product.back_to_catalog': 'Retour au catalogue',
 
   // Panier & Commande Express
+  'cart.items_title': 'Vérifiez vos articles',
+  'cart.pix_info': 'Le code QR et le code Pix apparaissent après la commande. Le paiement est confirmé après réception.',
   'cart.title': 'Votre panier',
   'cart.close_aria': 'Fermer le panier',
   'cart.empty_title': 'Votre panier est vide',

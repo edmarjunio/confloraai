@@ -321,7 +321,7 @@ window.PdvComponents = (() => {
         <p>Registrado em: {dateTime(order.createdAt)}</p>
         {order.paidAt && <p>Pago em: {dateTime(order.paidAt)}</p>}
         {order.deliveryAddress && <p>Entrega: {order.deliveryAddress}</p>}
-        {order.notes && <p>Observação: {order.notes}</p>}{order.manualPixProofId && <a className="mt-3 inline-flex font-bold text-emerald-800 underline" href={'/api/caixa/payment-proofs/' + order.manualPixProofId} target="_blank" rel="noopener noreferrer">Ver comprovante Pix anexado</a>}
+        {order.notes && <p>Observação: {order.notes}</p>}{order.manualPixProofId && <a className="mt-3 inline-flex font-bold text-emerald-800 underline" href={'/api/caixa/payment-proofs/' + order.manualPixProofId} onClick={(event) => { event.preventDefault(); window.ConfloraSession.openPrivateFile('/api/caixa/payment-proofs/' + order.manualPixProofId).catch(error => alert(error.message)); }}>Ver comprovante Pix anexado</a>}
         {order.paymentMethod === 'PIX' && ['CREATING_PIX', 'AWAITING_PIX'].includes(order.status) && <section className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 p-4">
           <h3 className="font-black text-sky-950">Pix aguardando confirmação</h3>
           <p className="mt-1 text-xs text-sky-900">A venda será finalizada pela confirmação do Sicredi ou pela conferência manual do Pix pelo caixa/admin.</p>
@@ -447,7 +447,7 @@ window.PdvComponents = (() => {
     useEffect(() => {
       refresh();
       const timer = setInterval(() => refresh(true), 15000);
-      const stream = typeof EventSource === 'undefined' ? null : new EventSource('/api/caixa/orders/stream');
+      const stream = !window.ConfloraSession ? null : window.ConfloraSession.openEventStream('/api/caixa/orders/stream');
       stream?.addEventListener('orders-changed', () => refresh(true));
       stream?.addEventListener('stream-fallback', () => refresh(true));
       const onVisible = () => { if (document.visibilityState === 'visible') refresh(true); };

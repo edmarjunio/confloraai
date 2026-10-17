@@ -76,6 +76,8 @@ export const es = {
   'product.back_to_catalog': 'Volver al catálogo',
 
   // Bolsa y Checkout Express
+  'cart.items_title': 'Revisa tus productos',
+  'cart.pix_info': 'El código QR y Pix aparecen después de enviar el pedido. El pago se confirma al recibirlo.',
   'cart.title': 'Tu bolsa',
   'cart.close_aria': 'Cerrar bolsa',
   'cart.empty_title': 'Tu bolsa está vacía',

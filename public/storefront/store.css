@@ -3704,3 +3704,18 @@ body {
   .account-profile-copy .account-greeting { font-size: 18px; }
   .account-shortcut { padding: 13px; gap: 10px; }
 }
+
+/* Checkout follows four visible steps, with readable labels and clear inputs. */
+.cart-drawer #checkoutCustomer { border: 1px solid #dce9e0; border-radius: 16px; padding: 15px; background: #f7fbf8; margin-bottom: 18px; }
+.cart-drawer #checkoutCustomerTitle, .cart-drawer .checkout-section-title, .cart-drawer #checkoutForm legend { display: flex; align-items: center; gap: 9px; color: #173c26; font-size: 15px; font-weight: 800; line-height: 1.4; margin-bottom: 12px; }
+.cart-drawer .checkout-step { display: inline-grid; place-items: center; flex: 0 0 25px; width: 25px; height: 25px; border-radius: 9px; background: #e0f1e5; color: #157437; font-size: 12px; font-weight: 850; }
+.cart-drawer #checkoutCustomer p { font-size: 12px; line-height: 1.5; margin-bottom: 14px; color: #53655b; }
+.cart-drawer #checkoutCustomer label, .cart-drawer #checkoutForm > label, .cart-drawer #deliveryFields > label { display: grid; gap: 7px; margin-bottom: 13px; font-size: 13px; line-height: 1.45; font-weight: 750; color: #263e2e; }
+.cart-drawer #checkoutCustomer input, .cart-drawer #checkoutForm input:not([type=radio]), .cart-drawer #checkoutForm textarea, .cart-drawer #checkoutForm select { min-height: 44px; padding: 11px 12px; border: 1px solid #cbdacf; border-radius: 11px; background: #fff; font-size: 14px; font-weight: 400; }
+.cart-drawer #checkoutForm fieldset { min-width: 0; padding: 16px 0; margin: 0; border: 0; border-top: 1px solid #e5ece7; }
+.cart-drawer .choices label { font-size: 12px; font-weight: 650; padding: 12px; min-height: 50px; border-radius: 12px; }
+.cart-drawer #pixBox { padding: 14px; border-radius: 13px; line-height: 1.5; }
+.cart-drawer #pixBox small { display: block; margin-top: 6px; font-size: 12px; }
+.cart-drawer #checkoutForm > .total { background: #f1f8f3; border: 1px solid #dceadf; border-radius: 14px; padding: 15px; margin: 16px 0; }
+.cart-drawer #checkoutTotal { font-size: 23px; color: #155d30; }
+.cart-drawer #submitOrder { min-height: 49px; border-radius: 13px; font-size: 14px; font-weight: 800; }

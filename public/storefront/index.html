@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="pt-BR">
   <head>
+    <script src="/store-assets/tab-session.js"></script>
     <meta charset="utf-8" />
     <script>
       (function() {
@@ -182,7 +183,7 @@
       </div>
       <section id="checkoutCustomer" aria-labelledby="checkoutCustomerTitle">
         <h3 id="checkoutCustomerTitle">
-          <span data-icon="user" aria-hidden="true"></span><span data-i18n="cart.customer_title">Dados para esta compra</span>
+          <span class="checkout-step" aria-hidden="true">1</span><span data-i18n="cart.customer_title">Dados para esta compra</span>
         </h3>
         <p data-i18n="cart.customer_subtitle">Você pode editar os dados deste pedido sem alterar seu cadastro.</p>
         <label
@@ -206,6 +207,7 @@
             maxlength="25"
         /></label>
       </section>
+      <h3 class="checkout-section-title"><span class="checkout-step" aria-hidden="true">2</span><span data-i18n="cart.items_title">Confira seus produtos</span></h3>
       <div id="cartItems"></div>
       <div class="total">
         <span data-i18n="cart.subtotal">Total dos produtos</span><strong id="cartTotal"></strong>
@@ -213,7 +215,7 @@
       <form id="checkoutForm">
         <fieldset>
           <legend>
-            <span data-icon="truck" aria-hidden="true"></span><span data-i18n="cart.fulfillment_title">Entrega ou retirada</span>
+            <span class="checkout-step" aria-hidden="true">3</span><span data-i18n="cart.fulfillment_title">Entrega ou retirada</span>
           </legend>
           <div id="fulfillmentOptions" class="choices"></div>
         </fieldset>
@@ -236,7 +238,7 @@
         <p id="pickupAddress" class="muted"></p>
         <fieldset>
           <legend>
-            <span data-icon="card" aria-hidden="true"></span><span data-i18n="cart.payment_title">Forma de pagamento</span>
+            <span class="checkout-step" aria-hidden="true">4</span><span data-i18n="cart.payment_title">Forma de pagamento</span>
           </legend>
           <div id="paymentOptions" class="choices"></div>
         </fieldset>

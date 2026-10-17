@@ -32,6 +32,7 @@ function renderAdminHtml(storeConfig) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${name} — Administração</title>
   ${GOOGLE_ANALYTICS_TAG}
+  <script src="/store-assets/tab-session.js"></script>
   ${FETCH_SHIM_SCRIPT}
 
   <link rel="stylesheet" href="/store-assets/admin-shell-v1.css">
@@ -689,6 +690,7 @@ function renderAdminHtml(storeConfig) {
     }
 
     function applyUserRoleUI() {
+      if (currentUser?.role === 'ENTREGADOR') { location.replace('/caixa'); return; }
       const photo = document.getElementById('loggedUserPhoto');
       photo.hidden = !currentUser?.picture;
       if (currentUser?.picture) photo.src = currentUser.picture;

@@ -345,9 +345,11 @@ class PdvRepository {
           ...(ownReservation ? { reservedQuantity: Math.max(0, Number(product.reservedQuantity || 0) - ownReservation) } : {}), updatedAt: now });
         tx.set('stock_movements', `${order.id}-${id}`, { productId: id, productName: product.name, orderId, quantityDeducted: quantity, previousStock: stock + quantity, newStock: stock, type: 'SALE_PDV', createdAt: now });
       }
-      const receivedBy = paymentMethod === 'PIX' && verification?.verifiedVia !== 'MANUAL_CAIXA_PIX'
+      const collectingActor = paymentMethod === 'PIX' && verification?.verifiedVia !== 'MANUAL_CAIXA_PIX'
         ? (order.mixedReceivedBy || order.createdBy || { id: 'SICREDI', name: 'Sicredi · confirmação automática', role: 'SYSTEM' }) : receiver;
+      const receivedBy = collectingActor.role === 'ENTREGADOR' ? order.createdBy || { id: 'ONLINE', name: 'Catálogo online', role: 'SYSTEM' } : collectingActor;
       const completed = { ...order,
+        ...(collectingActor.role === 'ENTREGADOR' ? { collectedBy: collectingActor } : {}),
         ...(isDelivery(order) && (!order.deliveryStatus || order.deliveryStatus === 'PENDING_DISPATCH') ? { deliveryStatus: 'PENDING_DELIVERY' } : {}),
         ...(finishDelivery ? { deliveryStatus: 'DELIVERED', deliveredBy: receiver, deliveredAt: now } : {}), paymentMethod, paymentParts: paymentParts.map((part) => ({ ...part, receivedBy, status: part.method === 'FIADO' ? 'ON_ACCOUNT' : 'APPROVED' })), receivedBy, cashierName: receivedBy.name, cashierEmail: receivedBy.email || '', status: 'CONFIRMED',
         paymentStatus: onAccount ? 'ON_ACCOUNT' : 'APPROVED', paidAt: onAccount ? null : now,

@@ -59,6 +59,7 @@ function formatOrderReceipt(order) {
     auditLines.push(`👤 *Pedido feito por:* ${sellerName} (Venda creditada para ele)`);
     auditLines.push(`🏦 *Recebido por:* ${cashierName} (Operador de Caixa que recebeu)`);
   }
+  if (order.collectedBy?.name) auditLines.push(`🧾 *Pagamento recolhido na entrega por:* ${order.collectedBy.name}`);
   if (order.deliveredBy?.name) {
     auditLines.push(`🛵 *Entregue por:* ${order.deliveredBy.name}`);
   }

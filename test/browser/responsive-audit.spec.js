@@ -7,7 +7,8 @@ for (const width of [320, 390, 768, 1440]) {
     await page.route(/https:\/\/.*/, route => route.abort());
     await page.setViewportSize({ width, height: 900 });
     await page.addInitScript(() => {
-      window.localStorage.setItem('store:garden:cart:v1', JSON.stringify([
+      window.sessionStorage.setItem('conflora_tab_id_v1', 'responsive-tab');
+      window.localStorage.setItem('store:garden:cart:v2:guest:responsive-tab', JSON.stringify([
         null, {}, { productId: 'product-1', quantity: 1 },
         { productId: 'product-1', quantity: 2 },
       ]));

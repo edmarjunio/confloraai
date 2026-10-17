@@ -104,6 +104,15 @@
         const place = result.results[0]; await this.select(place.geometry.location.toJSON(), place.formatted_address);
       } catch { this.status('Não foi possível buscar este endereço. Use o pino ou o GPS.'); }
     }
+    clearLocation() {
+      this.value = null;
+      this.listeners?.forEach(listener => listener?.remove());
+      if (this.marker) this.marker.map = null;
+      this.marker = null; this.map = null;
+      this.querySelector('[data-reference]').value = '';
+      const canvas = this.querySelector('[data-canvas]'); canvas.replaceChildren(); canvas.hidden = true;
+      this.querySelector('input[type=search]').value = ''; this.status('');
+    }
     disconnectedCallback() {
       this.listeners?.forEach((listener) => listener?.remove());
       this.marker?.map && (this.marker.map = null);

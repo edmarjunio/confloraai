@@ -121,24 +121,26 @@ export function createCatalog(state, add, navigate) {
     storageSet(favoriteKey(), [...favorites]);
     if (state.user && state.existingStore) {
       const snapshot = [...favorites];
+      const owner = state.user.id;
       favoriteSaveQueue = favoriteSaveQueue
-        .then(() => state.api("/favorites", {
+        .then(() => owner === state.user?.id ? state.api("/favorites", {
           method: "PUT",
           body: { favoriteProductIds: snapshot },
-        }))
+        }) : undefined)
         .catch((error) => console.warn("Não foi possível sincronizar os favoritos.", error));
     }
   }
 
   async function refreshFavorites() {
-    const revisionAtStart = favoriteRevision;
+    const revisionAtStart = ++favoriteRevision;
+    const owner = state.user?.id;
     const saved = storageGet(favoriteKey(), []);
     favorites.clear();
     for (const id of Array.isArray(saved) ? saved : []) favorites.add(id);
     if (state.user && state.existingStore) {
       try {
         const result = await state.api("/favorites");
-        if (favoriteRevision === revisionAtStart) {
+        if (favoriteRevision === revisionAtStart && state.user?.id === owner) {
           favorites.clear();
           for (const id of result.favoriteProductIds || []) favorites.add(id);
           storageSet(favoriteKey(), [...favorites]);

@@ -1,4 +1,4 @@
-const { isDelivery, assertAssignedDelivery, canReceiveOrder } = require('../orders/delivery-policy');
+const { financialReceiver, isDelivery, assertAssignedDelivery, canReceiveOrder } = require('../orders/delivery-policy');
 const { PaymentProofStorage } = require('../orders/payment-proof');
 const { timingSafeEqual, randomUUID } = require('node:crypto');
 const { PdvRepository } = require('../orders/pdv.repository');
@@ -195,7 +195,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     const orders = (await repository.getAllOrders(10000)).filter((order) => ['PDV', 'WEB_CATALOG'].includes(order.source));
     const range = reportRange(req.query);
     const isAdmin = req.user.role === 'ADMIN';
-    const canViewPersonalOrder = (order) => isAdmin || order.createdBy?.id === req.user.id || order.receivedBy?.id === req.user.id;
+    const canViewPersonalOrder = (order) => isAdmin || order.createdBy?.id === req.user.id || financialReceiver(order)?.id === req.user.id;
     const canViewOpenOrder = (order) => canViewPersonalOrder(order) || (req.user.role === 'CAIXA' && !order.completedAt && order.status !== 'CANCELLED');
     const openOrders = orders.filter((order) => !order.completedAt && order.status !== 'CANCELLED' &&
       canViewOpenOrder(order));
@@ -212,10 +212,10 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     const allSettlements = [...new Map(settlementGroups.flat().map((row) => [row.id, row])).values()];
     const debtHistory = allSettlements.filter((row) => ['QUITACAO_FIADO', 'CREDITO_CLIENTE'].includes(row.entryType || row.type || 'QUITACAO_FIADO') && (isAdmin || row.receivedBy?.id === req.user.id) && isWithinRange(row.createdAt, range));
     const mySales = completed.filter((order) => order.createdBy?.id === req.user.id);
-    const myReceipts = completed.filter((order) => order.receivedBy?.id === req.user.id);
+    const myReceipts = completed.filter((order) => financialReceiver(order)?.id === req.user.id);
     const myDebtReceipts = debtHistory.filter((row) => row.receivedBy?.id === req.user.id);
     const receivedOrders = completed.filter((order) => order.paymentStatus === 'APPROVED' || order.paymentParts?.some((part) => ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO'].includes(part.method)));
-    const closingOrders = isAdmin ? receivedOrders : receivedOrders.filter((order) => order.receivedBy?.id === req.user.id);
+    const closingOrders = isAdmin ? receivedOrders : receivedOrders.filter((order) => financialReceiver(order)?.id === req.user.id);
     const closingSettlements = isAdmin ? debtHistory : myDebtReceipts;
     const byPayment = paymentTotals(closingOrders, closingSettlements);
     const sum = (rows, field) => rows.reduce((total, row) => total + Number(row[field] || 0), 0);
@@ -227,7 +227,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
       customerCreditUsed: closingOrders.reduce((sum, order) => sum + partAmount(order, 'SALDO_CLIENTE'), 0),
       debtReceived: sum(closingSettlements, 'amount'),
       totalReceived: receivedTotal(closingOrders) + sum(closingSettlements, 'amount'),
-      confirmedDebt: (isAdmin ? confirmed : confirmed.filter((order) => order.createdBy?.id === req.user.id || order.receivedBy?.id === req.user.id)).reduce((sum, order) => sum + partAmount(order, 'FIADO'), 0),
+      confirmedDebt: (isAdmin ? confirmed : confirmed.filter((order) => order.createdBy?.id === req.user.id || financialReceiver(order)?.id === req.user.id)).reduce((sum, order) => sum + partAmount(order, 'FIADO'), 0),
       byPayment,
     };
     res.json({
@@ -250,7 +250,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
   const findOrder = async (req) => {
     const order = await store.read('orders', req.params.id);
     const canViewOrder = order && (
-      req.user.role === 'ADMIN' || order.createdBy?.id === req.user.id || order.receivedBy?.id === req.user.id ||
+      req.user.role === 'ADMIN' || order.createdBy?.id === req.user.id || financialReceiver(order)?.id === req.user.id ||
       (req.user.role === 'CAIXA' && !order.completedAt && order.status !== 'CANCELLED')
     );
     if (!order || !['PDV', 'WEB_CATALOG'].includes(order.source) || !canViewOrder) { throw new Error('Comanda não encontrada para este usuário.'); }
@@ -273,6 +273,10 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
   app.get('/api/caixa/payment-proofs/:id', requireDeliveryStaff, route(async (req, res) => {
     const proof = await store.read('payment_proofs', req.params.id);
     if (!proof || (req.user.role === 'ENTREGADOR' && proof.uploadedBy !== req.user.id)) return res.sendStatus(404);
+    if (req.user.role === 'ENTREGADOR') {
+      const order = proof.targetType === 'ORDER' ? await store.read('orders', proof.targetId) : null;
+      if (!order || order.assignedDriver?.id !== req.user.id || order.status === 'CANCELLED') return res.sendStatus(404);
+    }
     const buffer = await proofStorage.read(proof.path);
     if (!buffer) return res.sendStatus(404);
     res.set({ 'Content-Type': proof.contentType, 'Content-Disposition': 'inline', 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' }).send(buffer);

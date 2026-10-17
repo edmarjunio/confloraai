@@ -76,6 +76,8 @@ export const en = {
   'product.back_to_catalog': 'Back to catalog',
 
   // Cart & Express Checkout
+  'cart.items_title': 'Review your items',
+  'cart.pix_info': 'The QR code and Pix payment code appear after placing your order. Payment is confirmed after receipt.',
   'cart.title': 'Your Cart',
   'cart.close_aria': 'Close cart',
   'cart.empty_title': 'Your cart is empty',

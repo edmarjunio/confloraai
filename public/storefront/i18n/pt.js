@@ -76,6 +76,8 @@ export const pt = {
   'product.back_to_catalog': 'Voltar ao catálogo',
 
   // Sacola & Checkout
+  'cart.items_title': 'Confira seus produtos',
+  'cart.pix_info': 'O QR Code e o Pix Copia e Cola aparecem após enviar o pedido. A confirmação depende do recebimento do pagamento.',
   'cart.title': 'Sua sacola',
   'cart.close_aria': 'Fechar sacola',
   'cart.empty_title': 'Sua sacola está vazia',
