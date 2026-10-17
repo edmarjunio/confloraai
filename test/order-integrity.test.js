@@ -29,6 +29,7 @@ function transactionalStore(initial) {
           },
           update: (ref, value) => writes.push([ref.path, value, true]),
           set: (ref, value) => writes.push([ref.path, value, false]),
+          create: (ref, value) => { assert.equal(documents.has(ref.path), false); writes.push([ref.path, value, false]); },
         });
         if (store.failCommit) {throw new Error('Commit indisponível');}
         const next = new Map(documents);
@@ -144,8 +145,7 @@ for (const mode of ['memory', 'transaction']) {
 
 test('web Pix reservation is idempotent, protects stock until payment, then deducts exactly once with cashier audit', async () => {
   const repository = new FirestoreRepository({ isInMemory: true });
-  // A reservation Pix remains mandatory even with the legacy tracking toggle off.
-  await repository.saveInventorySettings({ stockControlEnabled: false });
+  await repository.saveInventorySettings({ stockControlEnabled: true });
   repository.inMemoryProducts.set('plant', { id: 'plant', name: 'Muda', stockQuantity: 3, reservedQuantity: 0 });
   const order = await repository.createDirectOrder({
     id: 'web-pix-reserved', source: 'WEB_CATALOG', status: 'AWAITING_PIX', paymentMethod: 'PIX',
@@ -159,6 +159,8 @@ test('web Pix reservation is idempotent, protects stock until payment, then dedu
     id: 'web-pix-overbook', source: 'WEB_CATALOG', status: 'AWAITING_PIX', paymentMethod: 'PIX', total: 100,
     items: [{ productId: 'plant', name: 'Muda', price: 10, quantity: 9 }],
   }, { reserveInventory: true }), /Estoque disponível insuficiente/);
+  // Existing reservations remain protected after switching to free sales.
+  await repository.saveInventorySettings({ stockControlEnabled: false });
   await repository.createDirectOrder({
     id: 'cash-order-competing', source: 'WEB_CATALOG', status: 'AWAITING_CASHIER', paymentMethod: 'DINHEIRO', total: 20,
     items: [{ productId: 'plant', name: 'Muda', price: 10, quantity: 2 }],
@@ -251,4 +253,26 @@ test('Firestore transaction: competing drivers claim one delivery and receipt co
   assert.equal(state.order().deliveryStatus, 'OUT_FOR_DELIVERY'); assert.equal(state.stock(), 10);
   state.store.failCommit = false; await pdv.receive('sale', assigned, null, 20, 'DINHEIRO', { finishDelivery: true });
   assert.equal(state.order().deliveryStatus, 'DELIVERED'); assert.equal(state.order().paymentStatus, 'APPROVED'); assert.equal(state.stock(), 8);
+});
+
+for (const mode of ['memory', 'transaction']) {
+  test(`${mode}: disabled stock permits a zero-stock web Pix without reserving or deducting inventory`, async () => {
+    const initial = { 'products/plant': { id: 'plant', name: 'Planta', stockQuantity: 0 }, 'store_settings/inventory': { stockControlEnabled: false } };
+    const store = mode === 'transaction' ? transactionalStore(initial) : null;
+    const repo = new FirestoreRepository({ isInMemory: true, firestoreInstance: store });
+    if (!store) { await repo.saveInventorySettings({ stockControlEnabled: false }); repo.inMemoryProducts.set('plant', initial['products/plant']); }
+    const order = await repo.createDirectOrder({ id: 'untracked-pix', source: 'WEB_CATALOG', status: 'AWAITING_PIX', paymentMethod: 'PIX', total: 20,
+      pixData: { txid: '0123456789ABCDEF0123456789ABCDEF' }, items: [{ productId: 'plant', quantity: 2, price: 10 }] }, { reserveInventory: true });
+    assert.equal(order.inventoryReserved, false);
+    await repo.confirmOrderPayment(order.id, { verifiedVia: 'SICREDI_PIX_WEBHOOK', pixTxid: order.pixData.txid, paymentTransactionId: 'E' + '4'.repeat(31), paymentAmount: 20 });
+    const product = store ? store.read('products/plant') : repo.inMemoryProducts.get('plant');
+    assert.equal(product.stockQuantity, 0);
+    assert.equal(Number(product.reservedQuantity || 0), 0);
+  });
+}
+
+test('inventory setting persistence failure is reported instead of pretending the switch was saved', async () => {
+  const repo = new FirestoreRepository({ isInMemory: true, firestoreInstance: { collection: () => ({ doc: () => ({ set: async () => { throw new Error('Persistence unavailable'); } }) }) } });
+  await assert.rejects(repo.saveInventorySettings({ stockControlEnabled: false }), /Persistence unavailable/);
+  assert.equal(repo.inMemoryInventorySettings?.stockControlEnabled === false, false);
 });

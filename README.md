@@ -182,3 +182,11 @@ Se o WhatsApp ainda não estiver conectado, o PDV continua mostrando o QR e o Pi
 - [Login Google para Web no Firebase](https://firebase.google.com/docs/auth/web/google-signin)
 - [Documentação interna do fluxo PDV/Sicredi](docs/PDV-SICREDI.md)
 - [Documentação interna dos fluxos Pix e limites](docs/PIX-TESTE-E-INTEGRIDADE.md)
+
+## Ativar estoque ou vender sem entradas
+
+Em **Admin → Estoque**, o botão **Ativar estoque / Estoque ativo · Desativar** controla o catálogo, caixa, comandas e entregas. Apenas Admin altera essa configuração.
+
+- **Desativado (venda livre):** permite vender sem cadastrar entradas, inclusive gerar e receber Pix, sem reservar nem alterar o saldo de novos pedidos.
+- **Ativado:** exige saldo disponível, reserva os itens dos pedidos pendentes e baixa o estoque na confirmação do pagamento.
+- Reservas criadas antes da desativação são preservadas até o pagamento ou cancelamento do respectivo pedido. A mudança não apaga entradas, saldos ou movimentações anteriores. Atualize uma tela de venda já aberta para recarregar a disponibilidade do catálogo.

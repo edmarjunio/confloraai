@@ -36,7 +36,8 @@ class PdvRepository {
         return this.memory.get(collection);
       };
       const result = await work({
-        get: async (collection, id) => structuredClone(mapFor(collection).get(id) || null),
+        get: async (collection, id) => collection === 'store_settings' && id === 'inventory'
+          ? this.repository.getInventorySettings() : structuredClone(mapFor(collection).get(id) || null),
         set: (collection, id, value) => writes.push([collection, id, structuredClone(value)]),
       });
       for (const [collection, id, value] of writes) {
@@ -108,7 +109,7 @@ class PdvRepository {
       if (order.status === 'AWAITING_PAYMENT' || (String(order.paymentMethod || '').toUpperCase() === 'PIX' && order.pixData)) {
         const reservation = await prepareStockReservation(tx, order.items);
         applyStockReservation(tx, reservation, new Date().toISOString());
-        savedOrder = { ...order, inventoryReserved: true, reservedItems: reservation.reservedItems };
+        savedOrder = { ...order, inventoryReserved: !reservation.trackingDisabled, reservedItems: reservation.reservedItems };
       }
       tx.set('orders', savedOrder.id, savedOrder);
       if (savedOrder.status !== 'CREATING_PIX') {
@@ -163,7 +164,7 @@ class PdvRepository {
       const now = new Date().toISOString();
       if (reservation) applyStockReservation(tx, reservation, now);
       const updated = { ...order, deliveryStatus: 'PENDING_DELIVERY', dispatchedBy: actor, dispatchedAt: order.dispatchedAt || now, updatedAt: now,
-        ...(reservation ? { inventoryReserved: true, reservedItems: reservation.reservedItems } : {}) };
+        ...(reservation ? { inventoryReserved: !reservation.trackingDisabled, reservedItems: reservation.reservedItems } : {}) };
       tx.set('orders', orderId, updated); return updated;
     });
   }
@@ -221,7 +222,7 @@ class PdvRepository {
       if (reservation) applyStockReservation(tx, reservation, now);
       const updated = { ...order, status: 'AWAITING_PAYMENT', paymentStatus: 'PENDING', confirmedBy: receiver,
         confirmedAt: now, updatedAt: now, paymentExpiresAt: new Date(Date.now() + ttl * 1000).toISOString(),
-        inventoryReserved: true, reservedItems: reservation?.reservedItems || order.reservedItems };
+        inventoryReserved: reservation ? !reservation.trackingDisabled : Boolean(order.inventoryReserved), reservedItems: reservation?.reservedItems || order.reservedItems };
       tx.set('orders', orderId, updated);
       return updated;
     });
@@ -260,7 +261,7 @@ class PdvRepository {
       if (reservation) applyStockReservation(tx, reservation, now);
       const updated = { ...order, paymentMethod: 'PIX', paymentStatus: 'PENDING', status: 'CREATING_PIX', pixData, pixCopiaECola: '',
         paymentParts: paymentParts.map((part) => ({ ...part, ...(['DINHEIRO', 'DEBITO', 'CREDITO'].includes(part.method) ? { status: 'RECEIVED_AT_CASHIER', receivedBy: receiver } : {}) })), mixedReceivedBy: receiver, deferToCashier: false,
-        inventoryReserved: true, reservedItems: reservation?.reservedItems || order.reservedItems,
+        inventoryReserved: reservation ? !reservation.trackingDisabled : Boolean(order.inventoryReserved), reservedItems: reservation?.reservedItems || order.reservedItems,
         pixTtlSeconds, pixExpiresAt: new Date(Date.now() + pixTtlSeconds * 1000).toISOString(), updatedAt: now };
       tx.set('orders', order.id, updated);
       return updated;

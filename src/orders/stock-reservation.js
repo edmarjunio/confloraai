@@ -1,6 +1,9 @@
 const { validateStockQuantity } = require('./order-integrity');
 
 async function prepareStockReservation(tx, items) {
+  const settings = await tx.get('store_settings', 'inventory');
+  const enabled = settings?.stockControlEnabled ?? process.env.STORE_STOCK_CONTROL_ENABLED !== 'false';
+  if (!enabled) return { products: [], reservedItems: [], trackingDisabled: true };
   const quantities = new Map();
   for (const item of items || []) {
     const productId = String(item.productId || '');

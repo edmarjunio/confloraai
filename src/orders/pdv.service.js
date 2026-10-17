@@ -110,7 +110,7 @@ class PdvService {
       return { productId: String(product.id), name, quantity, price, unit, subtotalMinor: Math.round(price * quantity * 100) };
     });
     const inventory = await this.repository.repository.getInventorySettings();
-    if (inventory.stockControlEnabled || paymentMethod === 'PIX') {
+    if (inventory.stockControlEnabled) {
       const quantities = new Map();
       for (const item of items) { quantities.set(item.productId, (quantities.get(item.productId) || 0) + item.quantity); }
       for (const [productId, quantity] of quantities) {

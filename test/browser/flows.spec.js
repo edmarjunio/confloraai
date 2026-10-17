@@ -226,3 +226,24 @@ test('Login inválido mantém o painel fechado', async ({ page }) => {
   await expect(page.locator('#adminGoogleLoginButton')).toBeDisabled();
   await expect(page.locator('[data-google-status]')).not.toBeEmpty();
 });
+
+test('Admin alterna venda livre e estoque ativo sem cadastrar entrada', async ({ page }) => {
+  await pinLogin(page, 'Edmar Júnio (Izibola)', '1234');
+  const original = await (await page.request.get('/api/admin/inventory-settings')).json();
+  await page.locator('#tabBtn-stock').click();
+  const button = page.locator('#stockControlToggle');
+  await expect(button).toBeEnabled();
+  try {
+    if ((await button.getAttribute('aria-pressed')) === 'true') await button.click();
+    await expect(button).toHaveText('Ativar estoque');
+    await expect(page.locator('#stockControlHelp')).toContainText('Venda livre');
+    await page.reload();
+    await page.locator('#tabBtn-stock').click();
+    await expect(button).toHaveText('Ativar estoque');
+    await button.click();
+    await expect(button).toContainText('Estoque ativo');
+    expect((await (await page.request.get('/api/admin/inventory-settings')).json()).stockControlEnabled).toBe(true);
+  } finally {
+    await page.request.put('/api/admin/inventory-settings', { data: original });
+  }
+});

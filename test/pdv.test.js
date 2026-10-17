@@ -981,3 +981,27 @@ test('delivery: mixed Pix at the door preserves reservation and bank confirmatio
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
   await s.service.completeDelivery(order.id, driver); assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
 });
+
+test('free sales permit cash, Pix and delivery without entries; activating stock blocks new zero-stock sales', async () => {
+  const s = setup();
+  await s.base.saveInventorySettings({ stockControlEnabled: false });
+  s.base.inMemoryProducts.get('plant').stockQuantity = 0;
+  const cash = await s.service.create({ ...s.input, requestId: randomUUID() }, cashier);
+  assert.equal(cash.paymentStatus, 'APPROVED');
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 0);
+  const pending = await s.service.create({ ...s.input, requestId: randomUUID(), deferToCashier: true }, cashier);
+  assert.equal(pending.inventoryReserved, false);
+  const pix = await s.service.requestPixAtCashier(pending.id, cashier);
+  assert.equal(pix.inventoryReserved, false);
+  s.pix.checkReceivedPayment = async (endToEndId) => ({ isPaid: true, raw: { txid: pix.pixData.txid, endToEndId, chave: 'pix-key', valor: '20.00' } });
+  await s.service.handlePix(pix.pixData.txid, 'E' + '4'.repeat(31));
+  const directPix = await s.service.create({ ...s.input, requestId: randomUUID(), paymentMethod: 'PIX' }, cashier);
+  assert.equal(directPix.inventoryReserved, false);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 0);
+  assert.equal(Number(s.base.inMemoryProducts.get('plant').reservedQuantity || 0), 0);
+  const delivery = await s.service.create({ ...s.input, requestId: randomUUID(), deferToCashier: true, orderType: 'DELIVERY', customerName: 'Cliente', customerPhone: '64999991234', deliveryAddress: 'Rua das Flores, 20, Centro' }, cashier);
+  const dispatched = await s.repository.dispatchDelivery(delivery.id, cashier);
+  assert.equal(dispatched.inventoryReserved, false);
+  await s.base.saveInventorySettings({ stockControlEnabled: true });
+  await assert.rejects(s.service.create({ ...s.input, requestId: randomUUID(), paymentMethod: 'PIX' }, cashier), /Estoque disponível insuficiente/);
+});

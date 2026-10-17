@@ -272,10 +272,12 @@ function renderAdminHtml(storeConfig) {
       <div class="admin-section-heading">
         <div><h2>Estoque</h2><p class="muted">Toque no cartão para somar uma unidade; use os botões para entrada, baixa ou contagem exata.</p></div>
         <div class="stock-toolbar-actions">
+          <button type="button" id="stockControlToggle" class="action-btn btn-gray" aria-pressed="false" onclick="toggleStockControl()" disabled>Carregando controle…</button>
           <button type="button" class="action-btn btn-green" onclick="openStockAdjustment('ENTRY')">＋ Entrada de estoque</button>
           <button type="button" class="action-btn btn-red" onclick="openStockAdjustment('EXIT')">− Baixa de estoque</button>
         </div>
       </div>
+      <p id="stockControlHelp" class="muted" role="status"></p>
       <div class="stock-toolbar">
         <input type="search" id="stockSearchInput" class="stock-search" placeholder="Buscar produto no estoque…" oninput="filterStockCards()" />
         <span id="stockProductsCount" class="muted" role="status"></span>
@@ -1498,7 +1500,42 @@ function renderAdminHtml(storeConfig) {
     }
 
     // 9. ESTOQUE ÁGIL (+1, +5, +10)
+    let stockControlActive = null;
+    function renderStockControl() {
+      const button = document.getElementById('stockControlToggle');
+      button.hidden = currentUser?.role !== 'ADMIN';
+      button.disabled = stockControlActive === null;
+      button.setAttribute('aria-pressed', String(stockControlActive === true));
+      button.className = 'action-btn ' + (stockControlActive ? 'btn-green' : 'btn-gray');
+      button.textContent = stockControlActive ? '✓ Estoque ativo · Desativar' : 'Ativar estoque';
+      document.getElementById('stockControlHelp').textContent = stockControlActive === null ? 'Não foi possível consultar o controle de estoque.' : stockControlActive
+        ? 'Estoque ativo: as vendas exigem saldo disponível e a baixa ocorre na confirmação do pagamento.'
+        : 'Venda livre: venda sem cadastrar entradas de estoque, inclusive no Pix. Reservas anteriores continuam protegidas.';
+    }
+    async function loadStockControl() {
+      try {
+        const response = await fetch('/api/admin/inventory-settings');
+        if (!response.ok) throw new Error('Falha ao consultar o estoque.');
+        const settings = await response.json();
+        stockControlActive = settings.stockControlEnabled;
+      } catch { stockControlActive = null; }
+      renderStockControl();
+    }
+    async function toggleStockControl() {
+      if (stockControlActive === null || currentUser?.role !== 'ADMIN') return;
+      const button = document.getElementById('stockControlToggle');
+      if (button.disabled) return;
+      button.disabled = true;
+      try {
+        const response = await fetch('/api/admin/inventory-settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stockControlEnabled: !stockControlActive }) });
+        const settings = await response.json();
+        if (!response.ok) throw new Error(settings.error || 'Não foi possível salvar o controle de estoque.');
+        stockControlActive = settings.stockControlEnabled;
+      } catch (error) { alert(error.message); }
+      finally { renderStockControl(); }
+    }
     async function loadStockProducts() {
+      await loadStockControl();
       try {
         const res = await fetch('/api/inventory');
         if (res.ok) {

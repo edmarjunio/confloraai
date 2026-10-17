@@ -1340,12 +1340,7 @@ class FirestoreRepository {
     }
     const value = { stockControlEnabled: settings.stockControlEnabled };
     if (this.firestore && !this._firestoreClientDisabled) {
-      try {
-        await this.firestore.collection('store_settings').doc('inventory').set(value, { merge: true });
-      } catch (err) {
-        Logger.warn('Erro ao salvar store_settings no Firestore, salvando em memória', err);
-        this.inMemoryInventorySettings = value;
-      }
+      await this.firestore.collection('store_settings').doc('inventory').set(value, { merge: true });
     } else {
       this.inMemoryInventorySettings = value;
     }
@@ -1826,6 +1821,13 @@ class FirestoreRepository {
         const saved = await this.firestore.runTransaction(async (transaction) => {
           const existingSnapshot = await transaction.get(orderRef);
           if (existingSnapshot.exists) return { id: orderId, ...existingSnapshot.data() };
+          const settingsSnapshot = await transaction.get(this.firestore.collection('store_settings').doc('inventory'));
+          const enabled = settingsSnapshot.data()?.stockControlEnabled ?? process.env.STORE_STOCK_CONTROL_ENABLED !== 'false';
+          if (!enabled) {
+            const untrackedOrder = { ...dataWithTs, inventoryReserved: false, reservedItems: [] };
+            transaction.create(orderRef, untrackedOrder);
+            return untrackedOrder;
+          }
           const productSnapshots = await Promise.all(productRefs.map((ref) => transaction.get(ref)));
           const updates = [];
           productSnapshots.forEach((snapshot, index) => {
@@ -1847,6 +1849,11 @@ class FirestoreRepository {
         return saved;
       }
       if (requirePersistence || !this.isInMemory) throw new Error('Não foi possível reservar o estoque com segurança.');
+      if (!(await this.getInventorySettings()).stockControlEnabled) {
+        const untrackedOrder = { ...dataWithTs, inventoryReserved: false, reservedItems: [] };
+        this.inMemoryOrders.set(orderId, untrackedOrder);
+        return untrackedOrder;
+      }
       const products = [...quantities].map(([productId, quantity]) => {
         const product = this.inMemoryProducts.get(productId);
         if (!product) throw new Error(`Produto não encontrado para reservar: ${productId}.`);
