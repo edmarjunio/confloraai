@@ -120,6 +120,12 @@ test('all drivers follow separation and routes live, while only the assigned dri
 
 
 test('delivery screen survives unavailable card styling scripts', async ({ page }) => {
+  const cashier = await page.context().browser().newContext({ baseURL: 'http://127.0.0.1:8099' });
+  await cashier.request.post('/api/admin/auth/login', { data: { userId: 'usr-caixa1', pin: '0000' } });
+  const response = await cashier.request.post('/api/caixa/orders', { data: { requestId: randomUUID(), items: [{ productId: 'test-plant', quantity: 1 }], paymentMethod: 'DINHEIRO', deferToCashier: true, orderType: 'DELIVERY', customerName: 'Teste elevação', customerPhone: '64999991234', deliveryAddress: 'Rua Flores, 20, Centro' } });
+  expect(response.ok()).toBe(true);
+  const { order } = await response.json();
+  await cashier.close();
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.route('**/pdv-assets/vendor/styled-components.js', route => route.fulfill({ status: 404, body: '' }));
@@ -130,5 +136,12 @@ test('delivery screen survives unavailable card styling scripts', async ({ page 
   await page.route('**/pdv-assets/order-card.styles.js', route => route.fulfill({ status: 404, body: '' }));
   await page.reload();
   await expect(page.getByRole('heading', { name: '🛵 Entregas', exact: true })).toBeVisible();
+  const action = page.getByRole('button', { name: 'Abrir recibo e detalhes da comanda ' + order.ticketNumber });
+  await action.hover();
+  await expect(action).toHaveCSS('box-shadow', 'none');
+  await expect(action).toHaveCSS('transform', 'none');
+  await expect(action.locator('..')).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, -2)');
+  await expect(action.locator('..')).toHaveCSS('box-shadow', 'rgba(15, 56, 30, 0.2) 0px 8px 20px 0px');
+  await page.screenshot({ path: 'test-results/card-hover-fallback.png' });
   expect(errors).toEqual([]);
 });
