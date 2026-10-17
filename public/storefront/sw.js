@@ -1,5 +1,5 @@
 /* Bump this version whenever the application shell changes before publishing. */
-const CACHE_NAME = 'conflora-public-shell-v6';
+const CACHE_NAME = 'conflora-public-shell-v7';
 const SHELL_URL = '/storefront/index.html';
 const CORE_FILES = [
   SHELL_URL,

@@ -334,3 +334,25 @@ test('registered customer data completes checkout without overwriting typed data
   await expect(page.locator('#checkoutCustomer [name=phone]')).toHaveValue('64999991234');
   await expect(page.locator('#checkoutForm [name=address]')).toHaveValue('Rua das Flores, 20, Centro, Mineiros GO');
 });
+
+test('catalogue header uses the catalogue width with the bag open and closed', async ({ page }) => {
+  await page.setViewportSize({ width: 1900, height: 1000 });
+  await page.route('**/api/auth/me', route => route.fulfill({ json: { user: { id: 'header-admin', name: 'Edmar Júnio', role: 'ADMIN' } } }));
+  await page.goto('/');
+  await expect(page.locator('#adminSettingsButton')).toBeVisible();
+  const alignments = async () => page.evaluate(() => {
+    const products = document.querySelector('#products').getBoundingClientRect();
+    const brand = document.querySelector('#brand').getBoundingClientRect();
+    const actions = document.querySelector('.header-actions').getBoundingClientRect();
+    const search = document.querySelector('.search').getBoundingClientRect();
+    return { left: Math.abs(products.left - brand.left), right: Math.abs(products.right - actions.right), searchWidth: search.width, overflow: document.documentElement.scrollWidth > innerWidth };
+  });
+  const closed = await alignments();
+  expect(closed.left).toBeLessThan(2); expect(closed.right).toBeLessThan(2); expect(closed.searchWidth).toBeGreaterThan(450);
+  if (await page.locator('#coachSkip').isVisible()) await page.locator('#coachSkip').click();
+  await page.locator('#cartButton').click();
+  await expect(page.locator('#cartDialog')).toBeVisible();
+  const opened = await alignments();
+  expect(opened.left).toBeLessThan(2); expect(opened.right).toBeLessThan(2); expect(opened.overflow).toBe(false);
+  await page.screenshot({ path: 'test-results/catalogue-header-wide.png' });
+});
