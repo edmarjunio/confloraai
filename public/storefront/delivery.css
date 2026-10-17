@@ -8,3 +8,5 @@ delivery-location-picker, delivery-route-map { display: block; min-width: 0; }
 .cf-location-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
 .cf-location-map { width: 100%; height: 280px; margin-top: 12px; border: 1px solid #d4e0d8; border-radius: 14px; overflow: hidden; background: #edf3ef; }
 .cf-location [hidden] { display: none !important; }
+
+delivery-location-picker[hidden], delivery-route-map[hidden] { display: none !important; }

@@ -51,3 +51,19 @@ test('customer selects delivery pin using address search and GPS without requiri
   await expect(picker.locator('[data-status]')).toContainText(/selecionada|Toque no mapa/);
   await page.screenshot({ path: 'test-results/delivery-location-mobile.png' });
 });
+
+test('delivery map controls stay visible without a configured key and disappear for pickup', async ({ page }) => {
+  await page.route('**/api/maps-config', route => route.fulfill({ json: { apiKey: '', storeLocation: null } }));
+  await page.goto('/');
+  await expect(page.locator('#products .product-card').first()).toBeVisible();
+  if (await page.locator('#coachSkip').isVisible()) await page.locator('#coachSkip').click();
+  await page.locator('#cartButton').click();
+  await page.locator('input[name=fulfillment][value=delivery]').check();
+  const picker = page.locator('#deliveryLocationPicker');
+  await expect(picker.getByRole('button', { name: 'Selecionar no mapa', exact: true })).toBeVisible();
+  await picker.getByRole('button', { name: 'Selecionar no mapa', exact: true }).click();
+  await expect(picker.locator('[data-status]')).toContainText('O mapa ainda não está configurado');
+  await page.locator('[name=address]').fill('Rua das Flores, 20, Centro');
+  await page.locator('input[name=fulfillment][value=pickup]').check();
+  await expect(picker).toBeHidden();
+});

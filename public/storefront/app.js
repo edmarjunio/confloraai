@@ -124,6 +124,11 @@ function updateHeaderActions() {
   $("#accountButton").hidden = isLoggedIn;
   $("#adminSettingsButton").hidden = role !== "ADMIN";
   cashierShortcut.hidden = !allowedCashierRoles.includes(role);
+  const deliveryRole = role === 'ENTREGADOR';
+  cashierShortcut.querySelector('span:first-child').replaceChildren(icon(deliveryRole ? 'truck' : 'register'));
+  cashierShortcut.querySelector('span:last-child').textContent = deliveryRole ? 'MINHAS ENTREGAS' : 'IR PARA O CAIXA';
+  cashierShortcut.setAttribute('aria-label', deliveryRole ? 'Minhas entregas' : 'Ir para o Caixa');
+  cashierShortcut.title = deliveryRole ? 'Minhas entregas' : 'Ir para o Caixa';
 
   if (isLoggedIn) {
     $("#headerAccountName").textContent =
@@ -277,61 +282,55 @@ async function account() {
   $("#googleAccount").hidden = !existingStore || !!state.user;
   if (state.user) {
     $("#accountTitle").textContent = "Sua conta";
-    $("#accountSubtitle").textContent = "Gerencie seu acesso e consulte suas compras na Conflora.";
+    $("#accountSubtitle").textContent = "Escolha o que você precisa fazer agora.";
     content.className = "account-content account-signed-in";
-    content.append(element("section", { class: "account-profile" }, [
-      element("span", { class: "account-profile-eyebrow", text: "CONECTADO" }),
-      element("strong", { class: "account-greeting", text: `Olá, ${state.user.name}` }),
-      ...(state.user.email ? [element("span", { class: "account-email", text: state.user.email })] : []),
-      element("span", { class: "account-role", text: state.user.role || "CLIENTE" }),
-    ]));
-    if (
-      state.user.role === "ADMIN" ||
-      (existingStore && state.user.role === "CAIXA")
-    ) {
-      content.append(
-        element("button", {
-          class: "primary",
-          type: "button",
-          text: "team.admin_full".tr,
-          onclick: () =>
-            existingStore
-              ? location.assign("/admin")
-              : navigate(`${basePath}/admin`),
-        }),
-      );
+    const name = state.user.name || state.user.email || "Cliente Conflora";
+    const role = String(state.user.role || "CLIENTE").toUpperCase();
+    const initials = name.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+    const avatar = element("div", { class: "account-avatar", "aria-hidden": "true" }, [element("span", { text: initials })]);
+    if (/^https:\/\//i.test(state.user.picture || '')) {
+      const photo = element("img", { src: state.user.picture, alt: "", referrerpolicy: "no-referrer" });
+      photo.onerror = () => photo.remove(); avatar.append(photo);
     }
-    content.append(
+    content.append(element("section", { class: "account-profile" }, [avatar,
+      element("div", { class: "account-profile-copy" }, [
+        element("span", { class: "account-profile-eyebrow", text: "VOCÊ ESTÁ CONECTADO" }),
+        element("strong", { class: "account-greeting", text: name }),
+        ...(state.user.email ? [element("span", { class: "account-email", text: state.user.email })] : []),
+        element("span", { class: "account-role", text: role }),
+      ]),
+    ]));
+    const actions = element("div", { class: "account-shortcuts" });
+    const addShortcut = (title, description, symbol, onClick, featured = false) => {
+      const button = element("button", { type: "button", class: "account-shortcut" + (featured ? " account-shortcut-featured" : ''), onclick: onClick }, [
+        element("span", { class: "account-shortcut-icon" }, [icon(symbol)]),
+        element("span", { class: "account-shortcut-copy" }, [element("strong", { text: title }), element("small", { text: description })]),
+        icon("arrow"),
+      ]);
+      actions.append(button);
+    };
+    const openCashier = () => { $("#accountDialog").close(); location.assign("/caixa"); };
+    if (existingStore && role === 'ENTREGADOR') addShortcut("Minhas entregas", "Aceite pedidos, abra a rota e confirme a entrega.", "truck", openCashier, true);
+    else if (existingStore && ['ADMIN', 'CAIXA', 'VENDEDOR'].includes(role)) addShortcut(role === 'VENDEDOR' ? "Criar comanda" : "Ir para o caixa", "Acesse os produtos, comandas e atendimentos.", "register", openCashier, true);
+    if (existingStore) addShortcut("Minha conta: saldo e histórico", "Consulte suas compras, pagamentos e saldo.", "history", () => { $("#accountDialog").close(); openPurchaseHistory(); }, role === 'CLIENTE');
+    if (role === 'ADMIN' || (existingStore && role === 'CAIXA')) addShortcut(role === 'ADMIN' ? "Painel administrativo" : "Painel de vendas", role === 'ADMIN' ? "Gerencie produtos, equipe e resultados da loja." : "Acompanhe seus atendimentos e recebimentos.", "menu", () => existingStore ? location.assign('/admin') : navigate(`${basePath}/admin`));
+    content.append(actions);
+    content.append(element("div", { class: "account-session-footer" }, [
+      element("span", { text: "Acesso pessoal à Conflora" }),
       element("button", {
-        class: "account-secondary-action",
-        type: "button",
-        text: "team.logout".tr,
-        onclick: async () => {
+        class: "account-logout", type: "button", text: "team.logout".tr,
+        onclick: async (event) => {
+          const button = event.currentTarget; button.disabled = true;
           try {
             await state.api("/auth/logout", { method: "POST" });
-            if (existingStore && window.signOutGoogle) {
-              await window.signOutGoogle().catch(() => {});
-            }
-            state.user = null;
-            appStore.getState().setUser(null);
-            catalog?.refreshFavorites();
-            updateHeaderActions();
-            $("#accountDialog").close();
-            navigate(basePath || "/");
-          } catch (error) {
-            notify(error.message);
-          }
+            if (existingStore && window.signOutGoogle) await window.signOutGoogle().catch(() => {});
+            state.user = null; appStore.getState().setUser(null); catalog?.refreshFavorites(); updateHeaderActions();
+            $("#accountDialog").close(); navigate(basePath || "/");
+          } catch (error) { notify(error.message); }
+          finally { button.disabled = false; }
         },
       }),
-    );
-    if (existingStore) {
-      content.append(element("button", {
-        type: "button",
-        class: "primary account-history-action",
-        text: "Minha conta: saldo e histórico",
-        onclick: () => { $("#accountDialog").close(); openPurchaseHistory(); },
-      }));
-    }
+    ]));
   } else {
     $("#accountTitle").textContent = "Entrar na sua conta";
     $("#accountSubtitle").textContent = "Acesse seus pedidos e aproveite uma compra mais prática.";

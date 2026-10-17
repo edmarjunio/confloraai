@@ -5,12 +5,12 @@
   const config = () => configuration ||= fetch('/api/maps-config').then(async (response) => {
     if (!response.ok) throw new Error('Mapa indisponível. Informe o endereço e use a navegação externa.');
     return response.json();
-  });
+  }).catch(error => { configuration = null; throw error; });
   const point = (value) => value && value.lat !== null && value.lng !== null && Number.isFinite(Number(value.lat)) && Number.isFinite(Number(value.lng)) && Math.abs(Number(value.lat)) <= 90 && Math.abs(Number(value.lng)) <= 180 ? { lat: Number(value.lat), lng: Number(value.lng) } : null;
   async function maps() {
     const settings = await config();
     if (window.google?.maps?.importLibrary) return window.google.maps;
-    if (!settings.apiKey) throw new Error('Mapa indisponível. Use o GPS ou informe o endereço completo.');
+    if (!settings.apiKey) throw new Error('O mapa ainda não está configurado pela loja. Você pode usar o GPS ou informar o endereço completo.');
     sdk ||= new Promise((resolve, reject) => {
       const script = document.createElement('script');
       const timeout = setTimeout(() => { script.remove(); reject(new Error('O mapa demorou para responder. Use GPS ou endereço.')); }, 20000);
@@ -70,9 +70,15 @@
       }, () => this.status('Não foi possível usar o GPS. Busque o endereço ou selecione o pino no mapa.'), { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
     }
     async openMap() {
+      if (this.opening) return this.opening;
+      this.opening = this.loadMap().finally(() => { this.opening = null; this.querySelector('[data-map]')?.removeAttribute('aria-busy'); });
+      return this.opening;
+    }
+    async loadMap() {
       this.querySelector('[data-search]').hidden = false;
       this.querySelector('input[type=search]').value ||= this.getAttribute('address') || '';
       if (this.map) return;
+      this.status('Carregando o mapa…'); this.querySelector('[data-map]').setAttribute('aria-busy', 'true');
       try {
         const googleMaps = await maps(); const settings = await config();
         const [{ Map }, { AdvancedMarkerElement }, { Geocoder }] = await Promise.all([googleMaps.importLibrary('maps'), googleMaps.importLibrary('marker'), googleMaps.importLibrary('geocoding')]);

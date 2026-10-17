@@ -253,7 +253,7 @@ export function createCart(state) {
     const delivery = form.elements.fulfillment?.value === "delivery";
     const payment = form.elements.payment?.value;
     $("#deliveryFields").hidden = !delivery;
-    if (locationPicker) { locationPicker.hidden = !delivery; locationPicker.setAttribute("address", form.elements.address?.value || ""); }
+    if (locationPicker) { locationPicker.setAttribute("address", form.elements.address?.value || ""); }
     if (form.elements.address) {
       form.elements.address.required = delivery;
       form.elements.address.minLength = delivery ? 8 : 0;

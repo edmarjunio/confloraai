@@ -3679,3 +3679,28 @@ body {
     grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
   }
 }
+
+/* Personal account: identity first, task shortcuts second, sign-out last. */
+.account-profile { display: flex; align-items: center; gap: 15px; padding: 20px; margin-bottom: 20px; }
+.account-avatar { position: relative; display: grid; place-items: center; flex: 0 0 60px; width: 60px; height: 60px; overflow: hidden; border-radius: 20px; background: #dcefe2; color: #176334; font-size: 21px; font-weight: 850; }
+.account-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.account-profile-copy { display: grid; justify-items: start; gap: 6px; min-width: 0; }
+.account-profile-copy .account-greeting { font-size: 21px; line-height: 1.25; overflow-wrap: anywhere; }
+.account-shortcuts { display: grid; gap: 10px; }
+.account-shortcut { display: flex; align-items: center; gap: 12px; width: 100%; padding: 15px; border: 1px solid #dce6df; border-radius: 15px; background: white; color: #233e2d; text-align: left; transition: transform .16s, box-shadow .16s, border-color .16s; }
+.account-shortcut:hover { transform: translateY(-2px); border-color: #a1cfaf; box-shadow: 0 6px 18px #17432d12; }
+.account-shortcut-icon { display: grid; place-items: center; flex: 0 0 42px; width: 42px; height: 42px; border-radius: 13px; background: #edf7f0; color: #188341; }
+.account-shortcut-copy { display: grid; flex: 1; gap: 5px; min-width: 0; }
+.account-shortcut-copy strong { font-size: 14px; line-height: 1.3; }
+.account-shortcut-copy small { font-size: 12px; line-height: 1.45; color: #63716a; font-weight: 400; }
+.account-shortcut > .icon { width: 17px; height: 17px; color: #789181; }
+.account-shortcut-featured { background: #f2faf5; border-color: #b6dbc2; }
+.account-session-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 20px; padding-top: 16px; border-top: 1px solid #e7ece8; }
+.account-session-footer > span { font-size: 11px; color: #748078; }
+.account-logout { min-height: 38px; padding: 8px 16px; border: 1px solid #f0d5d8; border-radius: 999px; color: #b4233b; background: #fff7f8; font-size: 12px; font-weight: 750; }
+@media (max-width: 480px) {
+  .account-profile { padding: 15px; gap: 12px; }
+  .account-avatar { flex-basis: 48px; width: 48px; height: 48px; border-radius: 16px; font-size: 17px; }
+  .account-profile-copy .account-greeting { font-size: 18px; }
+  .account-shortcut { padding: 13px; gap: 10px; }
+}

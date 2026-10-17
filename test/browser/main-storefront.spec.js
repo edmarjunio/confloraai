@@ -345,7 +345,7 @@ test('catalogue header uses the catalogue width with the bag open and closed', a
     const brand = document.querySelector('#brand').getBoundingClientRect();
     const actions = document.querySelector('.header-actions').getBoundingClientRect();
     const search = document.querySelector('.search').getBoundingClientRect();
-    return { left: Math.abs(products.left - brand.left), right: Math.abs(products.right - actions.right), searchWidth: search.width, overflow: document.documentElement.scrollWidth > innerWidth };
+    return { left: Math.abs(products.left - brand.left), right: Math.abs(products.right - actions.right), searchWidth: search.width, overflow: document.documentElement.scrollWidth > window.innerWidth };
   });
   const closed = await alignments();
   expect(closed.left).toBeLessThan(2); expect(closed.right).toBeLessThan(2); expect(closed.searchWidth).toBeGreaterThan(450);
@@ -356,3 +356,25 @@ test('catalogue header uses the catalogue width with the bag open and closed', a
   expect(opened.left).toBeLessThan(2); expect(opened.right).toBeLessThan(2); expect(opened.overflow).toBe(false);
   await page.screenshot({ path: 'test-results/catalogue-header-wide.png' });
 });
+
+for (const role of ['ADMIN', 'CLIENTE', 'ENTREGADOR']) {
+  test(`profile shortcuts match ${role} and fit a mobile screen`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.route('**/api/auth/me', route => route.fulfill({ json: { user: { id: 'profile-user', name: 'Edmar Júnio', email: 'perfil@example.com', role } } }));
+    await page.goto('/'); await selectPortuguese(page);
+    await page.locator('#headerAccountIdentity').click();
+    const dialog = page.locator('#accountDialog');
+    await expect(dialog.locator('.account-avatar')).toHaveText('EJ');
+    await expect(dialog.locator('.account-role')).toHaveText(role);
+    await expect(dialog.getByRole('button', { name: /Minha conta: saldo e histórico/ })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Sair', exact: true })).toBeVisible();
+    if (role === 'ADMIN') await expect(dialog.getByRole('button', { name: /Painel administrativo/ })).toBeVisible();
+    else await expect(dialog.getByRole('button', { name: /Painel administrativo/ })).toHaveCount(0);
+    expect(await dialog.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+    await page.screenshot({ path: `test-results/profile-${role.toLowerCase()}-mobile.png` });
+    if (role === 'ENTREGADOR') {
+      await dialog.getByRole('button', { name: /Minhas entregas/ }).click();
+      await expect(page).toHaveURL(/\/caixa$/);
+    }
+  });
+}
