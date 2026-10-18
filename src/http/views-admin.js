@@ -77,7 +77,7 @@ function renderAdminHtml(storeConfig) {
     .admin-products-toolbar { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:18px; }
     .admin-products-toolbar h2 { margin:0; }
     .admin-add-product { min-height:48px; padding:12px 20px; border:0; border-radius:14px; background:var(--primary); color:#fff; font-weight:800; font-size:14px; box-shadow:0 5px 14px rgba(46,147,72,.22); }
-    .admin-product-dialog { width:min(980px, calc(100vw - 32px)); max-width:none; max-height:calc(100dvh - 32px); padding:0; border:1px solid #dbe6dd; border-radius:22px; overflow:auto; background:#fff; color:#17251a; box-shadow:0 24px 80px rgba(15,23,42,.28); }
+    .admin-product-dialog { margin:auto; width:min(980px, calc(100vw - 32px)); max-width:none; max-height:calc(100dvh - 32px); padding:0; border:1px solid #dbe6dd; border-radius:22px; overflow:auto; background:#fff; color:#17251a; box-shadow:0 24px 80px rgba(15,23,42,.28); }
     .admin-product-dialog::backdrop { background:rgba(15,23,42,.48); backdrop-filter:blur(3px); }
     .admin-product-dialog__surface { padding:24px; }
     .admin-product-dialog__header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:18px; }
@@ -425,6 +425,7 @@ function renderAdminHtml(storeConfig) {
         <div style="grid-column: 1/-1; display:flex; gap:8px; flex-wrap:wrap;">
           <button type="submit" class="action-btn btn-green">💾 Salvar no Firestore</button>
           <button type="button" class="action-btn btn-gray" onclick="closeProductEditorDialog()">Cancelar</button>
+          <button type="button" id="deleteEditingProduct" class="action-btn btn-red" hidden onclick="deleteProduct(document.getElementById('formProdId').value)">Excluir produto</button>
         </div>
       </form>
         </div>
@@ -439,19 +440,7 @@ function renderAdminHtml(storeConfig) {
         </div>
         <p id="productStatusCount" role="status" style="font-size:13px;"></p>
       </div>
-      <div class="table-scroll" tabindex="0" role="region" aria-label="Tabela de dados"><table>
-        <thead>
-          <tr>
-            <th>Foto</th>
-            <th>Nome</th>
-            <th>Categoria</th>
-            <th>Preço</th>
-            <th>Estoque</th>
-            <th>Ações</th>
-          </tr>
-        </thead>
-        <tbody id="adminProductsTableBody"></tbody>
-      </table></div>
+      <div id="adminProductsGrid" class="admin-products-grid" aria-label="Produtos para editar"></div>
     </div>
 
     <!-- ABA 8: EQUIPE & PERMISSÕES (ADMIN) -->
@@ -1810,27 +1799,21 @@ function renderAdminHtml(storeConfig) {
       renderAdminProducts();
     }
     function renderAdminProducts() {
-      const tbody = document.getElementById('adminProductsTableBody');
-      tbody.innerHTML = '';
-
+      const grid = document.getElementById('adminProductsGrid');
+      grid.replaceChildren();
       const visible = allProducts.filter(p => productStatusFilter === 'TODOS' || productIsInactive(p) === (productStatusFilter === 'INATIVO'));
       document.getElementById('productStatusCount').textContent = visible.length + ' produto(s) · ' + (productStatusFilter === 'TODOS' ? 'Todos os status' : productStatusFilter === 'INATIVO' ? 'Inativos' : 'Ativos');
-      visible.forEach(p => {
-        const tr = document.createElement('tr');
-        const img = getProductImageUrl(p);
-        tr.innerHTML = \`
-          <td><img src="\${img}" class="prod-thumb" /></td>
-          <td><strong>\${p.descricao || p.name}</strong>\${productIsInactive(p) ? '<p style="color:#92400e; background:#fef3c7; padding:6px 8px; border-radius:6px; font-size:12px; margin-top:6px;">INATIVO — oculto no catálogo, indisponível para compra.</p>' : ''}</td>
-          <td>\${p.categoria || p.category || ''}</td>
-          <td>R$ \${Number(p.valor_num || p.price || 0).toFixed(2).replace('.', ',')}</td>
-          <td><strong style="color:#15803d;">\${p.stockQuantity ?? p.estoque ?? 0}</strong> \${getAdminProductSaleUnit(p) === 'KG' ? 'kg' : 'un.'}</td>
-          <td>
-            <button class="action-btn btn-blue" style="padding:4px 8px;" onclick="editProduct('\${p.id}')">✏️ Editar</button>
-            <button class="action-btn btn-red" style="padding:4px 8px;" onclick="deleteProduct('\${p.id}')">🗑️ Excluir</button>
-          </td>
-        \`;
-        tbody.appendChild(tr);
+      const fragment = document.createDocumentFragment();
+      visible.forEach(product => {
+        const card = document.createElement('render-product-card');
+        card.setAttribute('variant', 'admin');
+        card.product = product;
+        card.addEventListener('cf-product-card-action', event => {
+          if (['edit', 'open'].includes(event.detail.action)) editProduct(product.id);
+        });
+        fragment.appendChild(card);
       });
+      grid.appendChild(fragment);
     }
 
     function slugifyClient(text) {
@@ -1839,6 +1822,7 @@ function renderAdminHtml(storeConfig) {
     }
 
     let pendingPhotosList = [];
+    let previewProduct = null;
 
     function renderPendingPhotosGrid() {
       const box = document.getElementById('formProdPhotoPreviewBox');
@@ -1848,8 +1832,25 @@ function renderAdminHtml(storeConfig) {
       if (!box || !grid) return;
 
       if (pendingPhotosList.length === 0) {
-        box.style.display = 'none';
         if (base64Input) base64Input.value = '';
+        if (countSpan) countSpan.textContent = '0';
+        grid.replaceChildren();
+        box.style.display = previewProduct ? 'block' : 'none';
+        if (previewProduct) {
+          const preview = document.createElement('button');
+          preview.type = 'button';
+          preview.style.cssText = 'grid-column:1/-1;background:white;padding:12px;border:0;border-radius:12px';
+          preview.setAttribute('aria-label', 'Ampliar imagem exibida no catálogo');
+          const image = document.createElement('img');
+          image.src = previewProduct.imageFallbackUrl || '/store-assets/placeholder.svg';
+          image.alt = previewProduct.name || previewProduct.descricao || 'Imagem do produto';
+          image.style.cssText = 'display:block;width:100%;height:240px;object-fit:contain';
+          const caption = document.createElement('p');
+          caption.textContent = 'Imagem ilustrativa do catálogo. Adicione fotos reais para definir a capa deste produto.';
+          preview.append(image, caption);
+          preview.onclick = () => openProductPhoto(image.src, image.alt);
+          grid.appendChild(preview);
+        }
         return;
       }
 
@@ -2039,13 +2040,12 @@ function renderAdminHtml(storeConfig) {
       document.getElementById('formProdDesc').value = p.descriptionAi || p.descricao_ia || '';
       document.getElementById('formProdPhotoBase64').value = '';
 
-      // Carrega fotos existentes do produto no gerenciador de fotos
-      pendingPhotosList = [];
-      const existingImgs = (Array.isArray(p.images) && p.images.length > 0)
-        ? p.images.filter(Boolean)
-        : (p.imageUrl || p.imageurl ? [p.imageUrl || p.imageurl] : []);
-
-      existingImgs.map(image => typeof image === 'string' ? image : image.url).filter(url => url && (url.startsWith('https://') || url.startsWith('http://') || url.startsWith('/api/images/'))).forEach((url, i) => {
+      // Reuse the catalog image resolver for legacy fields and Storage paths.
+      clearAllPendingPhotos();
+      previewProduct = p;
+      document.getElementById('deleteEditingProduct').hidden = false;
+      const existingImgs = window.ConfloraProductCard?.getImageCandidates(p) || [];
+      existingImgs.forEach((url, i) => {
         pendingPhotosList.push({
           url,
           dataUrl: url,
@@ -2074,6 +2074,8 @@ function renderAdminHtml(storeConfig) {
     }
 
     function resetProdForm() {
+      previewProduct = null;
+      document.getElementById('deleteEditingProduct').hidden = true;
       document.getElementById('prodForm').reset();
       document.getElementById('formProdId').value = '';
       document.getElementById('formProdUnit').value = 'UN';
@@ -2093,6 +2095,7 @@ function renderAdminHtml(storeConfig) {
         alert('Não foi possível excluir o produto: ' + (result.error || 'Falha ao remover o produto.'));
         return;
       }
+      closeProductEditorDialog();
       loadAdminProducts();
     }
 

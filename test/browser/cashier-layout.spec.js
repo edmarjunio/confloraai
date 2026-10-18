@@ -76,3 +76,25 @@ test('sales table translates pending status and keeps customer, amount and actio
   for (const column of [1, 4, 6]) await expect(row.locator('td').nth(column)).toHaveCSS('white-space', 'nowrap');
   await expect(row.locator('td').nth(2)).toHaveCSS('white-space', 'normal');
 });
+
+test('admin product cards edit legacy photos and identify illustrative images without saving them', async ({ page }) => {
+  await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-edmar', pin: '1234' } });
+  await page.route('**/api/inventory', route => route.fulfill({ json: [
+    { id: 'legacy-photo', name: 'Foto antiga', price: 12, category: 'Horta', status: 'ATIVO', fotoUrl: '/store-assets/brands/conflora-logo.png' },
+    { id: 'illustrative-photo', name: 'Sem foto própria', price: 10, category: 'Horta', status: 'ATIVO', imageFallbackUrl: '/store-assets/brands/conflora-logo.png' },
+  ] }));
+  await page.goto('/admin');
+  await page.getByRole('button', { name: 'Produtos', exact: true }).click();
+  const cards = page.locator('#adminProductsGrid render-product-card');
+  await expect(cards).toHaveCount(2);
+  await expect(cards.locator('[data-action="add"]')).toHaveCount(0);
+  await page.screenshot({ path: 'test-results/admin-product-cards.png' });
+  await cards.filter({ hasText: 'Foto antiga' }).getByRole('button', { name: 'Editar produto', exact: true }).click();
+  await expect(page.locator('#formProdPhotosGrid img')).toHaveAttribute('src', '/store-assets/brands/conflora-logo.png');
+  await expect.poll(() => page.locator('#formProdPhotosGrid img').evaluate(image => image.naturalWidth)).toBeGreaterThan(0);
+  await page.getByRole('button', { name: 'Fechar cadastro de produto' }).click();
+  await cards.filter({ hasText: 'Sem foto própria' }).getByRole('button', { name: 'Editar produto', exact: true }).click();
+  await expect(page.locator('#formProdPhotosGrid')).toContainText('Imagem ilustrativa do catálogo');
+  await expect(page.locator('#formProdPhotoCount')).toHaveText('0');
+  await expect(page.locator('#formProdPhotosGrid img')).toBeVisible();
+});
