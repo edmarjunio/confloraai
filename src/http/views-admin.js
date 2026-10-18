@@ -1,5 +1,16 @@
 const { renderFirebaseAuthScript } = require('./firebase-client');
 const { GOOGLE_ANALYTICS_TAG } = require('./analytics');
+const { createHash } = require('node:crypto');
+const { readFileSync } = require('node:fs');
+const { resolve } = require('node:path');
+
+// Keep the admin markup, shared card and its styles on the same release,
+// even when an older storefront worker controls this tab.
+const productAssetsVersion = createHash('sha256')
+  .update(readFileSync(resolve(__dirname, '../../public/storefront/design-system.css')))
+  .update(readFileSync(resolve(__dirname, '../../public/storefront/product-card.js')))
+  .digest('hex').slice(0, 12);
+
 
 const FETCH_SHIM_SCRIPT = `<script>
   (function() {
@@ -39,7 +50,7 @@ function renderAdminHtml(storeConfig) {
 
   <link rel="stylesheet" href="/store-assets/admin-shell-v1.css">
   <link rel="stylesheet" href="/store-assets/site-header.css">
-  <link rel="stylesheet" href="/store-assets/design-system.css">
+  <link rel="stylesheet" href="/store-assets/design-system.css?v=${productAssetsVersion}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -662,7 +673,7 @@ function renderAdminHtml(storeConfig) {
   </div>
 
   <script src="/store-assets/render-image.js"></script>
-  <script src="/store-assets/product-card.js"></script>
+  <script src="/store-assets/product-card.js?v=${productAssetsVersion}"></script>
   <script>
     // ESTADO GLOBAL
     let currentUser = null;

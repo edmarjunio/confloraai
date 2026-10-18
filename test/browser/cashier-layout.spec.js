@@ -98,3 +98,40 @@ test('admin product cards edit legacy photos and identify illustrative images wi
   await expect(page.locator('#formProdPhotoCount')).toHaveText('0');
   await expect(page.locator('#formProdPhotosGrid img')).toBeVisible();
 });
+
+test('admin uses current product assets despite an older public cache and keeps cards sized on desktop and mobile', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => window.navigator.serviceWorker.ready.then(() => undefined));
+  await expect.poll(() => page.evaluate(() => Boolean(window.navigator.serviceWorker.controller))).toBe(true);
+  await page.evaluate(async () => {
+    const name = (await window.caches.keys()).find(key => key.startsWith('conflora-public-shell-'));
+    const cache = await window.caches.open(name);
+    await cache.put('/store-assets/design-system.css', new window.Response('/* Old release without admin grid */', { headers: { 'Content-Type': 'text/css' } }));
+    await cache.put('/store-assets/product-card.js', new window.Response('/* Old release without admin edit variant */', { headers: { 'Content-Type': 'application/javascript' } }));
+  });
+  await page.evaluate(async () => {
+    const response = await window.fetch('/api/admin/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: 'usr-edmar', pin: '1234' }) });
+    if (!response.ok) throw new Error('Login do administrador não foi concluído.');
+  });
+  await page.goto('/admin');
+  await page.getByRole('button', { name: 'Produtos', exact: true }).click();
+  const grid = page.locator('#adminProductsGrid');
+  const cards = grid.locator('render-product-card');
+  await expect(cards.first().getByRole('button', { name: 'Editar produto', exact: true })).toBeVisible();
+  await expect(grid).toHaveCSS('display', 'grid');
+  for (const width of [1600, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    const dimensions = await cards.evaluateAll(elements => elements.slice(0, 2).map(card => {
+      const rect = card.getBoundingClientRect();
+      const image = card.querySelector('img').getBoundingClientRect();
+      return { x: rect.x, y: rect.y, width: rect.width, imageWidth: image.width, imageHeight: image.height };
+    }));
+    expect(dimensions[0].width).toBeLessThan(width > 500 ? 320 : 200);
+    expect(dimensions[1].y).toBe(dimensions[0].y);
+    expect(dimensions[1].x).toBeGreaterThan(dimensions[0].x);
+    expect(dimensions[0].imageHeight).toBeLessThan(240);
+    expect(dimensions[0].imageWidth).toBeLessThanOrEqual(dimensions[0].width);
+    await expect(cards.locator('[data-action="add"]')).toHaveCount(0);
+    await page.screenshot({ path: 'test-results/admin-catalog-' + width + '.png' });
+  }
+});
