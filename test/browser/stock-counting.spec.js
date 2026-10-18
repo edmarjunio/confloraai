@@ -1,3 +1,4 @@
+const { openAdminSection } = require('./admin-navigation');
 const { test, expect } = require('@playwright/test');
 const { randomUUID } = require('node:crypto');
 
@@ -7,7 +8,7 @@ async function start(page, suffix, unit = 'UN') {
   const name = 'Contagem ' + suffix;
   expect((await page.request.post('/api/admin/products', { data: { id, name, price: 10, stockQuantity: 20, unit, status: 'ATIVO' } })).ok()).toBe(true);
   await page.goto('/admin');
-  await page.locator('#tabBtn-stock').click();
+  await openAdminSection(page, 'stock');
   await page.locator('#stockSearchInput').fill(name);
   await page.locator('#stockModeEntry').click();
   const card = page.locator('#stockCardsGrid render-product-card').filter({ hasText: name });
@@ -33,7 +34,7 @@ test('rapid physical taps, undo, search and reload preserve the entry before one
   await expect(page.locator('#tab-stock')).toBeVisible();
   page.on('dialog', dialog => dialog.accept());
   await page.reload();
-  await page.locator('#tabBtn-stock').click();
+  await openAdminSection(page, 'stock');
   await page.locator('#stockSearchInput').fill(name);
   await expect(card.locator('input')).toHaveValue('4');
   let failed = false;
@@ -60,7 +61,7 @@ test('physical count starts at zero, supports kg and never overwrites a concurre
   await page.locator('#stockSave').click();
   await expect(page.locator('#stockCountingStatus')).toContainText('estoque mudou');
   page.on('dialog', dialog => dialog.accept()); await page.reload();
-  await page.locator('#tabBtn-stock').click();
+  await openAdminSection(page, 'stock');
   await page.locator('#stockSearchInput').fill('Contagem peso KG');
   await card.getByRole('button', { name: 'Recomeçar este produto' }).click();
   await card.locator('input').fill('2.75'); await card.locator('input').blur();

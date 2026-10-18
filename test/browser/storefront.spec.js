@@ -1,3 +1,4 @@
+const { openAdminSection } = require('./admin-navigation');
 const { test, expect } = require("@playwright/test");
 const errors = new WeakMap();
 test.beforeEach(async ({ page }) => {
@@ -132,7 +133,7 @@ test("admin edits config and generic product specifications, cannot access anoth
   await expect(page.locator("#subtitle")).toHaveText(
     "Loja de teste atualizada",
   );
-  await page.getByRole("button", { name: "Produtos", exact: true }).click();
+  await openAdminSection(page, 'products');
   await page
     .locator(".admin-product-row")
     .filter({ hasText: "Substrato" })

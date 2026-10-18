@@ -1,3 +1,4 @@
+const { openAdminSection } = require('./admin-navigation');
 const { test, expect } = require('@playwright/test');
 
 const pageErrors = new WeakMap();
@@ -46,16 +47,13 @@ test('Admin: cabeçalho, ordem das abas e navegação dos sete módulos', async 
   await pinLogin(page, 'Edmar Júnio (Izibola)', '1234');
   await expect(page.locator('#loggedUserName')).toHaveText('Edmar Júnio (Izibola)');
   await expect(page.locator('#loggedUserRole')).toHaveText('ADMIN');
-  await expect(page.getByRole('link', { name: /IR PARA O CAIXA/i })).toBeVisible();
-  expect(await page.locator('.nav-btn').allTextContents()).toEqual([
-    'Caixa/Vendas', 'Comandas', 'Estoque', 'Produtos', 'Equipe',
-    'Teste de conexões/servidor', 'Eventos',
-  ]);
+  await expect(page.getByRole('link', { name: /^CAIXA$/i })).toBeVisible();
+  await expect(page.locator('.nav-tabs')).toHaveCount(0);
   for (const tab of ['cashier', 'orders', 'stock', 'products', 'team', 'status', 'analytics']) {
-    await page.locator('#tabBtn-' + tab).click();
+    await openAdminSection(page, tab);
     await expect(page.locator('#tab-' + tab)).toHaveClass(/active/);
   }
-  await page.locator('#tabBtn-products').click();
+  await openAdminSection(page, 'products');
   await page.getByRole('button', { name: /ADICIONAR PRODUTO/ }).click();
   await expect(page.locator('#productEditorDialog')).toBeVisible();
   await expect(page.locator('#productEditorDialog #prodForm')).toBeVisible();
@@ -85,7 +83,7 @@ test('Caixa: operador registra venda e áreas administrativas ficam bloqueadas',
 
 test('Vendedor: login limita o acesso às vendas e permite abrir preço', async ({ page }) => {
   await pinLogin(page, 'Edmar Júnio (Izibola)', '1234');
-  await page.locator('#tabBtn-team').click();
+  await openAdminSection(page, 'team');
   await page.locator('[onclick="openNewUserModal()"]')
     .click();
   await page.locator('#uName').fill('Vendedor E2E');
@@ -100,7 +98,7 @@ test('Vendedor: login limita o acesso às vendas e permite abrir preço', async 
   await expect(page.locator('#loginModal')).toHaveClass(/open/);
   await selectOperator(page, 'Vendedor E2E', '7788');
   await expect(page.locator('#loggedUserRole')).toHaveText('VENDEDOR');
-  await expect(page.locator('#tabBtn-cashier')).toBeVisible();
+  await expect(page.locator('#tab-cashier')).toHaveClass(/active/);
   for (const tab of ['orders', 'stock', 'products', 'team', 'status', 'analytics']) {
     await expect(page.locator('#tabBtn-' + tab)).toBeHidden();
   }
@@ -164,7 +162,7 @@ test('Cliente: compra, recibo e detalhes do histórico usam o mesmo comprovante'
 
 test('Admin: entrada, saída com justificativa e contagem substituem saldo com imagem renderizada', async ({ page }) => {
   await pinLogin(page, 'Edmar Júnio (Izibola)', '1234');
-  await page.locator('#tabBtn-stock').click();
+  await openAdminSection(page, 'stock');
   await page.locator('#stockSearchInput').fill('ABACATE KG');
   await page.locator('#stockModeEntry').click();
   const card = page.locator('#stockCardsGrid .stock-card').filter({ hasText: 'ABACATE KG' });
@@ -199,7 +197,7 @@ test('Admin mobile: produto inativo não aparece no catálogo e estoque não cau
     price: 10, status: 'INATIVO', stockQuantity: 0,
   } });
   expect(response.ok()).toBeTruthy();
-  await page.locator('#tabBtn-products').click();
+  await openAdminSection(page, 'products');
   const product = page.locator('#adminProductsGrid render-product-card').filter({ hasText: 'Produto oculto teste' });
   await expect(product).toHaveCount(0);
   await page.getByRole('button', { name: 'INATIVOS', exact: true }).click();
@@ -207,7 +205,7 @@ test('Admin mobile: produto inativo não aparece no catálogo e estoque não cau
   const catalog = await (await page.request.get('/api/storefront/catalog')).json();
   const inactiveCatalogProduct = catalog.products.find(item => item.id === 'inactive-filter-test');
   expect(inactiveCatalogProduct?.isAvailable).toBe(false);
-  await page.locator('#tabBtn-stock').click();
+  await openAdminSection(page, 'stock');
   await expect(page.locator('#stockControlEnabled')).toHaveCount(0);
   expect(await page.locator('html').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
   await page.request.delete('/api/admin/products/inactive-filter-test');
@@ -227,7 +225,7 @@ test('Login inválido mantém o painel fechado', async ({ page }) => {
 test('Admin alterna venda livre e estoque ativo sem cadastrar entrada', async ({ page }) => {
   await pinLogin(page, 'Edmar Júnio (Izibola)', '1234');
   const original = await (await page.request.get('/api/admin/inventory-settings')).json();
-  await page.locator('#tabBtn-stock').click();
+  await openAdminSection(page, 'stock');
   const button = page.locator('#stockControlToggle');
   await expect(button).toBeEnabled();
   try {
@@ -235,7 +233,7 @@ test('Admin alterna venda livre e estoque ativo sem cadastrar entrada', async ({
     await expect(button).toHaveText('Venda livre · Ativar estoque');
     await expect(page.locator('#stockControlHelp')).toContainText('Venda livre');
     await page.reload();
-    await page.locator('#tabBtn-stock').click();
+    await openAdminSection(page, 'stock');
     await expect(button).toHaveText('Venda livre · Ativar estoque');
     await button.click();
     await expect(button).toContainText('Estoque ativo');

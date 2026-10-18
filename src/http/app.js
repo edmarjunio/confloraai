@@ -1132,6 +1132,20 @@ function createApp({
     await sessions.logout(req, res);
     res.json({ success: true });
   });
+  app.patch('/api/auth/profile', async (req, res, next) => {
+    if (!req.user) return res.status(401).json({ error: 'Entre na sua conta.' });
+    const body = req.body || {};
+    const name = String(body.name || '').trim();
+    const phone = String(body.phone || '').replace(/\D/g, '');
+    const address = String(body.address || '').trim();
+    if (name.length < 2 || name.length > 120 || (phone && !/^\d{10,13}$/.test(phone)) || address.length > 500) return res.status(400).json({ error: 'Confira nome, WhatsApp com DDD e endereço.' });
+    try {
+      const profile = await messageService.firestoreRepo.updateOwnUserProfile(req.user.id, { name, phone, address });
+      const user = { ...req.user, name: profile.name, phone: profile.phone, address: profile.address };
+      await sessions.issue(req, res, user);
+      res.json({ user });
+    } catch (error) { next(error); }
+  });
   app.use('/api/admin', (req, res, next) => {
     if (req.path === '/auth/login' || (req.path === '/auth/users' && req.method === 'GET')) {return next();}
     if (!req.user) {return res.status(401).json({ error: 'Entre na sua conta.' });}
@@ -2837,6 +2851,7 @@ function createApp({
       const metrics = await messageService.firestoreRepo.getExecutivePeriodMetrics({
         from: String(req.query.from || ''),
         to: String(req.query.to || ''),
+        comparisonMode: ['month', 'year'].includes(req.query.comparisonMode) ? req.query.comparisonMode : 'previous',
       });
       res.status(200).json(metrics);
     } catch (err) {

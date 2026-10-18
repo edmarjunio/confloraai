@@ -227,7 +227,7 @@ test("catalog header exposes login, account role and admin settings according to
   await expect(page.locator("#accountButton")).toBeVisible();
   await expect(page.locator("#headerAccountIdentity")).toBeHidden();
   await expect(page.locator("#cashierShortcut")).toBeHidden();
-  await expect(page.locator("#adminSettingsButton")).toBeHidden();
+  await expect(page.locator("#adminSettingsButton")).toBeVisible();
   await page.locator("#accountButton").click();
   await expect(page.locator("#accountDialog")).toBeVisible();
   await page.locator('#accountDialog [data-close]').click();
@@ -252,7 +252,7 @@ test("catalog header exposes login, account role and admin settings according to
   await expect(page.locator("#headerAccountRole")).toHaveText("CLIENTE");
   await expect(page.locator("#accountButton")).toBeHidden();
   await expect(page.locator("#cashierShortcut")).toBeHidden();
-  await expect(page.locator("#adminSettingsButton")).toBeHidden();
+  await expect(page.locator("#adminSettingsButton")).toBeVisible();
   await page.locator("#headerAccountIdentity").click();
   await expect(page.locator("#accountDialog")).toBeVisible();
   await page.locator('#accountDialog [data-close]').click();
@@ -276,7 +276,9 @@ test("catalog header exposes login, account role and admin settings according to
   await expect(page.locator("#cashierShortcut")).toBeVisible();
   await expect(page.locator("#adminSettingsButton")).toBeVisible();
   await page.locator("#adminSettingsButton").click();
-  await expect(page).toHaveURL(/\/admin$/);
+  await expect(page.locator('#siteNavigationDrawer')).toBeVisible();
+  await page.getByRole('link', { name: 'Caixa/Vendas', exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\?tab=cashier$/);
 
   await page.goto("/");
   await expect(page.locator("#cashierShortcut")).toBeVisible();

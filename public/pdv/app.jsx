@@ -245,7 +245,10 @@ const { useState, useEffect, useRef, useMemo } = React;
       const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
       const [selectedCustomerId, setSelectedCustomerId] = useState('');
       const [customerNotification, setCustomerNotification] = useState('');
+      const [customerError, setCustomerError] = useState('');
+      useEffect(() => { if (customerError) document.getElementById('customerSaveError')?.focus(); }, [customerError]);
       const [isSavingCustomer, setIsSavingCustomer] = useState(false);
+      const shouldPersistCustomer = Boolean(selectedCustomerId || tempCustomerPhone.trim() || tempCustomerEmail.trim() || tempCustomerAddress.trim() || tempCustomerCpf.trim());
 
       // Discount & Freight (Nex F3 and F9 equivalents)
       const [discountPercent, setDiscountPercent] = useState(0);
@@ -254,7 +257,7 @@ const { useState, useEffect, useRef, useMemo } = React;
       // Mobile Bottom Sheet mode: 'collapsed' | 'peek' (tempo real) | 'expanded'
       const [mobileSheetMode, setMobileSheetMode] = useState('peek');
       const [activeModal, setActiveModal] = useState(null); // 'pay' | 'discount' | 'freight' | 'receipt' | 'customer' | 'debt_settle'
-      const [cashierPage, setCashierPage] = useState(null);
+      const [cashierPage, setCashierPage] = useState(() => ({ commands: 'orders', deliveries: 'deliveries' })[new URLSearchParams(location.search).get('view')] || null);
       const [paymentMethod, setPaymentMethod] = useState('pix');
       const [deferToCashier, setDeferToCashier] = useState(false);
       const [splitPayment, setSplitPayment] = useState(false);
@@ -382,7 +385,7 @@ const { useState, useEffect, useRef, useMemo } = React;
         setTempCustomerLocation(customerLocation);
         setTempCustomerNotes(customerNotes);
         setSelectedCustomerId(customerId);
-        setCustomerNotification('');
+        setCustomerNotification(''); setCustomerError('');
         setActiveModal('customer');
       };
 
@@ -395,7 +398,7 @@ const { useState, useEffect, useRef, useMemo } = React;
       };
 
       const handleQuickPurchaseCustomer = () => {
-        if (orderType === 'DELIVERY' && (!tempCustomerName.trim() || !/^\d{10,13}$/.test(tempCustomerPhone.replace(/\D/g, '')) || tempCustomerAddress.trim().length < 8)) { setCustomerNotification('Preencha nome, WhatsApp e endereço completo para entrega.'); return; }
+        if (orderType === 'DELIVERY' && (!tempCustomerName.trim() || !/^\d{10,13}$/.test(tempCustomerPhone.replace(/\D/g, '')) || tempCustomerAddress.trim().length < 8)) { setCustomerError('Preencha nome, WhatsApp e endereço completo para entrega.'); return; }
         setCustomerId('');
         setCustomerCreditBalance(0);
         setTempCustomerEmail('');
@@ -420,6 +423,7 @@ const { useState, useEffect, useRef, useMemo } = React;
           return;
         }
 
+        setCustomerError('');
         setIsSavingCustomer(true);
         try {
           const res = await fetch('/api/caixa/customers', {
@@ -440,7 +444,7 @@ const { useState, useEffect, useRef, useMemo } = React;
 
           const saved = await res.json().catch(() => ({}));
           if (!res.ok) {
-            setCustomerNotification(saved.error || 'Não foi possível salvar o cadastro do cliente.');
+            setCustomerError(saved.error || 'Não foi possível salvar o cadastro do cliente.');
             setIsSavingCustomer(false);
             return;
           }
@@ -459,23 +463,19 @@ const { useState, useEffect, useRef, useMemo } = React;
             setIsSavingCustomer(false);
           }, 700);
         } catch (error) {
-          setCustomerNotification(error.message || 'Falha de conexão ao salvar o cliente.');
+          setCustomerError(error.message || 'Falha de conexão ao salvar o cliente.');
           setIsSavingCustomer(false);
         }
       };
 
       const handleAddCustomer = async () => {
-        if (orderType === 'DELIVERY' && (!tempCustomerName.trim() || !/^\d{10,13}$/.test(tempCustomerPhone.replace(/\D/g, '')) || tempCustomerAddress.trim().length < 8)) { setCustomerNotification('Para entrega, informe nome, WhatsApp com DDD e endereço completo: rua, número, bairro e cidade.'); return; }
+        if (orderType === 'DELIVERY' && (!tempCustomerName.trim() || !/^\d{10,13}$/.test(tempCustomerPhone.replace(/\D/g, '')) || tempCustomerAddress.trim().length < 8)) { setCustomerError('Para entrega, informe nome, WhatsApp com DDD e endereço completo: rua, número, bairro e cidade.'); return; }
         const name = tempCustomerName.trim();
         if (!name) {
           alert('Por favor, informe ao menos o nome do cliente.');
           return;
         }
-        const hasAdditionalData = Boolean(
-          tempCustomerPhone.trim() || tempCustomerEmail.trim() || tempCustomerAddress.trim() || tempCustomerCpf.trim()
-        );
-
-        if (hasAdditionalData || selectedCustomerId) {
+        if (shouldPersistCustomer) {
           await handleSaveCustomerToDatabase();
         } else {
           handleQuickPurchaseCustomer();
@@ -1215,9 +1215,9 @@ const { useState, useEffect, useRef, useMemo } = React;
             {activeModal === 'debt_settle' && <PdvComponents.DebtSettlement onClose={() => setActiveModal(null)} />}
             {/* Com Flora Standard Website Header adapted for POS */}
             <div className="sticky top-0 z-20 bg-white">
-              <PdvComponents.Topbar user={currentUser} onCashier={() => setCashierPage(null)} onSearch={setSearchQuery} searchValue={searchQuery} searchInputRef={searchInputRef} />
+              <PdvComponents.Topbar hideCashier user={currentUser} onCashier={() => setCashierPage(null)} onSearch={setSearchQuery} searchValue={searchQuery} searchInputRef={searchInputRef} />
               <div className="cf-page-toolbar cf-pos-context">
-                <h1 className="font-extrabold text-emerald-950">Caixa</h1>
+                <button type="button" className="cf-back-button" onClick={() => window.ConfloraNavigation.back()}>← Voltar</button><h1 className="font-extrabold text-emerald-950">Caixa</h1>
                 {/* Quantity multiplier remains next to the cashier actions. */}
                 <div
                     className="order-2 flex shrink-0 items-center bg-white border border-slate-300 rounded-full px-2.5 py-1.5 shadow-xs sm:order-3"
@@ -1251,7 +1251,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                 </div>
 
                 {['ADMIN', 'CAIXA'].includes(currentUser.role) && <button type="button" className="cf-button" onClick={() => setCashierPage('deliveries')}>🛵 Entregas</button>}
-                <button type="button" className="cf-button" onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }); window.location.reload(); }}>Sair</button>
+                <button type="button" className="cf-danger-button" onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }); window.location.reload(); }}>Sair</button>
               </div>
               <nav className="cashier-command-nav mx-auto mt-3 mb-4 grid w-full max-w-[1600px] grid-cols-3 gap-2 border-t border-slate-100 pt-3 sm:gap-3 lg:mx-0 lg:w-2/3" aria-label="Ações do caixa por atalho">
                 <button type="button" className={shortcutButtonClass} disabled={cart.length === 0} onClick={() => setActiveModal('pay')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F1</kbd><span>Pagar</span></button>
@@ -1263,7 +1263,7 @@ const { useState, useEffect, useRef, useMemo } = React;
               </nav>
 
               {/* Com Flora Category Pills Row */}
-              <div className="mx-auto flex min-w-0 w-full max-w-[1600px] items-center justify-between gap-3 lg:mx-0 lg:w-2/3">
+              <div className="cf-pos-categories mx-auto flex min-w-0 w-full max-w-[1600px] items-center justify-between gap-3 lg:mx-0 lg:w-2/3">
                 <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
                   {categoryTabs.map((cat) => {
                     const isActive = selectedCategory === cat.id;
@@ -1286,13 +1286,13 @@ const { useState, useEffect, useRef, useMemo } = React;
 
             {/* 2/3 + 1/3 SPLIT MAIN CONTENT */}
             <main
-              className={"cf-work-body flex-1 max-w-[1600px] w-full mx-auto p-3 sm:p-5 grid grid-cols-1 md:grid-cols-12 gap-5 items-start " + (deviceView === 'mobile-preview' ? 'pb-6' : 'pb-64 md:pb-6')}
+              className={"cf-work-body cf-pos-main flex-1 max-w-[1600px] w-full mx-auto p-3 sm:p-5 grid grid-cols-1 md:grid-cols-12 gap-5 items-start " + (deviceView === 'mobile-preview' ? 'pb-6' : 'pb-64 md:pb-6')}
             >
               {/* LEFT SECTION (2/3 - 8 Columns): 4-per-row Product Cards */}
               <section
                 className={(deviceView === 'mobile-preview'
                   ? 'col-span-12'
-                  : 'md:col-span-8') + " flex flex-col gap-3"}
+                  : 'col-span-12 lg:col-span-8 cf-pos-products') + " flex flex-col gap-3"}
               >
                 {/* Section Title & Counter */}
                 <div className="flex items-center justify-between">
@@ -1364,8 +1364,8 @@ const { useState, useEffect, useRef, useMemo } = React;
                   style={{
                     top: 'calc(var(--cf-topbar-height, 72px) + 12px)',
                     height: 'calc(100dvh - var(--cf-topbar-height, 72px) - 24px)',
-                    right: 'max(calc((100vw - 1600px) / 2), 16px)',
-                    width: 'min(calc((100vw - 48px) / 3), 520px)',
+                    right: '24px',
+                    width: 'var(--cf-pos-aside-width)',
                   }}
                 >
                   {renderCashierPanel()}
@@ -1447,6 +1447,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                     </button>
                   </div>
 
+                  {customerError && <div id="customerSaveError" role="alert" tabIndex="-1" className="cf-error-banner"><strong>Não foi possível adicionar o cliente</strong><span>{customerError}</span>{/e-mail|email/i.test(customerError) && <span>Use BUSCAR CLIENTE para selecionar o cadastro existente ou confira o e-mail informado.</span>}</div>}
                   {/* Feedback notification if any */}
                   {customerNotification && (
                     <div className="mt-3 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
@@ -1511,12 +1512,15 @@ const { useState, useEffect, useRef, useMemo } = React;
                       </div>
 
                       <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                        <label htmlFor="customer-email" className="block text-xs font-bold text-slate-700 mb-1">
                           E-mail da conta do cliente (opcional):
                         </label>
                         <input
                           type="email"
+                          id="customer-email"
                           value={tempCustomerEmail}
+                          aria-invalid={!!customerError && /e-mail|email/i.test(customerError)}
+                          aria-describedby={customerError ? 'customerSaveError' : undefined}
                           onChange={(e) => setTempCustomerEmail(e.target.value)}
                           placeholder="cliente@email.com"
                           className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-600 focus:outline-none text-slate-800"
@@ -1554,18 +1558,18 @@ const { useState, useEffect, useRef, useMemo } = React;
                   <div className="pt-3 border-t border-slate-100 space-y-2.5">
                     {/* Live Status Indicator */}
                     <div className={"text-[11px] p-2.5 rounded-xl border flex items-center justify-between " + (
-                      !(tempCustomerPhone.trim() || tempCustomerAddress.trim() || tempCustomerCpf.trim())
+                      !shouldPersistCustomer
                         ? 'bg-amber-50/80 border-amber-200 text-amber-900'
                         : 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
                     )}>
-                      {!(tempCustomerPhone.trim() || tempCustomerAddress.trim() || tempCustomerCpf.trim()) ? (
+                      {!shouldPersistCustomer ? (
                         <div className="flex items-center gap-1.5">
                           <span className="font-bold">⚡ Compra Rápida:</span>
                           <span className="text-[10px] text-amber-800">Somente nome preenchido · Não será salvo na base</span>
                         </div>
                       ) : (
                         <div className="flex items-center gap-1.5">
-                          <span className="font-bold">💾 Cadastro Completo:</span>
+                          <span className="font-bold">💾 Cadastro:</span>
                           <span className="text-[10px] text-emerald-800">Dados informados · Será cadastrado na base para futuras compras</span>
                         </div>
                       )}

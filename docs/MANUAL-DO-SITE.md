@@ -1,6 +1,16 @@
 # Manual do site — Conflora Horta e Viveiro
 
-Versão de operação: 17/10/2026. Catálogo, caixa, administração e entregas.
+Versão de operação: 18/10/2026. Catálogo, caixa, administração e entregas.
+
+## Navegação e análise de resultados
+
+- Clique nas três linhas do topo para abrir as páginas disponíveis à direita. No admin, escolha Caixa/Vendas, Comandas, Estoque, Produtos, Equipe, Teste do servidor ou Eventos. O menu também oferece Caixa, Entregas, Editar meu perfil e Personalizar minha loja, conforme seu cargo.
+- Use **← Voltar** para retornar à página/seção anterior. Clique fora para fechar os diálogos. **Sair** e **Esvaziar** são vermelhos; **»** recolhe a sacola.
+- Se um e-mail já estiver cadastrado, o alerta vermelho indica o problema. Use **BUSCAR CLIENTE** para selecionar o cadastro existente.
+- No Painel Gerencial, selecione semana, mês, ano ou datas. Os números grandes mostram vendas, dinheiro recebido e comparações com o período anterior. Fiado registrado não significa dinheiro já recebido.
+- Os quatro rankings separam maior/menor quantidade e maior/menor valor vendido. Os menores incluem produtos ativos sem vendas. Confira kg ou unidade ao comparar quantidades. Valores dos produtos consideram descontos, sem frete.
+- Na seção mensal, escolha o ano e veja os produtos líderes de janeiro a dezembro. O ano atual é parcial até hoje. Meses sem vendas permanecem sem registros, sem estimativas inventadas.
+- Abra **Fechamento e detalhes do dia** para consultar e registrar o fechamento diário.
 
 ## 1. Antes de começar o dia
 

@@ -1205,13 +1205,14 @@ class FirestoreRepository {
     });
   }
 
-  async getExecutivePeriodMetrics({ from, to }) {
-    const range = getPreviousPeriod({ from: String(from || '').trim(), to: String(to || '').trim() });
-    const [orders, settlements] = await Promise.all([
+  async getExecutivePeriodMetrics({ from, to, comparisonMode }) {
+    const range = getPreviousPeriod({ from: String(from || '').trim(), to: String(to || '').trim(), comparisonMode });
+    const [orders, settlements, catalog] = await Promise.all([
       this.getExecutiveRecordsForRange('orders', range.previousFrom, range.to),
       this.getExecutiveRecordsForRange('debt_settlements', range.previousFrom, range.to),
+      this.getAllProducts(),
     ]);
-    return summarizeExecutivePeriod({ from: range.from, to: range.to, orders, settlements });
+    return summarizeExecutivePeriod({ from: range.from, to: range.to, orders, settlements, catalog, comparisonMode });
   }
 
   /**
@@ -2573,6 +2574,19 @@ class FirestoreRepository {
     if (!user) throw new Error("Usuário autenticado não encontrado.");
     this.inMemoryUsers.set(id, { ...user, favoriteProductIds, updatedAt });
     return favoriteProductIds;
+  }
+
+  async updateOwnUserProfile(userId, profile) {
+    const id = String(userId);
+    const patch = { name: profile.name, phone: profile.phone, address: profile.address, updatedAt: new Date().toISOString() };
+    if (this.firestore) {
+      await this.firestore.collection('users').doc(id).update(patch);
+    } else {
+      const user = this.inMemoryUsers.get(id);
+      if (!user) throw new Error('Conta não encontrada.');
+      this.inMemoryUsers.set(id, { ...user, ...patch });
+    }
+    return patch;
   }
 
   async registerUser({

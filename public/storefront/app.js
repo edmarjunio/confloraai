@@ -132,13 +132,14 @@ function updateHeaderActions() {
     }).catch(() => {});
   }
   $("#accountButton").hidden = isLoggedIn;
-  $("#adminSettingsButton").hidden = role !== "ADMIN";
+  $("#adminSettingsButton").hidden = false;
+  if ($('#siteNavigationDrawer')?.open) window.ConfloraNavigation.open(state.user);
   cashierShortcut.hidden = !allowedCashierRoles.includes(role);
   const deliveryRole = role === 'ENTREGADOR';
   cashierShortcut.querySelector('span:first-child').replaceChildren(icon(deliveryRole ? 'truck' : 'register'));
-  cashierShortcut.querySelector('span:last-child').textContent = deliveryRole ? 'MINHAS ENTREGAS' : 'IR PARA O CAIXA';
-  cashierShortcut.setAttribute('aria-label', deliveryRole ? 'Minhas entregas' : 'Ir para o Caixa');
-  cashierShortcut.title = deliveryRole ? 'Minhas entregas' : 'Ir para o Caixa';
+  cashierShortcut.querySelector('span:last-child').textContent = deliveryRole ? 'MINHAS ENTREGAS' : 'CAIXA';
+  cashierShortcut.setAttribute('aria-label', deliveryRole ? 'Minhas entregas' : 'Caixa');
+  cashierShortcut.title = deliveryRole ? 'Minhas entregas' : 'Caixa';
 
   if (isLoggedIn) {
     $("#headerAccountName").textContent =
@@ -151,11 +152,7 @@ function updateHeaderActions() {
   }
 }
 cashierShortcut.addEventListener("click", () => location.assign("/caixa"));
-$("#adminSettingsButton").addEventListener("click", () => {
-  if (String(state.user?.role || "").toUpperCase() === "ADMIN") {
-    location.assign(existingStore ? "/admin" : `${basePath}/admin`);
-  }
-});
+$("#adminSettingsButton").addEventListener("click", () => window.ConfloraNavigation.open(state.user));
 
 let catalog;
 let cart;
@@ -286,6 +283,30 @@ state.reloadProducts = async () => {
   cart?.render();
 };
 
+function editOwnProfile() {
+  if (!state.user || !existingStore) return;
+  $('#accountTitle').textContent = 'Editar meu perfil';
+  $('#accountSubtitle').textContent = 'Atualize seus dados pessoais. O e-mail continua vinculado ao seu login.';
+  const form = element('form', { class: 'account-profile-form' });
+  for (const [name, label, type] of [['name', 'Nome completo', 'text'], ['phone', 'WhatsApp com DDD', 'tel'], ['address', 'Endereço', 'text']]) {
+    const input = element('input', { name, type, value: state.user[name] || '', ...(name === 'name' ? { required: '', maxlength: '120' } : {}) });
+    form.append(element('label', { text: label }, [input]));
+  }
+  const status = element('p', { role: 'status' });
+  const save = element('button', { type: 'submit', class: 'cf-button', text: 'Salvar meu perfil' });
+  form.append(status, save);
+  form.onsubmit = async event => {
+    event.preventDefault(); save.disabled = true; status.textContent = '';
+    try {
+      const data = await state.api('/auth/profile', { method: 'PATCH', body: Object.fromEntries(new FormData(form)) });
+      state.user = data.user; appStore.getState().setUser(data.user); updateHeaderActions();
+      status.className = ''; status.textContent = 'Perfil atualizado.';
+    } catch (error) { status.className = 'cf-error-banner'; status.textContent = error.message; }
+    finally { save.disabled = false; }
+  };
+  $('#accountContent').replaceChildren(form);
+}
+
 async function account() {
   const content = $("#accountContent");
   content.replaceChildren();
@@ -415,6 +436,10 @@ async function account() {
         route();
       } catch (error) {
         errorLabel.textContent = error.message;
+        errorLabel.className = 'cf-error-banner';
+        errorLabel.tabIndex = -1;
+        errorLabel.focus();
+        email.setAttribute('aria-invalid', String(/e-mail|email/i.test(error.message)));
       } finally {
         button.disabled = false;
       }
@@ -860,7 +885,7 @@ try {
     appStore.getState().setUser(state.user);
     updateHeaderActions();
     if (topbarIntent.has('sacola')) cart.open();
-    if (topbarIntent.has('conta')) account().catch(error => notify(error.message));
+      if (topbarIntent.has('conta')) account().then(() => { if (topbarIntent.has('editar')) editOwnProfile(); }).catch(error => notify(error.message));
     catalog.refreshFavorites();
     if (/\/(admin|configuracoes)\/?$/.test(location.pathname)) await route();
   }).catch(() => {});

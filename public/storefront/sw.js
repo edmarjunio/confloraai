@@ -1,8 +1,8 @@
 /* Bump this version whenever the application shell changes before publishing. */
-const CACHE_NAME = 'conflora-public-shell-v14';
+const CACHE_NAME = 'conflora-public-shell-v15';
 const SHELL_URL = '/storefront/index.html';
 const CORE_FILES = [
-  SHELL_URL,
+  SHELL_URL, '/store-assets/site-navigation.js?v=1',
   '/store-assets/v5/store.css', '/store-assets/site-header.css?v=topbar-1',
   '/store-assets/design-system.css', '/store-assets/brands/conflora-logo.png',
   '/store-assets/delivery-maps.js', '/store-assets/delivery.css',

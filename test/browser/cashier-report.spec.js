@@ -1,9 +1,10 @@
+const { openAdminSection } = require('./admin-navigation');
 const { test, expect } = require('@playwright/test');
 
 test('admin types 100 over a negative stock and sees a clear inventory state banner', async ({ page }) => {
   await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-edmar', pin: '1234' } });
   const name = 'Estoque legado negativo';
-  await page.goto('/admin'); await page.locator('#tabBtn-stock').click();
+  await page.goto('/admin'); await openAdminSection(page, 'stock');
   await page.locator('#stockSearchInput').fill(name);
   await expect(page.locator('#stockModeCount')).toHaveAttribute('aria-pressed', 'true');
   const card = page.locator('#stockCardsGrid render-product-card').filter({ hasText: name });

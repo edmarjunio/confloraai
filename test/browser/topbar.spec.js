@@ -8,7 +8,8 @@ test('one topbar keeps the cashier button aligned across the catalog, admin, PDV
   for (const route of ['/', '/admin', '/pdv', '/admin-gerencial']) {
     await page.goto(route);
     const bar = page.locator('.cf-topbar-layout');
-    await expect(bar.locator('.cf-topbar-cashier')).toBeVisible();
+    if (route === '/pdv') await expect(bar.locator('.cf-topbar-cashier')).toBeHidden();
+    else await expect(bar.locator('.cf-topbar-cashier')).toBeVisible();
     for (const width of [320, 390, 768, 1024, 1440, 1920]) {
       await page.setViewportSize({ width, height: 1000 });
       const boxes = await bar.evaluate(header => {
@@ -22,7 +23,7 @@ test('one topbar keeps the cashier button aligned across the catalog, admin, PDV
       if (route === '/') references.set(width, boxes);
       else {
         expect(Math.abs(boxes.brand.x - references.get(width).brand.x)).toBeLessThan(2);
-        expect(Math.abs(boxes.cashier.right - references.get(width).cashier.right)).toBeLessThan(2);
+        if (route !== '/pdv') expect(Math.abs(boxes.cashier.right - references.get(width).cashier.right)).toBeLessThan(2);
       }
       if (route === '/pdv' && width >= 1024) {
         const receipt = await page.locator('.cf-cashier-receipt').boundingBox();

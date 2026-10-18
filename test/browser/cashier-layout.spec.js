@@ -1,3 +1,4 @@
+const { openAdminSection } = require('./admin-navigation');
 const { test, expect } = require('@playwright/test');
 
 test('partial payment requires a second method and keeps scrolling within the dialog', async ({ page }) => {
@@ -31,7 +32,7 @@ test('partial payment requires a second method and keeps scrolling within the di
 test('product gallery highlights cover, reorders originals and opens full-screen preview', async ({ page }) => {
   await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-edmar', pin: '1234' } });
   await page.goto('/admin');
-  await page.getByRole('button', { name: 'Produtos', exact: true }).click();
+  await openAdminSection(page, 'products');
   await page.getByRole('button', { name: '＋ ADICIONAR PRODUTO', exact: true }).click();
   const buffer = require('node:fs').readFileSync('public/storefront/brands/conflora-logo.png');
   await page.locator('#formProdPhotoFile').setInputFiles([
@@ -84,7 +85,7 @@ test('admin product cards edit legacy photos and identify illustrative images wi
     { id: 'illustrative-photo', name: 'Sem foto própria', price: 10, category: 'Horta', status: 'ATIVO', imageFallbackUrl: '/store-assets/brands/conflora-logo.png' },
   ] }));
   await page.goto('/admin');
-  await page.getByRole('button', { name: 'Produtos', exact: true }).click();
+  await openAdminSection(page, 'products');
   const cards = page.locator('#adminProductsGrid render-product-card');
   await expect(cards).toHaveCount(2);
   await expect(cards.locator('[data-action="add"]')).toHaveCount(0);
@@ -114,7 +115,7 @@ test('admin uses current product assets despite an older public cache and keeps 
     if (!response.ok) throw new Error('Login do administrador não foi concluído.');
   });
   await page.goto('/admin');
-  await page.getByRole('button', { name: 'Produtos', exact: true }).click();
+  await openAdminSection(page, 'products');
   const grid = page.locator('#adminProductsGrid');
   const cards = grid.locator('render-product-card');
   await expect(cards.first().getByRole('button', { name: 'Editar produto', exact: true })).toBeVisible();

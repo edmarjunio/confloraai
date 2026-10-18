@@ -22,15 +22,13 @@
         '<select class="cf-topbar-language" aria-label="Idioma do catálogo"><option value="pt">BR PT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select>' +
         '<button class="cf-topbar-identity" type="button" aria-label="Abrir minha conta">' + icon('user') + '<img hidden ' + (admin ? 'id="loggedUserPhoto"' : '') + ' alt="Foto do operador" referrerpolicy="no-referrer"><span><strong ' + (admin ? 'id="loggedUserName"' : '') + '></strong><small ' + (admin ? 'id="loggedUserRole"' : '') + '></small></span></button>' +
         '<a class="cf-topbar-pill cf-topbar-dark" href="/" data-primary>' + icon('cart') + '<span>Sacola</span></a>' +
-        '<a class="cf-topbar-pill cf-topbar-cashier" href="/caixa" aria-label="Ir para o Caixa">' + icon('cashier') + '<span>IR PARA O CAIXA</span></a>' +
+        '<a class="cf-topbar-pill cf-topbar-cashier" href="/caixa" aria-label="Caixa">' + icon('cashier') + '<span>CAIXA</span></a>' +
         '<button class="cf-topbar-menu" type="button" aria-label="Menu da loja">' + icon('menu') + '</button>' +
-        '</div></header>' +
-        '<dialog class="cf-topbar-dialog" aria-label="Menu da loja"><div class="cf-topbar-dialog-heading"><strong>Sua conta Conflora</strong><button type="button" data-close aria-label="Fechar menu">✕</button></div><nav aria-label="Navegação da loja"></nav></dialog>';
+        '</div></header>';
       this.header = this.querySelector('header');
       this.input = this.querySelector('input');
       this.input.placeholder = this.getAttribute('search-placeholder') || 'O que você procura?';
       this.input.value = this.getAttribute('search-value') || '';
-      this.dialog = this.querySelector('dialog');
       this.querySelector('form').onsubmit = event => {
         event.preventDefault();
         if (this.hasAttribute('local-search')) this.search();
@@ -41,10 +39,8 @@
         if (!this.hasAttribute('local-cashier')) return;
         event.preventDefault(); this.dispatchEvent(new CustomEvent('cf-topbar-cashier', { bubbles: true }));
       };
-      this.querySelector('.cf-topbar-menu').onclick = () => this.dialog.showModal();
-      this.querySelector('.cf-topbar-identity').onclick = () => this.dialog.showModal();
-      this.querySelector('[data-close]').onclick = () => this.dialog.close();
-      this.dialog.onclick = event => { if (event.target === this.dialog) this.dialog.close(); };
+      this.querySelector('.cf-topbar-menu').onclick = () => window.ConfloraNavigation.open(this.identityUser);
+      this.querySelector('.cf-topbar-identity').onclick = () => window.location.assign('/?conta=1');
       const language = this.querySelector('select');
       try { language.value = window.localStorage.getItem('conflora_lang') || 'pt'; } catch { /* The catalog remains usable without storage. */ }
       language.onchange = () => {
@@ -65,12 +61,13 @@
       if (name === 'search-value') { if (this.input.value !== (this.getAttribute(name) || '')) this.input.value = this.getAttribute(name) || ''; }
       else this.updateIdentity();
     }
-    disconnectedCallback() { this.sizeObserver?.disconnect(); window.removeEventListener('resize', this.updateSize); if (this.dialog?.open) this.dialog.close(); }
+    disconnectedCallback() { this.sizeObserver?.disconnect(); window.removeEventListener('resize', this.updateSize); }
     set user(value) { this.currentUser = value; this.updateIdentity(); }
     search() { this.dispatchEvent(new CustomEvent('cf-topbar-search', { detail: { query: this.input.value }, bubbles: true })); }
     updateIdentity() {
       if (!this.header) return;
       const user = this.currentUser || { name: this.getAttribute('user-name'), role: this.getAttribute('user-role'), picture: this.getAttribute('user-photo') };
+      this.identityUser = user;
       const role = user.role || '';
       const identity = this.querySelector('.cf-topbar-identity');
       identity.querySelector('strong').textContent = user.name || 'Entrar';
@@ -80,20 +77,13 @@
       if (user.picture) photo.src = user.picture;
       const cashier = this.querySelector('.cf-topbar-cashier');
       cashier.querySelector('svg').outerHTML = icon(role === 'ENTREGADOR' ? 'truck' : 'cashier');
-      cashier.hidden = !['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(role);
-      cashier.querySelector('span').textContent = role === 'ENTREGADOR' ? 'MINHAS ENTREGAS' : 'IR PARA O CAIXA';
-      cashier.setAttribute('aria-label', role === 'ENTREGADOR' ? 'Minhas entregas' : 'Ir para o Caixa');
+      cashier.hidden = this.hasAttribute('hide-cashier') || !['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(role);
+      cashier.querySelector('span').textContent = role === 'ENTREGADOR' ? 'MINHAS ENTREGAS' : 'CAIXA';
+      cashier.setAttribute('aria-label', role === 'ENTREGADOR' ? 'Minhas entregas' : 'Caixa');
       const primary = this.querySelector('[data-primary]');
       primary.href = role === 'ADMIN' ? '/admin-gerencial' : '/?sacola=1';
       primary.innerHTML = icon(role === 'ADMIN' ? 'chart' : 'cart') + '<span>' + (role === 'ADMIN' ? 'Painel Gerencial' : 'Sacola') + '</span>';
-      const nav = this.dialog.querySelector('nav'); nav.replaceChildren();
-      const links = [['Página inicial', '/'], ...(role === 'ADMIN' ? [['Administração', '/admin'], ['Painel Gerencial', '/admin-gerencial'], ['Personalizar loja', '/configuracoes']] : []), ...(role ? [['Minhas compras e conta', '/?conta=1']] : [['Entrar', '/?conta=1']])];
-      for (const [text, href] of links) { const link = document.createElement('a'); link.href = href; link.textContent = text; nav.appendChild(link); }
-      if (role) {
-        const logout = document.createElement('button'); logout.type = 'button'; logout.textContent = 'Sair da conta';
-        logout.onclick = async () => { await window.fetch('/api/auth/logout', { method: 'POST' }); window.location.reload(); };
-        nav.appendChild(logout);
-      }
+
     }
   }
   if (!customElements.get('conflora-topbar')) customElements.define('conflora-topbar', ConfloraTopbar);

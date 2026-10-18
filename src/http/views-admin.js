@@ -11,6 +11,7 @@ const productAssetsVersion = createHash('sha256')
   .update(readFileSync(resolve(__dirname, '../../public/storefront/admin-shell-v1.css')))
   .update(readFileSync(resolve(__dirname, '../../public/storefront/site-header.css')))
   .update(readFileSync(resolve(__dirname, '../../public/storefront/topbar.js')))
+  .update(readFileSync(resolve(__dirname, '../../public/storefront/site-navigation.js')))
   .update(readFileSync(resolve(__dirname, '../../public/storefront/product-card.js')))
   .update(readFileSync(resolve(__dirname, '../../public/storefront/stock-counting.js')))
   .update(readFileSync(resolve(__dirname, '../../public/storefront/cashier-report-actions.js')))
@@ -54,6 +55,7 @@ function renderAdminHtml(storeConfig) {
 
   <link rel="stylesheet" href="/store-assets/admin-shell-v1.css?v=${productAssetsVersion}">
   <link rel="stylesheet" href="/store-assets/site-header.css?v=${productAssetsVersion}">
+  <script src="/store-assets/site-navigation.js?v=1"></script>
   <script src="/store-assets/topbar.js?v=${productAssetsVersion}"></script>
   <link rel="stylesheet" href="/store-assets/design-system.css?v=${productAssetsVersion}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -98,25 +100,12 @@ function renderAdminHtml(storeConfig) {
   <conflora-topbar context="admin" managed></conflora-topbar>
   <div class="container">
     <nav class="cf-work-actions" aria-label="Opções administrativas">
-      <span>Administração</span>
+      <button type="button" class="cf-back-button" data-site-back>← Voltar</button>
+      <span id="adminPageLabel">Administração</span>
       <button class="header-btn" onclick="openLoginModal()">Trocar operador</button>
-      <button class="header-btn" onclick="logoutAdmin()" title="Sair da conta de operador/admin">Sair</button>
-      <button class="header-btn notification-button" onclick="showTab('notifs')" aria-label="Notificações">Avisos <span id="notifBadge">0</span></button>
-      <a href="/configuracoes" class="header-btn">Personalizar loja</a>
-      <a href="/" class="header-btn catalog-link">Ver catálogo ↗</a>
+      <button class="header-btn cf-notification-button" onclick="showTab('notifs')" aria-label="Notificações" title="Notificações não lidas"><svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg><span id="notifBadge">0</span></button>
+      <button class="cf-danger-button" onclick="logoutAdmin()">Sair</button>
     </nav>
-
-    <!-- NAVEGAÇÃO POR ABAS (FILTRADAS AUTOMATICAMENTE POR CARGO) -->
-    <div class="nav-tabs" id="navTabsContainer">
-      <!-- Abas ADMIN -->
-      <button class="nav-btn active" id="tabBtn-cashier" onclick="showTab('cashier')">Caixa/Vendas</button>
-      <button class="nav-btn" id="tabBtn-orders" onclick="showTab('orders')">Comandas</button>
-      <button class="nav-btn" id="tabBtn-stock" onclick="showTab('stock')">Estoque</button>
-      <button class="nav-btn" id="tabBtn-products" onclick="showTab('products')">Produtos</button>
-      <button class="nav-btn" id="tabBtn-team" onclick="showTab('team')">Equipe</button>
-      <button class="nav-btn" id="tabBtn-status" onclick="showTab('status')">Teste de conexões/servidor</button>
-      <button class="nav-btn" id="tabBtn-analytics" onclick="showTab('analytics')">Eventos</button>
-    </div>
 
     <!-- ABA 1: ANALYTICS & MÉTRICAS (EXCLUSIVA ADMIN) -->
     <div id="tab-analytics" class="tab-content">
@@ -734,15 +723,25 @@ function renderAdminHtml(storeConfig) {
       if (salesFilter) salesFilter.hidden = !isAdmin;
       const alterationsButton = document.getElementById('cashierAlterationsButton');
       if (alterationsButton) alterationsButton.hidden = currentUser.role === 'VENDEDOR';
-      showTab('cashier');
+      const requestedTab = new URLSearchParams(location.search).get('tab') || 'cashier';
+      showTab(document.getElementById('tab-' + requestedTab) && (isAdmin || ['cashier', 'diff', 'price', 'notifs'].includes(requestedTab)) ? requestedTab : 'cashier', { replace: true });
     }
 
-    function showTab(tab) {
+    window.addEventListener('cf-admin-navigate', event => showTab(event.detail.tab));
+    window.addEventListener('popstate', () => showTab(new URLSearchParams(location.search).get('tab') || 'cashier', { fromHistory: true }));
+    function showTab(tab, options = {}) {
       if (!currentUser || !['ADMIN', 'CAIXA', 'VENDEDOR'].includes(currentUser.role)) return;
       const isAdmin = currentUser.role === 'ADMIN';
       const isStaffAuxiliaryTab = ['diff', 'price', 'notifs'].includes(tab);
       if (!isAdmin && tab !== 'cashier' && !(['CAIXA', 'VENDEDOR'].includes(currentUser.role) && ['diff', 'price', 'notifs'].includes(tab))) return;
       if (!document.getElementById('tab-' + tab)) return;
+      if (!options.fromHistory) {
+        const url = new URL(location.href); url.searchParams.set('tab', tab);
+        if (options.replace || location.search === url.search) history.replaceState({ confloraNavigation: true }, '', url);
+        else history.pushState({ confloraNavigation: true }, '', url);
+      }
+      const names = { cashier: 'Caixa/Vendas', orders: 'Comandas', stock: 'Estoque', products: 'Produtos', team: 'Equipe', status: 'Teste do servidor', analytics: 'Eventos', notifs: 'Notificações', price: 'Preços', diff: 'Solicitações de correção' };
+      document.getElementById('adminPageLabel').textContent = names[tab] || 'Administração';
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
       document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
       
@@ -1046,6 +1045,7 @@ function renderAdminHtml(storeConfig) {
         const notifications = Array.isArray(list) ? list : [];
         const unreadCount = notifications.filter(n => !n.read).length;
         document.getElementById('notifBadge').innerText = unreadCount;
+        document.getElementById('notifBadge').hidden = unreadCount === 0;
 
         if (notifications.length === 0) {
           const empty = document.createElement('p');

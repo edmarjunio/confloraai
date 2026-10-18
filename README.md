@@ -231,9 +231,19 @@ Os cartões de comandas usam o componente compartilhado `OrderCardSurface` em `p
 
 ## Cabeçalho e navegação uniformes
 
-O catálogo, administração, caixa, comandas, relatórios, painel gerencial e entregas usam o mesmo padrão de topbar: logo, busca, idioma, conta e atalhos. No admin, **Painel Gerencial** ocupa o espaço do botão escuro da Sacola, ao lado de **Ir para o caixa**; as ferramentas administrativas ficam abaixo. No celular, os controles se reorganizam sem esconder a busca ou o idioma.
+O catálogo, administração, caixa, comandas, relatórios, painel gerencial e entregas usam o mesmo padrão de topbar: logo, busca, idioma, conta e atalhos. O botão de três linhas abre diretamente a navegação lateral direita, conforme o cargo. No admin, **Painel Gerencial** fica ao lado de **Caixa**; as seções são acessadas pelo menu, sem a faixa de abas. No próprio caixa, o atalho **Caixa** fica oculto. No celular, os controles se reorganizam sem esconder a busca ou o idioma.
 
 O layout compartilhado está em `public/storefront/site-header.css`. As telas operacionais usam `public/storefront/topbar.js`, integrado ao React por `PdvComponents.Topbar`; o catálogo mantém os mesmos estilos e seus controles de sacola e conta. Evite criar cabeçalhos independentes. No caixa, o atalho de retorno às vendas preserva a sacola em andamento e a busca. Os atalhos respeitam o cargo; as permissões continuam validadas pelo servidor.
+
+`site-navigation.js` concentra destinos, Voltar e fechamento por clique fora. As seções administrativas usam `/admin?tab=stock`, `/admin?tab=products` etc., com histórico de navegação. No desktop, produtos e recibo ocupam a largura disponível na proporção 2:1. Erros de cadastro aparecem em vermelho, com foco e instruções; sair e esvaziar usam botões vermelhos. **Editar meu perfil** altera apenas nome, telefone e endereço da própria conta; cargo, e-mail, saldo e permissões não são alteráveis por esse formulário.
+
+## Painel gerencial e produtos por período
+
+No Painel Gerencial, escolha **7 dias**, **Este mês**, **Este ano**, um mês específico ou datas livres. Vendas, recebimentos, quantidade de vendas e ticket médio aparecem em destaque. O modo mensal compara com as mesmas datas do mês anterior, limitado ao último dia disponível; o anual usa as mesmas datas do ano anterior. Datas livres comparam com o intervalo anterior de igual duração.
+
+Os quatro rankings mostram os dez produtos com maior/menor quantidade e maior/menor valor vendido. Produtos ativos sem vendas entram nos menores rankings. Quantidade mantém a unidade de venda; kg e unidades não são volumes equivalentes. Os valores dos produtos recebem o desconto proporcional e excluem o frete. Pedidos pendentes e cancelados não entram; fiado aprovado é venda registrada, separado do dinheiro recebido.
+
+Em **O que mais vende em cada mês?**, selecione o ano para ver faturamento mensal, comparação anual e o líder por quantidade e por valor de cada mês. O ano atual vai até hoje, com o mesmo corte no ano anterior. Meses sem registros não geram previsões. **Fechamento e detalhes do dia** reúne os indicadores operacionais em uma seção recolhida. As consultas mantêm o filtro de datas e paginação do Firestore.
 
 ## Relatório parcial do caixa em PDF
 

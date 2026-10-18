@@ -87,20 +87,21 @@
           <span data-icon="cart" aria-hidden="true"></span>
           <span class="cart-label" data-i18n="header.cart">Sacola</span> <span id="cartCount">0</span>
         </button>
-        <button class="cf-topbar-pill cf-topbar-cashier" id="cashierShortcut" type="button" aria-label="Ir para o Caixa" title="Ir para o Caixa" hidden>
-          <span data-icon="register" aria-hidden="true"></span><span>IR PARA O CAIXA</span>
+        <button class="cf-topbar-pill cf-topbar-cashier" id="cashierShortcut" type="button" aria-label="Caixa" title="Caixa" hidden>
+          <span data-icon="register" aria-hidden="true"></span><span>CAIXA</span>
         </button>
         <button id="customerAccountShortcut" class="header-history-button" type="button" aria-label="Minha conta: saldo e histórico" hidden>
           <span data-icon="history" aria-hidden="true"></span><span>MINHA CONTA</span>
           <small id="customerDebtBadge" hidden></small>
         </button>
         <button id="accountButton" class="header-login-button" type="button" hidden data-i18n="header.login">Entrar</button>
-        <button id="adminSettingsButton" class="admin-settings-button cf-topbar-menu" type="button" title="Configurações administrativas" aria-label="Abrir configurações administrativas" hidden>
+        <button id="adminSettingsButton" class="admin-settings-button cf-topbar-menu" type="button" title="Navegar pelas páginas" aria-label="Menu da loja" hidden>
           <span data-icon="menu" aria-hidden="true"></span>
         </button>
       </div>
     </header>
 
+    <nav class="cf-page-toolbar" aria-label="Voltar à página anterior"><button type="button" class="cf-back-button" data-site-back>← Voltar</button></nav>
     <main id="main" class="main">
       <section id="catalogView">
         <div class="section-title">
@@ -181,7 +182,7 @@
       <div class="dialog-header">
         <h2 id="cartTitle" data-i18n="cart.title">Sua sacola</h2>
         <button id="cartClearButton" type="button" data-i18n="cart.clear_all" aria-label="Esvaziar sacola" data-i18n-aria="cart.clear_all">Esvaziar</button>
-        <button id="cartCloseButton" type="button" aria-label="Fechar sacola" data-i18n-aria="cart.close_aria">Fechar ×</button>
+        <button id="cartCloseButton" type="button" aria-label="Fechar sacola" data-i18n-aria="cart.close_aria"><span aria-hidden="true">»</span></button>
       </div>
       <section id="checkoutCustomer" aria-labelledby="checkoutCustomerTitle">
         <h3 id="checkoutCustomerTitle">
@@ -483,6 +484,7 @@
       </div>
     </div>
 
+    <script src="/store-assets/site-navigation.js?v=1"></script>
     <script src="/store-assets/delivery-maps.js"></script>
   <script src="/store-assets/render-image.js"></script>
     <script src="/store-assets/product-card.js"></script>
