@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_ID="${GCP_PROJECT_ID:-conflora-ai}"
+PROJECT_ID="${GCP_PROJECT_ID:-confloraai}"
 
 echo ">>> Configuração segura de segredos no Google Secret Manager..."
 
@@ -31,5 +31,12 @@ create_or_update_secret "meta-app-secret" "${META_APP_SECRET}"
 create_or_update_secret "whatsapp-verify-token" "${WHATSAPP_VERIFY_TOKEN}"
 create_or_update_secret "conflora-task-secret" "${TASK_SECRET}"
 create_or_update_secret "conflora-admin-secret" "${ADMIN_SECRET}"
+if [[ "${PIX_MODE:-MANUAL}" == "SICREDI" ]]; then
+  create_or_update_secret "sicredi-client-id" "${SICREDI_CLIENT_ID}"
+  create_or_update_secret "sicredi-client-secret" "${SICREDI_CLIENT_SECRET}"
+  create_or_update_secret "sicredi-cert-pem" "${SICREDI_CERT_PEM}"
+  create_or_update_secret "sicredi-key-pem" "${SICREDI_KEY_PEM}"
+  create_or_update_secret "sicredi-webhook-secret" "${SICREDI_WEBHOOK_SECRET}"
+fi
 
 echo ">>> Todos os segredos foram criados/atualizados com sucesso no Secret Manager!"

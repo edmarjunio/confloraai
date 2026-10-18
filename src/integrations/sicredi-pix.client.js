@@ -33,7 +33,7 @@ class SicrediPixClient {
     authUrl = process.env.SICREDI_OAUTH_URL || 'https://api-pix.sicredi.com.br/oauth/token',
     clientId = process.env.SICREDI_CLIENT_ID || '', clientSecret = process.env.SICREDI_CLIENT_SECRET || '',
     certificate = process.env.SICREDI_CERT_PEM || '', privateKey = process.env.SICREDI_KEY_PEM || '',
-    pixKey = process.env.SICREDI_PIX_KEY || '', request = requestJson,
+    pixKey = process.env.SICREDI_PIX_KEY || process.env.PIX_KEY || '', request = requestJson,
   } = {}) {
     Object.assign(this, {
       baseUrl: baseUrl.replace(/\/$/, ''), authUrl, clientId, clientSecret,

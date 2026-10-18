@@ -446,17 +446,6 @@ export function createCart(state) {
         element("p", { text: "cart.order_success_desc".tr }),
         renderOrderReceipt(order),
       );
-      if (order.paymentMethod === "PIX" && order.paymentCheckoutUrl) {
-        receipt.append(
-          element("a", {
-            class: "primary",
-            text: "cart.pix_copy".tr,
-            href: order.paymentCheckoutUrl,
-            target: "_blank",
-            rel: "noopener noreferrer",
-          }),
-        );
-      }
       receipt.append(
         element("button", {
           type: "button",
@@ -498,7 +487,7 @@ export function createCart(state) {
     if (!state.existingStore) return;
     const customerSessionId = state.user?.id;
     const before = Object.fromEntries(['name', 'phone', 'address'].map((field) => [field, form.elements[field]?.value || '']));
-    fetch('/api/customer/profile').then(async (response) => {
+    window.ConfloraSession.apiFetch('/api/customer/profile').then(async (response) => {
       if (!response.ok) return;
       const profile = await response.json();
       if (customerSessionId !== state.user?.id) return;

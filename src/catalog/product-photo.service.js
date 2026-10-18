@@ -212,7 +212,7 @@ function buildFirestorePhotoDocument(product, {
     contentType: finalContentType,
     data: finalBase64,
     dataUrl,
-    sizeBytes: Buffer.byteLength(finalBase64, 'utf8'),
+    sizeBytes: Buffer.byteLength(finalBase64, 'base64'),
     source,
   storageLocation: 'firebase-storage',
     createdAt: now,

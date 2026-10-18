@@ -277,14 +277,14 @@ const { useState, useEffect, useRef, useMemo } = React;
       const searchInputRef = useRef(null);
 
       useEffect(() => {
-        fetch('/api/auth/me').then((res) => res.ok ? res.json() : null).then((data) => {
+        window.ConfloraSession.apiFetch('/api/auth/me').then((res) => res.ok ? res.json() : null).then((data) => {
           if (data?.user && ['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(data.user.role)) setCurrentUser(data.user);
         }).finally(() => setAuthReady(true));
       }, []);
       useEffect(() => {
         if (!currentUser || currentUser.role === 'ENTREGADOR') return;
         let cancelled = false;
-        fetch('/api/caixa/favorites')
+        window.ConfloraSession.apiFetch('/api/caixa/favorites')
           .then(async (response) => {
             const data = await response.json();
             if (!response.ok) throw new Error(data.error || 'Não foi possível carregar os favoritos.');
@@ -313,7 +313,7 @@ const { useState, useEffect, useRef, useMemo } = React;
       }, [favoriteProductIds]);
       useEffect(() => {
         if (!currentUser || currentUser.role === 'ENTREGADOR') return;
-        fetch('/api/caixa/products').then((res) => { if (!res.ok) throw new Error('Não foi possível carregar produtos.'); return res.json(); }).then((rows) => {
+        window.ConfloraSession.apiFetch('/api/caixa/products').then((res) => { if (!res.ok) throw new Error('Não foi possível carregar produtos.'); return res.json(); }).then((rows) => {
           const storefrontImagesById = readStorefrontProductImages();
           setProducts(rows.map((item) => {
             const productId = String(item.id ?? item.productId ?? item.sku ?? '').trim();
@@ -426,7 +426,7 @@ const { useState, useEffect, useRef, useMemo } = React;
         setCustomerError('');
         setIsSavingCustomer(true);
         try {
-          const res = await fetch('/api/caixa/customers', {
+          const res = await window.ConfloraSession.apiFetch('/api/caixa/customers', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -657,7 +657,7 @@ const { useState, useEffect, useRef, useMemo } = React;
           prev.map((p) => (String(p.id) === id ? { ...p, isShortcut: nextFavorites.has(id) } : p))
         );
         favoriteSaveQueueRef.current = favoriteSaveQueueRef.current.catch(() => {}).then(async () => {
-          const response = await fetch('/api/caixa/favorites', {
+          const response = await window.ConfloraSession.apiFetch('/api/caixa/favorites', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ favoriteProductIds: favoriteIds }),
@@ -708,7 +708,7 @@ const { useState, useEffect, useRef, useMemo } = React;
         const fingerprint = JSON.stringify(payload);
         if (!operationRef.current || operationRef.current.fingerprint !== fingerprint) operationRef.current = { fingerprint, id: crypto.randomUUID() };
         try {
-          const res = await fetch('/api/caixa/orders', {
+          const res = await window.ConfloraSession.apiFetch('/api/caixa/orders', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ...payload, requestId: operationRef.current.id })
@@ -1251,7 +1251,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                 </div>
 
                 {['ADMIN', 'CAIXA'].includes(currentUser.role) && <button type="button" className="cf-button" onClick={() => setCashierPage('deliveries')}>🛵 Entregas</button>}
-                <button type="button" className="cf-danger-button" onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }); window.location.reload(); }}>Sair</button>
+                <button type="button" className="cf-danger-button" onClick={async () => { await window.ConfloraSession.apiFetch('/api/auth/logout', { method: 'POST' }); window.location.reload(); }}>Sair</button>
               </div>
               <nav className="cashier-command-nav mx-auto mt-3 mb-4 grid w-full max-w-[1600px] grid-cols-3 gap-2 border-t border-slate-100 pt-3 sm:gap-3 lg:mx-0 lg:w-2/3" aria-label="Ações do caixa por atalho">
                 <button type="button" className={shortcutButtonClass} disabled={cart.length === 0} onClick={() => setActiveModal('pay')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F1</kbd><span>Pagar</span></button>
@@ -1675,7 +1675,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                   </p>
                   <div hidden={splitPayment} className={splitPayment ? 'hidden' : 'grid grid-cols-2 gap-2 mb-3 sm:grid-cols-5'}>
                     {[
-                      { id: 'pix', label: 'Pix · QR Code / Copia e Cola', icon: QrCode },
+                      { id: 'pix', label: window.CONFLORA_PIX_MODE === 'MANUAL' ? 'Pix · conferência do caixa' : 'Pix · QR Code / Copia e Cola', icon: QrCode },
                       { id: 'debito', label: 'Cartão de débito', icon: CreditCard },
                       { id: 'credito', label: 'Cartão de crédito', icon: CreditCard },
                       { id: 'dinheiro', label: 'Dinheiro', icon: Banknote },
@@ -1732,7 +1732,7 @@ const { useState, useEffect, useRef, useMemo } = React;
 
                   {paymentMethod === 'pix' && !splitPayment && !deferToCashier && (
                     <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-medium mb-3">
-                      💠 <strong>Pix Sicredi:</strong> QR Code e chave Pix Copia e Cola com o valor fixo travado de <strong>{formatBRL(finalTotal)}</strong>. Pedido baixado automaticamente quando pago!
+                      {window.CONFLORA_PIX_MODE === 'MANUAL' ? <>Pix manual: copie a chave após registrar o pedido. O caixa confere o recebimento e o comprovante antes de confirmar a venda.</> : <>💠 <strong>Pix Sicredi:</strong> QR Code e chave Pix Copia e Cola com o valor fixo travado de <strong>{formatBRL(finalTotal)}</strong>. Pedido baixado automaticamente quando pago!</>}
                     </div>
                   )}
 
@@ -1772,7 +1772,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                       className={primaryActionButtonClass + ' w-2/3 px-4 py-3 text-sm active:scale-98'}
                     >
                       <Check className="w-4 h-4" />
-                      <span>{isSubmittingSale ? 'Processando...' : deferToCashier ? 'Enviar comanda ao caixa' : splitPayment ? 'Confirmar pagamentos' : currentUser.role === 'VENDEDOR' && paymentMethod !== 'pix' ? 'Enviar comanda ao caixa' : paymentMethod === 'pix' ? 'Gerar Pix Sicredi' : paymentMethod === 'fiado' && currentUser.role !== 'ADMIN' ? 'Solicitar aprovação do fiado' : paymentMethod === 'credito_cliente' ? 'Usar saldo do cliente' : customerId ? 'Finalizar venda' : customerName && customerName !== 'Cliente Balcão' ? 'Adicionar cliente e finalizar venda' : 'Finalizar venda'}</span>
+                      <span>{isSubmittingSale ? 'Processando...' : deferToCashier ? 'Enviar comanda ao caixa' : splitPayment ? 'Confirmar pagamentos' : currentUser.role === 'VENDEDOR' && paymentMethod !== 'pix' ? 'Enviar comanda ao caixa' : paymentMethod === 'pix' ? (window.CONFLORA_PIX_MODE === 'MANUAL' ? 'Registrar Pix pendente' : 'Gerar Pix Sicredi') : paymentMethod === 'fiado' && currentUser.role !== 'ADMIN' ? 'Solicitar aprovação do fiado' : paymentMethod === 'credito_cliente' ? 'Usar saldo do cliente' : customerId ? 'Finalizar venda' : customerName && customerName !== 'Cliente Balcão' ? 'Adicionar cliente e finalizar venda' : 'Finalizar venda'}</span>
                     </button>
                   </div>
                 </div>

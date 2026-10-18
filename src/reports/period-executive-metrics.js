@@ -60,21 +60,17 @@ function summarizePeriod({ from, to, orders = [], settlements = [], catalog = []
     const isPaid = !isOnAccount && (!paymentStatus || ['APPROVED', 'PAID', 'PAID_CONFIRMED'].includes(paymentStatus));
 
     salesMinor += amountMinor;
-    let orderReceivedMinor = 0;
     if (order.paymentParts?.length > 1) {
       for (const part of order.paymentParts) {
         const amount = cents(part.amount);
         const row = byPayment.get(part.method) || byPayment.get('OUTROS');
         row.salesMinor += amount; row.orderCount++;
         if (part.method === 'FIADO') onAccountMinor += amount;
-        else if (part.method !== 'SALDO_CLIENTE') orderReceivedMinor += amount;
       }
-      receivedSalesMinor += orderReceivedMinor;
+      // Receipts are allocated below by their effective date.
     } else {
     if (isOnAccount) { onAccountMinor += amountMinor; }
-    const isCashReceived = isPaid && method !== 'SALDO_CLIENTE';
-    orderReceivedMinor = isCashReceived ? amountMinor : 0;
-    if (isCashReceived) { receivedSalesMinor += amountMinor; }
+    // Received cash is allocated below by payment date.
     const payment = byPayment.get(method);
     payment.salesMinor += isOnAccount || isPaid ? amountMinor : 0;
     payment.orderCount += isOnAccount || isPaid ? 1 : 0;
@@ -83,7 +79,7 @@ function summarizePeriod({ from, to, orders = [], settlements = [], catalog = []
 
     const dateSummary = daily.get(date) || { date, salesMinor: 0, receivedMinor: 0, orderCount: 0 };
     dateSummary.salesMinor += amountMinor;
-    dateSummary.receivedMinor += orderReceivedMinor;
+    // Sale date and receipt date are independent facts.
     dateSummary.orderCount++;
     daily.set(date, dateSummary);
 
@@ -92,6 +88,15 @@ function summarizePeriod({ from, to, orders = [], settlements = [], catalog = []
     weekdays[weekdayIndex].orderCount++;
 
 
+  }
+
+  for (const fact of require('./payment-facts').paymentFacts(orders)) {
+    if (fact.date < from || fact.date > to) continue;
+    receivedSalesMinor += fact.amountMinor;
+    const day = daily.get(fact.date) || { date: fact.date, salesMinor: 0, receivedMinor: 0, orderCount: 0 };
+    day.receivedMinor += fact.amountMinor; daily.set(fact.date, day);
+    const payment = byPayment.get(fact.method) || byPayment.get('OUTROS');
+    payment.receivedMinor += fact.amountMinor; payment.receiptCount++;
   }
 
   for (const settlement of validSettlements) {

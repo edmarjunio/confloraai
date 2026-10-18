@@ -157,7 +157,7 @@
     try {
       for (const [productId, draft] of drafts) {
         draft.submitted = true; persist();
-        const response = await window.fetch('/api/admin/stock/adjustments', {
+        const response = await window.ConfloraSession.apiFetch('/api/admin/stock/adjustments', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ productId, operation: mode, quantity: draft.amount, expectedStock: mode === 'SET' ? draft.expectedStock : undefined, reason: mode === 'SET' ? 'Conferência física por contagem no catálogo' : 'Entrada por contagem no catálogo', requestId: draft.requestId }),
         });

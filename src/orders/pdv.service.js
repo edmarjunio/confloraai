@@ -4,6 +4,7 @@ const { createHash } = require('node:crypto');
 const { formatOrderReceipt, money } = require('./receipt.util');
 const { normalizePaymentParts, partAmount } = require('./payment-parts');
 const { formatCustomerOrderMessage } = require('./customer-order-message');
+const { pixMode, manualPixSettings } = require('./pix-mode');
 
 const ORDER_PAYMENT_METHODS = new Set(['DINHEIRO', 'DEBITO', 'CREDITO', 'FIADO', 'SALDO_CLIENTE']);
 function actor(user) {
@@ -132,8 +133,9 @@ class PdvService {
     const paymentParts = normalizePaymentParts(input.paymentParts, paymentMethod, total);
     const amountFor = (method) => paymentParts.find((part) => part.method === method)?.amount || 0;
     const hasPix = amountFor('PIX') > 0;
+    const manualPix = hasPix && pixMode() === 'MANUAL' ? manualPixSettings() : null;
     paymentMethod = hasPix ? 'PIX' : paymentParts.length > 1 ? 'MISTO' : paymentParts[0].method;
-    const deferToCashier = input.deferToCashier === true || (input.orderType === 'DELIVERY' && !hasPix) || (user.role === 'VENDEDOR' && paymentParts.some((part) => part.method !== 'PIX'));
+    const deferToCashier = Boolean(manualPix) || input.deferToCashier === true || (input.orderType === 'DELIVERY' && !hasPix) || (user.role === 'VENDEDOR' && paymentParts.some((part) => part.method !== 'PIX'));
     const cashTendered = amountFor('DINHEIRO') && !deferToCashier ? Number(input.cashReceived ?? amountFor('DINHEIRO')) : null;
     if (cashTendered !== null && (!Number.isFinite(cashTendered) || Math.round(cashTendered * 100) < Math.round(amountFor('DINHEIRO') * 100))) { throw new Error('Valor recebido em dinheiro menor que o total.'); }
     const customerId = String(input.customerId || '');
@@ -177,6 +179,8 @@ class PdvService {
       pixData, pixCopiaECola: pixData?.pixCopiaECola || '',
       ...(pixData ? { pixTtlSeconds: Math.min(86400, Math.max(300, Number(process.env.PIX_PAYMENT_TTL_SECONDS) || 3600)), pixExpiresAt: new Date(Date.now() + Math.min(86400, Math.max(300, Number(process.env.PIX_PAYMENT_TTL_SECONDS) || 3600)) * 1000).toISOString() } : {}),
       createdAt: new Date().toISOString(),
+      ...(hasPix ? { pixMode: manualPix ? 'MANUAL' : 'SICREDI' } : {}),
+      ...(manualPix ? { manualPix, paymentReviewStatus: 'AWAITING_PAYMENT' } : {}),
     });
     if (pixData) await this.schedulePixExpiration(order);
     return this.finishCreation(await this.preparePix(order), user, approvedDiscount);
@@ -210,13 +214,15 @@ class PdvService {
   }
 
   async expirePixOrders() {
-    const orders = await this.repository.repository.getAllOrders(10000);
-    for (const order of orders.filter((item) => item.status === 'AWAITING_PAYMENT' || (['CREATING_PIX', 'AWAITING_PIX', 'PENDING'].includes(item.status) && item.paymentMethod === 'PIX'))) {
-      try { await this.expirePixOrder(order.id); } catch {}
+    const orders = await this.repository.expiredPixOrders();
+    for (const order of orders) {
+      try { await this.expirePixOrder(order.id); }
+      catch (error) { require('../shared/logger').error('Falha ao liberar reserva de pedido vencido', error, { source: 'ORDERS', orderId: order.id }); }
     }
   }
 
   async preparePix(order) {
+    if (order.pixMode === 'MANUAL') return order;
     if (order.status === 'CANCELLED') throw new Error('Esta comanda foi cancelada. Inicie uma nova venda.');
     if (order.completedAt || order.paidAt) return order;
     if (order.pixData && Date.parse(order.pixExpiresAt || '') <= Date.now()) {
@@ -230,6 +236,15 @@ class PdvService {
   }
 
   async requestPixAtCashier(orderId, user, paymentParts) {
+    if (pixMode() === 'MANUAL') {
+      const settings = manualPixSettings();
+      return this.repository.transaction(async tx => {
+        const current = await tx.get('orders', orderId);
+        if (!current || current.completedAt || current.status === 'CANCELLED' || current.pixData?.txid) throw new Error('A comanda não pode ser alterada.');
+        const updated = { ...current, paymentMethod: 'PIX', paymentParts: normalizePaymentParts(paymentParts, 'PIX', current.total), pixMode: 'MANUAL', manualPix: settings, status: 'AWAITING_PAYMENT', paymentReviewStatus: 'AWAITING_PAYMENT' };
+        tx.set('orders', orderId, updated); return updated;
+      });
+    }
     let order = await this.repository.requestPixAtCashier(orderId, actor(user), paymentParts);
     await this.schedulePixExpiration(order);
     order = await this.preparePix(order);
@@ -239,6 +254,7 @@ class PdvService {
 
   async finishCreation(order, user, deferReceipt = false) {
     if (order.creditApprovalStatus !== 'PENDING' && !deferReceipt && !order.deferToCashier && order.paymentMethod !== 'PIX' && ['ADMIN', 'CAIXA'].includes(user.role)) { order = await this.repository.receive(order.id, actor(user)); }
+    await this.queueOperationalNotifications(order);
     await this.deliver(`${order.id}-receipt`);
     const delivery = await this.repository.read('pdv_outbox', `${order.id}-receipt`);
     return { ...order, receiptText: formatOrderReceipt(order), qrCodeBase64: order.pixData?.qrCodeBase64 || '', receiptDelivery: { sent: delivery?.status === 'SENT' && Boolean(order.customerPhone), reason: delivery?.lastError || (order.customerPhone ? '' : 'Sem WhatsApp informado.') } };
@@ -280,7 +296,24 @@ class PdvService {
       throw new Error('Apenas entregadores, caixa ou administrador podem assumir entregas.');
     }
     const order = await this.repository.assignDelivery(orderId, actor(user));
+    const driver = await this.repository.repository.getUserById(order.assignedDriver.id);
+    if (driver?.phone) {
+      const id = `${order.id}-driver-${order.acceptedAt.replace(/\D/g, '')}`;
+      await this.repository.transaction(async tx => tx.set('pdv_outbox', id, { id, orderId, recipient: normalizePhone(driver.phone), kind: 'driver-assigned', status: 'PENDING', attempts: 0 }));
+    }
     return order;
+  }
+
+  async queueOperationalNotifications(order) {
+    const intents = [{ id: `${order.id}-owner-new`, orderId: order.id, kind: 'owner-new' }];
+    if (isDelivery(order) && !order.assignedDriver?.id && order.creditApprovalStatus !== 'PENDING' && (order.paymentMethod !== 'PIX' || isDeliverySettled(order))) {
+      const drivers = (await this.repository.repository.getAllUsers()).filter(user => user.active !== false && user.role === 'ENTREGADOR' && user.phone);
+      for (const driver of drivers) intents.push({ id: `${order.id}-available-${driver.id}`, orderId: order.id, kind: 'driver-available', recipient: normalizePhone(driver.phone) });
+    }
+    await this.repository.transaction(async tx => {
+      const previous = await Promise.all(intents.map(intent => tx.get('pdv_outbox', intent.id)));
+      intents.forEach((intent, index) => { if (!previous[index]) tx.set('pdv_outbox', intent.id, { ...intent, status: 'PENDING', attempts: 0, createdAt: new Date().toISOString() }); });
+    });
   }
 
   async startDelivery(orderId, user, payload = {}) {
@@ -354,19 +387,27 @@ class PdvService {
     try {
       const order = job.orderId ? await this.repository.read('orders', job.orderId) : null;
       const staleDeparture = job.kind === 'delivery-departure' && order?.deliveryStatus !== 'OUT_FOR_DELIVERY';
-      if (order?.status === 'CANCELLED' || staleDeparture) {
+        const staleAvailability = job.kind === 'driver-available' && (!order || order.assignedDriver?.id || ['DELIVERED', 'OUT_FOR_DELIVERY'].includes(order.deliveryStatus));
+        if (order?.status === 'CANCELLED' || staleDeparture || staleAvailability) {
         await this.repository.updateMessage(id, { status: 'SKIPPED', skipped: true, leaseUntil: 0, lastError: 'Mensagem substituída pelo estado atual do pedido.' });
         return;
       }
       const settlement = job.settlementId ? await this.repository.read('debt_settlements', job.settlementId) : null;
       const settlementMethods = settlement ? (settlement.paymentParts || [{ method: settlement.paymentMethod, amount: settlement.amount }])
         .map((part) => `${part.method}: ${money(part.amount)}`).join(' + ') : '';
-      const isOwner = ['owner-paid', 'owner-debt-paid'].includes(job.kind);
-      const phone = normalizePhone(isOwner ? this.ownerPhone : (order?.customerPhone || settlement?.customerPhone));
+      const isOwner = ['owner-paid', 'owner-debt-paid', 'owner-new', 'proof-review', 'closing'].includes(job.kind);
+      const recipient = job.kind === 'closing' ? process.env.OWNER_WHATSAPP_NUMBER : ['owner-new', 'proof-review', 'owner-paid'].includes(job.kind) ? process.env.STORE_NOTIFICATION_PHONE || this.ownerPhone : this.ownerPhone;
+      const phone = normalizePhone(job.recipient || (isOwner ? recipient : (order?.customerPhone || settlement?.customerPhone)));
       if (!phone && isOwner) { throw new Error('WhatsApp da horta não configurado.'); }
       if (!phone) { await this.repository.updateMessage(id, { status: 'SENT', skipped: true, leaseUntil: 0 }); return; }
       let text;
-      if (job.kind === 'delivery-departure') { text = `Seu pedido #${order.ticketNumber || order.id.slice(-6)} saiu para entrega! Responsável: ${order.assignedDriver?.name || 'Equipe Conflora'}. ${isDeliverySettled(order) ? 'Pagamento já registrado.' : 'Pagamento será recebido na entrega.'}`; }
+      if (job.kind === 'closing' || job.kind === 'conversation-text') text = job.text;
+      else if (job.kind === 'owner-new') text = `CONFLORA — NOVO PEDIDO #${order.ticketNumber || order.id}\nCliente: ${order.customerName}\nValor: ${money(order.total)}\nPagamento: ${order.completedAt ? 'confirmado' : 'ainda não confirmado'}`;
+      else if (job.kind === 'proof-review') text = `CONFLORA — COMPROVANTE AGUARDANDO CONFERÊNCIA\nPedido #${order.ticketNumber || order.id}\nValor: ${money(partAmount(order, 'PIX'))}\nConfira o recebimento na conta bancária antes de aprovar no caixa.`;
+      else if (job.kind === 'proof-rejected') text = `CONFLORA — COMPROVANTE RECUSADO\nPedido #${order.ticketNumber || order.id}\n${order.paymentReviewNote}\nEnvie um novo comprovante na página do seu pedido.`;
+      else if (job.kind === 'driver-available') text = 'CONFLORA — ENTREGA DISPONÍVEL\nAbra a aba Entregas para consultar e assumir o pedido.';
+      else if (job.kind === 'driver-assigned') text = `CONFLORA — ENTREGA ATRIBUÍDA\nPedido #${order.ticketNumber || order.id}\nConsulte os detalhes na aba Entregas.`;
+      else if (job.kind === 'delivery-departure') { text = `Seu pedido #${order.ticketNumber || order.id.slice(-6)} saiu para entrega! Responsável: ${order.assignedDriver?.name || 'Equipe Conflora'}. ${isDeliverySettled(order) ? 'Pagamento já registrado.' : 'Pagamento será recebido na entrega.'}`; }
       else if (job.kind === 'receipt' || job.kind === 'customer-paid' || job.kind === 'pix-charge') {
         text = !order.completedAt && !order.paidAt && job.kind !== 'customer-paid' ? formatCustomerOrderMessage(order) : formatOrderReceipt(order);
       }
@@ -382,7 +423,7 @@ class PdvService {
         const send = this.whatsapp.sendPdvText || this.whatsapp.sendTextMessage;
         const result = await send.call(this.whatsapp, phone, chunks[index]);
         if (result?.mock || !result?.messages?.[0]?.id) { throw new Error('WhatsApp não confirmou o envio.'); }
-        await this.repository.updateMessage(id, { textChunksSent: index + 1, leaseUntil: Date.now() + 120000 });
+        await this.repository.updateMessage(id, { textChunksSent: index + 1, providerMessageId: result.messages[0].id, deliveryStatus: 'ACCEPTED', leaseUntil: Date.now() + 120000 });
       }
       if (['receipt', 'pix-charge'].includes(job.kind) && order.pixData && !order.completedAt && !order.paidAt && !job.qrSent) {
       const image = Buffer.from(order.pixData.qrCodeBase64.split(',')[1], 'base64');
@@ -390,8 +431,15 @@ class PdvService {
         if (!result?.messages?.[0]?.id) { throw new Error('WhatsApp não confirmou o QR Code.'); }
         await this.repository.updateMessage(id, { qrSent: true });
       }
+      if (job.reportFileName && !job.documentSent) {
+        const storage = new (require('../reports/private-report-storage').PrivateReportStorage)(this.repository.repository);
+        const result = await this.whatsapp.sendDocumentBuffer(phone, await storage.read(job.reportFileName), 'fechamento-conflora.pdf', 'Fechamento de caixa Conflora');
+        if (!result?.messages?.[0]?.id) throw new Error('A API não confirmou o relatório.');
+        await this.repository.updateMessage(id, { documentSent: true, providerDocumentId: result.messages[0].id });
+      }
       await this.repository.updateMessage(id, { status: 'SENT', leaseUntil: 0, sentAt: new Date().toISOString(), lastError: '' });
     } catch (error) {
+      require('../shared/logger').error('Falha no envio de notificação operacional', error, { source: 'WHATSAPP', jobId: id, kind: job.kind });
       await this.repository.updateMessage(id, { leaseUntil: 0, nextAttemptAt: Date.now() + Math.min(3600000, 30000 * 2 ** Math.min(job.attempts, 7)), lastError: error.message });
     }
   }

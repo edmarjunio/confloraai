@@ -86,7 +86,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
   service.debtPix = debtPix;
   const route = (handler) => async (req, res) => {
     try { await handler(req, res); }
-    catch (error) { Logger.warn('Operação PDV não concluída', { error: error.message }); res.status(400).json({ error: error.message }); }
+    catch (error) { Logger.warn('Operação PDV não concluída', { error: error.message, requestId: req.requestId }); res.status(error.status || (/Firestore|banco.*indisponível/i.test(error.message) ? 503 : 400)).json({ error: error.message, requestId: req.requestId }); }
   };
   const requireCustomer = (req, res, next) => req.user ? next() : res.status(401).json({ error: 'Entre na sua conta.' });
   app.post('/api/customer/debt-pix', requireCustomer, route(async (req, res) => res.json({ success: true, charge: await debtPix.create(req.body, req.user) })));
@@ -96,6 +96,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     if (/^\/deliveries(?:\/[^/]+\/(?:accept|start|release|complete|receive))?$/.test(req.path) || req.path === '/orders/stream' || /^\/payment-proofs(?:\/[^/]+)?$/.test(req.path)) return next();
     res.status(403).json({ error: 'Seu perfil permite apenas suas entregas e os recebimentos vinculados a elas.' });
   });
+  require('../orders/manual-pix.routes').installManualPixRoutes(app, { store, proofStorage, service });
   const requireDeliveryStaff = (req, res, next) => ['ADMIN', 'CAIXA', 'ENTREGADOR'].includes(req.user.role) ? next() : res.status(403).json({ error: 'Sem acesso às entregas.' });
   app.get('/api/caixa/deliveries', requireDeliveryStaff, route(async (req, res) => res.json(await service.listDeliveries(req.user))));
   app.post('/api/caixa/deliveries/:id/dispatch', requireCashier, route(async (req, res) => res.json({ order: await store.dispatchDelivery(req.params.id, actor(req.user)) })));
@@ -152,9 +153,13 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     }
     const customer = await store.transaction(async (tx) => {
       const previous = await tx.get('customers', id);
+      const identityId = email ? require('node:crypto').createHash('sha256').update(email).digest('hex') : null;
+      const identity = identityId ? await tx.get('customer_emails', identityId) : null;
+      if (identity && identity.customerId !== id) throw Object.assign(new Error('Este e-mail já está vinculado a outro cadastro de cliente.'), { status: 409 });
       const nameSearch = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
       const saved = { ...previous, id, name, nameSearch, phone, phoneDigits: phone, email, ...(req.body.deliveryLocation ? { deliveryLocation: require('../orders/pdv.service').normalizeDeliveryLocation(req.body.deliveryLocation) } : {}), cpfCnpj: String(req.body.cpfCnpj || '').slice(0, 30), address: String(req.body.address || '').slice(0, 250), notes: String(req.body.notes || '').slice(0, 250), updatedAt: new Date().toISOString() };
       tx.set('customers', id, saved);
+      if (identityId) tx.set('customer_emails', identityId, { customerId: id });
       return saved;
     });
     res.status(201).json({ success: true, customer });
@@ -176,7 +181,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     heartbeat.unref?.();
     const unsubscribe = store.watchOpenOrders((orders) => {
       if (closed) return;
-      const visibleOrders = orders.filter((order) => (order.source === 'PDV' || order.source === 'WEB_CATALOG') && (req.user.role !== 'ENTREGADOR' || isDelivery(order)));
+      const visibleOrders = orders.filter((order) => (order.source === 'PDV' || order.source === 'WEB_CATALOG') && (req.user.role !== 'ENTREGADOR' || isDelivery(order)) && (req.user.role !== 'VENDEDOR' || order.createdBy?.id === req.user.id));
       send('orders-changed', { orderIds: visibleOrders.map((order) => order.id), updatedAt: new Date().toISOString() });
     }, () => {
       if (!closed) send('stream-fallback', { updatedAt: new Date().toISOString() });
@@ -349,6 +354,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
       for (const id of await store.ensurePaymentNotifications(order.id)) await service.deliver(id);
     }
     const receiptId = `${order.id}-${verification ? 'customer-paid' : 'final-receipt'}`;
+    await service.queueOperationalNotifications(order);
     await service.deliver(receiptId);
     const delivery = await store.read('pdv_outbox', receiptId);
     res.json({ success: true, order, receiptText: formatOrderReceipt(order), receiptDelivery: { sent: delivery?.status === 'SENT' && Boolean(order.customerPhone), reason: delivery?.lastError || (order.customerPhone ? '' : 'Sem WhatsApp informado.') } });
@@ -365,6 +371,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     const verification = manualPixVerification(existing, parts, req.body);
     const order = await store.receive(existing.id, receiver, verification, null, existing.pixData?.txid ? null : 'PIX', { requestedParts: parts });
     const notificationIds = await store.ensurePaymentNotifications(order.id);
+    await service.queueOperationalNotifications(order);
     for (const id of notificationIds) await service.deliver(id);
     res.json({ success: true, order, receiptText: formatOrderReceipt(order) });
   }));
@@ -380,7 +387,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
   }));
   app.post('/api/caixa/orders/:id/cancel', route(async (req, res) => {
     const order = await findOrder(req);
-    if (order.paymentMethod === 'PIX') { return res.status(409).json({ error: 'Cobranças Pix exigem cancelamento e conciliação no Sicredi.' }); }
+    if (order.paymentMethod === 'PIX' && order.pixMode !== 'MANUAL') { return res.status(409).json({ error: 'Cobranças Pix exigem cancelamento e conciliação no Sicredi.' }); }
     res.json(await repository.cancelOrder(req.params.id, String(req.body.reason || '')));
   }));
   app.post('/tasks/expire-pix', async (req, res) => {
@@ -452,14 +459,16 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
   app.get('/api/admin/pdv/pending-deliveries', route(async (_req, res) => res.json(await store.list('pdv_outbox', 'status', 'PENDING'))));
   // A scheduler can call this protected endpoint when Cloud Run scales to zero.
   app.post('/internal/pdv/retry-notifications', async (req, res) => {
-    if (!secureEqual(req.headers.authorization, process.env.PDV_WORKER_SECRET ? `Bearer ${process.env.PDV_WORKER_SECRET}` : '')) { return res.sendStatus(401); }
+    const workerSecret = process.env.PDV_WORKER_SECRET || process.env.TASK_SECRET;
+    if (!secureEqual(req.headers.authorization, workerSecret ? `Bearer ${workerSecret}` : '')) { return res.sendStatus(401); }
     try { await service.retryMessages(); res.sendStatus(200); } catch { res.sendStatus(503); }
   });
   if (process.env.NODE_ENV !== 'test') {
-    const timer = setInterval(() => Promise.all([service.retryMessages(), service.expirePixOrders()]).catch((error) => Logger.warn('Fila PDV pendente', { error: error.message })), 15000);
+    const timer = setInterval(() => Promise.all([service.retryMessages(), service.expirePixOrders()]).catch((error) => Logger.error('Fila PDV pendente', error, { source: 'WORKER' })), 15000);
     timer.unref();
   }
   app.locals.pdv = { service, store };
+  require('./whatsapp-admin.routes').installWhatsappAdminRoutes(app, { whatsapp, store });
   return { service, store };
 }
 module.exports = { installPdvRoutes, requireStaff, requireCashier, businessDate, reportRange, paymentTotals };

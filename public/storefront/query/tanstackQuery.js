@@ -197,7 +197,7 @@ export const storeQueries = {
         if (apiFn) {
           return await apiFn('/products');
         }
-        const res = await fetch('/api/storefront/catalog');
+        const res = await window.ConfloraSession.apiFetch('/api/storefront/catalog');
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}`);
         }
@@ -214,7 +214,7 @@ export const storeQueries = {
     return queryClient.fetchQuery({
       queryKey: QUERY_KEYS.teamUsers(),
       queryFn: async () => {
-        const res = await fetch('/api/admin/auth/users');
+        const res = await window.ConfloraSession.apiFetch('/api/admin/auth/users');
         if (!res.ok) {
           return [];
         }
@@ -241,7 +241,7 @@ export const storeQueries = {
           });
           return result?.order || result;
         }
-        const res = await fetch('/api/storefront/orders', {
+        const res = await window.ConfloraSession.apiFetch('/api/storefront/orders', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...headers },
           body: JSON.stringify(orderPayload),
@@ -265,7 +265,7 @@ export const storeQueries = {
   async adjustStock({ productId, quantityAdded }) {
     return queryClient.mutate({
       mutationFn: async () => {
-        const res = await fetch('/api/stock/quick-entry', {
+        const res = await window.ConfloraSession.apiFetch('/api/stock/quick-entry', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ productId, quantityAdded: Number(quantityAdded) }),

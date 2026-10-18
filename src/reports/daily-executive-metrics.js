@@ -158,13 +158,6 @@ function summarizeDailyExecutiveMetrics({ date, orders = [], settlements = [], u
     seller.salesCount++;
     seller.salesTotalMinor += orderMinor;
 
-    const receiver = order.receivedBy || (paymentMethod === 'PIX' ? creator : null);
-    if (receiver && receiptMinor > 0) {
-      const cashier = getCollaborator(receiver, receiver.id, receiver.name || order.cashierName, receiver.role);
-      cashier.receivedCount++;
-      cashier.receivedTotalMinor += receiptMinor;
-    }
-
     for (const item of Array.isArray(order.items) ? order.items : []) {
       const productId = String(item.productId || item.id || item.name || '').trim();
       if (!productId) { continue; }
@@ -183,6 +176,26 @@ function summarizeDailyExecutiveMetrics({ date, orders = [], settlements = [], u
       product.revenueMinor += currencyToMinor(Number.isFinite(unitPrice) ? unitPrice * quantity : 0);
       products.set(productId, product);
     }
+  }
+
+  const cashFacts = require('./payment-facts').paymentFacts(orders, getBusinessDate).filter(fact => fact.date === date);
+  totalReceivedSalesMinor = cashFacts.reduce((sum, fact) => sum + fact.amountMinor, 0);
+  cashSalesMinor = cashFacts.filter(fact => fact.method === 'DINHEIRO').reduce((sum, fact) => sum + fact.amountMinor, 0);
+  cashTenderedMinor = 0; changeMinor = 0;
+  const attributed = new Map();
+  for (const fact of cashFacts) {
+    if (fact.method === 'DINHEIRO') {
+      cashTenderedMinor += currencyToMinor(fact.order.cashReceived ?? fact.order.cashTendered ?? fact.amountMinor / 100);
+      changeMinor += currencyToMinor(fact.order.changeGiven);
+    }
+    if (!fact.receiver) continue;
+    const key = (fact.order.id || fact.order.createdAt) + ':' + fact.receiver.id;
+    const row = attributed.get(key) || { actor: fact.receiver, amount: 0 };
+    row.amount += fact.amountMinor; attributed.set(key, row);
+  }
+  for (const row of attributed.values()) {
+    const person = getCollaborator(row.actor, row.actor.id, row.actor.name, row.actor.role);
+    person.receivedCount++; person.receivedTotalMinor += row.amount;
   }
 
   for (const settlement of dailySettlements) {

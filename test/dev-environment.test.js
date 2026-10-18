@@ -48,12 +48,12 @@ test('dev callback allowlist rejects deceptive hosts, paths and credentials', ()
 test('dev loading ignores .env from production and refuses a production service account', (t) => {
   const directory = mkdtempSync(path.join(tmpdir(), 'conflora-env-test-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
-  writeFileSync(path.join(directory, '.env'), 'GCP_PROJECT_ID=confloraai\nMERCADO_PAGO_ACCESS_TOKEN=do-not-load\n');
+  writeFileSync(path.join(directory, '.env'), 'GCP_PROJECT_ID=confloraai\nSICREDI_CLIENT_SECRET=do-not-load\n');
   const env = { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot,
     APP_ENV: 'dev', GCP_PROJECT_ID: 'confloraai-dev', FIREBASE_PROJECT_ID: 'confloraai-dev',
     SERVICE_URL: 'https://confloraai-dev.web.app', CLOUD_TASKS_QUEUE: 'conflora-jobs-dev' };
   const configPath = require.resolve('../src/config/env');
-  const script = `const c = require(${JSON.stringify(configPath)}); if(c.mercadoPago.accessToken) process.exit(7); console.log(c.gcp.projectId)`;
+  const script = `const c = require(${JSON.stringify(configPath)}); if(c.sicredi.clientSecret) process.exit(7); console.log(c.gcp.projectId)`;
   assert.equal(execFileSync(process.execPath, ['-e', script], { cwd: directory, env, encoding: 'utf8' }).trim(), 'confloraai-dev');
   writeFileSync(path.join(directory, 'firebase-service-account.json'), JSON.stringify({ project_id: 'confloraai' }));
   assert.throws(() => execFileSync(process.execPath, ['-e', script], { cwd: directory, env, stdio: 'pipe' }));

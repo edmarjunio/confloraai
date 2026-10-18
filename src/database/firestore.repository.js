@@ -1,5 +1,7 @@
 const { randomUUID } = require('node:crypto');
 const { safeUser } = require('../security/web-session');
+const { protectCredentials, verifyCredential } = require('../security/credentials');
+const { createHash } = require('node:crypto');
 const config = require('../config/env');
 const Logger = require('../shared/logger');
 const { productStatus } = require('../catalog/product-status');
@@ -130,7 +132,7 @@ class FirestoreRepository {
       },
     ];
 
-    for (const u of defaultUsers) {
+    for (const u of this.isInMemory ? defaultUsers : []) {
       this.inMemoryUsers.set(u.id, u);
     }
 
@@ -746,8 +748,6 @@ class FirestoreRepository {
     ticketNumber = '',
     pixCode = '',
     orderId = '',
-    mercadoPagoPreferenceId = '',
-    paymentCheckoutUrl = '',
     requirePersistence = false,
     discountAmount = 0,
     discountPercent = 0,
@@ -786,8 +786,6 @@ class FirestoreRepository {
       operatorId: operatorId || '',
       ticketNumber: shortTicket,
       pixCode: pixCode || '',
-      mercadoPagoPreferenceId,
-      paymentCheckoutUrl,
       source: 'CAIXA_MANUAL',
       status: status || 'CONFIRMED',
     };
@@ -861,9 +859,9 @@ class FirestoreRepository {
     const allOrders = await this.getAllOrders(100);
     const pendingPix = allOrders.filter(
       (o) =>
-        ['AWAITING_PIX', 'AGUARDANDO_PIX', 'PENDING'].includes(o.status) &&
+        ['AWAITING_PIX', 'AWAITING_PAYMENT', 'AWAITING_CASHIER', 'CREATING_PIX', 'PENDING'].includes(o.status) &&
         String(o.paymentMethod || '').toUpperCase() === 'PIX' &&
-        Boolean(o.mercadoPagoPreferenceId),
+        (o.pixMode === 'MANUAL' || Boolean(o.pixData?.txid)),
     );
 
     const match = pendingPix.find((o) => {
@@ -921,9 +919,9 @@ class FirestoreRepository {
       updateData.paymentStatus = 'APPROVED';
       updateData.paymentProvider = 'CAIXA';
     }
-    if (['MERCADO_PAGO_WEBHOOK', 'SICREDI_PIX_WEBHOOK', 'MANUAL_CAIXA_PIX'].includes(verifiedVia)) {
+    if (['SICREDI_PIX_WEBHOOK', 'MANUAL_CAIXA_PIX'].includes(verifiedVia)) {
       updateData.paymentStatus = 'APPROVED';
-      updateData.paymentProvider = verifiedVia === 'MERCADO_PAGO_WEBHOOK' ? 'MERCADO_PAGO' : 'SICREDI';
+      updateData.paymentProvider = verifiedVia === 'MANUAL_CAIXA_PIX' ? 'MANUAL' : 'SICREDI';
       updateData.paymentTransactionId = String(paymentTransactionId);
       updateData.paymentVerifiedAmount = paymentAmount;
     }
@@ -946,7 +944,7 @@ class FirestoreRepository {
     }
 
     if (
-      ['MERCADO_PAGO_WEBHOOK', 'SICREDI_PIX_WEBHOOK', 'MANUAL_CAIXA_PIX'].includes(verifiedVia) &&
+      ['SICREDI_PIX_WEBHOOK', 'MANUAL_CAIXA_PIX'].includes(verifiedVia) &&
       process.env.NODE_ENV === 'production' &&
       (!this.firestore || this._firestoreClientDisabled)
     ) {
@@ -1160,24 +1158,27 @@ class FirestoreRepository {
   async getDailyExecutiveMetrics({ date = getBusinessDate(new Date()) } = {}) {
     const targetDate = String(date || '').trim();
     getBusinessDateRange(targetDate);
-    const [orders, settlements, users] = await Promise.all([
-      this.getExecutiveOrdersForDate(targetDate),
-      this.getExecutiveDebtSettlementsForDate(targetDate),
+    const [created, paid, completed, settlements, users] = await Promise.all([
+      this.getExecutiveRecordsForRange('orders', targetDate, targetDate),
+      this.getExecutiveRecordsForRange('orders', targetDate, targetDate, 'paidAt'),
+      this.getExecutiveRecordsForRange('orders', targetDate, targetDate, 'completedAt'),
+      this.getExecutiveRecordsForRange('debt_settlements', targetDate, targetDate),
       this.getAllUsers(),
     ]);
+    const orders = [...new Map([...created, ...paid, ...completed].map(order => [order.id, order])).values()];
     return summarizeDailyExecutiveMetrics({ date: targetDate, orders, settlements, users });
   }
 
-  async getExecutiveRecordsForRange(collectionName, from, to) {
+  async getExecutiveRecordsForRange(collectionName, from, to, dateField = 'createdAt') {
     const start = getBusinessDateRange(from).start;
     const end = getBusinessDateRange(to).end;
     if (this.firestore && !this._firestoreClientDisabled && !FirestoreRepository._globalClientDisabled) {
       const records = [];
       try {
         const baseQuery = this.firestore.collection(collectionName)
-          .where('createdAt', '>=', start)
-          .where('createdAt', '<', end)
-          .orderBy('createdAt', 'asc');
+          .where(dateField, '>=', start)
+          .where(dateField, '<', end)
+          .orderBy(dateField, 'asc');
         let lastDocument = null;
         while (true) {
           let pageQuery = baseQuery.limit(1000);
@@ -1200,25 +1201,28 @@ class FirestoreRepository {
       ? Array.from(this.inMemoryOrders.values())
       : (this.inMemoryDebtSettlements || []);
     return records.filter((record) => {
-      const businessDate = getBusinessDate(record.createdAt);
+      const businessDate = getBusinessDate(record[dateField]);
       return businessDate >= from && businessDate <= to;
     });
   }
 
   async getExecutivePeriodMetrics({ from, to, comparisonMode }) {
     const range = getPreviousPeriod({ from: String(from || '').trim(), to: String(to || '').trim(), comparisonMode });
-    const [orders, settlements, catalog] = await Promise.all([
+    const [createdOrders, paidOrders, completedOrders, settlements, catalog] = await Promise.all([
       this.getExecutiveRecordsForRange('orders', range.previousFrom, range.to),
+      this.getExecutiveRecordsForRange('orders', range.previousFrom, range.to, 'paidAt'),
+      this.getExecutiveRecordsForRange('orders', range.previousFrom, range.to, 'completedAt'),
       this.getExecutiveRecordsForRange('debt_settlements', range.previousFrom, range.to),
       this.getAllProducts(),
     ]);
+    const orders = [...new Map([...createdOrders, ...paidOrders, ...completedOrders].map(order => [order.id, order])).values()];
     return summarizeExecutivePeriod({ from: range.from, to: range.to, orders, settlements, catalog, comparisonMode });
   }
 
   /**
    * Finaliza o caixa do dia, gera o PDF executivo e envia resumo + PDF pro WhatsApp do patrão.
    */
-  async closeCashierDay({ date = new Date().toISOString().slice(0, 10), closedBy = 'Administrador', notes = '', notifyOwnerWhatsapp = true, whatsappClient = null } = {}) {
+  async closeCashierDay({ date = new Date().toISOString().slice(0, 10), closedBy = 'Administrador', notes = '', notifyOwnerWhatsapp = true, whatsappClient = null, requestId = randomUUID() } = {}) {
     const metrics = await this.getDailyExecutiveMetrics({ date });
     const paymentTotals = metrics.byPayment || {};
     const cardPayment = ['CARTAO', 'DEBITO', 'CREDITO'].reduce((summary, method) => ({
@@ -1231,7 +1235,8 @@ class FirestoreRepository {
       topProducts: metrics.topProductsByQuantity || metrics.topProducts || [],
     };
     const now = new Date().toISOString();
-    const closingId = `closing_${date}_${Date.now()}`;
+    if (!/^[a-f0-9-]{36}$/i.test(requestId)) throw new Error('Identificador do fechamento inválido.');
+    const closingId = `closing_${date}_${requestId}`;
 
     const closingRecord = {
       id: closingId,
@@ -1240,17 +1245,19 @@ class FirestoreRepository {
       closedBy,
       notes,
       metrics,
-      status: 'CLOSED',
+      status: 'PROCESSING',
     };
 
-    if (this.firestore && !this._firestoreClientDisabled) {
-      try {
-        await this.firestore.collection('cashier_closings').doc(closingId).set(closingRecord);
-      } catch (err) {
-        Logger.warn('Aviso: falha ao salvar fechamento no Firestore', { error: err.message });
-      }
-    }
-    this.inMemoryCashierClosings = this.inMemoryCashierClosings || new Map();
+    const closingStore = new (require('../orders/pdv.repository').PdvRepository)(this);
+    const previous = await closingStore.transaction(async tx => {
+      const saved = await tx.get('cashier_closings', closingId);
+      if (saved?.status === 'CLOSED') return saved;
+      if (saved?.leaseUntil > Date.now()) throw Object.assign(new Error('Fechamento em processamento. Aguarde e tente novamente.'), { status: 409 });
+      tx.set('cashier_closings', closingId, { ...closingRecord, leaseUntil: Date.now() + 120000 });
+      return null;
+    });
+    if (previous) return { success: true, closingId, date, metrics: previous.metrics, pdfUrl: '/reports/' + previous.reportFileName, reportFileName: previous.reportFileName, whatsappSent: false, whatsappQueued: true };
+    this.inMemoryCashierClosings ||= new Map();
     this.inMemoryCashierClosings.set(closingId, closingRecord);
 
     // Gera PDF oficial
@@ -1263,8 +1270,14 @@ class FirestoreRepository {
         closedAt: new Date().toLocaleTimeString('pt-BR'),
       });
     } catch (pdfErr) {
-      Logger.error('Erro ao gerar PDF de fechamento de caixa', pdfErr);
+      throw Object.assign(new Error('Fechamento salvo, mas o relatório ainda não foi concluído.'), { cause: pdfErr, status: 503 });
     }
+
+    const reportFileName = await new (require('../reports/private-report-storage').PrivateReportStorage)(this).save(pdfResult.buffer);
+    pdfResult.publicUrl = '/reports/' + reportFileName;
+    closingRecord.status = 'CLOSED'; closingRecord.reportFileName = reportFileName;
+    await closingStore.transaction(async tx => tx.set('cashier_closings', closingId, { ...closingRecord, leaseUntil: 0 }));
+    this.inMemoryCashierClosings.set(closingId, closingRecord);
 
     let whatsappSent = false;
     let whatsappError = null;
@@ -1308,6 +1321,7 @@ class FirestoreRepository {
       date,
       metrics,
       pdfUrl: pdfResult ? pdfResult.publicUrl : null,
+      reportFileName,
       whatsappSent,
       whatsappError,
     };
@@ -1799,7 +1813,7 @@ class FirestoreRepository {
     const dataWithTs = {
       ...orderData,
       status: orderData.status || 'PENDING',
-      ...(String(orderData.paymentMethod || '').toUpperCase() === 'PIX' ? { pixTtlSeconds, pixExpiresAt: orderData.pixExpiresAt || new Date(Date.now() + pixTtlSeconds * 1000).toISOString() } : {}),
+      ...(String(orderData.paymentMethod || '').toUpperCase() === 'PIX' && orderData.pixMode !== 'MANUAL' ? { pixTtlSeconds, pixExpiresAt: orderData.pixExpiresAt || new Date(Date.now() + pixTtlSeconds * 1000).toISOString() } : {}),
       createdAt: now,
       updatedAt: now,
     };
@@ -2485,21 +2499,22 @@ class FirestoreRepository {
         return docs;
       } catch (err) {
         if (err && (err.code === 7 || err.code === 'permission-denied' || String(err.message || '').includes('PERMISSION_DENIED'))) {
-          this._firestoreClientDisabled = true;
-          return Array.from(this.inMemoryUsers.values());
+          throw Object.assign(new Error('Cadastro de usuários indisponível.'), { status: 503 });
         }
         throw err;
       }
     }
-    if (!this.isInMemory && !this._firestoreClientDisabled) {throw new Error('Cadastro de usuários indisponível.');}
+    if (!this.isInMemory || this.firestore) {throw new Error('Cadastro de usuários indisponível.');}
     return Array.from(this.inMemoryUsers.values());
   }
 
   async saveUser(userData) {
     const id =
-      userData.id || `usr-${Date.now()}`;
+      userData.id || `usr-${randomUUID()}`;
+    if (!/^[a-zA-Z0-9_-]{1,128}$/.test(String(id))) throw Object.assign(new Error('Identificador de usuário inválido.'), { status: 400 });
 
-    const email = (userData.email || '')
+    const previous = await this.getUserById(String(id));
+    const email = String(userData.email ?? previous?.email ?? '')
       .toLowerCase()
       .trim();
 
@@ -2513,21 +2528,27 @@ class FirestoreRepository {
     }
 
 
-    const dataWithTs = {
-      ...userData,
+    const dataWithTs = await protectCredentials({
+      ...previous, ...userData,
       id: String(id),
       email,
       role,
       active: userData.active !== false,
       updatedAt: new Date().toISOString(),
-    };
+    }, previous || {});
 
     if (this.firestore && !this._firestoreClientDisabled) {
       try {
-        await this.firestore
-          .collection('users')
-          .doc(String(id))
-          .set(dataWithTs, { merge: true });
+        await this.firestore.runTransaction(async tx => {
+          const identity = email ? this.firestore.collection('user_emails').doc(createHash('sha256').update(email).digest('hex')) : null;
+          const existing = identity ? await tx.get(identity) : null;
+          if (existing?.exists && existing.data().userId !== String(id)) throw Object.assign(new Error('Este e-mail já possui cadastro.'), { status: 409 });
+          const oldIdentity = previous?.email && previous.email !== email ? this.firestore.collection('user_emails').doc(createHash('sha256').update(previous.email).digest('hex')) : null;
+          const old = oldIdentity ? await tx.get(oldIdentity) : null;
+          tx.set(this.firestore.collection('users').doc(String(id)), dataWithTs);
+          if (identity) tx.set(identity, { userId: String(id) });
+          if (old?.data()?.userId === String(id)) tx.delete(oldIdentity);
+        });
       } catch (err) {
         Logger.warn(
           'Erro ao salvar usuário no Firestore',
@@ -2537,12 +2558,24 @@ class FirestoreRepository {
       }
     }
 
+    if (!this.firestore && !this.isInMemory) throw new Error('Cadastro indisponível.');
+    if (!this.firestore && email && [...this.inMemoryUsers.values()].some(user => user.email === email && user.id !== String(id))) throw Object.assign(new Error('Este e-mail já possui cadastro.'), { status: 409 });
     this.inMemoryUsers.set(
       String(id),
       dataWithTs
     );
 
     return dataWithTs;
+  }
+
+  async getUserById(id) {
+    if (!id || !/^[a-zA-Z0-9_-]{1,128}$/.test(String(id))) return null;
+    if (this.firestore && !this._firestoreClientDisabled) {
+      const record = await this.firestore.collection('users').doc(String(id)).get();
+      return record.exists ? { ...record.data(), id: String(id) } : null;
+    }
+    if (!this.isInMemory || this.firestore) throw Object.assign(new Error('Cadastro indisponível.'), { status: 503 });
+    return this.inMemoryUsers.get(String(id)) || null;
   }
 
   async getUserFavorites(userId) {
@@ -2596,17 +2629,17 @@ class FirestoreRepository {
     phone,
     address,
   }) {
-    if (!email || !email.includes('@')) {
+    if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 200) {
       return {
         success: false,
         error: 'E-mail inválido.',
       };
     }
 
-    if (!password || password.length < 4) {
+    if (typeof password !== 'string' || password.length < 8 || password.length > 128) {
       return {
         success: false,
-        error: 'A senha deve conter pelo menos 4 caracteres.',
+        error: 'A senha deve conter entre 8 e 128 caracteres.',
       };
     }
 
@@ -2637,7 +2670,7 @@ class FirestoreRepository {
     const role = 'CLIENTE';
 
     const newUser = {
-      id: `usr-${Date.now()}`,
+      id: `usr-${randomUUID()}`,
       name: name || normalizedEmail.split('@')[0],
       email: normalizedEmail,
       password,
@@ -2661,7 +2694,7 @@ class FirestoreRepository {
   }
 
   async loginUser(email, password) {
-    if (!email || !password) {
+    if (typeof email !== 'string' || typeof password !== 'string' || !email || !password) {
       return {
         success: false,
         error: 'Informe e-mail e senha.',
@@ -2695,23 +2728,14 @@ class FirestoreRepository {
       };
     }
 
-    // Permite login via password OU pin do colaborador.
-    const isPasswordMatch =
-      user.password &&
-      String(user.password) === String(password);
-
-    const isPinMatch =
-      user.pin &&
-      String(user.pin) === String(password);
-
-    if (!isPasswordMatch && !isPinMatch) {
+    if (!await verifyCredential(password, user.passwordHash, user.password)) {
       return {
         success: false,
         error: 'Senha incorreta.',
       };
     }
 
-    const userWithoutSecrets = safeUser(user);
+    const userWithoutSecrets = safeUser(!user.passwordHash ? await this.saveUser(user) : user);
 
     return {
       success: true,
@@ -2771,10 +2795,7 @@ class FirestoreRepository {
           .doc(String(userId))
           .delete();
       } catch (err) {
-        Logger.warn(
-          'Erro ao excluir usuário no Firestore',
-          { error: err.message }
-        );
+        throw err;
       }
     }
 
@@ -2806,15 +2827,14 @@ class FirestoreRepository {
       };
     }
 
-    if (!['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(user.role) || !pin ||
-      !((user.pin && String(user.pin) === String(pin)) ||
-        (user.password && String(user.password) === String(pin)))) {
+    if (!['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(user.role) || !await verifyCredential(pin, user.pinHash, user.pin)) {
       return {
         success: false,
         error: 'PIN de segurança incorreto',
       };
     }
 
+    if (!user.pinHash) await this.saveUser(user);
     return {
       success: true,
       user: {

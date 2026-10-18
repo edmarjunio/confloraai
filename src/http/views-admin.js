@@ -18,23 +18,6 @@ const productAssetsVersion = createHash('sha256')
   .digest('hex').slice(0, 12);
 
 
-const FETCH_SHIM_SCRIPT = `<script>
-  (function() {
-    try {
-      var _fetch = typeof window !== 'undefined' ? window.fetch : null;
-      var _current = _fetch ? _fetch.bind(window) : null;
-      var desc = {
-        get: function() { return _current; },
-        set: function(fn) { _current = fn; },
-        configurable: true,
-        enumerable: true
-      };
-      try { Object.defineProperty(window, 'fetch', desc); } catch (_) {}
-      try { if (typeof Window !== 'undefined' && Window.prototype) Object.defineProperty(Window.prototype, 'fetch', desc); } catch (_) {}
-      try { if (typeof window !== 'undefined' && window.__proto__) Object.defineProperty(window.__proto__, 'fetch', desc); } catch (_) {}
-    } catch (_) {}
-  })();
-</script>`;
 
 function renderAdminHtml(storeConfig) {
   const escape = value => String(value || '').replace(/[&<>"']/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[character]);
@@ -51,11 +34,13 @@ function renderAdminHtml(storeConfig) {
   <script src="/store-assets/tab-session.js"></script>
     <link rel="stylesheet" href="/store-assets/order-display.css" />
     <script src="/store-assets/order-display.js"></script>
-  ${FETCH_SHIM_SCRIPT}
 
   <link rel="stylesheet" href="/store-assets/admin-shell-v1.css?v=${productAssetsVersion}">
   <link rel="stylesheet" href="/store-assets/site-header.css?v=${productAssetsVersion}">
   <script src="/store-assets/site-navigation.js?v=1"></script>
+  <script src="/store-assets/error-history.js" defer></script>
+  <script src="/store-assets/product-import.js" defer></script>
+  <script src="/store-assets/error-monitor.js"></script>
   <script src="/store-assets/topbar.js?v=${productAssetsVersion}"></script>
   <link rel="stylesheet" href="/store-assets/design-system.css?v=${productAssetsVersion}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -336,6 +321,7 @@ function renderAdminHtml(storeConfig) {
 
     <!-- ABA 7: CADASTRO DE PRODUTOS COM MÚLTIPLAS IMAGENS (ADMIN) -->
     <div id="tab-products" class="tab-content">
+      <button type="button" class="action-btn btn-green" onclick="window.ConfloraProductImport.open()">Importar planilha de produtos</button>
       <div class="admin-products-toolbar">
         <h2>Cadastro de produtos</h2>
         <button type="button" class="admin-add-product" onclick="openNewProductDialog()">＋ ADICIONAR PRODUTO</button>
@@ -487,6 +473,14 @@ function renderAdminHtml(storeConfig) {
       <div id="adminStatusDashboardContainer">
         <div style="padding:30px; text-align:center; color:#64748b;">Carregando diagnósticos em tempo real...</div>
       </div>
+      <section style="margin-top:28px" aria-label="Histórico de erros">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><h2>Histórico de erros</h2><button type="button" id="errorHistoryRefresh" class="action-btn btn-gray">Atualizar histórico</button></div>
+        <p style="font-size:13px;color:#64748b">Falhas do servidor e do navegador. Acesso exclusivo do administrador.</p>
+        <p id="errorHistoryStatus" role="status">O histórico será carregado ao abrir esta página.</p>
+        <div id="errorHistoryList"></div>
+        <button type="button" id="errorHistoryMore" class="action-btn btn-gray" hidden>Carregar registros anteriores</button>
+        <p style="font-size:12px;color:#64748b">Se o site estiver indisponível, consulte os <a href="https://console.cloud.google.com/logs/query?project=confloraai" target="_blank" rel="noopener noreferrer">logs no Google Cloud</a>.</p>
+      </section>
     </div>
   </div>
 
@@ -665,13 +659,14 @@ function renderAdminHtml(storeConfig) {
   <script>
     // ESTADO GLOBAL
     let currentUser = null;
-    fetch('/api/auth/me').then(res => res.json()).then(data => {
+    window.ConfloraSession.apiFetch('/api/auth/me').then(res => res.json()).then(data => {
       currentUser = data.user;
       if (currentUser && ['ADMIN', 'CAIXA', 'VENDEDOR'].includes(currentUser.role)) closeLoginModal();
       applyUserRoleUI();
     }).catch(() => { currentUser = null; applyUserRoleUI(); });
 
     let allProducts = [];
+    window.addEventListener('products-imported', () => loadAdminProducts());
     let allOrders = [];
     let currentSelectedUserIdForLogin = '';
 
@@ -740,7 +735,7 @@ function renderAdminHtml(storeConfig) {
         if (options.replace || location.search === url.search) history.replaceState({ confloraNavigation: true }, '', url);
         else history.pushState({ confloraNavigation: true }, '', url);
       }
-      const names = { cashier: 'Caixa/Vendas', orders: 'Comandas', stock: 'Estoque', products: 'Produtos', team: 'Equipe', status: 'Teste do servidor', analytics: 'Eventos', notifs: 'Notificações', price: 'Preços', diff: 'Solicitações de correção' };
+      const names = { cashier: 'Caixa/Vendas', orders: 'Comandas', stock: 'Estoque', products: 'Produtos', team: 'Equipe', status: 'Sistema e erros', analytics: 'Eventos', notifs: 'Notificações', price: 'Preços', diff: 'Solicitações de correção' };
       document.getElementById('adminPageLabel').textContent = names[tab] || 'Administração';
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
       document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -760,7 +755,7 @@ function renderAdminHtml(storeConfig) {
       if (tab === 'products') loadAdminProducts();
       if (tab === 'team') loadTeam();
       if (tab === 'notifs') loadNotifications();
-      if (tab === 'status') loadAdminStatusData();
+      if (tab === 'status') { loadAdminStatusData(); window.ConfloraErrorHistory?.load(); }
     }
 
     // 1. EVENTOS DO CATÁLOGO & INDICADORES PARA MARKETING
@@ -769,7 +764,7 @@ function renderAdminHtml(storeConfig) {
       status.textContent = 'Buscando eventos coletados…';
       try {
         const days = Number(document.getElementById('analyticsPeriod').value || 30);
-        const res = await fetch('/api/admin/analytics/events?days=' + encodeURIComponent(days));
+        const res = await window.ConfloraSession.apiFetch('/api/admin/analytics/events?days=' + encodeURIComponent(days));
         const metrics = await res.json();
         if (!res.ok) throw new Error(metrics.error || 'Não foi possível carregar os eventos.');
         const number = value => Number(value || 0).toLocaleString('pt-BR');
@@ -819,7 +814,7 @@ function renderAdminHtml(storeConfig) {
         const operator = isAdmin ? document.getElementById('adminSalesFilter')?.value || '' : '';
         const selectedOperatorName = isAdmin ? document.getElementById('adminSalesFilter')?.selectedOptions?.[0]?.textContent || '' : '';
         const url = '/api/admin/daily-metrics' + (operator ? '?operator=' + encodeURIComponent(operator) + '&operatorName=' + encodeURIComponent(selectedOperatorName) : '');
-        const res = await fetch(url);
+        const res = await window.ConfloraSession.apiFetch(url);
         const m = await res.json();
         if (!res.ok) throw new Error(m.error || 'Não foi possível carregar as vendas.');
         document.getElementById('cashierTotalToday').innerText = 'R$ ' + Number(m.totalRevenue || 0).toFixed(2).replace('.', ',');
@@ -873,7 +868,7 @@ function renderAdminHtml(storeConfig) {
     async function loadAlterations() {
       const container = document.getElementById('alterationsListContainer');
       try {
-        const res = await fetch('/api/admin/alterations');
+        const res = await window.ConfloraSession.apiFetch('/api/admin/alterations');
         const list = await res.json();
         container.innerHTML = '';
         
@@ -934,13 +929,13 @@ function renderAdminHtml(storeConfig) {
           container.appendChild(card);
         });
       } catch (err) {
-        container.innerHTML = 'Erro ao carregar alterações: ' + err.message;
+        container.innerHTML = 'Erro ao carregar alterações: ' + escapeHtml(err.message);
       }
     }
 
     async function approveAlteration(requestId) {
       if (!confirm('Deseja consolidar esta alteração no pedido e atualizar o estoque?')) return;
-      const res = await fetch('/api/admin/alterations/' + requestId + '/review', {
+      const res = await window.ConfloraSession.apiFetch('/api/admin/alterations/' + requestId + '/review', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'APPROVED', reviewedBy: currentUser.name })
@@ -968,7 +963,7 @@ function renderAdminHtml(storeConfig) {
       const reason = document.getElementById('rejectionReasonText').value.trim();
       if (!reason) { alert('Por favor, informe o motivo do cancelamento para o atendente.'); return; }
 
-      const res = await fetch('/api/admin/alterations/' + id + '/review', {
+      const res = await window.ConfloraSession.apiFetch('/api/admin/alterations/' + id + '/review', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'REJECTED', reviewedBy: currentUser.name, rejectionReason: reason })
@@ -983,7 +978,7 @@ function renderAdminHtml(storeConfig) {
 
     // 4. SOLICITAÇÃO DE ALTERAÇÃO PELO CAIXA
     async function openAlterationModal(orderId) {
-      const res = await fetch('/api/admin/orders');
+      const res = await window.ConfloraSession.apiFetch('/api/admin/orders');
       const orders = await res.json();
       const ord = orders.find(o => String(o.id) === String(orderId));
       if (!ord) return;
@@ -1002,7 +997,7 @@ function renderAdminHtml(storeConfig) {
 
     async function submitAlterationRequest() {
       const orderId = document.getElementById('altOrderId').value;
-      const res = await fetch('/api/admin/orders');
+      const res = await window.ConfloraSession.apiFetch('/api/admin/orders');
       const orders = await res.json();
       const orig = orders.find(o => String(o.id) === String(orderId));
 
@@ -1015,7 +1010,7 @@ function renderAdminHtml(storeConfig) {
 
       const proposed = { ...orig, customerName: newCust, paymentMethod: newPay, total: newTot };
 
-      await fetch('/api/admin/alterations', {
+      await window.ConfloraSession.apiFetch('/api/admin/alterations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1038,7 +1033,7 @@ function renderAdminHtml(storeConfig) {
       const container = document.getElementById('notificationsContainer');
       try {
         if (!currentUser) return;
-        const res = await fetch('/api/admin/notifications?userId=' + currentUser.id);
+        const res = await window.ConfloraSession.apiFetch('/api/admin/notifications?userId=' + currentUser.id);
         const list = await res.json();
         container.replaceChildren();
 
@@ -1106,7 +1101,7 @@ function renderAdminHtml(storeConfig) {
     }
 
     async function renderDiscountApprovals(container) {
-      const response = await fetch('/api/admin/discount-approvals');
+      const response = await window.ConfloraSession.apiFetch('/api/admin/discount-approvals');
       if (!response.ok) return;
       const approvals = await response.json();
       if (!Array.isArray(approvals) || approvals.length === 0) return;
@@ -1178,7 +1173,7 @@ function renderAdminHtml(storeConfig) {
       button.disabled = true;
       alternateButton.disabled = true;
       try {
-        const response = await fetch('/api/admin/discount-approvals/' + encodeURIComponent(approvalId) + '/review', {
+        const response = await window.ConfloraSession.apiFetch('/api/admin/discount-approvals/' + encodeURIComponent(approvalId) + '/review', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action, rejectionReason }),
@@ -1206,7 +1201,7 @@ function renderAdminHtml(storeConfig) {
     // 6. CONSULTA RÁPIDA DE PREÇO
     async function loadPriceProducts() {
       try {
-        const res = await fetch('/api/inventory');
+        const res = await window.ConfloraSession.apiFetch('/api/inventory');
         if (res.ok) {
           const data = await res.json();
           const list = safeExtractProductsAdmin(data);
@@ -1250,9 +1245,9 @@ function renderAdminHtml(storeConfig) {
         const tr = document.createElement('tr');
         const img = getProductImageUrl(p);
         tr.innerHTML = \`
-          <td><img src="\${img}" class="prod-thumb" /></td>
-          <td><strong>\${p.descricao || p.name}</strong></td>
-          <td>\${p.categoria || p.category || ''} • \${p.subcategoria || ''}</td>
+          <td><img src="\${escapeHtml(img)}" class="prod-thumb" /></td>
+          <td><strong>\${escapeHtml(p.descricao || p.name)}</strong></td>
+          <td>\${escapeHtml(p.categoria || p.category || '')} • \${escapeHtml(p.subcategoria || '')}</td>
           <td><strong style="color:#15803d; font-size:15px;">R$ \${Number(p.valor_num || p.price || 0).toFixed(2).replace('.', ',')}</strong></td>
           <td><span style="font-weight:bold;">\${p.stockQuantity ?? p.estoque ?? 0}</span> \${getAdminProductSaleUnit(p) === 'KG' ? 'kg' : 'un.'} em estoque</td>
         \`;
@@ -1262,7 +1257,7 @@ function renderAdminHtml(storeConfig) {
 
     // 7. EQUIPE & PERMISSÕES
     async function loadTeam() {
-      const res = await fetch('/api/admin/auth/users');
+      const res = await window.ConfloraSession.apiFetch('/api/admin/auth/users');
       const users = await res.json();
       const tbody = document.getElementById('teamTableBody');
       tbody.innerHTML = '';
@@ -1271,8 +1266,8 @@ function renderAdminHtml(storeConfig) {
         const tr = document.createElement('tr');
         const role = u.role || 'CLIENTE';
         tr.innerHTML = \`
-          <td><strong>\${u.name || 'Sem nome'}</strong></td>
-          <td>\${u.email}</td>
+          <td><strong>\${escapeHtml(u.name || 'Sem nome')}</strong></td>
+          <td>\${escapeHtml(u.email)}</td>
           <td>
             <select onchange="changeUserRole('\${u.id}', this.value)" style="padding:4px 8px; border-radius:6px; font-weight:700; font-size:12px; border:1px solid #cbd5e1; background:\${role === 'ADMIN' ? '#dcfce7' : (role === 'CAIXA' ? '#e0f2fe' : '#f8fafc')}; color:\${role === 'ADMIN' ? '#166534' : (role === 'CAIXA' ? '#0369a1' : '#475569')}; cursor:pointer;" \${u.id === 'usr-edmar' ? 'disabled' : ''}>
               <option value="CLIENTE" \${role === 'CLIENTE' ? 'selected' : ''}>👤 CLIENTE (Padrão)</option>
@@ -1294,7 +1289,7 @@ function renderAdminHtml(storeConfig) {
 
     async function changeUserRole(userId, newRole) {
       try {
-        const res = await fetch('/api/admin/users/' + encodeURIComponent(userId) + '/role', {
+        const res = await window.ConfloraSession.apiFetch('/api/admin/users/' + encodeURIComponent(userId) + '/role', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ role: newRole }),
@@ -1334,7 +1329,7 @@ function renderAdminHtml(storeConfig) {
       const role = document.getElementById('uRole').value;
       const pin = document.getElementById('uPin').value;
 
-      await fetch('/api/admin/users', {
+      await window.ConfloraSession.apiFetch('/api/admin/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, name, email, role, pin, active: true })
@@ -1347,13 +1342,13 @@ function renderAdminHtml(storeConfig) {
 
     async function deleteUser(id) {
       if (!confirm('Deseja excluir o acesso deste funcionário?')) return;
-      await fetch('/api/admin/users/' + id, { method: 'DELETE' });
+      await window.ConfloraSession.apiFetch('/api/admin/users/' + id, { method: 'DELETE' });
       loadTeam();
     }
 
     // 8. LOGIN / TROCA DE OPERADOR
     async function openLoginModal(automatic = false) {
-      const res = await fetch('/api/admin/auth/users');
+      const res = await window.ConfloraSession.apiFetch('/api/admin/auth/users');
       const users = await res.json();
       const listEl = document.getElementById('userSelectList');
       listEl.innerHTML = '';
@@ -1363,7 +1358,7 @@ function renderAdminHtml(storeConfig) {
         btn.style.cssText = 'padding:10px 14px; border:1px solid #cbd5e1; border-radius:8px; cursor:pointer; display:flex; justify-content:space-between; align-items:center;';
         btn.innerHTML = \`
           <div>
-            <strong>\${u.name}</strong><br>
+            <strong>\${escapeHtml(u.name)}</strong><br>
             <span style="font-size:11px; color:#64748b;">\${u.role}</span>
           </div>
           <span style="font-size:12px; color:#15803d; font-weight:bold;">Selecionar ➔</span>
@@ -1393,7 +1388,7 @@ function renderAdminHtml(storeConfig) {
 
     async function performLogin() {
       const pin = document.getElementById('loginPinInput').value;
-      const res = await fetch('/api/admin/auth/login', {
+      const res = await window.ConfloraSession.apiFetch('/api/admin/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: currentSelectedUserIdForLogin, pin })
@@ -1443,7 +1438,7 @@ function renderAdminHtml(storeConfig) {
         if (window.signOutGoogle) {
           try { await window.signOutGoogle(); } catch (error) { alert('Erro ao sair: ' + error.message); return; }
         }
-        await fetch('/api/auth/logout', { method: 'POST' });
+        await window.ConfloraSession.apiFetch('/api/auth/logout', { method: 'POST' });
         currentUser = null;
         localStorage.removeItem('conflora_user');
         localStorage.removeItem('conflora_op');
@@ -1457,7 +1452,7 @@ function renderAdminHtml(storeConfig) {
       if (!container) return;
       container.innerHTML = '<div style="padding:30px;text-align:center;color:#64748b;">Consultando WhatsApp e Firestore...</div>';
       try {
-        const response = await fetch('/api/admin/system-status');
+        const response = await window.ConfloraSession.apiFetch('/api/admin/system-status');
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Falha ao consultar o diagnóstico.');
         const cards = [
@@ -1480,31 +1475,6 @@ function renderAdminHtml(storeConfig) {
         container.innerHTML = '<div style="color:#ef4444;padding:20px;text-align:center;">Erro ao carregar diagnóstico: ' + error.message + '</div>';
       }
     }
-    async function testWebhookFromAdmin() {
-      const box = document.getElementById('adminTestResultBox');
-      if (box) {
-        box.style.display = 'block';
-        box.style.background = '#f1f5f9';
-        box.style.color = '#334155';
-        box.innerHTML = '⏳ Enviando ping para rota /webhook do WhatsApp...';
-      }
-      try {
-        const res = await fetch('/api/admin/test-webhook', { method: 'POST' });
-        const d = await res.json();
-        if (box) {
-          box.style.background = '#dcfce7';
-          box.style.color = '#166534';
-          box.innerHTML = '✅ <strong>Webhook WhatsApp OK:</strong> Rota <code>/webhook</code> respondeu com sucesso em ' + (d.pingLatencyMs || 0) + 'ms. ' + (d.message || '');
-        }
-      } catch (err) {
-        if (box) {
-          box.style.background = '#fee2e2';
-          box.style.color = '#991b1b';
-          box.innerHTML = '❌ <strong>Erro no teste do Webhook:</strong> ' + err.message;
-        }
-      }
-    }
-
     // 9. ESTOQUE ÁGIL (+1, +5, +10)
     let stockControlActive = null;
     function renderStockControl() {
@@ -1521,7 +1491,7 @@ function renderAdminHtml(storeConfig) {
     }
     async function loadStockControl() {
       try {
-        const response = await fetch('/api/admin/inventory-settings');
+        const response = await window.ConfloraSession.apiFetch('/api/admin/inventory-settings');
         if (!response.ok) throw new Error('Falha ao consultar o estoque.');
         const settings = await response.json();
         stockControlActive = settings.stockControlEnabled;
@@ -1534,7 +1504,7 @@ function renderAdminHtml(storeConfig) {
       if (button.disabled) return;
       button.disabled = true;
       try {
-        const response = await fetch('/api/admin/inventory-settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stockControlEnabled: !stockControlActive }) });
+        const response = await window.ConfloraSession.apiFetch('/api/admin/inventory-settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stockControlEnabled: !stockControlActive }) });
         const settings = await response.json();
         if (!response.ok) throw new Error(settings.error || 'Não foi possível salvar o controle de estoque.');
         stockControlActive = settings.stockControlEnabled;
@@ -1544,7 +1514,7 @@ function renderAdminHtml(storeConfig) {
     async function loadStockProducts() {
       await loadStockControl();
       try {
-        const res = await fetch('/api/inventory');
+        const res = await window.ConfloraSession.apiFetch('/api/inventory');
         if (res.ok) {
           const data = await res.json();
           const list = safeExtractProductsAdmin(data);
@@ -1659,7 +1629,7 @@ function renderAdminHtml(storeConfig) {
       submitButton.disabled = true;
       errorMessage.hidden = true;
       try {
-        const response = await fetch('/api/admin/stock/adjustments', {
+        const response = await window.ConfloraSession.apiFetch('/api/admin/stock/adjustments', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ productId, operation, quantity, reason, requestId: createStockRequestId() }),
         });
@@ -1680,7 +1650,7 @@ function renderAdminHtml(storeConfig) {
       const container = document.getElementById('stockMovementsList');
       if (!container) return;
       try {
-        const response = await fetch('/api/admin/stock/movements?limit=20');
+        const response = await window.ConfloraSession.apiFetch('/api/admin/stock/movements?limit=20');
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Não foi possível carregar as movimentações.');
         const movements = Array.isArray(data.movements) ? data.movements : [];
@@ -1715,7 +1685,7 @@ function renderAdminHtml(storeConfig) {
     }
     async function loadAdminProducts() {
       try {
-        const res = await fetch('/api/inventory');
+        const res = await window.ConfloraSession.apiFetch('/api/inventory');
         if (res.ok) {
           const data = await res.json();
           const list = safeExtractProductsAdmin(data);
@@ -2024,7 +1994,7 @@ function renderAdminHtml(storeConfig) {
 
     async function deleteProduct(id) {
       if (!confirm('Deseja excluir este produto e suas fotos?')) return;
-      const response = await fetch('/api/admin/products/' + id, { method: 'DELETE' });
+      const response = await window.ConfloraSession.apiFetch('/api/admin/products/' + id, { method: 'DELETE' });
       const result = await response.json();
       if (!response.ok) {
         alert('Não foi possível excluir o produto: ' + (result.error || 'Falha ao remover o produto.'));
@@ -2073,7 +2043,7 @@ function renderAdminHtml(storeConfig) {
         descriptionAi: desc,
       };
 
-      const res = await fetch('/api/admin/products', {
+      const res = await window.ConfloraSession.apiFetch('/api/admin/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -2084,7 +2054,7 @@ function renderAdminHtml(storeConfig) {
         document.getElementById('formProdId').value = id;
         try {
           for (const upload of newUploads) {
-            const photoResponse = await fetch('/api/admin/products/' + encodeURIComponent(id) + '/photo', {
+            const photoResponse = await window.ConfloraSession.apiFetch('/api/admin/products/' + encodeURIComponent(id) + '/photo', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/octet-stream',
@@ -2110,7 +2080,7 @@ function renderAdminHtml(storeConfig) {
             ...pendingPhotosList.filter(photo => photo.isExisting && photo.url).map(photo => photo.url),
             ...externalImgs,
           ])];
-          const finalResponse = await fetch('/api/admin/products', {
+          const finalResponse = await window.ConfloraSession.apiFetch('/api/admin/products', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -2144,7 +2114,7 @@ function renderAdminHtml(storeConfig) {
     async function loadAllOrders() {
       const container = document.getElementById('allOrdersListContainer');
       try {
-        const res = await fetch('/api/admin/orders');
+        const res = await window.ConfloraSession.apiFetch('/api/admin/orders');
         const orders = await res.json();
         container.innerHTML = '';
         if (orders.length === 0) {
@@ -2170,7 +2140,7 @@ function renderAdminHtml(storeConfig) {
           container.appendChild(div);
         });
       } catch (err) {
-        container.innerHTML = 'Erro ao carregar histórico: ' + err.message;
+        container.innerHTML = 'Erro ao carregar histórico: ' + escapeHtml(err.message);
       }
     }
 
@@ -2178,7 +2148,7 @@ function renderAdminHtml(storeConfig) {
     async function openManualOrderModal() {
       if (!allProducts.length) {
         try {
-          const response = await fetch('/api/inventory');
+          const response = await window.ConfloraSession.apiFetch('/api/inventory');
           const data = await response.json();
           if (!response.ok) throw new Error(data.error || 'Não foi possível carregar os produtos.');
           allProducts = safeExtractProductsAdmin(data);
@@ -2220,7 +2190,7 @@ function renderAdminHtml(storeConfig) {
       const items = [{ productId: p.id, name: p.descricao || p.name, price: Number(p.valor_num || p.price || 0), quantity: qty }];
 
       try {
-        const response = await fetch('/api/admin/orders/manual', {
+        const response = await window.ConfloraSession.apiFetch('/api/admin/orders/manual', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ customerName: name, customerPhone: phone, items, paymentMethod: pay })
@@ -2228,18 +2198,7 @@ function renderAdminHtml(storeConfig) {
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Não foi possível registrar a venda.');
 
-        if (result.order?.paymentCheckoutUrl) {
-          const paymentWindow = window.open(result.order.paymentCheckoutUrl, '_blank', 'noopener,noreferrer');
-          if (!paymentWindow) {
-            window.prompt('Copie o link seguro do pagamento Pix:', result.order.paymentCheckoutUrl);
-          }
-          const receiptWarning = result.receiptDelivery?.sent === false
-            ? ' Aviso: ' + result.receiptDelivery.reason
-            : '';
-          alert('Venda registrada. Aguardando aprovação do Pix pelo Mercado Pago.' + receiptWarning);
-        } else {
-          alert('Venda registrada com sucesso no caixa!');
-        }
+        alert(result.order?.paymentMethod === 'PIX' ? 'Pedido registrado. Abra a comanda para acompanhar ou conferir o Pix.' : 'Venda registrada com sucesso no caixa!');
         closeManualOrderModal();
         loadCashierDaily();
       } catch (error) {
@@ -2249,7 +2208,7 @@ function renderAdminHtml(storeConfig) {
 
     async function seedDefaultConflora() {
       if (!confirm('Deseja restaurar o catálogo oficial da Conflora Horta e Viveiro no Firestore?')) return;
-      const res = await fetch('/api/admin/seed-catalog', { method: 'POST' });
+      const res = await window.ConfloraSession.apiFetch('/api/admin/seed-catalog', { method: 'POST' });
       const d = await res.json();
       if (d.success) {
         alert('Catálogo completo sincronizado no Firestore com sucesso!');

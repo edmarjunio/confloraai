@@ -1,5 +1,5 @@
 module.exports = [
-  { ignores: ["public/pdv/vendor/**", "src/dataconnect-admin-generated/**", "functions/lib/**", "test-results/**", "playwright-report/**"] },
+  { ignores: ["public/pdv/vendor/**", "public/pdv/dist/**", "src/dataconnect-admin-generated/**", "functions/lib/**", "test-results/**", "playwright-report/**"] },
   {
     files: ["**/*.js"],
     ignores: ["node_modules/**"],
@@ -53,6 +53,7 @@ module.exports = [
         document: "readonly",
         window: "readonly",
         HTMLElement: "readonly",
+        FileReader: "readonly",
         CustomEvent: "readonly",
         customElements: "readonly",
         IntersectionObserver: "readonly",
@@ -77,6 +78,7 @@ module.exports = [
         document: "readonly",
         window: "readonly",
         HTMLElement: "readonly",
+        FileReader: "readonly",
         CustomEvent: "readonly",
         customElements: "readonly",
         IntersectionObserver: "readonly",

@@ -27,7 +27,7 @@ export function initTeamDrawer() {
   // Carrega operador salvo ou busca da sessão
   async function loadCurrentOperator() {
     try {
-      const res = await fetch('/api/auth/me');
+      const res = await window.ConfloraSession.apiFetch('/api/auth/me');
       if (res.ok) {
         const data = await res.json();
         if (data && data.user) {
@@ -140,15 +140,16 @@ export function initTeamDrawer() {
     if (!selectUser) {return;}
     selectUser.innerHTML = '<option value="">Carregando operadores...</option>';
     try {
-      const res = await fetch('/api/admin/auth/users');
+      const res = await window.ConfloraSession.apiFetch('/api/admin/auth/users');
       if (res.ok) {
         const users = await res.json();
         if (Array.isArray(users) && users.length > 0) {
-          selectUser.innerHTML = users.map(u => `
-            <option value="${u.id}" data-name="${u.name}" data-role="${u.role}" ${u.name === currentOperator.name ? 'selected' : ''}>
-              ${u.role === 'ADMIN' ? '👑' : '👤'} ${u.name} (${u.role})
-            </option>
-          `).join('');
+          selectUser.replaceChildren(...users.map(user => {
+            const option = document.createElement('option'); option.value = user.id;
+            option.dataset.name = user.name; option.dataset.role = user.role;
+            option.textContent = `${user.name} (${user.role})`; option.selected = user.name === currentOperator.name;
+            return option;
+          }));
           return;
         }
       }

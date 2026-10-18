@@ -2,7 +2,7 @@
 (() => {
   let configuration;
   let sdk;
-  const config = () => configuration ||= fetch('/api/maps-config').then(async (response) => {
+  const config = () => configuration ||= window.ConfloraSession.apiFetch('/api/maps-config').then(async (response) => {
     if (!response.ok) throw new Error('Mapa indisponível. Informe o endereço e use a navegação externa.');
     return response.json();
   }).catch(error => { configuration = null; throw error; });

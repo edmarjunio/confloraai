@@ -44,7 +44,7 @@ window.PdvComponents = (() => {
       if (query.trim().length < 4) return () => controller.abort();
       const timer = setTimeout(async () => {
         setLoading(true);
-        try { const response = await fetch('/api/caixa/customers?q=' + encodeURIComponent(query.trim()), { signal: controller.signal }); const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Não foi possível buscar clientes.'); setRows(result); }
+        try { const response = await window.ConfloraSession.apiFetch('/api/caixa/customers?q=' + encodeURIComponent(query.trim()), { signal: controller.signal }); const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Não foi possível buscar clientes.'); setRows(result); }
         catch (err) { if (err.name !== 'AbortError') setError(err.message); }
         finally { if (!controller.signal.aborted) setLoading(false); }
       }, 300);
@@ -98,7 +98,7 @@ window.PdvComponents = (() => {
     return <main className="min-h-screen bg-[#F4F6F5] font-sans text-slate-800"><Topbar /><button type="button" className="cf-back-button m-4" onClick={() => window.ConfloraNavigation.back()}>← Voltar</button><p className="p-8 text-center text-sm text-slate-500">Carregando sessão…</p></main>;
   }
   async function api(path, body) {
-    const response = await fetch(path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
+    const response = await window.ConfloraSession.apiFetch(path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
     const data = await response.json();
     if (!response.ok) { throw new Error(data.error || 'Não foi possível concluir a operação.'); }
     return data;
@@ -197,6 +197,7 @@ window.PdvComponents = (() => {
     return <Panel title={pending ? 'Pedido registrado' : current.paymentStatus === 'ON_ACCOUNT' ? 'Fiado registrado' : 'Venda finalizada'} onClose={onNewOrder}>
       <div className="space-y-4">
         <ReceiptView order={current} />
+        {current.pixMode === 'MANUAL' && pending && <section className="rounded-xl bg-amber-50 p-4"><h3 className="font-bold">Pix manual · aguardando pagamento</h3><p>Beneficiário: {current.manualPix?.recipientName}</p><label>Chave Pix<input readOnly className={field} value={current.manualPix?.key || ''} /></label><button className={button} onClick={() => navigator.clipboard.writeText(current.manualPix.key).then(() => setCopyStatus('Chave copiada.')).catch(() => setCopyStatus('Selecione e copie a chave acima.'))}>Copiar chave Pix</button><p role="status">{copyStatus}</p><p>Após o pagamento, o caixa ou administrador confere o recebimento e anexa o comprovante na comanda antes de confirmar.</p></section>}
         {isPixPending && <section className="rounded-2xl border border-emerald-100 bg-white p-4 text-center">
           <h3 className="text-sm font-extrabold text-slate-800">Pague o valor exato pelo Pix</h3>
           <p className="mt-2 font-bold">{money(current.pixData.amount || current.total)}</p>
@@ -263,6 +264,23 @@ window.PdvComponents = (() => {
     if (order.completedAt) return 'Confirmado';
     return 'Em andamento';
   }
+  function ManualPixReview({ order }) {
+    const [note, setNote] = useState(''); const [bankReceived, setBankReceived] = useState(false);
+    const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+    async function review(decision) {
+      setBusy(true); setError('');
+      try {
+        const response = await window.ConfloraSession.apiFetch('/api/caixa/orders/' + order.id + '/review-proof', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision, proofId: order.paymentProofId, bankReceived, note }) });
+        const data = await response.json(); if (!response.ok) throw new Error(data.error);
+        location.reload();
+      } catch (failure) { setError(failure.message); } finally { setBusy(false); }
+    }
+    async function viewProof() {
+      try { await window.ConfloraSession.openPrivateFile('/api/caixa/payment-proofs/' + order.paymentProofId); } catch (failure) { setError(failure.message); }
+    }
+    return <section className="my-3 space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4"><h3 className="font-bold">Pix manual · aguardando conferência</h3><p>O envio do comprovante não confirma o recebimento.</p>{error && <p role="alert" className="text-red-700">{error}</p>}{order.paymentProofId ? <><button type="button" className={button} onClick={viewProof}>Ver comprovante enviado pelo cliente</button><label className="block"><input type="checkbox" checked={bankReceived} onChange={event => setBankReceived(event.target.checked)} /> Conferi o recebimento na conta bancária e o valor da parcela Pix.</label><label className="block">Observação ou motivo<textarea className={field} value={note} onChange={event => setNote(event.target.value)} /></label><div className="flex gap-2"><button type="button" className={button} disabled={busy || !bankReceived || note.trim().length < 8} onClick={() => review('APPROVE')}>Confirmar recebimento Pix</button><button type="button" className="cf-danger-button" disabled={busy || note.trim().length < 8} onClick={() => review('REJECT')}>Recusar comprovante</button></div></> : <p>Aguardando envio do comprovante pelo cliente. Chave Pix: {order.manualPix?.key}</p>}</section>;
+  }
+
   function OrderDetails({ order, onClose, canReceive = false, canConfirmManualPix = false, busy = false, error = '', onReceive, onManualPix, canAdvance = false, onAdvance, deliveryMode = false, extraContent, canApproveCredit = false }) {
     const initialMethod = ['CARTAO', 'CARD', 'MISTO'].includes(order.paymentMethod) ? '' : order.paymentMethod === 'CASH' ? 'DINHEIRO' : order.paymentMethod || 'DINHEIRO';
     const [paymentMethod, setPaymentMethod] = useState(initialMethod);
@@ -292,9 +310,9 @@ window.PdvComponents = (() => {
       setPaymentParts([{ method, amount: (firstAmount / 100).toFixed(2) }, { method: method === 'CREDITO' ? 'DINHEIRO' : 'CREDITO', amount: ((totalCents - firstAmount) / 100).toFixed(2) }]);
       setSplitPayment(true);
     };
-    const [directPix, setDirectPix] = useState(false);
+    const [directPix, setDirectPix] = useState(order.pixMode === 'MANUAL');
     const hasPixPart = splitPayment ? paymentParts.some((part) => part.method === 'PIX') : paymentMethod === 'PIX';
-    const needsManualProof = directPix && hasPixPart;
+    const needsManualProof = (directPix || window.CONFLORA_PIX_MODE === 'MANUAL') && hasPixPart;
     const pixCopyPaste = order.pixData?.pixCopiaECola || order.pixCopiaECola || '';
     const pixAmount = order.paymentMethod !== 'PIX' ? Number(order.total || 0) : (order.paymentParts || [{ method: order.paymentMethod, amount: order.total }])
       .filter((part) => part.method === 'PIX').reduce((sum, part) => sum + Number(part.amount || 0), 0);
@@ -302,7 +320,7 @@ window.PdvComponents = (() => {
       try { await navigator.clipboard.writeText(pixCopyPaste); setCopied(true); }
       catch { setCopied(false); }
     };
-    return <Panel title={`Comanda #${order.ticketNumber || String(order.id).slice(-6).toUpperCase()}`} onClose={onClose}>
+    return <Panel title={`Comanda #${order.ticketNumber || String(order.id).slice(-6).toUpperCase()}`} onClose={onClose}>{order.pixMode === 'MANUAL' && !order.completedAt && canReceive && <ManualPixReview order={order} />}
       <div className="space-y-2 text-sm">
         <p className="font-bold text-lg">{order.customerName || 'Cliente Balcão'}</p>
         <p className="text-slate-600">{orderStatusLabel(order)} · {paymentLabel(order.paymentMethod)}</p>
@@ -328,7 +346,7 @@ window.PdvComponents = (() => {
         {canAdvance && <button type="button" className={button + ' mt-4 w-full'} disabled={busy} onClick={() => onAdvance(order)}>Confirmar comanda e aguardar pagamento</button>}
         {canReceive && <section className="mt-4 space-y-2 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
           <h3 className="font-black text-emerald-950">{deliveryMode ? 'Receber na entrega' : 'Receber no caixa'}</h3>
-          <PaymentMethodButtons value={paymentMethod} onChange={setPaymentMethod} labels={{ DINHEIRO: '💵 Dinheiro', DEBITO: '💳 Débito', CREDITO: '💳 Crédito', PIX: 'Pix · QR Code / Copia e Cola', ...(!deliveryMode ? { FIADO: 'Fiado · aprovação do Admin' } : {}) }} disabledMethods={order.customerId ? [] : ['FIADO', 'SALDO_CLIENTE']} />
+          <PaymentMethodButtons value={paymentMethod} onChange={setPaymentMethod} labels={{ DINHEIRO: '💵 Dinheiro', DEBITO: '💳 Débito', CREDITO: '💳 Crédito', PIX: window.CONFLORA_PIX_MODE === 'MANUAL' ? 'Pix · conferência do caixa' : 'Pix · QR Code / Copia e Cola', ...(!deliveryMode ? { FIADO: 'Fiado · aprovação do Admin' } : {}) }} disabledMethods={order.customerId ? [] : ['FIADO', 'SALDO_CLIENTE']} />
           <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={splitPayment} onChange={(event) => event.target.checked ? enableSplitPayment() : setSplitPayment(false)} />Usar mais de uma forma de pagamento</label>
           {splitPayment && <PaymentPartsEditor parts={paymentParts} onChange={setPaymentParts} total={Number(order.total)} customerId={order.customerId} allowedMethods={deliveryMode ? ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO'] : ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO', 'FIADO']} />}
           {hasPixPart && <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={directPix} onChange={(event) => setDirectPix(event.target.checked)} />Pix já recebido: confirmar manualmente</label>}
@@ -441,13 +459,7 @@ window.PdvComponents = (() => {
     };
     useEffect(() => {
       refresh();
-      const timer = setInterval(() => refresh(true), 15000);
-      const stream = !window.ConfloraSession ? null : window.ConfloraSession.openEventStream('/api/caixa/orders/stream');
-      stream?.addEventListener('orders-changed', () => refresh(true));
-      stream?.addEventListener('stream-fallback', () => refresh(true));
-      const onVisible = () => { if (document.visibilityState === 'visible') refresh(true); };
-      document.addEventListener('visibilitychange', onVisible);
-      return () => { clearInterval(timer); stream?.close(); document.removeEventListener('visibilitychange', onVisible); };
+      return window.ConfloraSession.watchOrderUpdates(() => refresh(true));
     }, [dateFrom, dateTo]);
 
     const setPeriod = (days) => {
@@ -598,7 +610,7 @@ window.PdvComponents = (() => {
             </>}
           </>}
       </main>
-      {selectedOrder && <OrderDetails key={`${selectedOrder.id}:${selectedOrder.status}:${selectedOrder.paymentMethod}`} order={selectedOrder} canApproveCredit={user.role === 'ADMIN' && selectedOrder.creditApprovalStatus === 'PENDING'} canAdvance={user.role !== 'VENDEDOR' && selectedOrder.status === 'AWAITING_CONFIRMATION' && selectedOrder.creditApprovalStatus !== 'PENDING'} onAdvance={(order) => moveOrder(order.id, 'confirmation', 'payment')} canReceive={(user.role === 'ADMIN' && selectedOrder.creditApprovalStatus === 'PENDING' && selectedOrder.paymentParts?.length > 1 || user.role !== 'VENDEDOR' && ['AWAITING_CASHIER', 'AWAITING_PAYMENT', 'PENDING'].includes(selectedOrder.status)) && !selectedOrder.pixData?.txid} canConfirmManualPix={(user.role !== 'VENDEDOR' || selectedOrder.createdBy?.id === user.id && (!selectedOrder.pixData?.txid || (selectedOrder.paymentParts || [{ method: selectedOrder.paymentMethod }]).every(part => part.method === 'PIX'))) && (selectedOrder.paymentMethod === 'PIX' && ['CREATING_PIX', 'AWAITING_PIX'].includes(selectedOrder.status) || user.role === 'VENDEDOR' && ['AWAITING_CASHIER', 'AWAITING_PAYMENT', 'PENDING'].includes(selectedOrder.status))} busy={busy} error={error} onReceive={receive} onManualPix={async (order, note, proofId) => {
+      {selectedOrder && <OrderDetails key={`${selectedOrder.id}:${selectedOrder.status}:${selectedOrder.paymentMethod}`} order={selectedOrder} canApproveCredit={user.role === 'ADMIN' && selectedOrder.creditApprovalStatus === 'PENDING'} canAdvance={user.role !== 'VENDEDOR' && selectedOrder.status === 'AWAITING_CONFIRMATION' && selectedOrder.creditApprovalStatus !== 'PENDING'} onAdvance={(order) => moveOrder(order.id, 'confirmation', 'payment')} canReceive={(user.role === 'ADMIN' && selectedOrder.creditApprovalStatus === 'PENDING' && selectedOrder.paymentParts?.length > 1 || user.role !== 'VENDEDOR' && ['AWAITING_CASHIER', 'AWAITING_PAYMENT', 'PENDING'].includes(selectedOrder.status)) && !selectedOrder.pixData?.txid} canConfirmManualPix={selectedOrder.pixMode !== 'MANUAL' && (user.role !== 'VENDEDOR' || selectedOrder.createdBy?.id === user.id && (!selectedOrder.pixData?.txid || (selectedOrder.paymentParts || [{ method: selectedOrder.paymentMethod }]).every(part => part.method === 'PIX'))) && (selectedOrder.paymentMethod === 'PIX' && ['CREATING_PIX', 'AWAITING_PIX'].includes(selectedOrder.status) || user.role === 'VENDEDOR' && ['AWAITING_CASHIER', 'AWAITING_PAYMENT', 'PENDING'].includes(selectedOrder.status))} busy={busy} error={error} onReceive={receive} onManualPix={async (order, note, proofId) => {
         setBusy(true); setError('');
         try {
           const response = await api('/api/caixa/orders/' + order.id + '/confirm-manual-pix', { proofSeen: true, note, proofId });

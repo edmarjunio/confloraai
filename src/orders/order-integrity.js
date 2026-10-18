@@ -16,9 +16,7 @@ function validateOrderConfirmation(order, updates) {
     updates.manualPixProofSeen === true && Boolean(updates.manualPixConfirmedBy?.id) &&
     ['ADMIN', 'CAIXA'].includes(updates.manualPixConfirmedBy?.role) &&
     String(updates.manualPixNote || '').trim().length >= 8 && paidAmountMatches;
-  const mercadoPagoVerified = updates.verifiedVia === 'MERCADO_PAGO_WEBHOOK' &&
-    /^\d+$/.test(updates.paymentTransactionId || '') && paidAmountMatches;
-  if (!sicrediVerified && !manualPixVerified && !mercadoPagoVerified) {
+  if (!sicrediVerified && !manualPixVerified) {
     throw new Error('Confirmação PIX exige pagamento verificado com o valor do pedido.');
   }
 }

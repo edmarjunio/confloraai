@@ -24,7 +24,7 @@ async function generateDailyReportPdf(metrics, meta = {}) {
   const closedBy = meta.closedBy || 'Administrador / Caixa';
   const closedAt = meta.closedAt || new Date().toLocaleTimeString('pt-BR');
 
-  const reportsDir = path.resolve(process.cwd(), 'public/reports');
+  const reportsDir = path.resolve(process.cwd(), '.private/reports');
   if (!fs.existsSync(reportsDir)) {
     fs.mkdirSync(reportsDir, { recursive: true });
   }

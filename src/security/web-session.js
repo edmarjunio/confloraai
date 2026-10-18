@@ -4,11 +4,13 @@ const { readSessionToken, sessionCookie } = require("./session-cookie");
 function safeUser(user) {
   const safe = {
     ...user,
-    hasPin: Boolean(user.pin),
-    hasPassword: Boolean(user.password),
+    hasPin: Boolean(user.pin || user.pinHash),
+    hasPassword: Boolean(user.password || user.passwordHash),
   };
   delete safe.password;
   delete safe.pin;
+  delete safe.pinHash;
+  delete safe.passwordHash;
   return safe;
 }
 
@@ -43,7 +45,7 @@ function createWebSessions(repo) {
       const token = randomBytes(32).toString("hex");
       const session = {
         userId: user.id,
-        expiresAt: Date.now() + 12 * 3600 * 1000,
+        expiresAt: new Date(Date.now() + 12 * 3600 * 1000),
       };
       if (repo.firestore) {
         await repo.firestore
@@ -73,10 +75,9 @@ function createWebSessions(repo) {
                   .get()
               ).data()
             : memory.get(hash(token));
-          if (session && session.expiresAt > Date.now()) {
-            const user = (await repo.getAllUsers()).find(
-              (u) => u.id === session.userId,
-            );
+          const expiresAt = session?.expiresAt?.toMillis?.() ?? (typeof session?.expiresAt === 'number' ? session.expiresAt : new Date(session?.expiresAt).getTime());
+          if (session && expiresAt > Date.now()) {
+            const user = await repo.getUserById(session.userId);
             if (user && user.active !== false) {
               req.user = safeUser(user);
             }

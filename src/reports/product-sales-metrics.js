@@ -2,12 +2,15 @@ const { getBusinessDate } = require('./daily-executive-metrics');
 const minor = value => Number.isFinite(Number(value)) ? Math.round(Number(value) * 100) : 0;
 const quantityOf = item => Number(item.quantity ?? 1);
 const lineMinor = item => Number.isFinite(Number(item.subtotalMinor)) ? Math.round(Number(item.subtotalMinor)) : minor(Number(item.price ?? item.unitPrice ?? 0) * quantityOf(item));
-const unitOf = product => /^(KG|KILO|QUILOGRAMA)$/i.test(product.saleUnit || product.unit || '') ? 'kg' : 'un.';
+const unitOf = product => /^(KG|KILO|QUILOGRAMA)$/i.test(product.saleUnit?.code || product.saleUnit || product.unit || '') ? 'kg' : 'un.';
 const compareName = (left, right) => left.name.localeCompare(right.name, 'pt-BR');
 
-function rankProducts(products) {
+function rankProducts(products, includeUnits = true) {
   const list = [...products.values()].map(product => ({ ...product, quantity: Math.round(product.quantity * 1000) / 1000, revenue: product.revenueMinor / 100 }));
   return {
+    ...(includeUnits ? { byUnit: Object.fromEntries(['kg', 'un.'].map(unit => [unit, rankProducts(new Map([...products].filter(([, product]) => product.unit === unit)), false)])) } : {}),
+    unsoldWithStock: list.filter(item => item.quantity === 0 && item.stockQuantity > 0).length,
+    unsoldWithoutStock: list.filter(item => item.quantity === 0 && item.stockQuantity === 0).length,
     mostByQuantity: list.filter(item => item.quantity > 0).sort((a, b) => b.quantity - a.quantity || b.revenue - a.revenue || compareName(a, b)).slice(0, 10),
     mostByRevenue: list.filter(item => item.quantity > 0).sort((a, b) => b.revenue - a.revenue || b.quantity - a.quantity || compareName(a, b)).slice(0, 10),
     leastByQuantity: list.slice().sort((a, b) => a.quantity - b.quantity || a.revenue - b.revenue || compareName(a, b)).slice(0, 10),
@@ -22,7 +25,7 @@ function summarizeProductSales({ orders, catalog = [] }) {
   const months = new Map();
   const emptyProduct = (id, item) => {
     const definition = definitions.get(id) || {};
-    return { id, name: String(item.name || definition.name || 'Produto'), unit: unitOf({ ...definition, ...item }), category: String(item.category || definition.category || 'Outros'), quantity: 0, revenueMinor: 0 };
+    return { id, name: String(item.name || definition.name || 'Produto'), unit: unitOf({ ...definition, ...item }), category: String(item.category || definition.category || 'Outros'), quantity: 0, revenueMinor: 0, stockQuantity: Number.isFinite(Number(definition.stockQuantity ?? definition.estoque)) ? Number(definition.stockQuantity ?? definition.estoque) : null };
   };
   for (const product of catalog) {
     if (product.active === false || ['INATIVO', 'INACTIVE', 'ARCHIVED'].includes(String(product.status || '').toUpperCase())) continue;

@@ -24,7 +24,7 @@ class SystemStatusService {
     const firestore = await this.checkFirestoreStatus();
     return {
       timestamp: new Date().toISOString(),
-      overallStatus: firestore.status === 'ERROR' || whatsapp.status === 'ERROR' ? 'WARNING' : 'HEALTHY',
+      overallStatus: firestore.status !== 'ONLINE' || whatsapp.status !== 'VERIFIED' ? 'WARNING' : 'HEALTHY',
       diagnosticsDurationMs: Date.now() - start,
       whatsapp,
       firestore,
@@ -42,8 +42,8 @@ class SystemStatusService {
     const isFullyConfigured = hasPhoneId && hasToken && hasVerifyToken;
 
     return {
-      status: isFullyConfigured ? 'ONLINE' : 'LISTENING_LOCAL',
-      badge: isFullyConfigured ? 'Webhook & Cloud API Prontos' : 'Webhook Ativo (Simulador / Testes)',
+      status: this.whatsappClient?.lastConnectionCheck?.status || (isFullyConfigured ? 'CONFIGURED_UNVERIFIED' : 'NOT_CONFIGURED'),
+      badge: isFullyConfigured ? 'Configurado · conexão ainda precisa ser verificada' : 'WhatsApp não configurado',
       color: isFullyConfigured ? '#10b981' : '#3b82f6',
       webhookRoute: '/webhook',
       phoneNumberId: phoneId
@@ -54,8 +54,8 @@ class SystemStatusService {
       lastReceivedAt: this.webhookStats.lastReceivedAt || 'Nenhuma mensagem recente',
       totalReceivedCount: this.webhookStats.totalReceived,
       message: isFullyConfigured
-        ? 'Webhook Meta operando na rota /webhook e token de verificação validado com sucesso.'
-        : 'Webhook ouvindo requisições na rota /webhook. Simulador do WhatsApp 100% ativo.',
+        ? 'Credenciais presentes. Isso não comprova validade do token nem entrega de mensagens.'
+        : 'Preencha a configuração para habilitar envios reais.',
     };
   }
 
@@ -74,14 +74,14 @@ class SystemStatusService {
     }
 
     return {
-      status: isConnected ? 'ONLINE' : 'FALLBACK_MEMORY',
-      badge: isConnected ? 'Firestore Conectado' : 'Modo Memória Ativo',
+      status: isConnected ? 'ONLINE' : this.firestoreRepo?.isInMemory ? 'TEST_MEMORY' : 'ERROR',
+      badge: isConnected ? 'Firestore Conectado' : this.firestoreRepo?.isInMemory ? 'Memória isolada de testes' : 'Firestore indisponível',
       color: isConnected ? '#10b981' : '#3b82f6',
       projectId,
       latencyMs: Date.now() - start,
       message: isConnected
         ? `Banco de dados Firestore conectado com sucesso ao projeto [${projectId}].`
-        : 'Operando com repositório em memória e persistência em cache.',
+        : this.firestoreRepo?.isInMemory ? 'Ambiente isolado de testes.' : 'Persistência indisponível. Operações não devem ser confirmadas.',
     };
   }
 }

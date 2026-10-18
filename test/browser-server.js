@@ -1,5 +1,9 @@
 // Ambiente de teste isolado: nunca acessa serviços externos.
 process.env.NODE_ENV = "test";
+process.env.REQUEST_AUTH_LIMIT = '10000';
+process.env.PIX_MODE ||= "SICREDI";
+process.env.PIX_KEY ||= "52998224725";
+process.env.PIX_TITULAR ||= "Loja de teste";
 const { createApp } = require("../src/http/app");
 const { FirestoreRepository } = require("../src/database/firestore.repository");
 const repo = new FirestoreRepository({ isInMemory: true });
@@ -24,5 +28,6 @@ const { seedStores } = require('./storefront-fixture');
       catalogRepo: { items: [], refreshCatalog: async () => {} },
     },
   });
-  app.listen(8099, "127.0.0.1", () => console.log("Browser test server: 8099"));
+  const port = Number(process.env.BROWSER_TEST_PORT) || 8099;
+  app.listen(port, "127.0.0.1", () => console.log('Browser test server: ' + port));
 })();

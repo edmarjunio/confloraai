@@ -53,7 +53,7 @@
         this.sizeObserver = new window.ResizeObserver(this.updateSize); this.sizeObserver.observe(this.header);
       } else window.addEventListener('resize', this.updateSize);
       if (!this.hasAttribute('managed')) {
-        window.fetch('/api/auth/me').then(response => response.json()).then(data => { if (this.isConnected) this.user = data.user; }).catch(() => {});
+        window.ConfloraSession.apiFetch('/api/auth/me').then(response => response.json()).then(data => { if (this.isConnected) this.user = data.user; }).catch(() => {});
       }
     }
     attributeChangedCallback(name) {

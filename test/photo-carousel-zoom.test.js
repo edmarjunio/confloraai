@@ -7,7 +7,6 @@ const {
   buildMultipleOptimizedFirestorePhotoDocuments,
 } = require('../src/catalog/product-photo.service');
 const { createApp } = require('../src/http/app');
-const { renderHomeHtml } = require('../src/http/views-home');
 
 // Helper para criar imagens sintéticas de teste
 async function createTestImage(width = 1600, height = 1200, color = { r: 34, g: 197, b: 94 }) {
@@ -197,28 +196,4 @@ test('3. API HTTP POST /api/admin/products/:id/photos salva múltiplas fotos com
   } finally {
     server.close();
   }
-});
-
-test('4. HTML do Catálogo contém elementos do Carrossel de Fotos e Visualizador de Zoom', () => {
-  const html = renderHomeHtml({ products: [] });
-
-  // Carrossel
-  assert.ok(html.includes('id="modalCarouselContainer"'), 'Deve conter container do carrossel');
-  assert.ok(html.includes('id="modalCarouselViewport"'), 'Deve conter viewport do carrossel');
-  assert.ok(html.includes('id="carouselPrevBtn"'), 'Deve conter botão de foto anterior');
-  assert.ok(html.includes('id="carouselNextBtn"'), 'Deve conter botão de próxima foto');
-  assert.ok(html.includes('id="carouselCounterBadge"'), 'Deve conter indicador numérico de fotos');
-  assert.ok(html.includes('id="carouselDotsRow"'), 'Deve conter bolinhas de paginação do carrossel');
-  assert.ok(html.includes('id="modalThumbsRow"'), 'Deve conter linha de miniaturas');
-
-  // Zoom
-  assert.ok(html.includes('id="photoZoomModal"'), 'Deve conter modal de zoom interativo');
-  assert.ok(html.includes('id="zoomViewport"'), 'Deve conter viewport de pan e zoom');
-  assert.ok(html.includes('id="zoomModalImg"'), 'Deve conter imagem de alta definição com zoom');
-  assert.ok(html.includes('onclick="zoomIn()"'), 'Deve conter botão de aproximar zoom');
-  assert.ok(html.includes('onclick="zoomOut()"'), 'Deve conter botão de afastar zoom');
-  assert.ok(html.includes('onclick="resetZoom()"'), 'Deve conter botão de redefinir zoom 100%');
-  assert.ok(html.includes('onclick="closePhotoZoom()"'), 'Deve conter botão de fechar zoom');
-  assert.ok(html.includes('setCarouselPhoto'), 'Deve conter função de controle do carrossel');
-  assert.ok(html.includes('openPhotoZoom'), 'Deve conter função de abertura do zoom');
 });

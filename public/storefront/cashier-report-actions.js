@@ -29,7 +29,7 @@
       this.message.textContent = action === 'download' ? 'Preparando PDF…' : 'Enviando PDF…';
       const params = Object.fromEntries(['from', 'to'].map(key => [key, this.getAttribute(key)]).filter(([, value]) => value));
       try {
-        const response = await window.fetch(action === 'download' ? '/api/caixa/report.pdf?' + new URLSearchParams(params) : '/api/caixa/report/send-whatsapp', action === 'send' ? {
+        const response = await window.ConfloraSession.apiFetch(action === 'download' ? '/api/caixa/report.pdf?' + new URLSearchParams(params) : '/api/caixa/report/send-whatsapp', action === 'send' ? {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params),
         } : {});
         if (!response.ok) {

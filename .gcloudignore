@@ -24,3 +24,14 @@ y
 bun.lock
 bun.lockb
 src/dataconnect-admin-generated/
+.private/
+tmp/
+output/
+docs/
+*.bat
+*.ps1
+.audit-*.json
+.implementation-*.json
+.final-*.json
+.aistudio/
+.gmp_cache/

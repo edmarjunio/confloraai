@@ -16,7 +16,7 @@ function PdvDelivery({ user, onBack }) {
   const loading = useRef(false); const requested = useRef(false); const latest = useRef(null); const selectedRef = useRef(null); selectedRef.current = selected;
   const actionClass = 'cf-button !rounded-full !px-4 !py-2 text-xs';
   const request = async (url, body) => {
-    const response = await fetch(url, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
+    const response = await window.ConfloraSession.apiFetch(url, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
     const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Não foi possível atualizar a entrega.'); return result;
   };
   const refresh = async () => {
@@ -38,12 +38,9 @@ function PdvDelivery({ user, onBack }) {
     finally { loading.current = false; if (requested.current) { requested.current = false; refresh(); } }
   };
   useEffect(() => {
-    refresh(); const timer = setInterval(refresh, 20000);
-    const stream = window.ConfloraSession.openEventStream('/api/caixa/orders/stream');
-    stream.addEventListener('orders-changed', refresh); stream.addEventListener('stream-fallback', refresh);
-    const visible = () => { if (document.visibilityState === 'visible') refresh(); };
-    document.addEventListener('visibilitychange', visible);
-    return () => { clearInterval(timer); clearTimeout(pulseTimer.current); stream.close(); document.removeEventListener('visibilitychange', visible); };
+    refresh();
+    const stop = window.ConfloraSession.watchOrderUpdates(refresh);
+    return () => { stop(); clearTimeout(pulseTimer.current); };
   }, []);
   const act = async (order, action, payload = {}) => {
     if (busy) return;
@@ -97,7 +94,7 @@ function PdvDelivery({ user, onBack }) {
     {showRoute && <delivery-route-map key={selected.id} destination={JSON.stringify(selected.deliveryLocation || null)} address={selected.deliveryAddress || ''} />}
   </div>;
   return <main className="min-h-screen bg-[#F4F6F5] font-sans text-slate-800">
-    <PdvComponents.Topbar user={user} onCashier={onBack} /><header className="cf-page-toolbar"><div className="flex w-full flex-wrap items-center justify-between gap-3"><button type="button" className="cf-back-button" onClick={() => user.role === 'ENTREGADOR' ? window.ConfloraNavigation.back() : onBack()}>← Voltar</button><h1 className="text-xl font-black text-[#0F381E]">🛵 Entregas</h1><div className="flex flex-wrap items-center gap-3"><div className="text-right"><strong className="block text-sm">{user.name}</strong><span className="text-[10px] font-bold text-emerald-700">{user.role}</span></div><button type="button" className="cf-danger-button" onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }); window.location.reload(); }}>Sair</button></div></div></header>
+    <PdvComponents.Topbar user={user} onCashier={onBack} /><header className="cf-page-toolbar"><div className="flex w-full flex-wrap items-center justify-between gap-3"><button type="button" className="cf-back-button" onClick={() => user.role === 'ENTREGADOR' ? window.ConfloraNavigation.back() : onBack()}>← Voltar</button><h1 className="text-xl font-black text-[#0F381E]">🛵 Entregas</h1><div className="flex flex-wrap items-center gap-3"><div className="text-right"><strong className="block text-sm">{user.name}</strong><span className="text-[10px] font-bold text-emerald-700">{user.role}</span></div><button type="button" className="cf-danger-button" onClick={async () => { await window.ConfloraSession.apiFetch('/api/auth/logout', { method: 'POST' }); window.location.reload(); }}>Sair</button></div></div></header>
     <div className="cf-work-body mx-auto max-w-[1600px] p-4 sm:p-6">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-slate-600">Assuma o pedido, separe os produtos e toque em “Saí da horta”. Todos acompanham; somente o responsável ou Admin altera a entrega.</p><span role="status" className="rounded-full bg-emerald-100 px-3 py-2 text-xs font-bold text-emerald-800">● Atualização automática</span></div>
       {notice && <p role="status" className="cf-order-card--attention mb-4 rounded-xl bg-amber-100 p-3 font-bold">{notice}</p>}

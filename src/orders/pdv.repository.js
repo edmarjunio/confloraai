@@ -12,7 +12,7 @@ const { setInterval, clearInterval } = require('node:timers');
 class PdvRepository {
   constructor(repository) {
     this.repository = repository;
-    this.memory = new Map();
+    this.memory = repository.pdvMemory ||= new Map();
     this.queue = Promise.resolve();
   }
 
@@ -28,7 +28,7 @@ class PdvRepository {
       }));
     }
     if (!repo.isInMemory || repo.firestore) { throw new Error('Firestore indisponível. Operação não registrada.'); }
-    const operation = this.queue.then(async () => {
+    const operation = (repo.pdvQueue || this.queue).then(async () => {
       const collections = { orders: repo.inMemoryOrders, products: repo.inMemoryProducts, customers: repo.inMemoryCustomers, users: repo.inMemoryUsers, discount_approvals: repo.inMemoryDiscountApprovals };
       const writes = [];
       const mapFor = (collection) => {
@@ -56,10 +56,24 @@ class PdvRepository {
       return result;
     });
     this.queue = operation.catch(() => {});
+    repo.pdvQueue = this.queue;
     return operation;
   }
 
   async read(collection, id) { return this.transaction((tx) => tx.get(collection, id)); }
+
+  async expiredPixOrders() {
+    const repo = this.repository;
+    const now = new Date().toISOString();
+    const statuses = ['AWAITING_PAYMENT', 'CREATING_PIX', 'AWAITING_PIX', 'PENDING'];
+    if (repo.firestore && !repo._firestoreClientDisabled) {
+      const pages = await Promise.all(['pixExpiresAt', 'paymentExpiresAt'].map(field => repo.firestore.collection('orders')
+        .where('status', 'in', statuses).where(field, '<=', now).orderBy(field).limit(100).get()));
+      return [...new Map(pages.flatMap(page => page.docs.map(doc => [doc.id, { ...doc.data(), id: doc.id }]))).values()];
+    }
+    if (!repo.isInMemory || repo.firestore) throw new Error('Firestore indisponível.');
+    return [...repo.inMemoryOrders.values()].filter(order => statuses.includes(order.status) && Date.parse(order.pixExpiresAt || order.paymentExpiresAt || '') <= Date.parse(now)).slice(0, 100);
+  }
 
   async list(collection, field, value) {
     const repo = this.repository;
@@ -75,11 +89,16 @@ class PdvRepository {
   watchOpenOrders(onChange, onError = () => {}) {
     const repo = this.repository;
     if (repo.firestore && !repo._firestoreClientDisabled) {
-      return repo.firestore.collection('orders')
-        .where('status', 'in', ['AWAITING_CONFIRMATION', 'AWAITING_CASHIER', 'AWAITING_PAYMENT', 'CREATING_PIX', 'AWAITING_PIX', 'PENDING', 'CONFIRMED', 'PAID_CONFIRMED', 'DELIVERED'])
-        .onSnapshot((snapshot) => {
-          onChange(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id })));
-        }, onError);
+      const snapshots = new Map();
+      const queries = [
+        repo.firestore.collection('orders').where('status', 'in', ['AWAITING_CONFIRMATION', 'AWAITING_CASHIER', 'AWAITING_PAYMENT', 'CREATING_PIX', 'AWAITING_PIX', 'PENDING']).limit(1000),
+        repo.firestore.collection('orders').where('completedAt', '>=', new Date(Date.now() - 7 * 86400000).toISOString()).orderBy('completedAt', 'desc').limit(200),
+      ];
+      const stops = queries.map((query, index) => query.onSnapshot(snapshot => {
+        snapshots.set(index, snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+        onChange([...new Map([...snapshots.values()].flat().map(order => [order.id, order])).values()]);
+      }, onError));
+      return () => stops.forEach(stop => stop());
     }
     if (!repo.isInMemory || repo.firestore) {
       onError(new Error('Firestore indisponível para acompanhar comandas em tempo real.'));
@@ -311,6 +330,7 @@ class PdvRepository {
       if (finishDelivery) assertAssignedDelivery(order, receiver);
       if (receiver?.role === 'ENTREGADOR' && !canReceiveOrder(order, receiver)) throw new Error('Sem permissão para receber esta entrega.');
       if (order.completedAt) { return { ...order, alreadyConfirmed: true }; }
+      if (order.pixMode === 'MANUAL' && order.paymentProofId && verification?.manualPixProofId !== order.paymentProofId) throw new Error('O comprovante mudou. Atualize a comanda.');
       if (Date.parse(order.pixExpiresAt || order.paymentExpiresAt || '') <= Date.now()) {
         throw new Error('O prazo de pagamento venceu. Aguarde o cancelamento e a liberação do estoque.');
       }
@@ -389,9 +409,9 @@ class PdvRepository {
         ...(order.creditApprovalStatus === 'PENDING' && !onAccount ? { creditApprovalStatus: 'NOT_REQUIRED' } : {}),
         ...(onAccount && receiver?.role === 'ADMIN' ? { creditApprovalStatus: 'APPROVED', creditApprovedBy: receiver, creditApprovedAt: now } : {}),
         ...(isDelivery(order) && (!order.deliveryStatus || order.deliveryStatus === 'PENDING_DISPATCH') ? { deliveryStatus: 'PENDING_DELIVERY' } : {}),
-        ...(finishDelivery ? { deliveryStatus: 'DELIVERED', deliveredBy: receiver, deliveredAt: now, deliveryMetrics, deliveryHistory: recordDeliveryEvent(tx, order, 'DELIVERED', receiver, now) } : {}), paymentMethod, paymentParts: paymentParts.map((part) => ({ ...part, receivedBy, status: part.method === 'FIADO' ? 'ON_ACCOUNT' : 'APPROVED' })), receivedBy, cashierName: receivedBy.name, cashierEmail: receivedBy.email || '', status: 'CONFIRMED',
+        ...(finishDelivery ? { deliveryStatus: 'DELIVERED', deliveredBy: receiver, deliveredAt: now, deliveryMetrics, deliveryHistory: recordDeliveryEvent(tx, order, 'DELIVERED', receiver, now) } : {}), paymentMethod, paymentParts: paymentParts.map((part) => ({ ...part, receivedBy, receivedAt: part.receivedAt || (part.status === 'RECEIVED_AT_CASHIER' ? order.createdAt : now), status: part.method === 'FIADO' ? 'ON_ACCOUNT' : 'APPROVED' })), receivedBy, cashierName: receivedBy.name, cashierEmail: receivedBy.email || '', status: 'CONFIRMED',
         paymentStatus: onAccount ? 'ON_ACCOUNT' : 'APPROVED', paidAt: onAccount ? null : now,
-        completedAt: now, stockDeducted: true, stockDeductedAt: order.stockDeductedAt || now,
+        completedAt: now, ...(order.pixMode === 'MANUAL' ? { paymentReviewStatus: 'APPROVED' } : {}), stockDeducted: true, stockDeductedAt: order.stockDeductedAt || now,
         inventoryReserved: false, reservationReleasedAt: order.inventoryReserved ? now : order.reservationReleasedAt || '',
         verifiedVia: verification ? (verification.verifiedVia || 'SICREDI_PIX_WEBHOOK') : 'CAIXA', updatedAt: now,
         ...(amountFor('DINHEIRO') ? { cashReceived: tendered, changeGiven: (Math.round(tendered * 100) - Math.round(amountFor('DINHEIRO') * 100)) / 100 } : {}),

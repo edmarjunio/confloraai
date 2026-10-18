@@ -16,6 +16,7 @@ function canReceiveOrder(order, actor) {
   try { assertAssignedDelivery(order, actor); return true; } catch { return false; }
 }
 function canConfirmManualPix(order, actor) {
+  if (order?.pixMode === 'MANUAL') return ['ADMIN', 'CAIXA'].includes(actor?.role);
   if (canReceiveOrder(order, actor)) return true;
   if (actor?.role !== 'VENDEDOR' || !actor.id || order?.createdBy?.id !== actor.id) return false;
   return !order.pixData?.txid || (order.paymentParts || [{ method: order.paymentMethod }]).every(part => part.method === 'PIX');

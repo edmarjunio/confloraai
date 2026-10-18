@@ -325,7 +325,8 @@ test('WhatsApp failure is retried independently from the sale and resumes after 
   s.whatsapp.sendImageBuffer = async () => { s.sent.push({ image: true }); return { messages: [{ id: 'image' }] }; };
   await s.repository.updateMessage(`${order.id}-receipt`, { nextAttemptAt: 0 });
   await s.service.retryMessages();
-  assert.equal(s.sent.length, 2);
+  assert.equal(s.sent.filter(message => message.image || message.phone === order.customerPhone).length, 2);
+  assert.equal(s.sent.filter(message => message.text?.includes('NOVO PEDIDO')).length, 1);
   assert.equal((await s.repository.read('pdv_outbox', `${order.id}-receipt`)).status, 'SENT');
 });
 

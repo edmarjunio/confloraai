@@ -49,10 +49,11 @@ class PaymentProofStorage {
 async function requireManualProof(tx, verification, receiver, targetType, targetId) {
   const proofId = String(verification?.manualPixProofId || '');
   const proof = /^[a-f0-9-]{36}$/.test(proofId) ? await tx.get('payment_proofs', proofId) : null;
-  if (!proof || proof.uploadedBy !== receiver?.id || proof.targetType !== targetType || proof.targetId !== targetId) {
+  const customerProof = proof?.uploadedByCustomer === true && ['ADMIN', 'CAIXA'].includes(receiver?.role) && targetType === 'ORDER' && proof.uploadedBy === `customer-order:${targetId}`;
+  if (!proof || proof.rejectedAt || (!customerProof && proof.uploadedBy !== receiver?.id) || proof.targetType !== targetType || proof.targetId !== targetId) {
     throw new Error('Anexe obrigatoriamente a foto ou o PDF do comprovante deste pagamento.');
   }
   return { id: proof.id, fileName: proof.fileName, contentType: proof.contentType, size: proof.size };
 }
 
-module.exports = { PaymentProofStorage, requireManualProof, decodeProof };
+module.exports = { PaymentProofStorage, requireManualProof, decodeProof, privateBucket };

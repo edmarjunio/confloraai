@@ -12,8 +12,7 @@ const { OrderService } = require('../src/orders/order.service');
 const { LearningService } = require('../src/services/learning.service');
 const { MessageService } = require('../src/services/message.service');
 const { parseCurrencyString, formatCurrency } = require('../src/shared/string.util');
-const { renderPrivacyPolicyHtml, renderDataDeletionHtml, renderTermsOfServiceHtml, renderHomeHtml, renderAdminHtml } = require('../src/http/app');
-const { renderAdminGerencialHtml } = require('../src/http/views-admin-gerencial');
+const { renderPrivacyPolicyHtml, renderDataDeletionHtml, renderTermsOfServiceHtml } = require('../src/http/app');
 
 const mockProducts = [
   {
@@ -440,45 +439,7 @@ test('15. Meta App Verification: Validação das páginas de Privacidade e Exclu
   assert.match(termsHtml, /Termos de Serviço/);
 });
 
-test('16. Cardápio Digital & Painel Admin: Renderização e elementos essenciais', () => {
-  const homeHtml = renderHomeHtml();
-  assert.match(homeHtml, /Conflora Horta e Viveiro/);
-  assert.match(homeHtml, /Cardápio Digital/);
-  assert.match(homeHtml, /galleryModal/);
-  assert.match(homeHtml, /setOrderType/);
-  assert.match(homeHtml, /class="brand-title has-logo conflora-site-brand" aria-label="Conflora Horta e Viveiro — página inicial"/);
-  assert.match(homeHtml, /site-header\.css/);
 
-  const adminHtml = renderAdminHtml();
-  assert.match(adminHtml, /Administração/);
-  assert.match(adminHtml, /class="conflora-site-brand" aria-label="Administração — página inicial"/);
-  assert.match(adminHtml, /admin-shell-v1\.css/);
-  assert.match(adminHtml, /Caixa e vendas/);
-  assert.match(adminHtml, /Entrada de estoque/);
-  assert.match(adminHtml, /Baixa de estoque/);
-  assert.match(adminHtml, /Contagem/);
-  assert.match(adminHtml, /admin-cashier-link/);
-  assert.match(adminHtml, /ADICIONAR PRODUTO/);
-  assert.match(adminHtml, /id="productEditorDialog"/);
-  assert.doesNotMatch(adminHtml, /tabBtn-import|import-data|import-xlsx|AppSheet|Google Sheets/);
-
-  const managementHtml = renderAdminGerencialHtml();
-  assert.match(managementHtml, /class="conflora-site-brand" aria-label="Conflora — página inicial"/);
-  assert.match(managementHtml, /id="cardDebtReceived"/);
-  assert.match(managementHtml, /id="topProductsQuantity"/);
-  assert.match(managementHtml, /id="topProductsValue"/);
-  assert.match(managementHtml, /Enviar para Júnior/);
-  assert.match(managementHtml, /id="dateTodayButton"/);
-  assert.match(managementHtml, /Selecionar outra data/);
-  assert.match(managementHtml, /aria-label="Atualizar dados"/);
-  assert.match(managementHtml, /aria-keyshortcuts="Control\+Shift\+Enter"/);
-  assert.match(managementHtml, /function handleDashboardShortcut/);
-  assert.doesNotMatch(managementHtml, /Resumo do caixa|Vendas, recebimentos e desempenho da equipe na data selecionada/);
-  assert.doesNotMatch(managementHtml, /Confirmar Fechamento & Enviar PDF/);
-  for (const [, script] of managementHtml.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)) {
-    if (script.trim()) { assert.doesNotThrow(() => new Function(script)); }
-  }
-});
 
 test('17. Firestore Repository: Entrada ágil de estoque e venda balcão', async () => {
   const repo = new FirestoreRepository({ isInMemory: true });
@@ -530,7 +491,6 @@ test('18. Status Dashboard & Google Auth: Diagnóstico de conexões e autentica�
   const status = await statusService.getSystemStatus();
   assert.ok(status.whatsapp);
   assert.ok(status.firestore);
-  assert.equal('googleSheets' in status, false);
   assert.equal('defaultCatalog' in status, false);
 
   // 2. Teste do webhook

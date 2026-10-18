@@ -62,7 +62,7 @@ function trackStorefrontEvent(eventName, details = {}) {
     utmCampaign: analyticsCampaign.get("utm_campaign") || "",
     ...details,
   };
-  fetch("/api/analytics/events", {
+  window.ConfloraSession.apiFetch("/api/analytics/events", {
     method: "POST",
     credentials: "same-origin",
     keepalive: true,
@@ -593,7 +593,10 @@ historyDialog.addEventListener('close', () => clearTimeout(debtPixTimer));
 function renderDebtPayment(ledger) {
   const version = accountVersion;
   const section = element('section', { class: 'ledger-payment' });
-  if (Number(ledger.balance) > 0) {
+  if (Number(ledger.balance) > 0 && state.config?.checkout?.pix?.mode !== 'SICREDI') {
+    section.append(element('p', { role: 'status', text: 'Para quitar sua dívida por Pix, fale com a loja. O caixa confere o recebimento e atualiza seu saldo.' }));
+  }
+  if (Number(ledger.balance) > 0 && state.config?.checkout?.pix?.mode === 'SICREDI') {
     const amount = element('input', { type: 'number', min: '0.01', max: String(ledger.balance), step: '0.01', value: Number(ledger.balance).toFixed(2), 'aria-label': 'Valor da dívida a pagar' });
     const status = element('p', { role: 'status', class: 'muted' });
     const result = element('div');

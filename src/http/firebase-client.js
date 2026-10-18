@@ -19,7 +19,7 @@ function renderFirebaseAuthScript() {
       window.authenticateGoogle = async () => {
         const result = await signInWithPopup(auth, new GoogleAuthProvider());
         const idToken = await result.user.getIdToken();
-        const response = await fetch('/api/auth/google', {
+        const response = await window.ConfloraSession.apiFetch('/api/auth/google', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ idToken })

@@ -8,9 +8,11 @@ let cachedHtml = null;
 
 function renderCaixaHtml() {
   if (!cachedHtml || process.env.NODE_ENV === 'development') {
-    cachedHtml = fs.readFileSync(path.join(__dirname, 'views-caixa.html'), 'utf-8');
+    const manifest = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../public/pdv/dist/manifest.json'), 'utf8'));
+    cachedHtml = fs.readFileSync(path.join(__dirname, 'views-caixa.html'), 'utf-8')
+      .replace('__PDV_SCRIPT__', manifest.script).replace('__PDV_STYLES__', manifest.styles);
   }
-  return cachedHtml;
+  return cachedHtml.replace('__PIX_MODE__', JSON.stringify(require('../orders/pix-mode').pixMode()));
 }
 
 module.exports = {

@@ -7,7 +7,7 @@ test('menu abre no primeiro clique da home, navega pelas seções e Voltar retor
   await page.locator('#adminSettingsButton').click();
   const drawer = page.getByRole('dialog', { name: 'Navegação da loja' });
   await expect(drawer).toBeVisible();
-  for (const name of ['Caixa/Vendas', 'Comandas', 'Estoque', 'Produtos', 'Equipe', 'Teste do servidor', 'Eventos', 'Caixa', 'Entregas', 'Editar meu perfil', 'Personalizar minha loja']) await expect(drawer.getByRole('link', { name, exact: true })).toBeVisible();
+  for (const name of ['Caixa/Vendas', 'Comandas', 'Estoque', 'Produtos', 'Equipe', 'Sistema e erros', 'Eventos', 'Caixa', 'Entregas', 'Editar meu perfil', 'Personalizar minha loja']) await expect(drawer.getByRole('link', { name, exact: true })).toBeVisible();
   await drawer.getByRole('link', { name: 'Estoque', exact: true }).click();
   await expect(page.locator('#tab-stock')).toHaveClass(/active/);
   await expect(page.locator('.nav-tabs')).toHaveCount(0);

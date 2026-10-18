@@ -16,7 +16,7 @@ try {
     if ($FirebaseAppId -notlike "1:$($project.projectNumber):web:*") {
         throw 'FIREBASE_APP_ID deve pertencer ao projeto confloraai-dev.'
     }
-    foreach ($name in @('mercado-pago-access-token', 'mercado-pago-webhook-secret', 'conflora-admin-secret', 'conflora-task-secret')) {
+    foreach ($name in @('conflora-admin-secret', 'conflora-task-secret')) {
         $version = Get-DevGcloud -Arguments @('secrets', 'versions', 'describe', 'latest', "--secret=$name")
         if ($version.state -ne 'ENABLED') { throw "Secret sem versão ativa: $name" }
     }
@@ -32,7 +32,7 @@ try {
         FIREBASE_STORAGE_BUCKET = 'confloraai-dev.firebasestorage.app'
         FIREBASE_API_KEY = $FirebaseApiKey; FIREBASE_APP_ID = $FirebaseAppId
         CLOUD_TASKS_QUEUE = 'conflora-jobs-dev'; SERVICE_URL = 'https://confloraai-dev.web.app'
-        MERCADO_PAGO_EXPECT_LIVE_MODE = 'true'; WHATSAPP_AI_ENABLED = 'false'
+        PIX_MODE = 'MANUAL'; WHATSAPP_AI_ENABLED = 'false'
         STORE_STOCK_CONTROL_ENABLED = 'true'
     }
     $envFile = Join-Path ([IO.Path]::GetTempPath()) ("conflora-dev-env-" + [guid]::NewGuid() + '.json')
@@ -43,15 +43,15 @@ try {
             "--build-service-account=projects/$DevProject/serviceAccounts/$DevBuildAccount",
             '--allow-unauthenticated', '--min-instances=0', '--max-instances=2', '--memory=512Mi',
             "--env-vars-file=$envFile",
-            '--set-secrets=MERCADO_PAGO_ACCESS_TOKEN=mercado-pago-access-token:latest,MERCADO_PAGO_WEBHOOK_SECRET=mercado-pago-webhook-secret:latest,ADMIN_SECRET=conflora-admin-secret:latest,TASK_SECRET=conflora-task-secret:latest')
+            '--set-secrets=ADMIN_SECRET=conflora-admin-secret:latest,TASK_SECRET=conflora-task-secret:latest')
     } finally {
         if (Test-Path -LiteralPath $envFile) { Remove-Item -LiteralPath $envFile }
     }
     Invoke-DevFirebase -Arguments @('deploy', '--only', 'hosting,firestore:rules,storage', '--config', 'firebase.dev.json')
     $health = Invoke-RestMethod -Uri 'https://confloraai-dev.web.app/health'
-    if ($health.projectId -ne $DevProject -or $health.environment -ne 'dev' -or $health.expectedLiveMode -ne $true) {
+    if ($health.projectId -ne $DevProject -or $health.environment -ne 'dev' -or $health.paymentProvider -ne 'MANUAL') {
         throw 'A URL publicada não corresponde ao ambiente dev com Pix real.'
     }
     Write-Host 'Dev publicado: https://confloraai-dev.web.app'
-    Write-Host 'Webhook: https://confloraai-dev.web.app/webhooks/mercadopago'
+    Write-Host 'Webhook: https://confloraai-dev.web.app/webhooks/sicredi'
 } finally { Pop-Location }

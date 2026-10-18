@@ -15,8 +15,8 @@
   const tabId = read('conflora_tab_id_v1') || crypto.randomUUID();
   write('conflora_tab_id_v1', tabId);
   // Tenant authentication retains its separate, scoped contract.
-  if (tenant) { window.ConfloraSession = { tabId }; return; }
-  window.fetch = async (input, options = {}) => {
+  if (tenant) { window.ConfloraSession = { tabId, apiFetch: nativeFetch }; return; }
+  const apiFetch = async (input, options = {}) => {
     const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url, location.href);
     if (url.origin !== location.origin || !url.pathname.startsWith('/api/')) return nativeFetch(input, options);
     const headers = new window.Headers(input instanceof window.Request ? input.headers : undefined);
@@ -46,7 +46,7 @@
       if (closed) return;
       controller = new AbortController();
       try {
-        const response = await fetch(url, { signal: controller.signal, headers: { Accept: 'text/event-stream' } });
+        const response = await apiFetch(url, { signal: controller.signal, headers: { Accept: 'text/event-stream' } });
         if (!response.ok) throw new Error('Não foi possível acompanhar atualizações.');
         const reader = response.body.getReader(); const decoder = new window.TextDecoder(); let buffer = '';
         while (!closed) {
@@ -69,11 +69,27 @@
     events.close = () => { closed = true; clearTimeout(timer); controller?.abort(); };
     connect(); return events;
   }
+  function watchOrderUpdates(onChange) {
+    const stream = openEventStream('/api/caixa/orders/stream');
+    let fallbackTimer; let refreshTimer;
+    const refresh = () => {
+      if (document.visibilityState === 'hidden' || refreshTimer) return;
+      refreshTimer = setTimeout(() => { refreshTimer = null; onChange(); }, 100);
+    };
+    const connected = () => { window.clearInterval(fallbackTimer); fallbackTimer = null; refresh(); };
+    const fallback = () => { if (!fallbackTimer) fallbackTimer = window.setInterval(refresh, 30000); };
+    const visible = () => { if (document.visibilityState === 'visible') refresh(); };
+    stream.addEventListener('orders-changed', connected);
+    stream.addEventListener('stream-fallback', fallback);
+    stream.addEventListener('error', fallback);
+    document.addEventListener('visibilitychange', visible);
+    return () => { window.clearInterval(fallbackTimer); clearTimeout(refreshTimer); stream.close(); document.removeEventListener('visibilitychange', visible); };
+  }
   async function openPrivateFile(url) {
     const preview = window.open('about:blank', '_blank');
     if (preview) preview.opener = null;
     try {
-      const response = await fetch(url);
+      const response = await apiFetch(url);
       if (!response.ok) throw new Error('Não foi possível abrir o comprovante.');
       const objectUrl = URL.createObjectURL(await response.blob());
       if (preview) preview.location.href = objectUrl;
@@ -81,5 +97,5 @@
       setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
     } catch (error) { preview?.close(); throw error; }
   }
-  window.ConfloraSession = { tabId, openEventStream, openPrivateFile };
+  window.ConfloraSession = { tabId, apiFetch, openEventStream, watchOrderUpdates, openPrivateFile };
 })();

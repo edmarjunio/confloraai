@@ -23,7 +23,7 @@ const checks = [
   ['GCP_PROJECT_ID', Boolean(config.gcp.projectId)],
   ['GCP_REGION', Boolean(config.gcp.region)],
   ['CLOUD_TASKS_QUEUE', Boolean(config.tasks.queue)],
-  ['PDV_WORKER_SECRET', Boolean(process.env.PDV_WORKER_SECRET)],
+  ['PDV_WORKER_SECRET ou TASK_SECRET', Boolean(process.env.PDV_WORKER_SECRET || process.env.TASK_SECRET)],
 ];
 
 for (const [name, configured] of checks) {

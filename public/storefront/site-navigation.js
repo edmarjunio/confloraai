@@ -1,6 +1,6 @@
 /* Shared navigation and dismissal behavior for the catalog and staff screens. */
 (() => {
-  const adminPages = [['Caixa/Vendas', 'cashier'], ['Comandas', 'orders'], ['Estoque', 'stock'], ['Produtos', 'products'], ['Equipe', 'team'], ['Teste do servidor', 'status'], ['Eventos', 'analytics']];
+  const adminPages = [['Caixa/Vendas', 'cashier'], ['Comandas', 'orders'], ['Estoque', 'stock'], ['Produtos', 'products'], ['Equipe', 'team'], ['Sistema e erros', 'status'], ['Eventos', 'analytics']];
   function destinations(user) {
     const role = user?.role;
     const links = [['Página inicial', '/']];
@@ -16,7 +16,7 @@
   async function logout(button) {
     button.disabled = true;
     try {
-      const response = await fetch('/api/auth/logout', { method: 'POST' });
+      const response = await window.ConfloraSession.apiFetch('/api/auth/logout', { method: 'POST' });
       if (!response.ok) throw new Error('Não foi possível sair. Tente novamente.');
       if (window.signOutGoogle) await window.signOutGoogle().catch(() => {});
       location.assign('/');

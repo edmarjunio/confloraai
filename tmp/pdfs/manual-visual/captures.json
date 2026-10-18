@@ -1,0 +1,239 @@
+{
+  "login": {
+    "x": 0,
+    "y": 0,
+    "width": 1280,
+    "height": 820,
+    "pins": [
+      {
+        "n": 1,
+        "x": 956.078125,
+        "y": 29.5
+      },
+      {
+        "n": 2,
+        "x": 492,
+        "y": 582.5
+      },
+      {
+        "n": 3,
+        "x": 861.5625,
+        "y": 29.5
+      }
+    ]
+  },
+  "inicio": {
+    "x": 0,
+    "y": 0,
+    "width": 1280,
+    "height": 820,
+    "pins": [
+      {
+        "n": 1,
+        "x": 223,
+        "y": 33
+      },
+      {
+        "n": 2,
+        "x": 1014.5625,
+        "y": 27.5
+      },
+      {
+        "n": 3,
+        "x": 1228,
+        "y": 27.5
+      }
+    ]
+  },
+  "menu": {
+    "x": 900,
+    "y": 0,
+    "width": 380,
+    "height": 820,
+    "pins": []
+  },
+  "sacola": {
+    "x": 940,
+    "y": 0,
+    "width": 340,
+    "height": 820,
+    "pins": []
+  },
+  "pix-cliente": {
+    "x": 16.4375,
+    "y": 32.796875,
+    "width": 1247.109375,
+    "height": 754.390625,
+    "pins": []
+  },
+  "pix-enviado": {
+    "x": 16.4375,
+    "y": 32.796875,
+    "width": 1247.109375,
+    "height": 754.390625,
+    "pins": []
+  },
+  "caixa": {
+    "x": 0,
+    "y": 0,
+    "width": 1280,
+    "height": 820,
+    "pins": [
+      {
+        "n": 1,
+        "x": 600,
+        "y": 405.59375
+      },
+      {
+        "n": 2,
+        "x": 1086.125,
+        "y": 207
+      },
+      {
+        "n": 3,
+        "x": 881,
+        "y": 752.75
+      }
+    ]
+  },
+  "cliente": {
+    "x": 416,
+    "y": 79.59375,
+    "width": 448,
+    "height": 660.796875,
+    "pins": []
+  },
+  "comandas": {
+    "x": 0,
+    "y": 0,
+    "width": 1280,
+    "height": 820,
+    "pins": []
+  },
+  "pix-conferencia": {
+    "x": 352,
+    "y": 41,
+    "width": 576,
+    "height": 738,
+    "pins": []
+  },
+  "relatorio": {
+    "x": 0,
+    "y": 0,
+    "width": 1280,
+    "height": 820,
+    "pins": []
+  },
+  "receber": {
+    "x": 352,
+    "y": 62.203125,
+    "width": 576,
+    "height": 695.59375,
+    "pins": []
+  },
+  "historico": {
+    "x": 0,
+    "y": 0,
+    "width": 1280,
+    "height": 820,
+    "pins": []
+  },
+  "admin-cashier": {
+    "x": 0,
+    "y": 0,
+    "width": 1280,
+    "height": 820,
+    "pins": []
+  },
+  "admin-products": {
+    "x": 0,
+    "y": 0,
+    "width": 1280,
+    "height": 820,
+    "pins": []
+  },
+  "admin-stock": {
+    "x": 0,
+    "y": 0,
+    "width": 1280,
+    "height": 820,
+    "pins": []
+  },
+  "admin-team": {
+    "x": 0,
+    "y": 0,
+    "width": 1280,
+    "height": 820,
+    "pins": []
+  },
+  "admin-status": {
+    "x": 0,
+    "y": 0,
+    "width": 1280,
+    "height": 820,
+    "pins": []
+  },
+  "admin-analytics": {
+    "x": 0,
+    "y": 0,
+    "width": 1280,
+    "height": 820,
+    "pins": []
+  },
+  "produto": {
+    "x": 150,
+    "y": 16,
+    "width": 980,
+    "height": 788,
+    "pins": []
+  },
+  "importacao": {
+    "x": 0,
+    "y": 0,
+    "width": 1131.640625,
+    "height": 268.046875,
+    "pins": []
+  },
+  "equipe-cadastro": {
+    "x": 0,
+    "y": 0,
+    "width": 1280,
+    "height": 820,
+    "pins": []
+  },
+  "estoque-ajuste": {
+    "x": 380,
+    "y": 138.46875,
+    "width": 520,
+    "height": 543.046875,
+    "pins": []
+  },
+  "gerencial": {
+    "x": 0,
+    "y": 0,
+    "width": 1280,
+    "height": 820,
+    "pins": []
+  },
+  "rankings": {
+    "x": 0,
+    "y": 0,
+    "width": 1280,
+    "height": 820,
+    "pins": []
+  },
+  "fechamento": {
+    "x": 0,
+    "y": 0,
+    "width": 1280,
+    "height": 820,
+    "pins": []
+  },
+  "entregas": {
+    "x": 0,
+    "y": 0,
+    "width": 1280,
+    "height": 820,
+    "pins": []
+  }
+}

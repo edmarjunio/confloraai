@@ -5,23 +5,7 @@ function renderAdminGerencialHtml() {
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <script>
-    (function() {
-      try {
-        var _fetch = typeof window !== 'undefined' ? window.fetch : null;
-        var _current = _fetch ? _fetch.bind(window) : null;
-        var desc = {
-          get: function() { return _current; },
-          set: function(fn) { _current = fn; },
-          configurable: true,
-          enumerable: true
-        };
-        try { Object.defineProperty(window, 'fetch', desc); } catch (_) {}
-        try { if (typeof Window !== 'undefined' && Window.prototype) Object.defineProperty(Window.prototype, 'fetch', desc); } catch (_) {}
-        try { if (typeof window !== 'undefined' && window.__proto__) Object.defineProperty(window.__proto__, 'fetch', desc); } catch (_) {}
-      } catch (_) {}
-    })();
-  </script>
+  <script src="/store-assets/error-monitor.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Conflora — Fechamento diário</title>
   <script src="/store-assets/tab-session.js"></script>
@@ -575,6 +559,8 @@ function renderAdminGerencialHtml() {
       <p class="seasonal-mobile-hint period-empty">Deslize a tabela para o lado para ver os produtos líderes.</p><div class="seasonal-scroll"><table class="seasonal-table"><thead><tr><th>Mês</th><th>Vendas</th><th>Comparação anual</th><th>Líder em quantidade</th><th>Líder em valor</th></tr></thead><tbody id="monthlyLeaders"></tbody></table></div>
     </section>
       <h2 class="panel-title">Produtos no período selecionado</h2>
+      <label class="period-date">Unidade do ranking<select id="rankingUnit" aria-label="Unidade do ranking" onchange="if(lastPeriodResult)renderPeriodMetrics(lastPeriodResult)"><option value="all">Todas (medidas diferentes)</option><option value="kg">Quilos</option><option value="un.">Unidades</option></select></label>
+      <p class="period-empty">Margem, perdas e cobertura de estoque: indisponíveis até registrar custos e histórico de disponibilidade. Nenhuma previsão é estimada sem esses dados.</p>
       <div class="details-grid product-rankings">
         <section class="panel-card"><h3>Mais vendidos · quantidade</h3><div id="periodProducts" class="period-list"></div></section>
         <section class="panel-card"><h3>Mais vendidos · valor</h3><div id="periodProductsValue" class="period-list"></div></section>
@@ -719,6 +705,7 @@ function renderAdminGerencialHtml() {
   <script>
     let periodComparisonMode = 'month';
     let periodRequestVersion = 0;
+    let lastPeriodResult = null;
     let seasonalRequestVersion = 0;
     document.addEventListener('DOMContentLoaded', initializeDashboard);
     document.addEventListener('keydown', handleDashboardShortcut);
@@ -730,7 +717,7 @@ function renderAdminGerencialHtml() {
       document.getElementById('seasonalYear').value = getBusinessToday().slice(0,4);
       updateDateButtonLabel();
       try {
-        const response = await fetch('/api/auth/me');
+        const response = await window.ConfloraSession.apiFetch('/api/auth/me');
         const data = await response.json();
         if (response.ok && data.user && data.user.role === 'ADMIN') {
           document.getElementById('btnSendReport').hidden = false;
@@ -787,6 +774,7 @@ function renderAdminGerencialHtml() {
     }
 
     function renderPeriodMetrics(result) {
+      lastPeriodResult = result;
       const current = result.current || {};
       const comparison = result.comparison || {};
       document.getElementById('periodSales').textContent = formatCurrency(current.sales);
@@ -823,12 +811,14 @@ function renderAdminGerencialHtml() {
         ? paymentRows.map((payment) => '<div class="period-row"><span class="period-row-label">' + payment.label + '</span><span class="period-row-label">Vendas ' + formatCurrency(payment.sales) + ' · recebimentos ' + formatCurrency(payment.receipts) + '</span><strong>' + (payment.orderCount || 0) + ' venda(s)</strong></div>').join('')
         : '<span class="period-empty">Nenhuma venda ou recebimento no período.</span>';
 
-      const rankings = current.rankings || {};
+      const allRankings = current.rankings || {};
+      const unit = document.getElementById('rankingUnit').value;
+      const rankings = unit === 'all' ? allRankings : allRankings.byUnit?.[unit] || {};
       renderPeriodProducts('periodProducts', rankings.mostByQuantity || current.topProducts || []);
       renderPeriodProducts('periodProductsValue', rankings.mostByRevenue || []);
       renderPeriodProducts('periodLeastQuantity', rankings.leastByQuantity || []);
       renderPeriodProducts('periodLeastValue', rankings.leastByRevenue || []);
-      document.getElementById('unsoldProductsNote').textContent = (rankings.unsoldCount || 0) + ' produto(s) ativo(s) sem venda neste período. Os rankings de menor venda incluem esses produtos.';
+      document.getElementById('unsoldProductsNote').textContent = (rankings.unsoldCount || 0) + ' produto(s) ativo(s) sem venda neste período. ' + (rankings.unsoldWithStock || 0) + ' com estoque; ' + (rankings.unsoldWithoutStock || 0) + ' sem estoque. Saldo atual não informa a disponibilidade histórica.';
 
       let series = Array.isArray(current.daily) ? current.daily : [];
       if (series.length > 31) {
@@ -889,7 +879,7 @@ function renderAdminGerencialHtml() {
       try {
         const today = getBusinessToday();
         const to = year === Number(today.slice(0,4)) ? today : year + '-12-31';
-        const response = await fetch('/api/admin/executive-period-metrics?from=' + year + '-01-01&to=' + to + '&comparisonMode=year');
+        const response = await window.ConfloraSession.apiFetch('/api/admin/executive-period-metrics?from=' + year + '-01-01&to=' + to + '&comparisonMode=year');
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Não foi possível carregar o histórico.');
         if (version !== seasonalRequestVersion) return;
@@ -924,7 +914,7 @@ function renderAdminGerencialHtml() {
       button.disabled = true;
       document.getElementById('periodStatus').textContent = 'Carregando vendas e recebimentos…';
       try {
-        const response = await fetch('/api/admin/executive-period-metrics?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to) + '&comparisonMode=' + periodComparisonMode);
+        const response = await window.ConfloraSession.apiFetch('/api/admin/executive-period-metrics?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to) + '&comparisonMode=' + periodComparisonMode);
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Não foi possível carregar o período.');
         if (requestVersion === periodRequestVersion) renderPeriodMetrics(data);
@@ -993,7 +983,7 @@ function renderAdminGerencialHtml() {
       refreshButton.disabled = true;
       refreshButton.classList.add('is-loading');
       try {
-        const res = await fetch('/api/admin/executive-metrics?date=' + encodeURIComponent(date));
+        const res = await window.ConfloraSession.apiFetch('/api/admin/executive-metrics?date=' + encodeURIComponent(date));
         if (res.status === 401 || res.status === 403) {
           showToast('Acesso restrito ao Administrador.');
           return;
@@ -1078,7 +1068,7 @@ function renderAdminGerencialHtml() {
       button.disabled = true;
       button.innerHTML = '<span class="loading-spinner"></span> Enviando relatório...';
       try {
-        const response = await fetch('/api/admin/executive-metrics/send-whatsapp', {
+        const response = await window.ConfloraSession.apiFetch('/api/admin/executive-metrics/send-whatsapp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ date: document.getElementById('reportDate').value }),
@@ -1102,10 +1092,10 @@ function renderAdminGerencialHtml() {
       button.disabled = true;
       button.textContent = 'Registrando fechamento...';
       try {
-        const response = await fetch('/api/admin/cashier/close-day', {
+        const response = await window.ConfloraSession.apiFetch('/api/admin/cashier/close-day', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ date }),
+          body: JSON.stringify({ date, requestId: sessionStorage.getItem('closing:' + date) || (() => { const id = crypto.randomUUID(); sessionStorage.setItem('closing:' + date, id); return id; })() }),
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Não foi possível registrar o fechamento.');
