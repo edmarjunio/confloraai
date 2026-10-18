@@ -396,7 +396,7 @@ function renderAdminHtml(storeConfig) {
               <input type="file" id="formProdCameraFile" accept="image/*" capture="environment" onchange="handleProdPhotoFileSelect(event)" />
             </label>
           </div>
-          <div style="font-size:10px; color:#15803d; margin-top:2px;">⚡ <strong>Qualidade Máxima &amp; Zoom HD:</strong> Fotos são otimizadas no servidor antes do envio ao Firebase Storage e ficam disponíveis no catálogo.</div>
+          <div style="font-size:10px; color:#15803d; margin-top:2px;">⚡ <strong>Qualidade Máxima &amp; Zoom HD:</strong> Os arquivos originais são preservados no armazenamento. Clique na foto para ampliar; use as setas para ordenar. A primeira foto é a capa.</div>
           <div id="formProdPhotoPreviewBox" style="display:none; margin-top:8px; padding:10px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
               <div style="font-size:12px; font-weight:bold; color:#14532d;">📸 Galeria de Fotos (<span id="formProdPhotoCount">0</span> foto(s)):</div>
@@ -856,7 +856,7 @@ function renderAdminHtml(storeConfig) {
             <td>\${itemsTxt}</td>
             <td>\${escapeHtml(o.paymentMethod || 'PIX')}</td>
             <td><strong>R$ \${Number(o.total || 0).toFixed(2).replace('.', ',')}</strong></td>
-            <td><span class="badge \${o.status === 'CONFIRMED' ? 'badge-confirmed' : 'badge-pending'}">\${escapeHtml(o.status)}</span></td>
+            <td><span class="badge \${o.status === 'CONFIRMED' ? 'badge-confirmed' : 'badge-pending'}">\${escapeHtml(({ AWAITING_PAYMENT: 'AGUARDANDO PAGAMENTO', AWAITING_CASHIER: 'AGUARDANDO PAGAMENTO', AWAITING_PIX: 'AGUARDANDO PAGAMENTO PIX', CREATING_PIX: 'PREPARANDO PIX', AWAITING_CONFIRMATION: 'AGUARDANDO CONFIRMAÇÃO', CONFIRMED: 'CONFIRMADO', PAID_CONFIRMED: 'PAGO', DELIVERED: 'ENTREGUE', CANCELLED: 'CANCELADO', PENDING: 'PENDENTE' })[o.status] || 'EM ANDAMENTO')}</span></td>
             <td>
               <button class="action-btn btn-amber" style="padding:4px 8px;" onclick="openAlterationModal('\${o.id}')" title="Corrigir se errou no lançamento">✏️ Corrigir Venda</button>
             </td>
@@ -1875,19 +1875,67 @@ function renderAdminHtml(storeConfig) {
 
         card.innerHTML =
           '<div style="position:relative; width:100%; height:80px; border-radius:6px; overflow:hidden; background:#f1f5f9;">' +
-            '<img src="' + imgSrc + '" style="width:100%; height:100%; object-fit:cover;" alt="Foto" />' +
+            '<img src="' + escapeHtml(imgSrc) + '" style="width:100%; height:100%; object-fit:cover;" alt="Foto" />' +
             badge +
           '</div>' +
-          '<div style="font-size:10px; font-weight:bold; color:#334155; width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:center;" title="' + label + '">' +
-            label +
+          '<div style="font-size:10px; font-weight:bold; color:#334155; width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:center;" title="' + escapeHtml(label) + '">' +
+            escapeHtml(label) +
           '</div>' +
           '<div style="display:flex; gap:4px; width:100%; justify-content:center; margin-top:2px;">' +
             capaBtn +
             '<button type="button" onclick="removePendingPhoto(' + index + ')" title="Remover esta foto" style="font-size:10px; padding:2px 6px; border:1px solid #fecaca; border-radius:4px; background:#fef2f2; color:#dc2626; cursor:pointer;">🗑️</button>' +
           '</div>';
 
+        if (isPrimary) card.style.gridColumn = '1 / -1';
+        const preview = card.querySelector('img');
+        preview.parentElement.style.height = isPrimary ? '280px' : '120px';
+        preview.style.objectFit = 'contain';
+        const expand = document.createElement('button');
+        expand.type = 'button';
+        expand.setAttribute('aria-label', 'Ampliar foto ' + (index + 1));
+        expand.style.cssText = 'display:block;width:100%;height:100%;padding:0;border:0;background:transparent;cursor:zoom-in';
+        preview.replaceWith(expand);
+        expand.appendChild(preview);
+        expand.onclick = () => openProductPhoto(imgSrc, label);
+        const actions = card.lastElementChild;
+        [-1, 1].forEach(direction => {
+          const move = document.createElement('button');
+          move.type = 'button';
+          move.textContent = direction < 0 ? '←' : '→';
+          move.title = direction < 0 ? 'Mover foto antes' : 'Mover foto depois';
+          move.disabled = index + direction < 0 || index + direction >= pendingPhotosList.length;
+          move.onclick = () => {
+            [pendingPhotosList[index], pendingPhotosList[index + direction]] = [pendingPhotosList[index + direction], pendingPhotosList[index]];
+            renderPendingPhotosGrid();
+          };
+          actions.appendChild(move);
+        });
         grid.appendChild(card);
       });
+    }
+
+    function openProductPhoto(url, label) {
+      const dialog = document.createElement('dialog');
+      dialog.setAttribute('aria-label', 'Foto ampliada do produto');
+      dialog.style.cssText = 'position:fixed;inset:0;margin:auto;width:100vw;height:100dvh;max-width:none;max-height:none;padding:20px;border:0;background:#101810;color:white';
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.textContent = 'Fechar ✕';
+      close.style.cssText = 'position:absolute;right:20px;top:20px;padding:12px 20px;z-index:1;border-radius:24px;background:white;color:#123b25';
+      close.onclick = () => dialog.close();
+      const image = document.createElement('img');
+      image.src = url;
+      image.alt = label;
+      image.style.cssText = 'display:block;width:100%;height:100%;object-fit:contain;cursor:zoom-in';
+      image.onclick = () => {
+        const zoomed = image.dataset.zoomed === 'true';
+        image.dataset.zoomed = String(!zoomed);
+        image.style.cssText = zoomed ? 'display:block;width:100%;height:100%;object-fit:contain;cursor:zoom-in' : 'display:block;max-width:none;width:auto;height:auto;cursor:zoom-out';
+      };
+      dialog.append(close, image);
+      dialog.addEventListener('close', () => dialog.remove(), { once: true });
+      document.body.appendChild(dialog);
+      dialog.showModal();
     }
 
     function setPrimaryPendingPhoto(index) {
@@ -1925,7 +1973,7 @@ function renderAdminHtml(storeConfig) {
       const id = document.getElementById('formProdId').value || 'novo';
       const oversizedFile = files.find((file) => file.size > 20 * 1024 * 1024);
       if (oversizedFile) {
-        alert('Cada foto deve ter até 20 MB. A imagem original será otimizada no servidor.');
+        alert('Cada foto deve ter até 20 MB. O arquivo original será preservado.');
         return;
       }
       const tagsInput = document.getElementById('formProdTags');
@@ -1947,6 +1995,7 @@ function renderAdminHtml(storeConfig) {
         };
         pendingPhotosList.push(upload);
       });
+      renderPendingPhotosGrid();
     }
 
     let productUnitTouched = false;
@@ -1996,7 +2045,7 @@ function renderAdminHtml(storeConfig) {
         ? p.images.filter(Boolean)
         : (p.imageUrl || p.imageurl ? [p.imageUrl || p.imageurl] : []);
 
-      existingImgs.filter(isStoredProductImageUrl).forEach((url, i) => {
+      existingImgs.map(image => typeof image === 'string' ? image : image.url).filter(url => url && (url.startsWith('https://') || url.startsWith('http://') || url.startsWith('/api/images/'))).forEach((url, i) => {
         pendingPhotosList.push({
           url,
           dataUrl: url,

@@ -457,3 +457,7 @@ cf-card[data-order-card] > button:first-child {
 @media (prefers-reduced-motion: reduce) {
   cf-card[data-order-card], cf-card[data-order-card]:hover { transition: none; transform: none; }
 }
+
+.cf-cashier-board > section { flex: 1 0 280px; min-width: 280px; }
+#todayOrdersTable th, #todayOrdersTable td { white-space: nowrap; width: 1%; }
+#todayOrdersTable th:nth-child(3), #todayOrdersTable td:nth-child(3) { white-space: normal; width: auto; min-width: 240px; }

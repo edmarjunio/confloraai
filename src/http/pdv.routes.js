@@ -1,4 +1,4 @@
-const { financialReceiver, isDelivery, assertAssignedDelivery, canConfirmManualPix } = require('../orders/delivery-policy');
+const { financialReceiver, isDelivery, isDeliverySettled, assertAssignedDelivery, canConfirmManualPix } = require('../orders/delivery-policy');
 const { PaymentProofStorage } = require('../orders/payment-proof');
 const { timingSafeEqual, randomUUID } = require('node:crypto');
 const { PdvRepository } = require('../orders/pdv.repository');
@@ -200,8 +200,16 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     const canViewOpenOrder = (order) => canViewPersonalOrder(order) || (req.user.role === 'CAIXA' && !order.completedAt && order.status !== 'CANCELLED');
     const openOrders = orders.filter((order) => !order.completedAt && order.status !== 'CANCELLED' &&
       canViewOpenOrder(order));
+    const activeDeliveries = orders.filter(order => isDelivery(order) && order.status !== 'CANCELLED' &&
+      order.deliveryStatus !== 'DELIVERED' && (canViewPersonalOrder(order) || req.user.role === 'CAIXA') &&
+      order.creditApprovalStatus !== 'PENDING' &&
+      (['PREPARING_DELIVERY', 'OUT_FOR_DELIVERY'].includes(order.deliveryStatus) ||
+        (order.paymentMethod !== 'PIX' && !(order.paymentParts || []).some(part => ['PIX', 'FIADO'].includes(part.method))) || isDeliverySettled(order)));
+    const awaitingDriver = activeDeliveries.filter(order => ['PENDING_DELIVERY', 'PENDING_DISPATCH', 'PREPARING_DELIVERY'].includes(order.deliveryStatus));
+    const outForDelivery = activeDeliveries.filter(order => order.deliveryStatus === 'OUT_FOR_DELIVERY');
+    const deliveryIds = new Set([...awaitingDriver, ...outForDelivery].map(order => order.id));
     const pendingConfirmation = openOrders.filter((order) => order.status === 'AWAITING_CONFIRMATION');
-    const pendingPayment = openOrders.filter((order) => ['AWAITING_CASHIER', 'AWAITING_PAYMENT', 'CREATING_PIX', 'AWAITING_PIX', 'PENDING'].includes(order.status));
+    const pendingPayment = openOrders.filter((order) => !deliveryIds.has(order.id) && ['AWAITING_CASHIER', 'AWAITING_PAYMENT', 'CREATING_PIX', 'AWAITING_PIX', 'PENDING'].includes(order.status));
     const history = orders.filter((order) => canViewPersonalOrder(order) && isWithinRange(order.paidAt || order.completedAt || order.createdAt, range));
     const completed = history.filter((order) => order.completedAt && order.status !== 'CANCELLED');
     const confirmed = completed.filter((order) => order.paymentStatus === 'ON_ACCOUNT');
@@ -237,6 +245,8 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
       pendingPayment,
       confirmed,
       paid,
+      awaitingDriver,
+      outForDelivery,
       history: history.sort((a, b) => String(b.paidAt || b.completedAt || b.createdAt).localeCompare(String(a.paidAt || a.completedAt || a.createdAt))),
       debtHistory: debtHistory.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))),
       metrics: {
@@ -252,7 +262,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     const order = await store.read('orders', req.params.id);
     const canViewOrder = order && (
       req.user.role === 'ADMIN' || order.createdBy?.id === req.user.id || financialReceiver(order)?.id === req.user.id ||
-      (req.user.role === 'CAIXA' && !order.completedAt && order.status !== 'CANCELLED')
+      (req.user.role === 'CAIXA' && (!order.completedAt || isDelivery(order) && order.deliveryStatus !== 'DELIVERED') && order.status !== 'CANCELLED')
     );
     if (!order || !['PDV', 'WEB_CATALOG'].includes(order.source) || !canViewOrder) { throw new Error('Comanda não encontrada para este usuário.'); }
     return order;

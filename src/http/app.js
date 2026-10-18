@@ -2302,6 +2302,7 @@ function createApp({
           quality: quality ? parseInt(quality, 10) : undefined,
           format,
           preserveZoomQuality: true,
+          preserveOriginal: true,
         });
 
         const storedImage = await messageService.firestoreRepo.uploadProductImage(photoDoc);

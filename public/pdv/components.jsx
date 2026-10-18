@@ -96,7 +96,7 @@ window.PdvComponents = (() => {
     return data;
   }
   function Panel({ title, onClose, children, layer = 50 }) {
-    return <div style={{ zIndex: layer }} className="fixed inset-0 bg-black/40 flex items-center justify-center p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section role="dialog" aria-modal="true" aria-label={title} className="bg-white rounded-3xl p-6 w-full max-w-xl max-h-[90vh] overflow-auto"><div className="flex justify-between gap-4 mb-4"><h2 className="font-bold text-xl">{title}</h2><button onClick={onClose} aria-label="Fechar">✕</button></div>{children}</section></div>;
+    return <div style={{ zIndex: layer }} className="fixed inset-0 bg-black/40 flex items-center justify-center p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section role="dialog" aria-modal="true" aria-label={title} className="bg-white rounded-3xl p-4 w-full max-w-xl max-h-[90vh] overflow-hidden flex flex-col"><div className="flex shrink-0 justify-between gap-4 mb-4"><h2 className="font-bold text-xl">{title}</h2><button onClick={onClose} aria-label="Fechar">✕</button></div><div className="min-h-0 overflow-y-auto px-2 pb-2" style={{ scrollbarGutter: 'stable' }}>{children}</div></section></div>;
   }
   function WeightPrompt({ product, onCancel, onConfirm }) {
     const minimum = Number(product.saleUnit?.minimum) || 0.1;
@@ -272,6 +272,18 @@ window.PdvComponents = (() => {
     }, [order.id, order.status, order.paymentMethod]);
     const [splitPayment, setSplitPayment] = useState(order.paymentParts?.length > 1);
     const [paymentParts, setPaymentParts] = useState(order.paymentParts?.length > 1 ? order.paymentParts : [{ method: 'DINHEIRO', amount: '' }, { method: 'CREDITO', amount: '' }]);
+    const totalCents = Math.round(Number(order.total) * 100);
+    const enteredCents = Math.round(Number(cashAmount) * 100);
+    const remainingCents = totalCents - enteredCents;
+    const invalidAmount = splitPayment
+      ? paymentParts.some(part => !part.method || !Number.isFinite(Number(part.amount)) || Number(part.amount) <= 0) || paymentParts.reduce((sum, part) => sum + Math.round(Number(part.amount) * 100), 0) !== totalCents || new Set(paymentParts.map(part => part.method)).size !== paymentParts.length
+      : !Number.isFinite(enteredCents) || enteredCents <= 0 || remainingCents > 0 || (paymentMethod !== 'DINHEIRO' && remainingCents !== 0);
+    const enableSplitPayment = () => {
+      const firstAmount = Math.min(totalCents, Math.max(0, enteredCents || 0));
+      const method = paymentMethod || 'DINHEIRO';
+      setPaymentParts([{ method, amount: (firstAmount / 100).toFixed(2) }, { method: method === 'CREDITO' ? 'DINHEIRO' : 'CREDITO', amount: ((totalCents - firstAmount) / 100).toFixed(2) }]);
+      setSplitPayment(true);
+    };
     const [directPix, setDirectPix] = useState(false);
     const hasPixPart = splitPayment ? paymentParts.some((part) => part.method === 'PIX') : paymentMethod === 'PIX';
     const needsManualProof = directPix && hasPixPart;
@@ -309,15 +321,17 @@ window.PdvComponents = (() => {
         {canReceive && <section className="mt-4 space-y-2 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
           <h3 className="font-black text-emerald-950">{deliveryMode ? 'Receber na entrega' : 'Receber no caixa'}</h3>
           <PaymentMethodButtons value={paymentMethod} onChange={setPaymentMethod} labels={{ DINHEIRO: '💵 Dinheiro', DEBITO: '💳 Débito', CREDITO: '💳 Crédito', PIX: 'Pix · QR Code / Copia e Cola', ...(!deliveryMode ? { FIADO: 'Fiado · aprovação do Admin' } : {}) }} disabledMethods={order.customerId ? [] : ['FIADO', 'SALDO_CLIENTE']} />
-          <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={splitPayment} onChange={(event) => setSplitPayment(event.target.checked)} />Usar mais de uma forma de pagamento</label>
+          <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={splitPayment} onChange={(event) => event.target.checked ? enableSplitPayment() : setSplitPayment(false)} />Usar mais de uma forma de pagamento</label>
           {splitPayment && <PaymentPartsEditor parts={paymentParts} onChange={setPaymentParts} total={Number(order.total)} customerId={order.customerId} allowedMethods={deliveryMode ? ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO'] : ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO', 'FIADO']} />}
           {hasPixPart && <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={directPix} onChange={(event) => setDirectPix(event.target.checked)} />Pix já recebido: confirmar manualmente</label>}
           {needsManualProof && <div className="space-y-2"><PixProofUpload targetType="ORDER" targetId={order.id} onChange={setProofId} /><label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={manualProofSeen} onChange={(event) => setManualProofSeen(event.target.checked)} />Conferi o valor do Pix e a conta recebedora da Conflora.</label><label className="block text-xs">Observação do comprovante<textarea className={field} value={manualPixNote} onChange={(event) => setManualPixNote(event.target.value)} /></label></div>}
-          {paymentMethod === 'DINHEIRO' && !splitPayment && <label className="block text-xs font-bold text-slate-700">Valor recebido em dinheiro (R$)<input className={field} type="number" min={Number(order.total || 0)} step="0.01" value={cashAmount} onChange={(event) => setCashAmount(event.target.value)} /></label>}
+          {paymentMethod && !splitPayment && <label className="block text-xs font-bold text-slate-700">Valor nesta forma de pagamento (R$)<input className={field} type="number" min="0.01" step="0.01" value={cashAmount} onChange={(event) => setCashAmount(event.target.value)} /></label>}
           {paymentMethod === 'DINHEIRO' && !splitPayment && Number(cashAmount) >= Number(order.total || 0) && <p className="text-right text-xs font-bold text-emerald-900">Troco: {money(Number(cashAmount) - Number(order.total || 0))}</p>}
+          {!splitPayment && remainingCents > 0 && <div role="status" className="rounded-xl bg-amber-100 p-3 font-bold text-amber-950">Falta pagar {money(remainingCents / 100)}. Adicione outra forma de pagamento para concluir.<button type="button" className={button + ' mt-2 w-full'} onClick={enableSplitPayment}>Adicionar outra forma de pagamento</button></div>}
+          {!splitPayment && paymentMethod !== 'DINHEIRO' && remainingCents < 0 && <p role="alert" className="text-sm font-bold text-red-800">O valor informado excede o total em {money(-remainingCents / 100)}. Ajuste para continuar.</p>}
           {!order.customerId && ['FIADO', 'SALDO_CLIENTE'].includes(paymentMethod) && <p className="text-xs text-amber-900">Selecione um cliente cadastrado antes de receber em fiado ou usar saldo.</p>}
 
-          <button type="button" className={button + ' w-full'} disabled={busy || (!splitPayment && !paymentMethod) || (needsManualProof && (!proofId || !manualProofSeen || manualPixNote.trim().length < 8)) || (!splitPayment && paymentMethod === 'DINHEIRO' && Number(cashAmount) < Number(order.total || 0)) || (!splitPayment && ['FIADO', 'SALDO_CLIENTE'].includes(paymentMethod) && !order.customerId)} onClick={() => onReceive(order, splitPayment ? 'MISTO' : needsManualProof ? 'PIX_MANUAL' : paymentMethod, !splitPayment && paymentMethod === 'DINHEIRO' ? cashAmount : null, splitPayment ? paymentParts.map((part) => ({ ...part, amount: Number(part.amount) })) : undefined, { manualPix: needsManualProof, proofSeen: manualProofSeen, note: manualPixNote, proofId })}>
+          <button type="button" className={button + ' w-full'} disabled={busy || invalidAmount || (!splitPayment && !paymentMethod) || (needsManualProof && (!proofId || !manualProofSeen || manualPixNote.trim().length < 8)) || (!splitPayment && paymentMethod === 'DINHEIRO' && Number(cashAmount) < Number(order.total || 0)) || (!splitPayment && ['FIADO', 'SALDO_CLIENTE'].includes(paymentMethod) && !order.customerId)} onClick={() => onReceive(order, splitPayment ? 'MISTO' : needsManualProof ? 'PIX_MANUAL' : paymentMethod, !splitPayment && paymentMethod === 'DINHEIRO' ? cashAmount : null, splitPayment ? paymentParts.map((part) => ({ ...part, amount: Number(part.amount) })) : undefined, { manualPix: needsManualProof, proofSeen: manualProofSeen, note: manualPixNote, proofId })}>
             {busy ? 'Processando…' : hasPixPart && !needsManualProof ? 'Gerar QR Code Pix' : 'Confirmar pagamento e finalizar'}
           </button>
         </section>}
@@ -377,7 +391,7 @@ window.PdvComponents = (() => {
   }
   function CashierQueue({ user, view, onBack, onDebt }) {
     const today = dateInSaoPaulo();
-    const [dateFrom, setDateFrom] = useState(view === 'history' || view === 'report' ? '2000-01-01' : today);
+    const [dateFrom, setDateFrom] = useState(today);
     const [dateTo, setDateTo] = useState(today);
     const [data, setData] = useState(null);
     const [error, setError] = useState('');
@@ -397,12 +411,12 @@ window.PdvComponents = (() => {
         const nextData = await api('/api/caixa/orders?' + query.toString());
         const previous = dataRef.current;
         if (silent && previous) {
-          const previousIds = new Set([...(previous.pendingConfirmation || []), ...(previous.pendingPayment || [])].map((order) => order.id));
-          const incoming = [...(nextData.pendingConfirmation || []), ...(nextData.pendingPayment || [])].filter((order) => !previousIds.has(order.id));
+          const previousIds = new Set([...(previous.pendingConfirmation || []), ...(previous.pendingPayment || []), ...(previous.awaitingDriver || []), ...(previous.outForDelivery || [])].map((order) => order.id));
+          const incoming = [...(nextData.pendingConfirmation || []), ...(nextData.pendingPayment || []), ...(nextData.awaitingDriver || []), ...(nextData.outForDelivery || [])].filter((order) => !previousIds.has(order.id));
           if (incoming.length) {
             const ids = new Set(incoming.map((order) => order.id));
             setPulsedOrderIds((current) => new Set([...current, ...ids]));
-            setNewOrderNotice(incoming.length === 1 ? `Nova comanda aguardando ${incoming[0].status === 'AWAITING_CONFIRMATION' ? 'confirmação' : 'pagamento'}: #${incoming[0].ticketNumber}` : `${incoming.length} novas comandas aguardando atendimento`);
+            setNewOrderNotice(incoming.length === 1 ? `Nova comanda aguardando ${incoming[0].deliveryStatus ? 'entrega' : incoming[0].status === 'AWAITING_CONFIRMATION' ? 'confirmação' : 'pagamento'}: #${incoming[0].ticketNumber}` : `${incoming.length} novas comandas aguardando atendimento`);
             setTimeout(() => setPulsedOrderIds((current) => new Set([...current].filter((id) => !ids.has(id)))), 9000);
             setTimeout(() => setNewOrderNotice(''), 9000);
           }
@@ -411,7 +425,7 @@ window.PdvComponents = (() => {
         setData(nextData);
         setSelectedOrder((current) => {
           if (!current) return current;
-          const available = [nextData.pendingConfirmation, nextData.pendingPayment, nextData.confirmed, nextData.paid, nextData.history].flat();
+          const available = [nextData.pendingConfirmation, nextData.pendingPayment, nextData.confirmed, nextData.paid, nextData.awaitingDriver || [], nextData.outForDelivery || [], nextData.history].flat();
           return available.find((order) => order.id === current.id) || current;
         });
       } catch (err) { setError(err.message); }
@@ -458,11 +472,14 @@ window.PdvComponents = (() => {
       finally { setBusy(false); setDragFrom(null); }
     };
 
+    const deliveryOrderIds = new Set([...(data?.awaitingDriver || []), ...(data?.outForDelivery || [])].map(order => order.id));
     const columns = data ? [
       { title: 'ESPERANDO CONFIRMAÇÃO', hint: 'Pedidos que exigem confirmação prévia da loja', orders: data.pendingConfirmation, tone: 'amber', stage: 'confirmation' },
       { title: 'ESPERANDO PAGAMENTO', hint: 'Receba no caixa ou aguarde a confirmação do Pix', orders: data.pendingPayment, tone: 'blue', stage: 'payment' },
-      { title: 'PAGOS / FINALIZADOS', hint: 'Pagamentos recebidos e pedidos concluídos', orders: data.paid, tone: 'green', stage: 'paid' },
-      { title: 'FIADOS', hint: 'Vendas registradas para pagamento posterior', orders: data.confirmed, tone: 'red', stage: 'debt' },
+      { title: 'ESPERANDO ENTREGADOR', hint: 'Pedidos disponíveis ou em separação', orders: data.awaitingDriver || [], tone: 'amber', stage: 'delivery' },
+      { title: 'SAIU PARA ENTREGA', hint: 'Pedidos em rota com o entregador', orders: data.outForDelivery || [], tone: 'blue', stage: 'route' },
+      { title: 'PAGOS / FINALIZADOS', hint: 'Pagamentos recebidos e pedidos concluídos', orders: data.paid.filter(order => !deliveryOrderIds.has(order.id)), tone: 'green', stage: 'paid' },
+      { title: 'FIADOS', hint: 'Vendas registradas para pagamento posterior', orders: data.confirmed.filter(order => !deliveryOrderIds.has(order.id)), tone: 'red', stage: 'debt' },
     ] : [];
     const title = view === 'orders' ? 'Comandas' : view === 'history' ? 'Histórico de vendas' : 'Relatório';
     const reportOrders = data ? data.history.filter((order) => user.role === 'ADMIN'
@@ -530,7 +547,7 @@ window.PdvComponents = (() => {
               </div>
               <p className="mb-2 text-[11px] font-medium text-slate-500">Deslize para o lado no celular para ver as etapas do quadro.</p>
               {newOrderNotice && <div role="status" className="mb-3 rounded-xl border border-amber-300 bg-amber-100 px-4 py-3 text-sm font-extrabold text-amber-950 shadow-sm" aria-live="polite">🔔 {newOrderNotice}</div>}
-              <div className="flex snap-x gap-3 overflow-x-auto pb-3 md:grid md:grid-cols-2 xl:grid-cols-4 md:overflow-visible">
+              <div className="cf-cashier-board flex snap-x gap-3 overflow-x-auto pb-3">
                 {columns.map((column) => <CashierColumn key={column.title} {...column} canMove={['ADMIN', 'CAIXA'].includes(user.role) && !busy} dragFrom={dragFrom} onMove={moveOrder} onDragStart={setDragFrom} onDragEnd={() => setDragFrom(null)} pulsedOrderIds={pulsedOrderIds} selectedOrderId={selectedOrder?.id} onDetails={setSelectedOrder} />)}
               </div>
             </>}

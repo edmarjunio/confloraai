@@ -845,11 +845,21 @@ test('online pickup and delivery cash/card orders appear directly in payment que
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
   const board = await (await fetch(`${origin}/api/caixa/orders?from=${today}&to=${today}`, { headers: { cookie } })).json();
   assert.deepEqual(board.pendingConfirmation, []);
-  assert.deepEqual(board.pendingPayment.map((order) => order.id).sort(), ids.sort());
+  assert.deepEqual(board.pendingPayment.map((order) => order.id).sort(), ids.slice(0, 2).sort());
+  assert.deepEqual(board.awaitingDriver.map((order) => order.id).sort(), ids.slice(2).sort());
+  assert.deepEqual(board.outForDelivery, []);
   assert.equal(s.chargeCalls.length, 0); assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 4);
   const deliveries = await app.locals.pdv.service.listDeliveries({ id: 'driver', role: 'ENTREGADOR' });
   assert.equal(deliveries.available.length, 2);
   assert.ok(deliveries.available.every(order => order.customerName === 'Cliente online' && order.items[0].name === 'Muda'));
+  const driver = { id: 'driver', name: 'Entregador teste', role: 'ENTREGADOR' };
+  await app.locals.pdv.service.assignDelivery(ids[2], driver);
+  await app.locals.pdv.service.startDelivery(ids[2], driver);
+  const updatedBoard = await (await fetch(`${origin}/api/caixa/orders?from=${today}&to=${today}`, { headers: { cookie } })).json();
+  assert.equal(updatedBoard.outForDelivery[0].id, ids[2]);
+  assert.equal(updatedBoard.outForDelivery[0].assignedDriver.name, driver.name);
+  assert.equal(updatedBoard.awaitingDriver.length, 1);
+
   const response = await post(`/api/caixa/orders/${ids[0]}/confirm`, { paymentMethod: 'DINHEIRO', receivedAmount: 10 }, cookie);
   assert.equal(response.status, 200); assert.equal((await response.json()).order.paymentStatus, 'APPROVED');
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 19);
