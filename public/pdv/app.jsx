@@ -21,7 +21,6 @@ const { useState, useEffect, useRef, useMemo } = React;
     const Plus = (p) => <IconBase {...p}><path d="M5 12h14"/><path d="M12 5v14"/></IconBase>;
     const Minus = (p) => <IconBase {...p}><path d="M5 12h14"/></IconBase>;
     const X = (p) => <IconBase {...p}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></IconBase>;
-    const Menu = (p) => <IconBase {...p}><path d="M3 6h18M3 12h18M3 18h18"/></IconBase>;
     const ShoppingBag = (p) => (
       <IconBase {...p}>
         <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>
@@ -30,7 +29,6 @@ const { useState, useEffect, useRef, useMemo } = React;
     const Check = (p) => <IconBase {...p}><polyline points="20 6 9 17 4 12"/></IconBase>;
     const Info = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></IconBase>;
     const Heart = ({ fill = "none", ...p }) => <IconBase {...p} fill={fill}><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/></IconBase>;
-    const LogOut = (p) => <IconBase {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></IconBase>;
     const ChevronDown = (p) => <IconBase {...p}><path d="m6 9 6 6 6-6"/></IconBase>;
     const Percent = (p) => (
       <IconBase {...p}>
@@ -1216,35 +1214,11 @@ const { useState, useEffect, useRef, useMemo } = React;
             {activeModal === 'approval' && <PdvComponents.DiscountApproval approval={discountApproval} onClose={() => setActiveModal(null)} onOrder={(order) => { setCompletedOrder(order); setActiveModal('receipt'); }} />}
             {activeModal === 'debt_settle' && <PdvComponents.DebtSettlement onClose={() => setActiveModal(null)} />}
             {/* Com Flora Standard Website Header adapted for POS */}
-            <header className="conflora-site-header sticky top-0 z-20 !flex-col !items-stretch">
-              <div className="mx-auto flex min-w-0 w-full max-w-[1600px] flex-wrap items-center gap-3">
-                <PdvComponents.SiteBrand />
-
-                {/* Search fills the available space; quantity stays beside the user controls. */}
-                <div className="order-4 flex w-full basis-full flex-none items-center sm:order-2 sm:w-auto sm:min-w-0 sm:flex-1 sm:basis-0">
-                  <div className="relative flex-1">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      ref={searchInputRef}
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Nome, categoria ou descrição (Ex.: plantas de sombra, plantas para jardim, flores, e etc)"
-                      className="w-full pl-9 pr-8 py-2 bg-slate-100/90 hover:bg-slate-100 focus:bg-white rounded-full text-xs sm:text-sm text-slate-800 placeholder-slate-400 border border-slate-200 focus:border-emerald-600 focus:outline-none transition"
-                    />
-                    {searchQuery && (
-                      <button
-                        onClick={() => setSearchQuery('')}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-
-                </div>
-
-                {/* Exact Nex-inspired "Quant: 1" Pill */}
+            <div className="sticky top-0 z-20 bg-white">
+              <PdvComponents.Topbar user={currentUser} onCashier={() => setCashierPage(null)} onSearch={setSearchQuery} searchValue={searchQuery} searchInputRef={searchInputRef} />
+              <div className="cf-page-toolbar cf-pos-context">
+                <h1 className="font-extrabold text-emerald-950">Caixa</h1>
+                {/* Quantity multiplier remains next to the cashier actions. */}
                 <div
                     className="order-2 flex shrink-0 items-center bg-white border border-slate-300 rounded-full px-2.5 py-1.5 shadow-xs sm:order-3"
                     title="Multiplicador de quantidade para o próximo item clicado"
@@ -1276,35 +1250,9 @@ const { useState, useEffect, useRef, useMemo } = React;
                     </button>
                 </div>
 
-                {/* Right Status Actions */}
-                {['ADMIN', 'CAIXA'].includes(currentUser.role) && <button type="button" className="cf-button !rounded-full text-xs" onClick={() => setCashierPage('deliveries')}>🛵 Entregas</button>}
-                <div className="order-3 ml-auto flex items-center gap-2 sm:order-4">
-                  <div className="max-w-36 text-right sm:max-w-52">
-                    <p className="truncate text-xs font-extrabold text-slate-800">{currentUser.name || currentUser.email}</p>
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">{currentUser.role}</p>
-                  </div>
-                  {String(currentUser.role || '').toUpperCase() === 'ADMIN' && (
-                    <button
-                      type="button"
-                      onClick={() => window.location.assign('/admin')}
-                      className="inline-flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full border border-slate-300 bg-white p-2 text-slate-700 transition hover:-translate-y-0.5 hover:border-emerald-600 hover:bg-green-50 hover:text-emerald-700 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
-                      title="Configurações administrativas"
-                      aria-label="Abrir configurações administrativas"
-                    >
-                      <Menu className="h-5 w-5" />
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }); window.location.reload(); }}
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-rose-600 px-3 py-2 text-xs font-extrabold text-white shadow-sm transition hover:bg-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2"
-                  >
-                    <LogOut className="h-3.5 w-3.5" />
-                    Sair
-                  </button>
-                </div>
+                {['ADMIN', 'CAIXA'].includes(currentUser.role) && <button type="button" className="cf-button" onClick={() => setCashierPage('deliveries')}>🛵 Entregas</button>}
+                <button type="button" className="cf-button" onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }); window.location.reload(); }}>Sair</button>
               </div>
-
               <nav className="cashier-command-nav mx-auto mt-3 mb-4 grid w-full max-w-[1600px] grid-cols-3 gap-2 border-t border-slate-100 pt-3 sm:gap-3 lg:mx-0 lg:w-2/3" aria-label="Ações do caixa por atalho">
                 <button type="button" className={shortcutButtonClass} disabled={cart.length === 0} onClick={() => setActiveModal('pay')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F1</kbd><span>Pagar</span></button>
                 <button type="button" className={shortcutButtonClass} onClick={() => setCashierPage('orders')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F2</kbd><span>Comandas</span></button>
@@ -1334,11 +1282,11 @@ const { useState, useEffect, useRef, useMemo } = React;
                   })}
                 </div>
               </div>
-            </header>
+            </div>
 
             {/* 2/3 + 1/3 SPLIT MAIN CONTENT */}
             <main
-              className={"flex-1 max-w-[1600px] w-full mx-auto p-3 sm:p-5 grid grid-cols-1 md:grid-cols-12 gap-5 items-start " + (deviceView === 'mobile-preview' ? 'pb-6' : 'pb-64 md:pb-6')}
+              className={"cf-work-body flex-1 max-w-[1600px] w-full mx-auto p-3 sm:p-5 grid grid-cols-1 md:grid-cols-12 gap-5 items-start " + (deviceView === 'mobile-preview' ? 'pb-6' : 'pb-64 md:pb-6')}
             >
               {/* LEFT SECTION (2/3 - 8 Columns): 4-per-row Product Cards */}
               <section
@@ -1412,8 +1360,10 @@ const { useState, useEffect, useRef, useMemo } = React;
               {/* RIGHT SECTION (1/3 - 4 Columns): Real-Time Cashier Receipt Panel */}
               {deviceView !== 'mobile-preview' && (
                 <aside
-                  className="fixed top-16 z-30 hidden h-[calc(100dvh-5rem)] min-h-0 lg:block"
+                  className="cf-cashier-receipt fixed z-30 hidden min-h-0 lg:block"
                   style={{
+                    top: 'calc(var(--cf-topbar-height, 72px) + 12px)',
+                    height: 'calc(100dvh - var(--cf-topbar-height, 72px) - 24px)',
                     right: 'max(calc((100vw - 1600px) / 2), 16px)',
                     width: 'min(calc((100vw - 48px) / 3), 520px)',
                   }}

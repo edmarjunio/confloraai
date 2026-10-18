@@ -59,10 +59,18 @@ window.PdvComponents = (() => {
     const remaining = (Math.round(total * 100) - sum) / 100;
     return <section className="my-3 space-y-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3"><strong className="text-xs">Dividir pagamento</strong>{parts.map((part, index) => <div key={index} className="rounded-xl border border-emerald-100 bg-white p-2"><PaymentMethodButtons value={part.method} onChange={(method) => update(index, { method })} labels={labels} disabledMethods={Object.keys(labels).filter((value) => (value === 'FIADO' && !customerId) || parts.some((entry, current) => current !== index && entry.method === value))} suffix={` · parcela ${index + 1}`} /><input aria-label={`Valor da parcela ${index + 1}`} type="number" min="0.01" step="0.01" value={part.amount} onChange={(event) => update(index, { amount: event.target.value })} className="w-24 rounded-lg border p-2 text-xs" /><button type="button" aria-label={`Remover parcela ${index + 1}`} onClick={() => onChange(parts.filter((_, current) => current !== index))}>✕</button></div>)}<p className="text-xs font-bold">{remaining >= 0 ? 'Falta distribuir: ' : 'Excedente: '}{money(Math.abs(remaining))}</p>{parts.length < Object.keys(labels).length && <button type="button" className="text-xs underline" onClick={() => onChange([...parts, { method: Object.keys(labels).find((method) => !parts.some((part) => part.method === method)), amount: Math.max(0, remaining).toFixed(2) }])}>Adicionar forma de pagamento</button>}</section>;
   }
-  function SiteBrand() {
-    return <a href="/" aria-label="Ir para a página inicial" className="conflora-site-brand flex min-w-0 items-center gap-3 text-inherit no-underline">
-      <img src="/store-assets/brands/conflora-logo.png" alt="Conflora Horta e Viveiro" className="h-10 w-auto max-w-[160px] shrink-0 object-contain" />
-    </a>;
+  function Topbar({ user, onSearch, searchValue, searchInputRef, onCashier }) {
+    const ref = useRef(null);
+    useEffect(() => {
+      const node = ref.current;
+      const search = event => onSearch?.(event.detail.query);
+      const cashier = () => onCashier?.();
+      node.addEventListener('cf-topbar-search', search);
+      node.addEventListener('cf-topbar-cashier', cashier);
+      if (searchInputRef) searchInputRef.current = node.querySelector('input');
+      return () => { node.removeEventListener('cf-topbar-search', search); node.removeEventListener('cf-topbar-cashier', cashier); };
+    }, [onSearch, searchInputRef, onCashier]);
+    return <conflora-topbar ref={ref} local-cashier={onCashier ? '' : undefined} managed user-name={user?.name || user?.email || ''} user-role={user?.role || ''} user-photo={user?.picture || ''} local-search={onSearch ? '' : undefined} search-value={searchValue || ''} search-placeholder={onSearch ? 'Nome, categoria ou descrição (Ex.: plantas de sombra, plantas para jardim, flores, e etc)' : 'O que você procura?'}></conflora-topbar>;
   }
   function handleProductImageError(event, product) {
     const imageElement = event.currentTarget;
@@ -87,7 +95,7 @@ window.PdvComponents = (() => {
     if (imageElement.src !== placeholderUrl) imageElement.src = '/store-assets/placeholder.svg';
   }
   function Loading() {
-    return <main className="min-h-screen bg-[#F4F6F5] font-sans text-slate-800"><header className="conflora-site-header"><div className="mx-auto w-full max-w-[1600px]"><SiteBrand /></div></header><p className="p-8 text-center text-sm text-slate-500">Carregando sessão…</p></main>;
+    return <main className="min-h-screen bg-[#F4F6F5] font-sans text-slate-800"><Topbar /><p className="p-8 text-center text-sm text-slate-500">Carregando sessão…</p></main>;
   }
   async function api(path, body) {
     const response = await fetch(path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
@@ -174,7 +182,7 @@ window.PdvComponents = (() => {
       event.preventDefault();
       try { const result = await api('/api/admin/auth/login', { userId, pin }); onLogin(result.user); } catch (err) { setError(err.message); }
     };
-    return <main className="min-h-screen bg-[#F4F6F5] font-sans text-slate-800"><header className="conflora-site-header"><div className="mx-auto w-full max-w-[1600px]"><SiteBrand /></div></header><div className="flex min-h-[calc(100vh-66px)] items-center justify-center p-6"><form onSubmit={submit} className="w-full max-w-sm rounded-3xl bg-white p-8 shadow"><h1 className="text-2xl font-bold text-[#0F381E]">Frente de caixa</h1><p className="my-2">Entre com sua conta de colaborador.</p><label>Usuário<select required className={field} value={userId} onChange={(e) => setUserId(e.target.value)}><option value="">Selecione</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label><label>PIN<input required type="password" className={field} value={pin} onChange={(e) => setPin(e.target.value)} /></label>{error && <p role="alert" className="mb-3 text-red-700">{error}</p>}<button className={button}>Entrar</button></form></div></main>;
+    return <main className="min-h-screen bg-[#F4F6F5] font-sans text-slate-800"><Topbar /><div className="flex min-h-[calc(100vh-66px)] items-center justify-center p-6"><form onSubmit={submit} className="w-full max-w-sm rounded-3xl bg-white p-8 shadow"><h1 className="text-2xl font-bold text-[#0F381E]">Frente de caixa</h1><p className="my-2">Entre com sua conta de colaborador.</p><label>Usuário<select required className={field} value={userId} onChange={(e) => setUserId(e.target.value)}><option value="">Selecione</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label><label>PIN<input required type="password" className={field} value={pin} onChange={(e) => setPin(e.target.value)} /></label>{error && <p role="alert" className="mb-3 text-red-700">{error}</p>}<button className={button}>Entrar</button></form></div></main>;
   }
   function Receipt({ order, onNewOrder }) {
     const [current, setCurrent] = useState(order); const [copyStatus, setCopyStatus] = useState('');
@@ -514,12 +522,12 @@ window.PdvComponents = (() => {
     const mostByValue = data ? topProducts(reportOrders, 'total') : [];
 
     return <div className="min-h-screen bg-[#F4F6F5] font-sans text-slate-800">
-      <header className="conflora-site-header !flex-col !items-stretch border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
-        <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-col items-start gap-2"><SiteBrand /><button type="button" onClick={onBack} className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#E7B914] bg-[#F4C430] px-4 py-2 text-xs font-extrabold text-[#0F381E] shadow-sm transition hover:bg-[#E7B914] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E7B914] focus-visible:ring-offset-2">← Voltar ao caixa</button></div>
+      <div className="bg-white"><Topbar user={user} onCashier={onBack} />
+        <div className="cf-page-toolbar">
+          <div className="flex flex-col items-start gap-2"><button type="button" onClick={onBack} className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#E7B914] bg-[#F4C430] px-4 py-2 text-xs font-extrabold text-[#0F381E] shadow-sm transition hover:bg-[#E7B914] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E7B914] focus-visible:ring-offset-2">← Voltar ao caixa</button></div>
           <div className="flex items-center gap-2"><h1 className="mr-2 text-lg font-black text-[#0F381E]">{title}</h1>{view === 'report' && user.role !== 'VENDEDOR' && <button className={button} onClick={onDebt}>Receber pagamento</button>}<button className={button} disabled={refreshing} onClick={() => refresh()} aria-label="Atualizar">{refreshing ? 'Atualizando…' : '↻ Atualizar'}</button></div>
         </div>
-        </header>
+        </div>
 
       <div className="shrink-0 border-b border-slate-200 bg-white/80 px-4 py-3 sm:px-6">
           <div className="mx-auto flex max-w-[1600px] flex-wrap items-end gap-2">
@@ -616,5 +624,5 @@ window.PdvComponents = (() => {
     const amountInvalid = !Number.isFinite(Number(amount)) || Number(amount) <= 0 || (!isCreditEntry && Number(amount) > balance);
     return <Panel title="Receber pagamento do cliente" onClose={onClose}>{error && <p role="alert" className="text-red-700">{error}</p>}{result ? <div><p>Recebimento registrado: {money(result.amount)}</p><p>Saldo devedor: {money(result.newBalance)}</p><p>Crédito disponível: {money(result.newCreditBalance)}</p>{result.newBalance > 0 && <button className={button + ' mt-4'} onClick={() => { setBalance(result.newBalance); setCreditBalance(result.newCreditBalance || 0); setAmount(Number(result.newBalance).toFixed(2)); setId(crypto.randomUUID()); setResult(null); setSplitPayment(false); setProofSeen(false); setNote(''); setProofId(''); }}>Receber valor restante</button>}</div> : <><label>Buscar cliente cadastrado<input className={field} value={query} onChange={(e) => setQuery(e.target.value)} /></label><div className="max-h-36 overflow-auto">{customers.map((row) => <button className="block w-full border-b p-2 text-left" key={row.id} onClick={() => select(row)}>{row.name} · {row.phone || 'Sem telefone'}</button>)}</div>{customer && <><p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm font-bold">{customer.name}<span className="mt-1 block text-xs font-medium text-amber-800">Saldo devedor: {money(balance)}</span><span className="block text-xs font-medium text-emerald-800">Crédito disponível: {money(creditBalance)}</span></p><label>Tipo de lançamento<select className={field} value={entryType} onChange={(event) => setEntryType(event.target.value)}><option value="QUITACAO_FIADO">Receber pagamento de dívida</option><option value="CREDITO_CLIENTE">Adicionar crédito antecipado</option></select></label><label>Valor recebido<input className={field} type="number" min="0.01" max={isCreditEntry ? undefined : balance} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></label><PaymentMethodButtons value={method} onChange={setMethod} labels={{ DINHEIRO: 'Dinheiro', DEBITO: 'Cartão de débito', CREDITO: 'Cartão de crédito', PIX: 'Pix já recebido' }} /><label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={splitPayment} onChange={(event) => setSplitPayment(event.target.checked)} />Usar mais de uma forma de pagamento</label>{splitPayment && <PaymentPartsEditor parts={parts} onChange={setParts} total={Number(amount || 0)} allowedMethods={['DINHEIRO', 'DEBITO', 'CREDITO', 'PIX']} />}{hasPix && <div className="my-3 space-y-2"><PixProofUpload key={id} targetType="DEBT" targetId={id} onChange={setProofId} /><label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={proofSeen} onChange={(event) => setProofSeen(event.target.checked)} />Conferi o Pix recebido na conta da Conflora.</label><label className="block text-xs">Observação do comprovante<textarea className={field} value={note} onChange={(event) => setNote(event.target.value)} /></label></div>}{!isCreditEntry && <p className="my-3 text-sm font-bold">Saldo após recebimento: {money(Math.max(0, balance - Number(amount || 0)))}</p>}<button className={button} disabled={busy || (hasPix && (!proofId || !proofSeen || note.trim().length < 8)) || amountInvalid || (!isCreditEntry && balance <= 0)} onClick={submit}>{busy ? 'Registrando…' : isCreditEntry ? 'Registrar crédito recebido' : 'Confirmar recebimento'}</button></>}</>}</Panel>;
   }
-  return { SiteBrand, Loading, Login, Receipt, CashierQueue, DebtSettlement, DiscountApproval, ProductInformation, WeightPrompt, handleProductImageError, PaymentPartsEditor, PaymentMethodButtons, CustomerSearch, LocationPicker, OrderDetails, CashierColumn };
+  return { Topbar, Loading, Login, Receipt, CashierQueue, DebtSettlement, DiscountApproval, ProductInformation, WeightPrompt, handleProductImageError, PaymentPartsEditor, PaymentMethodButtons, CustomerSearch, LocationPicker, OrderDetails, CashierColumn };
 })();

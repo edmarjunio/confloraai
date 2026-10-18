@@ -229,6 +229,12 @@ As mensagens que falharam ficam pendentes na fila e seguem a política de reenvi
 Os cartões de comandas usam o componente compartilhado `OrderCardSurface` em `public/pdv/order-card.styles.js` (styled-components servido pelo backend). Fiado aprovado pelo Admin baixa estoque e registra dívida; a quitação não baixa novamente.
 
 
+## Cabeçalho e navegação uniformes
+
+O catálogo, administração, caixa, comandas, relatórios, painel gerencial e entregas usam o mesmo padrão de topbar: logo, busca, idioma, conta e atalhos. No admin, **Painel Gerencial** ocupa o espaço do botão escuro da Sacola, ao lado de **Ir para o caixa**; as ferramentas administrativas ficam abaixo. No celular, os controles se reorganizam sem esconder a busca ou o idioma.
+
+O layout compartilhado está em `public/storefront/site-header.css`. As telas operacionais usam `public/storefront/topbar.js`, integrado ao React por `PdvComponents.Topbar`; o catálogo mantém os mesmos estilos e seus controles de sacola e conta. Evite criar cabeçalhos independentes. No caixa, o atalho de retorno às vendas preserva a sacola em andamento e a busca. Os atalhos respeitam o cargo; as permissões continuam validadas pelo servidor.
+
 ## Relatório parcial do caixa em PDF
 
 Admin → Caixa/Vendas e Caixa → Relatório oferecem **Baixar PDF** e **Enviar PDF no WhatsApp** a qualquer momento. A emissão não fecha o caixa. O Admin exporta o consolidado da loja e o perfil CAIXA exporta somente os seus recebimentos, incluindo a atribuição de recebimentos pelo entregador ao responsável financeiro da venda. A autorização é aplicada no servidor, sem aceitar troca de operador por parâmetros enviados pelo navegador.

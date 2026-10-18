@@ -850,12 +850,17 @@ try {
   cart.render();
   trackStorefrontEvent("page_view", { resultCount: state.products.length });
   await route();
+  const topbarIntent = new URLSearchParams(location.search);
+  if (topbarIntent.has('q')) { $('#search').value = topbarIntent.get('q'); catalog.render(); }
+
   if (saved) refreshPublicCatalog().catch(() => {});
   // Login resolution does not block the public catalogue or its first render.
   session.then(async ({ user }) => {
     state.user = user || null;
     appStore.getState().setUser(state.user);
     updateHeaderActions();
+    if (topbarIntent.has('sacola')) cart.open();
+    if (topbarIntent.has('conta')) account().catch(error => notify(error.message));
     catalog.refreshFavorites();
     if (/\/(admin|configuracoes)\/?$/.test(location.pathname)) await route();
   }).catch(() => {});

@@ -894,3 +894,6 @@ tbody tr:hover {
 .nav-btn { min-height:42px; font-weight:700; }
 .table-scroll .action-btn { min-height:34px; padding:7px 11px !important; }
 @media(max-width:700px) { .admin-section-heading .stock-toolbar-actions { width:100%; } #tab-cashier > div:first-child > div:last-child { width:100%; } #tab-cashier > div:first-child .action-btn { flex:1 1 140px; } .action-btn { min-height:44px; } }
+
+body .action-btn, body .header-btn, body .btn-action, body .nav-btn { border-radius:999px !important; }
+body :is(.action-btn,.header-btn,.btn-action):hover:not(:disabled) { transform:translateY(-2px); box-shadow:0 7px 16px rgb(20 44 28 / 18%); }

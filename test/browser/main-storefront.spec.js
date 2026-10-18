@@ -186,7 +186,7 @@ test("main mobile product, bottom sheet and conversational cards follow the appr
   await expect(page.locator("#productView h1")).toHaveText("Planta Teste");
   const coachSkip = page.locator("#coachSkip");
   if (await coachSkip.isVisible()) await coachSkip.click();
-  await expect(page.locator(".search")).toBeHidden();
+  await expect(page.locator(".search")).toBeVisible();
   await page.getByRole("tab", { name: "Especificações" }).click();
   await page
     .getByRole("button", { name: "Adicionar à sacola", exact: true })

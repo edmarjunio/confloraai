@@ -11,6 +11,7 @@
   --cf-danger: #e11d48;
   --cf-radius-card: 16px;
   --cf-radius-control: 12px;
+  --cf-radius-button: 999px;
   --cf-shadow-card: 0 1px 3px rgb(15 56 30 / 8%);
   --cf-shadow-card-hover: 0 8px 22px rgb(15 56 30 / 12%);
   --cf-space-card: 16px;
@@ -389,7 +390,7 @@ render-product-card.cf-pdv-product-card {
   justify-content: center;
   gap: 8px;
   border: 1px solid transparent;
-  border-radius: var(--cf-radius-control);
+  border-radius: var(--cf-radius-button);
   padding: 9px 14px;
   background: var(--cf-button-color, var(--cf-green));
   color: #fff;

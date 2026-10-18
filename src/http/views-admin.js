@@ -9,6 +9,8 @@ const { resolve } = require('node:path');
 const productAssetsVersion = createHash('sha256')
   .update(readFileSync(resolve(__dirname, '../../public/storefront/design-system.css')))
   .update(readFileSync(resolve(__dirname, '../../public/storefront/admin-shell-v1.css')))
+  .update(readFileSync(resolve(__dirname, '../../public/storefront/site-header.css')))
+  .update(readFileSync(resolve(__dirname, '../../public/storefront/topbar.js')))
   .update(readFileSync(resolve(__dirname, '../../public/storefront/product-card.js')))
   .update(readFileSync(resolve(__dirname, '../../public/storefront/stock-counting.js')))
   .update(readFileSync(resolve(__dirname, '../../public/storefront/cashier-report-actions.js')))
@@ -36,7 +38,6 @@ const FETCH_SHIM_SCRIPT = `<script>
 function renderAdminHtml(storeConfig) {
   const escape = value => String(value || '').replace(/[&<>"']/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[character]);
   const name = escape(storeConfig?.identity.name || 'Administração');
-  const logo = escape(storeConfig?.branding.logoUrl || '/store-assets/placeholder.svg');
   const colors = storeConfig?.branding.colors || {};
   const color = (key, fallback) => /^#[0-9a-f]{6}$/i.test(colors[key]) ? colors[key] : fallback;
   return `<!DOCTYPE html>
@@ -52,7 +53,8 @@ function renderAdminHtml(storeConfig) {
   ${FETCH_SHIM_SCRIPT}
 
   <link rel="stylesheet" href="/store-assets/admin-shell-v1.css?v=${productAssetsVersion}">
-  <link rel="stylesheet" href="/store-assets/site-header.css">
+  <link rel="stylesheet" href="/store-assets/site-header.css?v=${productAssetsVersion}">
+  <script src="/store-assets/topbar.js?v=${productAssetsVersion}"></script>
   <link rel="stylesheet" href="/store-assets/design-system.css?v=${productAssetsVersion}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -93,30 +95,16 @@ function renderAdminHtml(storeConfig) {
 
 </head>
 <body>
+  <conflora-topbar context="admin" managed></conflora-topbar>
   <div class="container">
-    <header class="conflora-site-header">
-      <a href="/" class="conflora-site-brand" aria-label="${name} — página inicial">
-        <img src="${logo}" alt="" />
-        <span><strong>${name}</strong><small>Horta e Viveiro · Mineiros - GO</small></span>
-      </a>
-      <span class="conflora-site-header__context">Administração</span>
-
-      <div class="header-actions">
-        <div class="user-pill" id="userHeaderPill">
-          <span>Operador:</span>
-          <img id="loggedUserPhoto" alt="Foto do operador" referrerpolicy="no-referrer" hidden style="width:28px; height:28px; border-radius:50%; object-fit:cover;" />
-          <strong id="loggedUserName">Carregando...</strong>
-          <span class="role-badge" id="loggedUserRole">ADMIN</span>
-        </div>
-        <button class="header-btn" onclick="openLoginModal()">Trocar operador</button>
-        <button class="header-btn" onclick="logoutAdmin()" title="Sair da conta de operador/admin">Sair</button>
-        <a href="/caixa" class="header-btn admin-cashier-link" aria-label="Ir para o Caixa">▣ IR PARA O CAIXA</a>
-        <a href="/admin-gerencial" class="header-btn" style="background:#0f172a; color:#fff;" title="Painel Gerencial Executivo & Looker Studio">📊 Painel Gerencial</a>
-        <button class="header-btn notification-button" onclick="showTab('notifs')" aria-label="Notificações">Avisos <span id="notifBadge">0</span></button>
-        <a href="/configuracoes" class="header-btn">Personalizar loja</a>
-        <a href="/" class="header-btn catalog-link">Ver catálogo ↗</a>
-      </div>
-    </header>
+    <nav class="cf-work-actions" aria-label="Opções administrativas">
+      <span>Administração</span>
+      <button class="header-btn" onclick="openLoginModal()">Trocar operador</button>
+      <button class="header-btn" onclick="logoutAdmin()" title="Sair da conta de operador/admin">Sair</button>
+      <button class="header-btn notification-button" onclick="showTab('notifs')" aria-label="Notificações">Avisos <span id="notifBadge">0</span></button>
+      <a href="/configuracoes" class="header-btn">Personalizar loja</a>
+      <a href="/" class="header-btn catalog-link">Ver catálogo ↗</a>
+    </nav>
 
     <!-- NAVEGAÇÃO POR ABAS (FILTRADAS AUTOMATICAMENTE POR CARGO) -->
     <div class="nav-tabs" id="navTabsContainer">
@@ -703,6 +691,7 @@ function renderAdminHtml(storeConfig) {
     }
 
     function applyUserRoleUI() {
+      document.querySelector('conflora-topbar').user = currentUser;
       if (currentUser?.role === 'ENTREGADOR') { location.replace('/caixa'); return; }
       const photo = document.getElementById('loggedUserPhoto');
       photo.hidden = !currentUser?.picture;

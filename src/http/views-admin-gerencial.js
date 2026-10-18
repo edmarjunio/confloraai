@@ -24,7 +24,9 @@ function renderAdminGerencialHtml() {
   </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Conflora — Fechamento diário</title>
-  <link rel="stylesheet" href="/store-assets/site-header.css">
+  <script src="/store-assets/tab-session.js"></script>
+  <link rel="stylesheet" href="/store-assets/site-header.css?v=topbar-1">
+  <script src="/store-assets/topbar.js?v=1"></script>
   <link rel="stylesheet" href="/store-assets/design-system.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -474,22 +476,15 @@ function renderAdminGerencialHtml() {
 <body>
 
   <!-- CABEÇALHO -->
-  <header class="conflora-site-header">
-    <a href="/" class="conflora-site-brand" aria-label="Conflora — página inicial">
-      <img src="/store-assets/brands/conflora-logo.png" alt="" />
-      <span><strong>Conflora Horta e Viveiro</strong><small>Mineiros - GO</small></span>
-    </a>
-    <span class="conflora-site-header__context">Fechamento diário</span>
-
-    <div class="header-actions">
-      <a href="/caixa" class="btn-action">Ir ao Caixa / PDV</a>
-      <a href="/admin" class="btn-action">Admin completo</a>
-      <button id="btnSendReport" class="btn-action primary" onclick="sendDailyReport()" hidden>Enviar para Júnior</button>
-    </div>
-  </header>
+  <conflora-topbar></conflora-topbar>
+  <nav class="cf-work-actions" aria-label="Opções do painel gerencial">
+    <span>Painel Gerencial</span>
+    <a href="/admin" class="btn-action">Administração</a>
+    <button id="btnSendReport" class="btn-action primary" onclick="sendDailyReport()" hidden>Enviar para Júnior</button>
+  </nav>
 
   <!-- CONTEÚDO PRINCIPAL -->
-  <div class="main-container">
+  <div class="main-container cf-work-body">
 
     <!-- DATA DO FECHAMENTO -->
     <div class="toolbar">
