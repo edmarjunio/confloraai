@@ -1,0 +1,898 @@
+[
+  {
+    "page": 4,
+    "group": "COMECE AQUI",
+    "title": "Entrar com sua própria conta",
+    "route": "Acesso da equipe > Caixa",
+    "shot": "login",
+    "steps": [
+      [
+        "Escolha seu usuário",
+        "Selecione seu nome na lista. Cada pessoa deve trabalhar na própria conta."
+      ],
+      [
+        "Informe seu PIN",
+        "Digite o PIN pessoal e toque em Entrar."
+      ],
+      [
+        "Confira a identificação",
+        "Antes de vender, veja se o cabeçalho mostra seu nome e a função correta."
+      ],
+      [
+        "Encerre sua sessão",
+        "Ao trocar de operador ou entregar o aparelho, use Sair. O próximo colega entra com a própria conta."
+      ]
+    ],
+    "result": "Seu nome e sua função aparecem no cabeçalho.",
+    "attention": "Não compartilhe o PIN. Se não conseguir entrar, peça ajuda ao Admin.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 5,
+    "group": "COMECE AQUI",
+    "title": "Encontrar qualquer página",
+    "route": "Página inicial > Menu de três linhas",
+    "shot": "menu",
+    "steps": [
+      [
+        "Abra o menu",
+        "Toque no ícone de três linhas, no canto superior direito."
+      ],
+      [
+        "Escolha a área",
+        "Caixa, Comandas, Entregas e outras páginas aparecem conforme seu cargo."
+      ],
+      [
+        "Volte ou troque de área",
+        "Use Voltar para retornar. Para mudar de área, abra o menu novamente."
+      ],
+      [
+        "Saia com segurança",
+        "O botão vermelho Sair encerra a sua sessão. A seta da sacola apenas recolhe a sacola."
+      ]
+    ],
+    "result": "Você chega à área desejada sem procurar por várias abas.",
+    "attention": "Se um atalho não aparecer, confirme sua função com o Admin.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 6,
+    "group": "CAIXA",
+    "title": "Montar uma venda no balcão",
+    "route": "Menu > Caixa",
+    "shot": "caixa",
+    "steps": [
+      [
+        "Localize o produto",
+        "Use a busca ou a categoria. Toque no produto para colocá-lo na sacola."
+      ],
+      [
+        "Confira a sacola à direita",
+        "Ajuste a quantidade com + e -. Confira os itens e remova o que entrou por engano."
+      ],
+      [
+        "Atenção a UN e KG",
+        "UN é quantidade de unidades. Em KG, informe o peso medido e confira o total."
+      ],
+      [
+        "Revise antes de cobrar",
+        "Confira cliente, balcão ou entrega e valor final. Depois toque em PAGAR - F1."
+      ]
+    ],
+    "result": "A sacola contém exatamente os produtos e quantidades combinados.",
+    "attention": "Não finalize com preço ou estoque divergente. Chame o responsável.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 7,
+    "group": "CAIXA",
+    "title": "Identificar o cliente",
+    "route": "Caixa > Adicionar cliente",
+    "shot": "cliente",
+    "steps": [
+      [
+        "Procure antes de cadastrar",
+        "Use BUSCAR CLIENTE para encontrar um cadastro existente."
+      ],
+      [
+        "Confira quem está comprando",
+        "Confirme nome e telefone com DDD. E-mail vincula o cadastro à conta do cliente."
+      ],
+      [
+        "Complete os dados necessários",
+        "Fiado e crédito precisam de cliente cadastrado. Entrega exige endereço completo."
+      ],
+      [
+        "Salve e confira",
+        "Toque em Adicionar cliente. O nome deve aparecer na sacola."
+      ]
+    ],
+    "result": "A venda fica associada ao cliente correto.",
+    "attention": "Só preencher o nome faz uma compra rápida; isso não cria um cadastro completo.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 8,
+    "group": "CAIXA",
+    "title": "Receber dinheiro ou cartão",
+    "route": "Caixa > PAGAR - F1",
+    "shot": "pagamento",
+    "steps": [
+      [
+        "Confira o total",
+        "Leia o total a receber e confirme o nome do cliente."
+      ],
+      [
+        "Escolha a forma real",
+        "Dinheiro, Cartão de débito ou Cartão de crédito."
+      ],
+      [
+        "Confira o recebimento",
+        "Em dinheiro, informe o valor recebido e devolva o troco. Em cartão, aguarde a aprovação da máquina."
+      ],
+      [
+        "Finalize uma vez",
+        "Toque em Finalizar venda e espere o recibo. Use Nova venda para o próximo atendimento."
+      ]
+    ],
+    "result": "A tela mostra Venda finalizada e o pagamento confirmado.",
+    "attention": "Se a tela demorar, consulte a comanda antes de cobrar ou registrar novamente.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 9,
+    "group": "CAIXA",
+    "title": "Dividir um pagamento",
+    "route": "Pagamento > Usar mais de uma forma de pagamento",
+    "shot": "pagamento-dividido",
+    "steps": [
+      [
+        "Ative a divisão",
+        "Marque Usar mais de uma forma de pagamento."
+      ],
+      [
+        "Distribua os valores",
+        "Informe cada forma e o valor correspondente. A soma deve ser igual ao total."
+      ],
+      [
+        "Confira cada parcela",
+        "Confirme dinheiro e cartão. Uma parcela Pix manual exige conferência; uma parcela fiada gera dívida."
+      ],
+      [
+        "Conclua a operação",
+        "Use Confirmar pagamentos quando os valores estiverem corretos e acompanhe as pendências exibidas."
+      ]
+    ],
+    "result": "Cada parcela fica registrada com a forma e o valor corretos.",
+    "attention": "Não marque Pix como dinheiro para conseguir concluir a venda.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 10,
+    "group": "CAIXA",
+    "title": "Registrar um Pix no balcão",
+    "route": "Pagamento > Pix · conferência do caixa",
+    "shot": "pix-balcao",
+    "steps": [
+      [
+        "Escolha Pix",
+        "Selecione Pix · conferência do caixa."
+      ],
+      [
+        "Registre a pendência",
+        "Toque em Registrar Pix pendente. O pedido ainda não está pago."
+      ],
+      [
+        "Oriente o cliente",
+        "Mostre a chave da loja e o beneficiário na comanda. Peça o comprovante após o pagamento."
+      ],
+      [
+        "Passe à conferência",
+        "Abra a comanda e siga a próxima página. O Caixa ou Admin confirma o crédito no banco."
+      ]
+    ],
+    "result": "O pedido fica pendente até a conferência do pagamento.",
+    "attention": "O Pix automático do Sicredi ainda não faz parte deste procedimento.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 11,
+    "group": "CAIXA",
+    "title": "Conferir e confirmar o Pix",
+    "route": "Comandas > Abrir recibo e detalhes",
+    "shot": "pix-conferencia",
+    "steps": [
+      [
+        "Abra o comprovante",
+        "Use Ver comprovante enviado pelo cliente. Confira também o valor da parcela Pix."
+      ],
+      [
+        "Confira no banco",
+        "Verifique se o dinheiro entrou na conta da empresa, com o valor e beneficiário corretos. Agendamento não é recebimento."
+      ],
+      [
+        "Registre a conferência",
+        "Marque a caixa de confirmação e escreva uma observação clara."
+      ],
+      [
+        "Confirme ou recuse",
+        "Se estiver correto, use Confirmar recebimento Pix. Se estiver errado, informe o motivo e use Recusar comprovante."
+      ]
+    ],
+    "result": "Após confirmar, confira o novo estado da comanda e o recibo.",
+    "attention": "Comprovante enviado não significa pagamento confirmado. Nunca aprove só pela imagem.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 12,
+    "group": "CAIXA",
+    "title": "Acompanhar as comandas",
+    "route": "Caixa > Comandas / F2",
+    "shot": "comandas",
+    "steps": [
+      [
+        "Encontre o pedido",
+        "Localize pelo cliente ou identificador da comanda."
+      ],
+      [
+        "Abra os detalhes",
+        "Confira produtos, quantidades, total e forma de pagamento."
+      ],
+      [
+        "Leia a etapa",
+        "Esperando confirmação: conferir o pedido. Esperando pagamento: receber. Pagos/finalizados: consultar. Fiados: acompanhar a dívida."
+      ],
+      [
+        "Avance apenas após conferir",
+        "Use a ação disponível dentro do pedido. Pix, entrega e fiado têm regras próprias."
+      ]
+    ],
+    "result": "Cada pedido fica na etapa correspondente à situação real.",
+    "attention": "Antes de refazer uma venda, procure por ela nas comandas e no histórico.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 13,
+    "group": "CAIXA",
+    "title": "Desconto e venda fiada",
+    "route": "Caixa > Desconto / F4 ou Pagamento > Fiado",
+    "shot": "desconto",
+    "steps": [
+      [
+        "Combine o desconto",
+        "Abra F4 e informe o percentual autorizado. Confira o novo total."
+      ],
+      [
+        "Aguarde a aprovação",
+        "Descontos acima de 5% solicitados por Caixa ou Vendedor dependem do Admin."
+      ],
+      [
+        "No fiado, identifique o cliente",
+        "Selecione um cadastro existente e escolha Fiado · aprovação do Admin."
+      ],
+      [
+        "Encaminhe a comanda",
+        "Acompanhe o pedido e siga a decisão administrativa antes de liberar a operação."
+      ]
+    ],
+    "result": "A condição comercial fica registrada e pode ser conferida.",
+    "attention": "Fiado aprovado é dívida do cliente; não é dinheiro recebido.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 14,
+    "group": "CAIXA",
+    "title": "Receber uma dívida ou crédito",
+    "route": "Relatório / F3 > Receber pagamento",
+    "shot": "receber",
+    "steps": [
+      [
+        "Selecione o cadastro certo",
+        "Busque o cliente e confira nome, saldo devedor e crédito disponível."
+      ],
+      [
+        "Escolha o lançamento",
+        "Receber pagamento de dívida quita fiado. Adicionar crédito antecipado registra valor pago para uso futuro."
+      ],
+      [
+        "Informe o que recebeu",
+        "Escolha valor e forma. No Pix, anexe comprovante, confira o banco e registre a observação."
+      ],
+      [
+        "Confira o novo saldo",
+        "Confirme o recebimento e leia o resultado. Recebimento parcial mantém o restante em aberto."
+      ]
+    ],
+    "result": "O saldo do cliente é atualizado e o recebimento fica registrado.",
+    "attention": "Não crie venda fictícia para quitar uma dívida antiga.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 15,
+    "group": "CAIXA",
+    "title": "Consultar recibos e relatório",
+    "route": "Caixa > Histórico / F9 ou Relatório / F3",
+    "shot": "relatorio",
+    "steps": [
+      [
+        "Escolha o período",
+        "Confira a data e os filtros antes de analisar os valores."
+      ],
+      [
+        "Revise seus recebimentos",
+        "Compare dinheiro, Pix, cartões, quitações e valores ainda pendentes."
+      ],
+      [
+        "Abra o histórico quando precisar",
+        "F9 permite localizar uma venda anterior e conferir seus detalhes."
+      ],
+      [
+        "Termine o turno",
+        "Entregue os valores e pendências ao responsável. Use Sair ao deixar o posto."
+      ]
+    ],
+    "result": "O responsável recebe os valores e uma lista clara de pendências.",
+    "attention": "O relatório do turno não substitui o fechamento diário feito pelo Admin.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 16,
+    "group": "VENDEDOR",
+    "title": "Montar e encaminhar a venda",
+    "route": "Menu > Caixa",
+    "shot": "vendedor",
+    "steps": [
+      [
+        "Monte a sacola",
+        "Inclua os produtos, confira UN ou KG e combine o total com o cliente."
+      ],
+      [
+        "Identifique o atendimento",
+        "Informe o cliente. Se for entrega, confira telefone, endereço e referência."
+      ],
+      [
+        "Respeite as aprovações",
+        "Solicite desconto ou fiado quando necessário e acompanhe a resposta do Admin."
+      ],
+      [
+        "Envie ao Caixa",
+        "Use Enviar comanda ao caixa. Informe o identificador do pedido ao cliente e ao operador."
+      ]
+    ],
+    "result": "O Caixa encontra a mesma comanda e continua o atendimento.",
+    "attention": "Não monte uma segunda venda para substituir uma comanda que já foi enviada.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 17,
+    "group": "ENTREGADOR",
+    "title": "Assumir e separar o pedido",
+    "route": "Menu > Entregas",
+    "shot": "entrega-assumir",
+    "steps": [
+      [
+        "Abra uma entrega disponível",
+        "Confira cliente, endereço, itens e situação do pagamento."
+      ],
+      [
+        "Assuma a responsabilidade",
+        "Toque em Assumir e separar pedido."
+      ],
+      [
+        "Confira a separação",
+        "Verifique produto, quantidade e condições antes de carregar."
+      ],
+      [
+        "Se não puder seguir",
+        "Use Devolver à fila de entregas e avise o responsável."
+      ]
+    ],
+    "result": "O pedido fica vinculado a quem vai fazer a entrega.",
+    "attention": "WhatsApp é um aviso. Confirme a situação atual dentro do site.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 18,
+    "group": "ENTREGADOR",
+    "title": "Registrar a saída da horta",
+    "route": "Entregas > Pedido assumido",
+    "shot": "entrega-saida",
+    "steps": [
+      [
+        "Confira se está tudo pronto",
+        "Produtos separados, endereço confirmado e pagamento entendido."
+      ],
+      [
+        "Registre a saída",
+        "Ao sair de verdade, toque em Saí da horta · iniciar entrega."
+      ],
+      [
+        "Abra a navegação",
+        "Use Abrir no Google Maps ou Abrir no Waze. Se necessário, ligue para o cliente."
+      ],
+      [
+        "Siga com o pedido correto",
+        "Confira o nome e endereço antes de entregar os produtos."
+      ]
+    ],
+    "result": "A entrega passa para Em rota e a saída fica registrada.",
+    "attention": "Não registre a saída enquanto o pedido ainda estiver sendo separado.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 19,
+    "group": "ENTREGADOR",
+    "title": "Entregar e concluir a rota",
+    "route": "Entregas > Pedido em rota",
+    "shot": "entrega-concluir",
+    "steps": [
+      [
+        "Confira a situação financeira",
+        "Se já estiver pago, não cobre novamente. Se for a receber, registre somente o que realmente recebeu."
+      ],
+      [
+        "Para Pix manual, chame o Caixa",
+        "A conferência bancária do Pix manual cabe ao Caixa ou Admin."
+      ],
+      [
+        "Registre o percurso, se usar",
+        "Preencha os quilômetros reais no campo opcional."
+      ],
+      [
+        "Conclua no momento certo",
+        "Após entregar e resolver o pagamento, toque em Confirmar entrega."
+      ]
+    ],
+    "result": "O pedido aparece entre os finalizados/entregues.",
+    "attention": "Se houver recusa, endereço errado ou falta de pagamento, não conclua: avise o responsável.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 20,
+    "group": "ADMIN / PRODUTOS",
+    "title": "Cadastrar e atualizar produtos",
+    "route": "Menu > Produtos",
+    "shot": "produto",
+    "steps": [
+      [
+        "Abra o cadastro",
+        "Use ADICIONAR PRODUTO para um item novo ou abra um produto existente."
+      ],
+      [
+        "Confira os dados de venda",
+        "Nome, categoria, unidade e preço. Em KG, o preço é por quilograma."
+      ],
+      [
+        "Adicione informações úteis",
+        "Inclua fotos reais e detalhes que ajudem cliente e equipe a identificar o item."
+      ],
+      [
+        "Salve e confira a vitrine",
+        "Verifique o produto no catálogo e no Caixa. Para retirar temporariamente da venda, use INATIVO."
+      ]
+    ],
+    "result": "O cadastro apresenta o produto com o preço e a unidade corretos.",
+    "attention": "Movimente estoque pela tela própria para manter o histórico da operação.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 21,
+    "group": "ADMIN / PRODUTOS",
+    "title": "Importar a planilha de produtos",
+    "route": "Produtos > Importar planilha de produtos",
+    "shot": "importacao",
+    "steps": [
+      [
+        "Use o modelo",
+        "Baixe o CSV, preencha uma linha por produto e salve como CSV UTF-8. JSON também é aceito."
+      ],
+      [
+        "Mantenha o código estável",
+        "Preencha código, nome, preço, categoria, unidade e estoque. Preserve zeros à esquerda."
+      ],
+      [
+        "Confira a prévia",
+        "Envie o arquivo e use Validar e mostrar prévia. Corrija qualquer erro antes de continuar."
+      ],
+      [
+        "Confirme e verifique",
+        "Use Confirmar importação, aguarde a mensagem final e confira os produtos no Caixa."
+      ]
+    ],
+    "result": "Os produtos novos aparecem no cadastro com os valores importados.",
+    "attention": "Limite: 2.000 produtos e 1 MB. Se interromper, reenvie o mesmo arquivo para retomar sem duplicar.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 22,
+    "group": "ADMIN / ESTOQUE",
+    "title": "Registrar entrada e contagem",
+    "route": "Menu > Estoque",
+    "shot": "estoque-contagem",
+    "steps": [
+      [
+        "Escolha o produto",
+        "Confira o nome e a unidade antes de lançar quantidade."
+      ],
+      [
+        "Entrada: some o que chegou",
+        "Use o modo de entrada e registre somente a mercadoria recebida."
+      ],
+      [
+        "Contagem: informe o saldo real",
+        "Use Conferir o que tenho e digite a quantidade que contou fisicamente."
+      ],
+      [
+        "Salve e confira",
+        "Revise o saldo final e o histórico de movimentações."
+      ]
+    ],
+    "result": "O saldo no sistema corresponde à movimentação realizada.",
+    "attention": "Contagem substitui o saldo; ela não soma a quantidade informada.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 23,
+    "group": "ADMIN / ESTOQUE",
+    "title": "Registrar perda, baixa ou ajuste",
+    "route": "Estoque > Baixa ou ajuste com motivo",
+    "shot": "estoque-ajuste",
+    "steps": [
+      [
+        "Abra a movimentação",
+        "Localize o item e use Baixa ou ajuste com motivo."
+      ],
+      [
+        "Confira operação e quantidade",
+        "Verifique se está fazendo a entrada, saída ou ajuste correto."
+      ],
+      [
+        "Escreva o motivo real",
+        "Exemplo: perda por avaria ou correção após conferência física."
+      ],
+      [
+        "Confirme o resultado",
+        "Salve e confira o saldo e o registro no histórico."
+      ]
+    ],
+    "result": "A diferença fica registrada com uma justificativa consultável.",
+    "attention": "Não use uma venda fictícia para corrigir o estoque.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 24,
+    "group": "ADMIN / EQUIPE",
+    "title": "Cadastrar e orientar a equipe",
+    "route": "Menu > Equipe > Novo Funcionário",
+    "shot": "equipe-cadastro",
+    "steps": [
+      [
+        "Cadastre cada pessoa",
+        "Informe nome, e-mail, cargo e PIN pessoal."
+      ],
+      [
+        "Escolha a função adequada",
+        "Admin, Caixa, Vendedor ou Entregador. Estoque é uma responsabilidade de uma conta administrativa autorizada."
+      ],
+      [
+        "Confirme o acesso",
+        "Salve e peça à pessoa para entrar. Confira nome, função e os atalhos disponíveis."
+      ],
+      [
+        "Mantenha a equipe atualizada",
+        "Quando alguém sair, remova ou desative o acesso e confira a lista."
+      ]
+    ],
+    "result": "Cada pessoa usa a própria conta e vê as áreas permitidas.",
+    "attention": "Não distribua a conta Admin para toda a equipe.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 25,
+    "group": "ADMIN / APROVAÇÕES",
+    "title": "Decidir sobre desconto e fiado",
+    "route": "Avisos / Comandas > Pedido pendente",
+    "shot": "comandas",
+    "steps": [
+      [
+        "Abra a solicitação",
+        "Confira cliente, produtos, valor, operador e o motivo da condição pedida."
+      ],
+      [
+        "Decida sobre o desconto",
+        "Aprove apenas o percentual autorizado. Se recusar, informe um motivo claro."
+      ],
+      [
+        "No fiado, confira o cadastro",
+        "Siga a política da empresa e confira a situação do cliente antes de aprovar."
+      ],
+      [
+        "Oriente a continuidade",
+        "Depois da aprovação, o Caixa segue as etapas do pedido e dos pagamentos."
+      ]
+    ],
+    "result": "A comanda registra a decisão e a equipe sabe como continuar.",
+    "attention": "Aprovação de fiado registra dívida; não representa entrada de dinheiro.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 26,
+    "group": "ADMIN / GESTÃO",
+    "title": "Ler os números da loja",
+    "route": "Menu > Painel Gerencial",
+    "shot": "gerencial",
+    "steps": [
+      [
+        "Escolha o período",
+        "Use o mês, a semana, o ano ou as datas disponíveis."
+      ],
+      [
+        "Compare os principais valores",
+        "Vendas registradas, dinheiro recebido e valor fiado têm significados diferentes."
+      ],
+      [
+        "Confira a comparação",
+        "Observe o período anterior indicado na tela antes de concluir se houve crescimento."
+      ],
+      [
+        "Investigue as diferenças",
+        "Use os detalhes por forma de pagamento e por produto."
+      ]
+    ],
+    "result": "Você acompanha os resultados do período que realmente selecionou.",
+    "attention": "Faturamento não é lucro. Uma venda pode ser feita num mês e recebida em outro.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 27,
+    "group": "ADMIN / GESTÃO",
+    "title": "Entender a venda de cada mês",
+    "route": "Painel Gerencial > O que mais vende em cada mês?",
+    "shot": "mensal",
+    "steps": [
+      [
+        "Escolha o ano",
+        "Use o campo Ano do histórico mensal."
+      ],
+      [
+        "Leia mês a mês",
+        "Confira o total vendido e a comparação anual exibida."
+      ],
+      [
+        "Observe os líderes",
+        "Veja o produto que lidera em quantidade e o que lidera em valor em cada mês."
+      ],
+      [
+        "Use o histórico para planejar",
+        "Combine os resultados com disponibilidade, estoque e época do ano."
+      ]
+    ],
+    "result": "Você identifica a sazonalidade registrada nas vendas da loja.",
+    "attention": "Mês sem registro não é previsão de venda e não comprova falta de procura.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 28,
+    "group": "ADMIN / GESTÃO",
+    "title": "Comparar produtos que vendem",
+    "route": "Painel Gerencial > Rankings de produtos",
+    "shot": "rankings",
+    "steps": [
+      [
+        "Confira o período",
+        "Os rankings acompanham o filtro selecionado no painel."
+      ],
+      [
+        "Escolha a unidade",
+        "Separe quilos e unidades quando comparar quantidade."
+      ],
+      [
+        "Leia os quatro rankings",
+        "Mais e menos vendidos em quantidade; mais e menos vendidos em valor."
+      ],
+      [
+        "Confira itens sem venda",
+        "Antes de decidir, veja se o produto estava ativo e disponível em estoque."
+      ]
+    ],
+    "result": "A análise distingue volume vendido de valor vendido.",
+    "attention": "Não compare 1 kg com 1 unidade como se fossem a mesma medida.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 29,
+    "group": "ADMIN / GESTÃO",
+    "title": "Conferir e fechar o dia",
+    "route": "Painel Gerencial > Fechamento e detalhes do dia",
+    "shot": "fechamento",
+    "steps": [
+      [
+        "Confira a data",
+        "Abra Fechamento e detalhes do dia e escolha o dia correto."
+      ],
+      [
+        "Concilie os valores",
+        "Compare dinheiro físico, extrato Pix e cartões com o sistema. Confira quitações e créditos separadamente."
+      ],
+      [
+        "Resolva as divergências",
+        "Revise com o operador e baixe o relatório quando precisar conferir os detalhes."
+      ],
+      [
+        "Registre uma vez",
+        "Use Registrar fechamento e aguarde. O relatório segue para a fila de envio ao Júnior."
+      ]
+    ],
+    "result": "O fechamento fica registrado com os valores conferidos.",
+    "attention": "Se o WhatsApp não chegar, consulte o estado no site; não feche o mesmo dia novamente.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 30,
+    "group": "ADMIN / SUPORTE",
+    "title": "Consultar o histórico de erros",
+    "route": "Menu > Sistema e erros",
+    "shot": "admin-status",
+    "steps": [
+      [
+        "Abra a área de acompanhamento",
+        "Use Sistema e erros no menu."
+      ],
+      [
+        "Atualize o histórico",
+        "Toque em Atualizar histórico para consultar as falhas registradas."
+      ],
+      [
+        "Anote o contexto",
+        "Horário, operação e identificador da requisição, quando houver."
+      ],
+      [
+        "Encaminhe ao suporte",
+        "Explique o que estava fazendo e a mensagem exibida. Se o site inteiro cair, avise o responsável técnico."
+      ]
+    ],
+    "result": "O suporte recebe informações úteis para localizar a falha.",
+    "attention": "Não envie PIN, senha, token ou comprovantes de clientes em grupos públicos.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 31,
+    "group": "ADMIN / LOJA",
+    "title": "Personalizar a loja e acompanhar acesso",
+    "route": "Menu > Personalizar minha loja / Eventos",
+    "shot": "personalizar",
+    "steps": [
+      [
+        "Abra a personalização",
+        "Revise identidade visual, nome, cores e informações exibidas ao cliente."
+      ],
+      [
+        "Faça alterações com atenção",
+        "Confira os campos e salve usando a ação indicada na página."
+      ],
+      [
+        "Verifique a vitrine",
+        "Abra a página inicial e confira o resultado no computador e no celular."
+      ],
+      [
+        "Consulte os Eventos",
+        "A área Eventos mostra registros de interação do site; use-a para entender o uso da loja."
+      ]
+    ],
+    "result": "A identidade da Conflora fica coerente em toda a vitrine.",
+    "attention": "Eventos de navegação não substituem o relatório financeiro de vendas.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 32,
+    "group": "TODAS AS FUNÇÕES",
+    "title": "Perfil, avisos e saída",
+    "route": "Menu > Editar meu perfil",
+    "shot": "perfil",
+    "steps": [
+      [
+        "Confira seus dados",
+        "Abra Editar meu perfil e mantenha as informações pessoais corretas."
+      ],
+      [
+        "Salve as alterações",
+        "Confira a confirmação antes de fechar a tela."
+      ],
+      [
+        "Acompanhe os avisos",
+        "O sino e a quantidade destacada indicam avisos ainda não lidos. Abra para consultar o conteúdo."
+      ],
+      [
+        "Encerre a sessão",
+        "Use o botão vermelho Sair antes de entregar o aparelho a outra pessoa."
+      ]
+    ],
+    "result": "Seus dados ficam atualizados e as pendências são consultadas.",
+    "attention": "Alteração de função e acesso deve ser feita pelo Admin na Equipe.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 33,
+    "group": "CLIENTE / ORIENTAÇÃO",
+    "title": "Comprar no catálogo",
+    "route": "Página inicial > Produtos > Sacola",
+    "shot": "sacola",
+    "steps": [
+      [
+        "Escolha os produtos",
+        "Busque o item e adicione à sacola. Confira quantidade e unidade."
+      ],
+      [
+        "Informe os dados",
+        "Preencha nome e telefone. Escolha retirada ou entrega e complete o endereço quando solicitado."
+      ],
+      [
+        "Revise e envie",
+        "Confira itens, total e forma de pagamento antes de confirmar o pedido."
+      ],
+      [
+        "Guarde o acompanhamento",
+        "Use o link do pedido para consultar o andamento e enviar comprovante."
+      ]
+    ],
+    "result": "O pedido aparece no acompanhamento e pode ser atendido pela loja.",
+    "attention": "O link do pedido é privado. Não compartilhe em grupos públicos.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 34,
+    "group": "CLIENTE / ORIENTAÇÃO",
+    "title": "Pagar com Pix e enviar comprovante",
+    "route": "Acompanhamento do pedido",
+    "shot": "pix-cliente",
+    "steps": [
+      [
+        "Copie a chave no site",
+        "Use Copiar chave Pix e confira o beneficiário no aplicativo do banco."
+      ],
+      [
+        "Faça o pagamento",
+        "Confira o valor do pedido ou da parcela Pix antes de concluir no banco."
+      ],
+      [
+        "Envie o comprovante",
+        "Selecione foto ou PDF e toque em Enviar comprovante."
+      ],
+      [
+        "Aguarde a conferência",
+        "A loja verifica o recebimento. Se houver recusa, leia o motivo e envie o arquivo correto."
+      ]
+    ],
+    "result": "O site informa que o comprovante aguarda conferência.",
+    "attention": "Chave e valores da imagem são demonstrativos. Sempre use a chave exibida no site em operação.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  },
+  {
+    "page": 35,
+    "group": "CLIENTE / ORIENTAÇÃO",
+    "title": "Buscar ajuda e acompanhar compras",
+    "route": "Página inicial > Assistente / Minha conta",
+    "shot": "assistente",
+    "steps": [
+      [
+        "Use a busca ou o assistente",
+        "Digite o produto que procura. Enter envia a mensagem e Esc limpa o campo."
+      ],
+      [
+        "Confira antes de comprar",
+        "As sugestões ajudam a localizar itens. Preço e estoque são conferidos ao finalizar o pedido."
+      ],
+      [
+        "Consulte sua conta",
+        "Abra Minha conta para consultar compras e informações disponíveis do cadastro."
+      ],
+      [
+        "Para quitar dívida",
+        "Fale com a loja e aguarde o recebimento ser registrado pelo Caixa."
+      ]
+    ],
+    "result": "O cliente encontra produtos e acompanha o próprio atendimento.",
+    "attention": "Uma resposta do assistente não confirma pagamento nem reserva uma venda.",
+    "caption": "Tela demonstrativa. Produtos, clientes e valores são exemplos."
+  }
+]
