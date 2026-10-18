@@ -16,6 +16,7 @@ const { seedStores } = require('./storefront-fixture');
   ]) {
     await repo.saveProduct({ ...product, stockQuantity: 100, status: "ATIVO" });
   }
+  repo.inMemoryProducts.set('legacy-negative-stock', { id: 'legacy-negative-stock', name: 'Estoque legado negativo', price: 10, stockQuantity: -25, status: 'INATIVO', unit: 'UN' });
   const app = createApp({
     storeRepository,
     messageService: {

@@ -1233,3 +1233,43 @@ test('concurrent Sicredi requests share authentication and recover after token f
   assert.equal(await client.getAccessToken(), 'test-token');
   assert.equal(calls, 2);
 });
+
+
+test('cashier PDF and WhatsApp snapshot preserve role isolation and never close or change sales', async t => {
+  const s = setup();
+  const reportAdmin = { ...admin, pin: '9999', active: true };
+  s.base.inMemoryUsers.set(admin.id, reportAdmin);
+  const documents = [];
+  s.whatsapp.sendDocumentBuffer = async (phone, buffer, filename, caption) => {
+    documents.push({ phone, buffer, filename, caption }); return { messages: [{ id: 'wamid.report' }] };
+  };
+  const app = createApp({ messageService: { firestoreRepo: s.base, whatsappClient: s.whatsapp }, sicrediClient: s.pix });
+  const server = app.listen(0); t.after(() => server.close()); const origin = `http://127.0.0.1:${server.address().port}`;
+  const post = (path, body, cookie = '') => fetch(origin + path, { method: 'POST', headers: { 'Content-Type': 'application/json', cookie }, body: JSON.stringify(body) });
+  const login = async user => (await post('/api/admin/auth/login', { userId: user.id, pin: user.pin })).headers.get('set-cookie').split(';')[0];
+  const first = await s.service.create({ ...s.input, requestId: randomUUID() }, cashier);
+  await s.repository.receive(first.id, actor(cashier));
+  const other = await s.service.create({ ...s.input, requestId: randomUUID(), items: [{ productId: 'plant', quantity: 1 }] }, secondCashier);
+  await s.repository.receive(other.id, actor(secondCashier));
+  const cashierCookie = await login(cashier);
+  const snapshot = await (await fetch(origin + '/api/caixa/orders', { headers: { cookie: cashierCookie } })).json();
+  assert.equal(snapshot.closing.totalReceived, 20);
+  assert.deepEqual(snapshot.cashierOrderIds, [first.id]);
+  const report = await fetch(origin + '/api/caixa/report.pdf?operator=admin', { headers: { cookie: cashierCookie } });
+  assert.equal(report.status, 200); assert.match(report.headers.get('content-type'), /application\/pdf/);
+  assert.match(report.headers.get('cache-control'), /no-store/);
+  assert.equal(Buffer.from(await report.arrayBuffer()).subarray(0, 5).toString(), '%PDF-');
+  const adminCookie = await login(reportAdmin);
+  const general = await (await fetch(origin + '/api/caixa/orders', { headers: { cookie: adminCookie } })).json();
+  assert.equal(general.closing.totalReceived, 30); assert.equal(general.cashierOrderIds.length, 2);
+  const before = JSON.stringify(await s.repository.read('orders', first.id));
+  assert.equal((await post('/api/caixa/report/send-whatsapp', {}, cashierCookie)).status, 200);
+  assert.equal(documents.length, 1); assert.equal(documents[0].buffer.subarray(0, 5).toString(), '%PDF-');
+  assert.match(documents[0].caption, new RegExp(cashier.name));
+  assert.equal(JSON.stringify(await s.repository.read('orders', first.id)), before);
+  const sellerCookie = await login(seller);
+  assert.equal((await fetch(origin + '/api/caixa/report.pdf', { headers: { cookie: sellerCookie } })).status, 403);
+  assert.equal((await post('/api/caixa/report/send-whatsapp', {}, sellerCookie)).status, 403);
+  s.whatsapp.sendDocumentBuffer = async () => ({ mock: true });
+  assert.equal((await post('/api/caixa/report/send-whatsapp', {}, cashierCookie)).status, 502);
+});

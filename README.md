@@ -227,3 +227,16 @@ As mensagens que falharam ficam pendentes na fila e seguem a política de reenvi
 - [Relatório da revisão de 17/10/2026](docs/RELATORIO-VALIDACAO-2026-10-17.md)
 
 Os cartões de comandas usam o componente compartilhado `OrderCardSurface` em `public/pdv/order-card.styles.js` (styled-components servido pelo backend). Fiado aprovado pelo Admin baixa estoque e registra dívida; a quitação não baixa novamente.
+
+
+## Relatório parcial do caixa em PDF
+
+Admin → Caixa/Vendas e Caixa → Relatório oferecem **Baixar PDF** e **Enviar PDF no WhatsApp** a qualquer momento. A emissão não fecha o caixa. O Admin exporta o consolidado da loja e o perfil CAIXA exporta somente os seus recebimentos, incluindo a atribuição de recebimentos pelo entregador ao responsável financeiro da venda. A autorização é aplicada no servidor, sem aceitar troca de operador por parâmetros enviados pelo navegador.
+
+O PDF inclui período, horário de emissão, vendas recebidas, recebimentos de clientes, formas de pagamento e detalhamento. Fiado aprovado e crédito de cliente utilizado aparecem separados do dinheiro novo recebido. O PDF é gerado em memória, com resposta privada `no-store`, sem publicação em `/reports`.
+
+O envio usa `OWNER_WHATSAPP_NUMBER` como destinatário da loja. Para envios proativos fora da janela de atendimento, configure `WHATSAPP_CASHIER_REPORT_TEMPLATE` com um modelo aprovado na Meta: cabeçalho **DOCUMENT**, corpo com uma variável de texto para a descrição do relatório, idioma `WHATSAPP_TEMPLATE_LANGUAGE` (padrão `pt_BR`). Sem esse modelo, o envio usa mensagem de documento e fica sujeito à janela de atendimento. A API só informa sucesso após confirmação da Meta; baixar o PDF continua disponível quando há falha de envio.
+
+Referência oficial: [documentos pela API do WhatsApp](https://www.postman.com/meta/whatsapp-business-platform/request/zjtbdpz/send-document-message-by-id).
+
+Na conferência de estoque, o campo numérico representa o saldo absoluto: de -25 para 100 significa **saldo final 100**. O modo **Receber produtos** soma entradas e é selecionado explicitamente. Reservas de pedidos continuam protegidas.

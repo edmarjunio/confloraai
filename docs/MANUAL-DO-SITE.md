@@ -53,6 +53,8 @@ O histórico fica em Minha conta. Abra uma compra para ver seu recibo. O saldo d
 
 O vendedor pode lançar a comanda para recebimento no caixa. Selecionar uma intenção de pagamento não significa que o dinheiro já foi recebido.
 
+**Relatório a qualquer hora:** em Caixa/Vendas ou Caixa → Relatório, use **Baixar PDF** ou **Enviar PDF no WhatsApp**. O Admin recebe o caixa geral da loja; o Caixa recebe somente os valores atribuídos ao seu caixa. O PDF é uma posição parcial até a emissão e não encerra o caixa. O envio vai ao WhatsApp da loja configurado no sistema. Para enviar automaticamente fora da janela de atendimento do WhatsApp, é necessário o modelo de documento aprovado na Meta, descrito no README.
+
 ## 5. Comandas
 
 | Coluna | Significado e ação |
@@ -115,7 +117,7 @@ O tempo de separação é distinto do tempo desde a saída. As médias por km di
 **Entrada e conferência por toque:**
 
 1. Abra **Admin → Estoque** e busque o produto pelo nome ou categoria.
-2. Use **Receber produtos** para somar novas unidades ao saldo. Use **Conferir o que tenho** para contar do zero e substituir o saldo pela quantidade física encontrada.
+2. O modo inicial é **Conferir o que tenho**. Digite 100 para deixar o saldo em exatamente 100, mesmo se o saldo anterior era negativo. Use **Receber produtos** para somar novas unidades ao saldo. Use **Conferir o que tenho** para contar do zero e substituir o saldo pela quantidade física encontrada.
 3. Cada toque na foto, no nome ou em **Contar 1 unidade** soma uma unidade à contagem. Para KG, cada toque soma 1 kg; você pode digitar o peso com até três casas decimais.
 4. Confira o número destacado. Use **Desfazer último toque** para corrigir um engano ou **Recomeçar este produto** para zerar o rascunho. Na conferência, digite **0** para registrar um produto esgotado.
 5. Não encontrou o produto? Use **Cadastrar este produto**. O nome pesquisado vem preenchido e, após salvar, você volta ao estoque com os outros produtos contados preservados.

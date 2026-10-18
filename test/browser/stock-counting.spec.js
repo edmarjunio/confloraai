@@ -9,6 +9,7 @@ async function start(page, suffix, unit = 'UN') {
   await page.goto('/admin');
   await page.locator('#tabBtn-stock').click();
   await page.locator('#stockSearchInput').fill(name);
+  await page.locator('#stockModeEntry').click();
   const card = page.locator('#stockCardsGrid render-product-card').filter({ hasText: name });
   await expect(card).toBeVisible();
   return { id, name, card };

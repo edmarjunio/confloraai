@@ -166,6 +166,7 @@ test('Admin: entrada, saída com justificativa e contagem substituem saldo com i
   await pinLogin(page, 'Edmar Júnio (Izibola)', '1234');
   await page.locator('#tabBtn-stock').click();
   await page.locator('#stockSearchInput').fill('ABACATE KG');
+  await page.locator('#stockModeEntry').click();
   const card = page.locator('#stockCardsGrid .stock-card').filter({ hasText: 'ABACATE KG' });
   await expect(card).toBeVisible();
   await expect(card.locator('render-image img')).toBeVisible();
@@ -231,11 +232,11 @@ test('Admin alterna venda livre e estoque ativo sem cadastrar entrada', async ({
   await expect(button).toBeEnabled();
   try {
     if ((await button.getAttribute('aria-pressed')) === 'true') await button.click();
-    await expect(button).toHaveText('Ativar estoque');
+    await expect(button).toHaveText('Venda livre · Ativar estoque');
     await expect(page.locator('#stockControlHelp')).toContainText('Venda livre');
     await page.reload();
     await page.locator('#tabBtn-stock').click();
-    await expect(button).toHaveText('Ativar estoque');
+    await expect(button).toHaveText('Venda livre · Ativar estoque');
     await button.click();
     await expect(button).toContainText('Estoque ativo');
     expect((await (await page.request.get('/api/admin/inventory-settings')).json()).stockControlEnabled).toBe(true);

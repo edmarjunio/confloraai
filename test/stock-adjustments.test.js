@@ -77,3 +77,13 @@ test('conferência rejeita saldo alterado e não reduz estoque reservado', async
   assert.equal(count.newStock, 8);
   assert.equal((await repository.adjustStock({ productId: 'concurrent-count', operation: 'SET', quantity: 8, expectedStock: 11, reason: 'Conferência física', requestId: 'safe-count' })).duplicate, true);
 });
+
+
+test('digitar 100 na conferência substitui o saldo negativo e mantém o saldo exatamente 100', async () => {
+  const repository = new FirestoreRepository({ isInMemory: true });
+  repository.inMemoryProducts.set('negative-product', { id: 'negative-product', name: 'Produto com saldo antigo negativo', stockQuantity: -15 });
+  const result = await repository.adjustStock({ productId: 'negative-product', operation: 'SET', quantity: 100, expectedStock: -15, reason: 'Conferência física digitada', requestId: 'count-negative-100' });
+  assert.equal(result.previousStock, -15);
+  assert.equal(result.newStock, 100);
+  assert.equal(repository.inMemoryProducts.get('negative-product').stockQuantity, 100);
+});

@@ -8,8 +8,10 @@ const { resolve } = require('node:path');
 // even when an older storefront worker controls this tab.
 const productAssetsVersion = createHash('sha256')
   .update(readFileSync(resolve(__dirname, '../../public/storefront/design-system.css')))
+  .update(readFileSync(resolve(__dirname, '../../public/storefront/admin-shell-v1.css')))
   .update(readFileSync(resolve(__dirname, '../../public/storefront/product-card.js')))
   .update(readFileSync(resolve(__dirname, '../../public/storefront/stock-counting.js')))
+  .update(readFileSync(resolve(__dirname, '../../public/storefront/cashier-report-actions.js')))
   .digest('hex').slice(0, 12);
 
 
@@ -49,7 +51,7 @@ function renderAdminHtml(storeConfig) {
     <script src="/store-assets/order-display.js"></script>
   ${FETCH_SHIM_SCRIPT}
 
-  <link rel="stylesheet" href="/store-assets/admin-shell-v1.css">
+  <link rel="stylesheet" href="/store-assets/admin-shell-v1.css?v=${productAssetsVersion}">
   <link rel="stylesheet" href="/store-assets/site-header.css">
   <link rel="stylesheet" href="/store-assets/design-system.css?v=${productAssetsVersion}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -210,6 +212,7 @@ function renderAdminHtml(storeConfig) {
         </div>
       </div>
 
+      <cashier-report-actions id="adminCashierReport"></cashier-report-actions>
       <div class="stat-grid" >
         <div class="stat-card">
           <div class="stat-label">Vendas Totais Hoje</div>
@@ -273,14 +276,12 @@ function renderAdminHtml(storeConfig) {
     <!-- ABA 5: CONTROLE DE ESTOQUE -->
     <div id="tab-stock" class="tab-content">
       <div class="admin-section-heading">
-        <div><h2>Entrada e conferência de estoque</h2><p class="muted">Busque o produto e toque uma vez para cada unidade que estiver contando.</p></div>
-        <div class="stock-toolbar-actions">
-          <button type="button" id="stockControlToggle" class="action-btn btn-gray" aria-pressed="false" onclick="toggleStockControl()" disabled>Carregando controle…</button>
-          <button type="button" class="action-btn btn-green" onclick="openStockAdjustment('ENTRY')">＋ Entrada de estoque</button>
-          <button type="button" class="action-btn btn-red" onclick="openStockAdjustment('EXIT')">− Baixa de estoque</button>
-        </div>
+        <div><h2>Entrada e conferência de estoque</h2><p class="muted">Busque o produto, digite a quantidade real e conclua a conferência. Também pode contar com toques.</p></div>
       </div>
-      <p id="stockControlHelp" class="muted" role="status"></p>
+      <section id="stockControlBanner" class="stock-control-banner" aria-label="Controle de estoque">
+        <div><strong>Controle de estoque nas vendas</strong><p id="stockControlHelp" role="status"></p></div>
+        <button type="button" id="stockControlToggle" class="action-btn" aria-pressed="false" onclick="toggleStockControl()" disabled>Carregando controle…</button>
+      </section>
       <div class="stock-toolbar">
         <input type="search" id="stockSearchInput" class="stock-search" aria-label="Buscar produto no estoque" placeholder="1. Busque o produto pelo nome ou categoria…" oninput="filterStockCards()" />
         <span id="stockProductsCount" class="muted" role="status"></span>
@@ -298,6 +299,13 @@ function renderAdminHtml(storeConfig) {
       </div>
       <p id="stockCountingStatus" role="status" aria-live="polite"></p>
       <div class="admin-products-grid" id="stockCardsGrid"></div>
+      <details class="stock-extra-actions">
+        <summary>Outros ajustes de estoque</summary>
+        <div class="stock-toolbar-actions">
+          <button type="button" class="action-btn btn-gray" onclick="openStockAdjustment('ENTRY')">Entrada por quantidade</button>
+          <button type="button" class="action-btn btn-gray" onclick="openStockAdjustment('EXIT')">Baixa com justificativa</button>
+        </div>
+      </details>
       <div class="card" style="margin-top:22px;">
         <h3>Movimentações recentes</h3>
         <div id="stockMovementsList" class="muted">Carregando movimentações…</div>
@@ -676,6 +684,7 @@ function renderAdminHtml(storeConfig) {
   <script src="/store-assets/render-image.js"></script>
   <script src="/store-assets/product-card.js?v=${productAssetsVersion}"></script>
   <script src="/store-assets/stock-counting.js?v=${productAssetsVersion}"></script>
+  <script src="/store-assets/cashier-report-actions.js?v=${productAssetsVersion}"></script>
   <script>
     // ESTADO GLOBAL
     let currentUser = null;
@@ -721,6 +730,8 @@ function renderAdminHtml(storeConfig) {
       roleEl.innerText = currentUser.role || 'OPERADOR';
       roleEl.className = 'role-badge ' + (currentUser.role === 'CAIXA' ? 'caixa' : '');
 
+      document.getElementById('adminCashierReport').hidden = !['ADMIN', 'CAIXA'].includes(currentUser.role);
+      document.getElementById('adminCashierReport').setAttribute('scope-label', currentUser.role === 'ADMIN' ? 'Caixa geral da loja · hoje' : 'Somente o seu caixa · hoje');
       const isAdmin = currentUser.role === 'ADMIN';
 
       const visibleTabs = isAdmin
@@ -1512,8 +1523,9 @@ function renderAdminHtml(storeConfig) {
       button.hidden = currentUser?.role !== 'ADMIN';
       button.disabled = stockControlActive === null;
       button.setAttribute('aria-pressed', String(stockControlActive === true));
-      button.className = 'action-btn ' + (stockControlActive ? 'btn-green' : 'btn-gray');
-      button.textContent = stockControlActive ? '✓ Estoque ativo · Desativar' : 'Ativar estoque';
+      document.getElementById('stockControlBanner').dataset.enabled = String(stockControlActive === true);
+      button.className = 'action-btn ' + (stockControlActive ? 'btn-green' : 'btn-amber');
+      button.textContent = stockControlActive === null ? 'Verificar controle de estoque' : stockControlActive ? '✓ Estoque ativo · Desativar' : 'Venda livre · Ativar estoque';
       document.getElementById('stockControlHelp').textContent = stockControlActive === null ? 'Não foi possível consultar o controle de estoque.' : stockControlActive
         ? 'Estoque ativo: as vendas exigem saldo disponível e a baixa ocorre na confirmação do pagamento.'
         : 'Venda livre: venda sem cadastrar entradas de estoque, inclusive no Pix. Reservas anteriores continuam protegidas.';

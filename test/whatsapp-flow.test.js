@@ -80,3 +80,26 @@ test('WhatsApp uploads QR image and sends its media ID; failed upload never send
   await assert.rejects(client.sendImageBuffer('5564999990000', Buffer.from('image')), /HTTP 503/);
   assert.equal(calls.length, 1);
 });
+
+
+test('cashier report uploads a PDF and sends its media ID using the approved document template', async t => {
+  const originalFetch = global.fetch;
+  const previousTemplate = process.env.WHATSAPP_CASHIER_REPORT_TEMPLATE;
+  process.env.WHATSAPP_CASHIER_REPORT_TEMPLATE = 'relatorio_caixa_pdf';
+  t.after(() => { global.fetch = originalFetch; if (previousTemplate === undefined) delete process.env.WHATSAPP_CASHIER_REPORT_TEMPLATE; else process.env.WHATSAPP_CASHIER_REPORT_TEMPLATE = previousTemplate; });
+  const calls = [];
+  global.fetch = async (url, options) => {
+    calls.push({ url, options });
+    return { ok: true, json: async () => String(url).endsWith('/media') ? { id: 'report-media' } : { messages: [{ id: 'wamid.report' }] } };
+  };
+  const client = new WhatsAppClient();
+  const result = await client.sendDocumentBuffer('5564999994321', Buffer.from('%PDF-test'), 'caixa.pdf', 'Caixa geral de hoje');
+  assert.equal(result.messages[0].id, 'wamid.report');
+  assert.equal(calls.length, 2);
+  const file = calls[0].options.body.get('file');
+  assert.equal(file.type, 'application/pdf'); assert.equal(file.name, 'caixa.pdf');
+  const message = JSON.parse(calls[1].options.body);
+  assert.equal(message.type, 'template');
+  assert.equal(message.template.components[0].parameters[0].document.id, 'report-media');
+  assert.equal(message.template.components[1].parameters[0].text, 'Caixa geral de hoje');
+});

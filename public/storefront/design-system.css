@@ -492,3 +492,24 @@ cf-card[data-order-card] > button:first-child {
 @media(max-width:540px) { .stock-count-summary { top:0; gap:8px; padding:10px; } .stock-count-summary strong { flex-basis:100%; } #stockSave { flex:1; } .stock-count-toolbar button { flex:1; min-height:48px; } }
 
 #stockSearchInput { flex:1; width:100%; max-width:800px; min-width:220px; min-height:50px; border:2px solid #96cbaa; font-size:16px; }
+
+.cashier-report-actions { display:flex; align-items:center; flex-wrap:wrap; gap:16px; padding:18px; margin-bottom:20px; border:1px solid #c9e5d2; border-radius:16px; background:#f6fbf8; }
+.cashier-report-actions[hidden] { display:none; }
+.cashier-report-actions > div:first-child { flex:1; min-width:200px; }
+.cashier-report-actions strong { color:#123b25; font-size:16px; }
+.cashier-report-actions p { font-size:12px; color:#53675b; margin:6px 0 0; }
+.cashier-report-buttons { display:flex; flex-wrap:wrap; gap:10px; }
+.cashier-report-buttons .cf-button { min-height:46px; padding:12px 18px; }
+.cashier-report-status { flex-basis:100%; }
+.cashier-report-status:empty { display:none; }
+.stock-control-banner { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:18px; padding:22px; margin:16px 0 24px; border:2px solid #edc561; border-radius:18px; background:#fffbeb; }
+.stock-control-banner[data-enabled="true"] { border-color:#64b980; background:#ecfdf3; }
+.stock-control-banner > div { flex:1; min-width:220px; }
+.stock-control-banner strong { display:block; font-size:18px; color:#173e28; }
+.stock-control-banner p { font-size:13px; line-height:1.5; margin-top:6px; }
+#stockControlToggle { min-height:54px; padding:14px 22px; font-size:16px; font-weight:800; border-radius:14px; box-shadow:0 4px 12px rgb(15 56 30 / 12%); }
+@media(max-width:600px) { .cashier-report-buttons { width:100%; } .cashier-report-buttons button { flex:1; } #stockControlToggle { width:100%; } }
+
+.stock-extra-actions { margin-top:24px; padding:14px 16px; border:1px solid #e0e7e2; border-radius:12px; }
+.stock-extra-actions summary { cursor:pointer; color:#53675b; font-weight:600; font-size:13px; }
+.stock-extra-actions .stock-toolbar-actions { margin-top:14px; }

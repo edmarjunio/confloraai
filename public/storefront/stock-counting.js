@@ -2,7 +2,7 @@
 (() => {
   let options;
   let owner = '';
-  let mode = 'ENTRY';
+  let mode = 'SET';
   let drafts = new Map();
   let history = [];
   let saving = false;
@@ -19,7 +19,7 @@
     options = next;
     if (owner === next.userId) return;
     owner = next.userId;
-    drafts = new Map(); history = []; mode = 'ENTRY';
+    drafts = new Map(); history = []; mode = 'SET';
     try {
       const saved = JSON.parse(window.sessionStorage.getItem(key()) || 'null');
       if (saved && ['ENTRY', 'SET'].includes(saved.mode) && Array.isArray(saved.drafts)) {
@@ -29,8 +29,8 @@
   }
   function summary() {
     element('stockCountingHelp').textContent = mode === 'ENTRY'
-      ? '2. Cada toque soma +1 à entrada. O saldo atual só muda ao salvar. Para kg, digite o peso recebido.'
-      : '2. Conte do zero: cada toque soma +1 à quantidade física. Ao concluir, ela substitui o saldo. Para produto esgotado, digite 0.';
+      ? 'Digite a quantidade recebida, por exemplo 100. Ela será somada ao saldo. Se quer deixar o saldo exatamente em 100, use Conferir o que tenho.'
+      : 'Digite o saldo real, por exemplo 100. Ao concluir, o estoque será exatamente 100, mesmo se antes estava negativo. Para contar aos poucos, cada toque soma +1.';
     element('stockModeEntry').setAttribute('aria-pressed', String(mode === 'ENTRY'));
     element('stockModeCount').setAttribute('aria-pressed', String(mode === 'SET'));
     for (const [id, selected] of [['stockModeEntry', mode === 'ENTRY'], ['stockModeCount', mode === 'SET']]) {
@@ -39,7 +39,7 @@
     }
     element('stockDraftSummary').textContent = drafts.size
       ? drafts.size + ' produto(s) contado(s) · revise os números nos cartões'
-      : 'Nenhum produto contado · toque no cartão para começar';
+      : 'Digite a quantidade ou toque no cartão para contar';
     element('stockSave').textContent = saving ? 'Salvando…' : (mode === 'ENTRY' ? 'Salvar entradas' : 'Concluir conferência') + (drafts.size ? ' (' + drafts.size + ')' : '');
     element('stockSave').disabled = saving || !drafts.size;
     element('stockUndo').disabled = saving || !history.length;
@@ -120,7 +120,7 @@
       const value = document.createElement('strong'); value.id = 'stk-' + product.id; balance.append(value, options.getUnit(product) === 'KG' ? ' kg' : ' un.');
       const controls = document.createElement('label'); controls.className = 'stock-count-input';
       controls.textContent = mode === 'ENTRY' ? 'Quantidade recebida' : 'Quantidade física contada';
-      const input = document.createElement('input'); input.type = 'number'; input.min = '0'; input.step = options.getUnit(product) === 'KG' ? '0.001' : '1'; input.inputMode = options.getUnit(product) === 'KG' ? 'decimal' : 'numeric'; input.placeholder = '0';
+      const input = document.createElement('input'); input.type = 'number'; input.min = '0'; input.step = options.getUnit(product) === 'KG' ? '0.001' : '1'; input.inputMode = options.getUnit(product) === 'KG' ? 'decimal' : 'numeric'; input.placeholder = 'Ex.: 100';
       input.setAttribute('aria-label', controls.textContent + ' de ' + (product.name || product.descricao));
       input.onchange = () => { if (input.value !== '') change(product, Number(input.value)); };
       controls.appendChild(input);

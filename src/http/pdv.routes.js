@@ -192,16 +192,16 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     if (!approval || (req.user.role !== 'ADMIN' && approval.requestedBy !== req.user.id)) { return res.sendStatus(404); }
     res.json(approval);
   }));
-  app.get('/api/caixa/orders', route(async (req, res) => {
+  const cashierSnapshot = async (user, query = {}) => {
     const orders = (await repository.getAllOrders(10000)).filter((order) => ['PDV', 'WEB_CATALOG'].includes(order.source));
-    const range = reportRange(req.query);
-    const isAdmin = req.user.role === 'ADMIN';
-    const canViewPersonalOrder = (order) => isAdmin || order.createdBy?.id === req.user.id || financialReceiver(order)?.id === req.user.id;
-    const canViewOpenOrder = (order) => canViewPersonalOrder(order) || (req.user.role === 'CAIXA' && !order.completedAt && order.status !== 'CANCELLED');
+    const range = reportRange(query);
+    const isAdmin = user.role === 'ADMIN';
+    const canViewPersonalOrder = (order) => isAdmin || order.createdBy?.id === user.id || financialReceiver(order)?.id === user.id;
+    const canViewOpenOrder = (order) => canViewPersonalOrder(order) || (user.role === 'CAIXA' && !order.completedAt && order.status !== 'CANCELLED');
     const openOrders = orders.filter((order) => !order.completedAt && order.status !== 'CANCELLED' &&
       canViewOpenOrder(order));
     const activeDeliveries = orders.filter(order => isDelivery(order) && order.status !== 'CANCELLED' &&
-      order.deliveryStatus !== 'DELIVERED' && (canViewPersonalOrder(order) || req.user.role === 'CAIXA') &&
+      order.deliveryStatus !== 'DELIVERED' && (canViewPersonalOrder(order) || user.role === 'CAIXA') &&
       order.creditApprovalStatus !== 'PENDING' &&
       (['PREPARING_DELIVERY', 'OUT_FOR_DELIVERY'].includes(order.deliveryStatus) ||
         (order.paymentMethod !== 'PIX' && !(order.paymentParts || []).some(part => ['PIX', 'FIADO'].includes(part.method))) || isDeliverySettled(order)));
@@ -219,12 +219,12 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
       store.list('debt_settlements', 'type', 'CREDITO_CLIENTE'),
     ]);
     const allSettlements = [...new Map(settlementGroups.flat().map((row) => [row.id, row])).values()];
-    const debtHistory = allSettlements.filter((row) => ['QUITACAO_FIADO', 'CREDITO_CLIENTE'].includes(row.entryType || row.type || 'QUITACAO_FIADO') && (isAdmin || row.receivedBy?.id === req.user.id) && isWithinRange(row.createdAt, range));
-    const mySales = completed.filter((order) => order.createdBy?.id === req.user.id);
-    const myReceipts = completed.filter((order) => financialReceiver(order)?.id === req.user.id);
-    const myDebtReceipts = debtHistory.filter((row) => row.receivedBy?.id === req.user.id);
+    const debtHistory = allSettlements.filter((row) => ['QUITACAO_FIADO', 'CREDITO_CLIENTE'].includes(row.entryType || row.type || 'QUITACAO_FIADO') && (isAdmin || row.receivedBy?.id === user.id) && isWithinRange(row.createdAt, range));
+    const mySales = completed.filter((order) => order.createdBy?.id === user.id);
+    const myReceipts = completed.filter((order) => financialReceiver(order)?.id === user.id);
+    const myDebtReceipts = debtHistory.filter((row) => row.receivedBy?.id === user.id);
     const receivedOrders = completed.filter((order) => order.paymentStatus === 'APPROVED' || order.paymentParts?.some((part) => ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO'].includes(part.method)));
-    const closingOrders = isAdmin ? receivedOrders : receivedOrders.filter((order) => financialReceiver(order)?.id === req.user.id);
+    const closingOrders = isAdmin ? receivedOrders : receivedOrders.filter((order) => financialReceiver(order)?.id === user.id);
     const closingSettlements = isAdmin ? debtHistory : myDebtReceipts;
     const byPayment = paymentTotals(closingOrders, closingSettlements);
     const sum = (rows, field) => rows.reduce((total, row) => total + Number(row[field] || 0), 0);
@@ -236,10 +236,10 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
       customerCreditUsed: closingOrders.reduce((sum, order) => sum + partAmount(order, 'SALDO_CLIENTE'), 0),
       debtReceived: sum(closingSettlements, 'amount'),
       totalReceived: receivedTotal(closingOrders) + sum(closingSettlements, 'amount'),
-      confirmedDebt: (isAdmin ? confirmed : confirmed.filter((order) => order.createdBy?.id === req.user.id || financialReceiver(order)?.id === req.user.id)).reduce((sum, order) => sum + partAmount(order, 'FIADO'), 0),
+      confirmedDebt: (isAdmin ? confirmed : confirmed.filter((order) => order.createdBy?.id === user.id || financialReceiver(order)?.id === user.id)).reduce((sum, order) => sum + partAmount(order, 'FIADO'), 0),
       byPayment,
     };
-    res.json({
+    return {
       range,
       pendingConfirmation,
       pendingPayment,
@@ -256,7 +256,32 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
         orderCount: mySales.length,
       },
       closing,
-    });
+      cashierOrders: closingOrders,
+      cashierSettlements: closingSettlements,
+    };
+  };
+  app.get('/api/caixa/orders', route(async (req, res) => {
+    const { cashierOrders, ...board } = await cashierSnapshot(req.user, req.query);
+    delete board.cashierSettlements;
+    res.json({ ...board, cashierOrderIds: cashierOrders.map(order => order.id) });
+  }));
+  const createReport = async (user, query) => {
+    const snapshot = await cashierSnapshot(user, query);
+    const { createCashierSnapshotPdf } = require('../reports/cashier-snapshot-pdf');
+    return { buffer: await createCashierSnapshotPdf(snapshot, user), range: snapshot.range };
+  };
+  app.get('/api/caixa/report.pdf', requireCashier, route(async (req, res) => {
+    const report = await createReport(req.user, req.query);
+    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="caixa-' + report.range.from + '.pdf"', 'Cache-Control': 'private, no-store' });
+    res.send(report.buffer);
+  }));
+  app.post('/api/caixa/report/send-whatsapp', requireCashier, route(async (req, res) => {
+    const phone = normalizePhone(ownerPhone);
+    if (!phone || !whatsapp?.sendDocumentBuffer) return res.status(503).json({ error: 'Configure o WhatsApp da loja para enviar o relatório.' });
+    const report = await createReport(req.user, req.body);
+    const result = await whatsapp.sendDocumentBuffer(phone, report.buffer, 'caixa-' + report.range.from + '.pdf', 'Relatório do caixa ' + report.range.from + ' - ' + (req.user.role === 'ADMIN' ? 'Geral da loja' : req.user.name));
+    if (result?.mock || !result?.messages?.length) return res.status(502).json({ error: 'O WhatsApp não confirmou o envio. O PDF continua disponível para baixar.' });
+    res.json({ success: true, message: 'PDF enviado ao WhatsApp da loja.' });
   }));
   const findOrder = async (req) => {
     const order = await store.read('orders', req.params.id);

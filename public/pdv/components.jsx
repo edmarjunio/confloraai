@@ -482,8 +482,10 @@ window.PdvComponents = (() => {
       { title: 'FIADOS', hint: 'Vendas registradas para pagamento posterior', orders: data.confirmed.filter(order => !deliveryOrderIds.has(order.id)), tone: 'red', stage: 'debt' },
     ] : [];
     const title = view === 'orders' ? 'Comandas' : view === 'history' ? 'Histórico de vendas' : 'Relatório';
-    const reportOrders = data ? data.history.filter((order) => user.role === 'ADMIN'
-      || (user.role === 'VENDEDOR' ? order.createdBy?.id === user.id : order.receivedBy?.id === user.id)) : [];
+    const cashierOrderIds = new Set(data?.cashierOrderIds || []);
+    const reportOrders = data ? (user.role === 'CAIXA'
+      ? data.history.filter(order => data.cashierOrderIds ? cashierOrderIds.has(order.id) : order.receivedBy?.id === user.id)
+      : data.history.filter(order => user.role === 'ADMIN' || order.createdBy?.id === user.id)) : [];
     const reportPaidOrders = reportOrders.filter((order) => (order.paymentStatus === 'APPROVED' || order.paymentStatus === 'ON_ACCOUNT') && (order.paidAt || order.completedAt));
     const methodAmount = (order, method) => (order.paymentParts || [{ method: order.paymentMethod, amount: order.total }]).filter((part) => part.method === method).reduce((sum, part) => sum + Number(part.amount || 0), 0);
     const cashAmount = (order) => ['PIX', 'DINHEIRO', 'CREDITO', 'DEBITO'].reduce((sum, method) => sum + methodAmount(order, method), 0);
@@ -564,6 +566,7 @@ window.PdvComponents = (() => {
             </>}
 
             {view === 'report' && <>
+              {['ADMIN', 'CAIXA'].includes(user.role) && <cashier-report-actions scope-label={user.role === 'ADMIN' ? 'Caixa geral da loja · período selecionado' : 'Somente o seu caixa · período selecionado'} from={dateFrom} to={dateTo}></cashier-report-actions>}
               <h3 className="mb-3 font-black text-[#0F381E]">Relatório · {dateFrom === dateTo ? dateFrom : `${dateFrom} a ${dateTo}`}</h3>
               <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
                 <MetricCard label="Recebido em vendas" value={money(reportSalesTotal)} description={`${reportCashOrders.length} venda(s) com recebimento no período`} />
