@@ -1707,7 +1707,7 @@ class FirestoreRepository {
     });
   }
 
-  async adjustStock({ productId, operation, quantity, reason = '', requestId, actor = {} }) {
+  async adjustStock({ productId, operation, quantity, reason = '', requestId, actor = {}, expectedStock }) {
     const id = String(productId || '').trim();
     const movementId = String(requestId || '').trim();
     const kind = String(operation || '').toUpperCase();
@@ -1736,8 +1736,12 @@ class FirestoreRepository {
       }
       const previousStock = Number(product.stockQuantity ?? product.estoque ?? 0);
       if (!Number.isFinite(previousStock)) throw new Error('O estoque atual do produto não é um número válido.');
+      if (kind === 'SET' && expectedStock !== undefined && (!Number.isFinite(Number(expectedStock)) || Math.abs(previousStock - Number(expectedStock)) > 0.000001)) {
+        throw new Error('O estoque mudou durante a conferência. Atualize e conte este produto novamente.');
+      }
       const newStock = kind === 'SET' ? amount : kind === 'ENTRY' ? previousStock + amount : previousStock - amount;
       if (newStock < 0) throw new Error(`Estoque insuficiente. Saldo atual: ${previousStock}.`);
+      if (newStock < Number(product.reservedQuantity || 0)) throw new Error('Existem unidades reservadas para pedidos. Confira as reservas antes de reduzir o saldo.');
       return { previousStock, newStock };
     };
     const buildMovement = (product, previousStock, newStock) => ({

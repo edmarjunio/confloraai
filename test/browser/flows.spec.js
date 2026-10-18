@@ -170,22 +170,24 @@ test('Admin: entrada, saída com justificativa e contagem substituem saldo com i
   await expect(card).toBeVisible();
   await expect(card.locator('render-image img')).toBeVisible();
   const before = Number(await card.locator('.stock-card-balance strong').textContent());
-  await card.click();
+  await card.locator('.product-photo').click();
+  await expect(card.locator('.stock-count-preview')).toContainText('Entrada: +1');
+  await page.locator('#stockSave').click();
   await expect(card.locator('.stock-card-balance strong')).toHaveText(String(before + 1));
 
-  await card.getByRole('button', { name: 'Baixa' }).click();
+  await card.getByRole('button', { name: 'Baixa ou ajuste com motivo' }).click();
   await page.locator('#stockAdjustmentQuantity').fill('1');
   await page.locator('#stockAdjustmentReason').fill('Avaria de teste');
   await page.locator('#stockAdjustmentForm button[type=submit]').click();
   await expect(card.locator('.stock-card-balance strong')).toHaveText(String(before));
   await expect(page.locator('#stockMovementsList')).toContainText('Avaria de teste');
 
-  await card.getByRole('button', { name: 'Contagem' }).click();
-  await page.locator('#stockAdjustmentQuantity').fill('15');
-  await page.locator('#stockAdjustmentReason').fill('Contagem física de teste');
-  await page.locator('#stockAdjustmentForm button[type=submit]').click();
+  await page.getByRole('button', { name: '✓ Conferir o que tenho', exact: true }).click();
+  await card.locator('input').fill('15');
+  await card.locator('input').blur();
+  await page.locator('#stockSave').click();
   await expect(card.locator('.stock-card-balance strong')).toHaveText('15');
-  await expect(page.locator('#stockMovementsList')).toContainText('Contagem física de teste');
+  await expect(page.locator('#stockMovementsList')).toContainText('Conferência física');
 });
 
 test('Admin mobile: produto inativo não aparece no catálogo e estoque não causa overflow', async ({ page }) => {
@@ -197,10 +199,10 @@ test('Admin mobile: produto inativo não aparece no catálogo e estoque não cau
   } });
   expect(response.ok()).toBeTruthy();
   await page.locator('#tabBtn-products').click();
-  const product = page.locator('#adminProductsTableBody tr').filter({ hasText: 'Produto oculto teste' });
+  const product = page.locator('#adminProductsGrid render-product-card').filter({ hasText: 'Produto oculto teste' });
   await expect(product).toHaveCount(0);
   await page.getByRole('button', { name: 'INATIVOS', exact: true }).click();
-  await expect(product).toContainText('INATIVO — oculto no catálogo');
+  await expect(product).toContainText('INATIVO - Indisponível');
   const catalog = await (await page.request.get('/api/storefront/catalog')).json();
   const inactiveCatalogProduct = catalog.products.find(item => item.id === 'inactive-filter-test');
   expect(inactiveCatalogProduct?.isAvailable).toBe(false);

@@ -2223,6 +2223,7 @@ function createApp({
         quantity,
         reason,
         requestId,
+        expectedStock: req.body.expectedStock,
         actor: { id: req.user.id, name: req.user.name },
       });
       if (movement.operation === 'EXIT' && !movement.duplicate) {
@@ -2232,7 +2233,7 @@ function createApp({
       }
       res.status(200).json(movement);
     } catch (error) {
-      const status = /não encontrado/i.test(error.message) ? 404 : /insuficiente/i.test(error.message) ? 409 : 400;
+      const status = /não encontrado/i.test(error.message) ? 404 : /insuficiente|estoque mudou|reservadas/i.test(error.message) ? 409 : 400;
       res.status(status).json({ error: error.message || 'Não foi possível ajustar o estoque.' });
     }
   });

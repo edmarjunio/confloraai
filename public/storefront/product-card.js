@@ -514,7 +514,8 @@
         return;
       }
 
-      if (variant === "cashier") {
+      if (variant === "stock" && event.target.closest("input, label, button")) return;
+      if (variant === "cashier" || variant === "stock") {
         this.emit("add", event);
       }
     }
@@ -650,7 +651,7 @@
         this.renderLegacyCatalog(vm);
         return;
       }
-      this.renderStorefront(vm, variant === "recommendation", variant === "admin");
+      this.renderStorefront(vm, variant === "recommendation", ["admin", "stock"].includes(variant));
     }
   }
 

@@ -65,3 +65,15 @@ test('baixa gera notificações para todos os administradores ativos', async () 
   assert.deepEqual(repository.inMemoryNotifications.map((notification) => notification.toUserId).sort(), ['admin-a', 'admin-b']);
   assert.ok(repository.inMemoryNotifications.every((notification) => notification.reason === 'Folhas danificadas'));
 });
+
+
+test('conferência rejeita saldo alterado e não reduz estoque reservado', async () => {
+  const repository = new FirestoreRepository({ isInMemory: true });
+  await repository.saveProduct({ id: 'concurrent-count', name: 'Muda', stockQuantity: 10, reservedQuantity: 3 });
+  await repository.adjustStock({ productId: 'concurrent-count', operation: 'ENTRY', quantity: 1, requestId: 'parallel-entry' });
+  await assert.rejects(repository.adjustStock({ productId: 'concurrent-count', operation: 'SET', quantity: 8, expectedStock: 10, reason: 'Conferência física', requestId: 'stale-count' }), /estoque mudou/);
+  await assert.rejects(repository.adjustStock({ productId: 'concurrent-count', operation: 'SET', quantity: 2, expectedStock: 11, reason: 'Conferência física', requestId: 'reserved-count' }), /reservadas/);
+  const count = await repository.adjustStock({ productId: 'concurrent-count', operation: 'SET', quantity: 8, expectedStock: 11, reason: 'Conferência física', requestId: 'safe-count' });
+  assert.equal(count.newStock, 8);
+  assert.equal((await repository.adjustStock({ productId: 'concurrent-count', operation: 'SET', quantity: 8, expectedStock: 11, reason: 'Conferência física', requestId: 'safe-count' })).duplicate, true);
+});

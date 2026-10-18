@@ -112,6 +112,17 @@ O tempo de separação é distinto do tempo desde a saída. As médias por km di
 
 ## 9. Estoque: reserva, baixa e falta de produto
 
+**Entrada e conferência por toque:**
+
+1. Abra **Admin → Estoque** e busque o produto pelo nome ou categoria.
+2. Use **Receber produtos** para somar novas unidades ao saldo. Use **Conferir o que tenho** para contar do zero e substituir o saldo pela quantidade física encontrada.
+3. Cada toque na foto, no nome ou em **Contar 1 unidade** soma uma unidade à contagem. Para KG, cada toque soma 1 kg; você pode digitar o peso com até três casas decimais.
+4. Confira o número destacado. Use **Desfazer último toque** para corrigir um engano ou **Recomeçar este produto** para zerar o rascunho. Na conferência, digite **0** para registrar um produto esgotado.
+5. Não encontrou o produto? Use **Cadastrar este produto**. O nome pesquisado vem preenchido e, após salvar, você volta ao estoque com os outros produtos contados preservados.
+6. Clique em **Salvar entradas** ou **Concluir conferência**. Até esse momento, o saldo oficial não foi alterado. Somente produtos contados serão ajustados; os demais ficam como estavam.
+
+O rascunho é guardado por operador nesta aba e sobrevive a uma atualização da página. Se houver falha ao salvar, tente novamente: a mesma movimentação não será registrada duas vezes. Caso uma venda ou outra movimentação altere o saldo durante a conferência, atualize a tela, use **Recomeçar este produto** e conte novamente. O sistema bloqueia ajustes abaixo das quantidades reservadas para pedidos.
+
 Exemplo: saldo físico 10 e reserva 2 → disponível para novas vendas 8. Quando a venda é paga, o físico passa a 8 e a reserva volta a zero. Se cancelar antes de pagar, o físico continua 10 e a reserva volta a zero.
 
 Separar ou sair em rota não significa receber dinheiro. Para pedidos ainda não pagos, mantenha o item reservado. Venda já paga baixa antes da entrega e não baixa novamente ao concluir a entrega.

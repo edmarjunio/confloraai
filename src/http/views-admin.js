@@ -9,6 +9,7 @@ const { resolve } = require('node:path');
 const productAssetsVersion = createHash('sha256')
   .update(readFileSync(resolve(__dirname, '../../public/storefront/design-system.css')))
   .update(readFileSync(resolve(__dirname, '../../public/storefront/product-card.js')))
+  .update(readFileSync(resolve(__dirname, '../../public/storefront/stock-counting.js')))
   .digest('hex').slice(0, 12);
 
 
@@ -66,18 +67,6 @@ function renderAdminHtml(storeConfig) {
     .stock-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
     .stock-toolbar-actions { display:flex; gap:8px; flex-wrap:wrap; }
     .stock-search { width:min(100%, 420px); padding:11px 14px; border:1px solid var(--border); border-radius:12px; font:inherit; }
-    .stock-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:14px; }
-    .stock-card { border:1px solid var(--border); border-radius:16px; background:#fff; padding:14px; display:grid; gap:12px; cursor:pointer; box-shadow:0 2px 6px rgba(15,23,42,.05); transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
-    .stock-card:hover { transform:translateY(-2px); box-shadow:0 9px 22px rgba(15,23,42,.12); border-color:#86c99a; }
-    .stock-card-head { display:flex; align-items:center; gap:12px; min-width:0; }
-    .stock-card render-image { width:64px; height:64px; flex:none; overflow:hidden; border-radius:12px; background:#f1f5f3; }
-    .stock-card render-image img { width:100%; height:100%; object-fit:cover; }
-    .stock-card-name { font-weight:800; font-size:14px; color:#0f172a; overflow-wrap:anywhere; }
-    .stock-card-category { font-size:11px; color:#64748b; margin-top:4px; }
-    .stock-card-balance { font-size:13px; color:#475569; }
-    .stock-card-balance strong { font-size:20px; color:var(--primary-dark); }
-    .stock-card-actions { display:flex; gap:8px; flex-wrap:wrap; }
-    .stock-card-actions .action-btn { flex:1; justify-content:center; }
     .stock-movement-row { padding:10px 12px; border:1px solid #e2e8f0; border-radius:10px; background:#fff; color:#475569; font-size:12px; line-height:1.5; }
     .stock-adjust-modal .modal-card { width:min(100% - 24px, 520px); border-radius:20px; padding:24px; }
     .stock-adjust-form { display:grid; gap:14px; margin-top:16px; }
@@ -284,7 +273,7 @@ function renderAdminHtml(storeConfig) {
     <!-- ABA 5: CONTROLE DE ESTOQUE -->
     <div id="tab-stock" class="tab-content">
       <div class="admin-section-heading">
-        <div><h2>Estoque</h2><p class="muted">Toque no cartão para somar uma unidade; use os botões para entrada, baixa ou contagem exata.</p></div>
+        <div><h2>Entrada e conferência de estoque</h2><p class="muted">Busque o produto e toque uma vez para cada unidade que estiver contando.</p></div>
         <div class="stock-toolbar-actions">
           <button type="button" id="stockControlToggle" class="action-btn btn-gray" aria-pressed="false" onclick="toggleStockControl()" disabled>Carregando controle…</button>
           <button type="button" class="action-btn btn-green" onclick="openStockAdjustment('ENTRY')">＋ Entrada de estoque</button>
@@ -293,10 +282,22 @@ function renderAdminHtml(storeConfig) {
       </div>
       <p id="stockControlHelp" class="muted" role="status"></p>
       <div class="stock-toolbar">
-        <input type="search" id="stockSearchInput" class="stock-search" placeholder="Buscar produto no estoque…" oninput="filterStockCards()" />
+        <input type="search" id="stockSearchInput" class="stock-search" aria-label="Buscar produto no estoque" placeholder="1. Busque o produto pelo nome ou categoria…" oninput="filterStockCards()" />
         <span id="stockProductsCount" class="muted" role="status"></span>
       </div>
-      <div class="stock-cards" id="stockCardsGrid"></div>
+      <div class="stock-count-toolbar" role="group" aria-label="Tipo de contagem">
+        <button type="button" id="stockModeEntry" class="action-btn btn-green" aria-pressed="true" onclick="StockCounting.setMode('ENTRY')">＋ Receber produtos</button>
+        <button type="button" id="stockModeCount" class="action-btn btn-gray" aria-pressed="false" onclick="StockCounting.setMode('SET')">✓ Conferir o que tenho</button>
+        <button type="button" class="action-btn btn-green" onclick="StockCounting.createProduct()">＋ Cadastrar produto</button>
+      </div>
+      <p id="stockCountingHelp" class="stock-count-help"></p>
+      <div class="stock-count-summary">
+        <strong id="stockDraftSummary">Nenhum produto contado</strong>
+        <button type="button" id="stockUndo" class="action-btn btn-gray" onclick="StockCounting.undo()" disabled>↶ Desfazer último toque</button>
+        <button type="button" id="stockSave" class="action-btn btn-green" onclick="StockCounting.save()" disabled>Salvar entradas</button>
+      </div>
+      <p id="stockCountingStatus" role="status" aria-live="polite"></p>
+      <div class="admin-products-grid" id="stockCardsGrid"></div>
       <div class="card" style="margin-top:22px;">
         <h3>Movimentações recentes</h3>
         <div id="stockMovementsList" class="muted">Carregando movimentações…</div>
@@ -355,7 +356,7 @@ function renderAdminHtml(storeConfig) {
         <button type="button" class="admin-add-product" onclick="openNewProductDialog()">＋ ADICIONAR PRODUTO</button>
       </div>
       <button type="button" class="action-btn btn-gray" onclick="showTab('price')">Abrir consulta e ajuste de preços</button>
-      <dialog id="productEditorDialog" class="admin-product-dialog" aria-labelledby="productFormTitle">
+      <dialog id="productEditorDialog" oncancel="event.preventDefault(); closeProductEditorDialog()" class="admin-product-dialog" aria-labelledby="productFormTitle">
         <div class="admin-product-dialog__surface">
           <div class="admin-product-dialog__header">
             <div>
@@ -674,6 +675,7 @@ function renderAdminHtml(storeConfig) {
 
   <script src="/store-assets/render-image.js"></script>
   <script src="/store-assets/product-card.js?v=${productAssetsVersion}"></script>
+  <script src="/store-assets/stock-counting.js?v=${productAssetsVersion}"></script>
   <script>
     // ESTADO GLOBAL
     let currentUser = null;
@@ -1565,107 +1567,24 @@ function renderAdminHtml(storeConfig) {
     }
 
     function filterStockCards() {
-      if (!Array.isArray(allProducts)) allProducts = [];
-      const query = String(document.getElementById('stockSearchInput')?.value || '').trim().toLocaleLowerCase('pt-BR');
-      const grid = document.getElementById('stockCardsGrid');
-      if (!grid) return;
-      grid.replaceChildren();
-      const products = allProducts.filter(product => {
-        const searchableText = [product.name, product.descricao, product.category, product.categoria, product.subcategory, product.subcategoria]
-          .filter(Boolean).join(' ').toLocaleLowerCase('pt-BR');
-        return !query || searchableText.includes(query);
+      window.StockCounting.configure({
+        userId: currentUser?.id || '',
+        getProducts: () => allProducts,
+        getUnit: getAdminProductSaleUnit,
+        updateBalance: updateStockBalance,
+        refreshMovements: loadStockMovements,
+        adjust: openStockAdjustment,
+        create: () => {
+          openNewProductDialog();
+          document.getElementById('formProdName').value = document.getElementById('stockSearchInput').value.trim();
+          returnToStock = true;
+        },
       });
-      const count = document.getElementById('stockProductsCount');
-      if (count) count.textContent = \`\${products.length} produto\${products.length === 1 ? '' : 's'}\`;
-      products.forEach(product => {
-        const card = document.createElement('div');
-        card.className = 'stock-card';
-        card.dataset.productId = product.id;
-        card.setAttribute('role', 'button');
-        card.setAttribute('tabindex', '0');
-        const stockUnit = getAdminProductSaleUnit(product);
-        card.setAttribute('aria-label', stockUnit === 'KG' ? \`Adicionar 1 kg de \${product.name || product.descricao || 'produto'} ao estoque\` : \`Adicionar uma unidade de \${product.name || product.descricao || 'produto'} ao estoque\`);
-        const image = document.createElement('render-image');
-        image.setAttribute('alt', product.name || product.descricao || 'Produto');
-        image.setAttribute('loading', 'lazy');
-        image.setAttribute('fallback-src', '/store-assets/placeholder.svg');
-        const candidates = window.ConfloraProductCard?.getImageCandidates(product) || [getProductImageUrl(product)];
-        image.setAttribute('image-candidates', JSON.stringify(candidates));
-        image.setAttribute('src', candidates[0] || '/store-assets/placeholder.svg');
-        const head = document.createElement('div');
-        head.className = 'stock-card-head';
-        head.appendChild(image);
-        const meta = document.createElement('div');
-        meta.style.minWidth = '0';
-        const name = document.createElement('div');
-        name.className = 'stock-card-name';
-        name.textContent = product.name || product.descricao || 'Produto sem nome';
-        const category = document.createElement('div');
-        category.className = 'stock-card-category';
-        category.textContent = window.ConfloraProductCard?.getCategory(product) || product.category || product.categoria || '';
-        meta.append(name, category);
-        head.appendChild(meta);
-        const balance = document.createElement('div');
-        balance.className = 'stock-card-balance';
-        balance.append('Estoque atual: ');
-        const quantity = document.createElement('strong');
-        quantity.id = 'stk-' + product.id;
-        quantity.textContent = String(product.stockQuantity ?? product.estoque ?? 0);
-        balance.append(quantity, stockUnit === 'KG' ? ' kg' : ' un');
-        const actions = document.createElement('div');
-        actions.className = 'stock-card-actions';
-        const addButton = document.createElement('button');
-        addButton.type = 'button';
-        addButton.className = 'action-btn btn-green';
-        addButton.textContent = stockUnit === 'KG' ? '＋1 kg Entrada' : '＋1 Entrada';
-        addButton.addEventListener('click', () => addStock(product.id, 1));
-        const countButton = document.createElement('button');
-        countButton.type = 'button';
-        countButton.className = 'action-btn btn-gray';
-        countButton.textContent = 'Contagem';
-        countButton.addEventListener('click', () => openStockAdjustment('SET', product.id));
-        const exitButton = document.createElement('button');
-        exitButton.type = 'button';
-        exitButton.className = 'action-btn btn-red';
-        exitButton.textContent = 'Baixa';
-        exitButton.addEventListener('click', () => openStockAdjustment('EXIT', product.id));
-        actions.append(addButton, countButton, exitButton);
-        card.append(head, balance, actions);
-        card.addEventListener('click', event => {
-          if (!event.target.closest('button')) addStock(product.id, 1);
-        });
-        card.addEventListener('keydown', event => {
-          if ((event.key === 'Enter' || event.key === ' ') && !event.target.closest('button')) {
-            event.preventDefault();
-            addStock(product.id, 1);
-          }
-        });
-        grid.appendChild(card);
-      });
+      window.StockCounting.render();
     }
 
     function createStockRequestId() {
       return window.crypto?.randomUUID?.() || \`stock-\${Date.now()}-\${Math.random().toString(36).slice(2, 12)}\`;
-    }
-
-    async function addStock(productId, quantity) {
-      const selector = \`.stock-card[data-product-id="\${CSS.escape(String(productId))}"]\`;
-      const card = document.querySelector(selector);
-      if (card?.dataset.saving === 'true') return;
-      if (card) { card.dataset.saving = 'true'; card.setAttribute('aria-busy', 'true'); }
-      try {
-        const response = await fetch('/api/admin/stock/adjustments', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ productId, operation: 'ENTRY', quantity, requestId: createStockRequestId() }),
-        });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Não foi possível atualizar o estoque.');
-        updateStockBalance(productId, data.newStock);
-      } catch (error) {
-        alert(error.message || 'Não foi possível atualizar o estoque.');
-      } finally {
-        if (card) { card.dataset.saving = 'false'; card.removeAttribute('aria-busy'); }
-      }
     }
 
     function updateStockBalance(productId, value) {
@@ -1675,6 +1594,7 @@ function renderAdminHtml(storeConfig) {
       if (element) element.textContent = String(stock);
       const product = allProducts.find(item => String(item.id) === String(productId));
       if (product) { product.stockQuantity = stock; product.estoque = stock; }
+      window.StockCounting?.refreshBalances();
     }
 
     function openStockAdjustment(operation, productId = '') {
@@ -2070,7 +1990,9 @@ function renderAdminHtml(storeConfig) {
       document.getElementById('productEditorDialog').showModal();
     }
 
+    let returnToStock = false;
     function openNewProductDialog() {
+      returnToStock = false;
       showTab('products');
       resetProdForm();
       document.getElementById('productFormTitle').textContent = 'Novo produto no catálogo';
@@ -2082,6 +2004,7 @@ function renderAdminHtml(storeConfig) {
       const dialog = document.getElementById('productEditorDialog');
       if (dialog?.open) dialog.close();
       resetProdForm();
+      if (returnToStock) { returnToStock = false; showTab('stock'); }
     }
 
     function resetProdForm() {
@@ -2205,11 +2128,12 @@ function renderAdminHtml(storeConfig) {
           alert('Produto salvo, mas não foi possível concluir o ciclo das fotos: ' + error.message + '. Tente novamente.');
           return;
         }
-        alert('✅ Produto salvo e fotos enviadas ao Firebase Storage em alta qualidade para zoom!');
+        if (!returnToStock) alert('✅ Produto salvo e fotos enviadas ao Firebase Storage em alta qualidade para zoom!');
         document.getElementById('productEditorDialog').close();
         resetProdForm();
         loadAdminProducts();
         loadPriceProducts();
+        if (returnToStock) { returnToStock = false; showTab('stock'); }
       } else {
         alert('Erro ao salvar no Firestore: ' + (data.error || 'Falha'));
       }
