@@ -917,11 +917,19 @@ try {
   $("#logo").alt = "Conflora Horta e Viveiro";
   $("#logo").hidden = false;
   $("#brand").classList.add("has-logo");
+  const isNetwork = error.message?.includes("fetch") || error.name === "TypeError";
+  const errorMessage = isNetwork
+    ? "Conectando ao catálogo... Se não carregar em instantes, clique para tentar novamente."
+    : error.message;
   $("#products").replaceChildren(
-    element("p", { text: error.message, class: "error" }),
+    element("p", { text: errorMessage, class: "error" }),
     element("button", {
       text: "common.retry".tr,
       onclick: () => location.reload(),
     }),
   );
+  if (isNetwork) {
+    setTimeout(() => location.reload(), 3500);
+    window.addEventListener("online", () => location.reload(), { once: true });
+  }
 }

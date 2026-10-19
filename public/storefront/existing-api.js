@@ -4,24 +4,44 @@ import { readJsonResponse } from "./ui.js";
 export function createExistingApi() {
   let catalogPromise;
   async function request(path, options = {}) {
-    const response = await window.ConfloraSession.apiFetch(path, {
-      credentials: "same-origin",
-      signal: AbortSignal.timeout(15000),
-      ...options,
-      headers: { "Content-Type": "application/json", ...options.headers },
-      ...(options.body ? { body: JSON.stringify(options.body) } : {}),
-    });
-    if (path === "/api/auth/me" && response.status === 401) {
-      return { user: null };
+    const isGet = !options.method || options.method === "GET";
+    const maxRetries = isGet ? 3 : 0;
+    let attempt = 0;
+    while (true) {
+      try {
+        const response = await window.ConfloraSession.apiFetch(path, {
+          credentials: "same-origin",
+          signal: AbortSignal.timeout(15000),
+          ...options,
+          headers: { "Content-Type": "application/json", ...options.headers },
+          ...(options.body ? { body: JSON.stringify(options.body) } : {}),
+        });
+        if (path === "/api/auth/me" && response.status === 401) {
+          return { user: null };
+        }
+        const data = await readJsonResponse(response);
+        if (!response.ok || data.success === false) {
+          const error = new Error(data.error || data.message || "Não foi possível concluir.");
+          error.status = response.status;
+          error.code = data.code || "";
+          throw error;
+        }
+        return data;
+      } catch (err) {
+        attempt++;
+        const isTransient =
+          err.name === "TypeError" ||
+          err.name === "TimeoutError" ||
+          err.message?.includes("Failed to fetch") ||
+          err.message?.includes("NetworkError") ||
+          err.message?.includes("abort");
+        if (attempt <= maxRetries && isTransient) {
+          await new Promise((res) => setTimeout(res, attempt * 400));
+          continue;
+        }
+        throw err;
+      }
     }
-    const data = await readJsonResponse(response);
-    if (!response.ok || data.success === false) {
-      const error = new Error(data.error || data.message || "Não foi possível concluir.");
-      error.status = response.status;
-      error.code = data.code || "";
-      throw error;
-    }
-    return data;
   }
   function order(record) {
     return {
