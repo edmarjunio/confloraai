@@ -67,9 +67,12 @@ class PdvRepository {
     const now = new Date().toISOString();
     const statuses = ['AWAITING_PAYMENT', 'CREATING_PIX', 'AWAITING_PIX', 'PENDING'];
     if (repo.firestore && !repo._firestoreClientDisabled) {
-      const pages = await Promise.all(['pixExpiresAt', 'paymentExpiresAt'].map(field => repo.firestore.collection('orders')
-        .where('status', 'in', statuses).where(field, '<=', now).orderBy(field).limit(100).get()));
-      return [...new Map(pages.flatMap(page => page.docs.map(doc => [doc.id, { ...doc.data(), id: doc.id }]))).values()];
+      const snapshot = await repo.firestore.collection('orders')
+        .where('status', 'in', statuses).limit(500).get();
+      return snapshot.docs
+        .map(doc => ({ ...doc.data(), id: doc.id }))
+        .filter(order => Date.parse(order.pixExpiresAt || order.paymentExpiresAt || '') <= Date.parse(now))
+        .slice(0, 100);
     }
     if (!repo.isInMemory || repo.firestore) throw new Error('Firestore indisponível.');
     return [...repo.inMemoryOrders.values()].filter(order => statuses.includes(order.status) && Date.parse(order.pixExpiresAt || order.paymentExpiresAt || '') <= Date.parse(now)).slice(0, 100);
@@ -165,9 +168,14 @@ class PdvRepository {
     if (database && !this.repository._firestoreClientDisabled) {
       const collection = database.collection('orders');
       const open = collection.where('deliveryStatus', 'in', ['PENDING_DISPATCH', 'PENDING_DELIVERY', 'PREPARING_DELIVERY', 'OUT_FOR_DELIVERY']);
-      const completed = collection.where('deliveryStatus', '==', 'DELIVERED');
-      const snapshots = await Promise.all([open.get(), completed.orderBy('deliveredAt', 'desc').limit(100).get()]);
-      return snapshots.flatMap((snapshot) => snapshot.docs.map((document) => ({ ...document.data(), id: document.id })));
+      const completed = collection.where('deliveryStatus', '==', 'DELIVERED').limit(200);
+      const [openSnap, completedSnap] = await Promise.all([open.get(), completed.get()]);
+      const openDocs = openSnap.docs.map((document) => ({ ...document.data(), id: document.id }));
+      const completedDocs = completedSnap.docs
+        .map((document) => ({ ...document.data(), id: document.id }))
+        .sort((a, b) => String(b.deliveredAt || '').localeCompare(String(a.deliveredAt || '')))
+        .slice(0, 100);
+      return [...openDocs, ...completedDocs];
     }
     return this.list('orders', 'orderType', 'DELIVERY');
   }
