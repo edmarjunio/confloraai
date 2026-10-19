@@ -453,11 +453,38 @@ window.PdvComponents = (() => {
       });
     };
 
+    const [showFullReceipt, setShowFullReceipt] = useState(false);
+
     return <Panel title={`Comanda #${order.ticketNumber || String(order.id).slice(-6).toUpperCase()}`} onClose={onClose}>{order.pixMode === 'MANUAL' && !order.completedAt && canReceive && <ManualPixReview order={order} />}
       <div className="space-y-2 text-sm">
-        <p className="font-bold text-lg">{order.customerName || 'Cliente Balcão'}</p>
-        <p className="text-slate-600">{orderStatusLabel(order)} · {paymentLabel(order.paymentMethod)}</p>
-        <ReceiptView order={order} />
+        <div className="flex items-center justify-between bg-slate-50 border border-slate-200/80 p-2.5 rounded-xl">
+          <div>
+            <p className="font-black text-base text-slate-800 leading-tight">{order.customerName || 'Cliente Balcão'}</p>
+            <p className="text-xs text-slate-500 font-medium">{orderStatusLabel(order)} · {paymentLabel(order.paymentMethod)}</p>
+          </div>
+          <div className="text-right">
+            <span className="text-[10px] font-bold text-slate-400 block uppercase">Total</span>
+            <span className="text-base font-black text-emerald-800">{money(order.total)}</span>
+          </div>
+        </div>
+
+        {/* Minimalist receipt view: expandable so it doesn't force scrolling */}
+        <div className="border border-slate-200 rounded-xl bg-white overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowFullReceipt(v => !v)}
+            className="w-full flex items-center justify-between p-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+          >
+            <span>🧾 {showFullReceipt ? 'Ocultar cupom detalhado' : 'Ver cupom detalhado'} ({(order.items || []).length} itens)</span>
+            <span className="text-slate-400">{showFullReceipt ? '▲' : '▼'}</span>
+          </button>
+          {showFullReceipt && (
+            <div className="p-3 border-t border-slate-100 bg-slate-50/50 max-h-64 overflow-y-auto">
+              <ReceiptView order={order} />
+            </div>
+          )}
+        </div>
+
         {extraContent}
         {order.requiresRefund && <p role="alert" className="rounded-lg bg-amber-50 p-3 font-bold text-amber-900">Recebimento parcial de {money(order.refundDue)} pendente de conciliação ou estorno pela loja.</p>}
         {order.manualPixProofId && <a className="mt-3 inline-flex font-bold text-emerald-800 underline" href={'/api/caixa/payment-proofs/' + order.manualPixProofId} onClick={(event) => { event.preventDefault(); window.ConfloraSession.openPrivateFile('/api/caixa/payment-proofs/' + order.manualPixProofId).catch(error => alert(error.message)); }}>Ver comprovante Pix anexado</a>}
