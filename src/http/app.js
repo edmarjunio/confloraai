@@ -1107,6 +1107,17 @@ function createApp({
   const sessions = createWebSessions(messageService.firestoreRepo);
   app.use('/api', sessions.resolve);
   app.use('/api/customer', (req, res, next) => req.user?.role === 'ENTREGADOR' ? res.status(403).json({ error: 'Seu acesso é exclusivo às entregas.' }) : next());
+
+  // Meta Business Agent Platform - Tools HTTP Connector & Fila Humana
+  if (messageService && messageService.metaAgentService) {
+    const { createMetaAgentRoutes } = require('./meta-agent.routes');
+    const metaAgentRouter = createMetaAgentRoutes({
+      agentService: messageService.metaAgentService,
+      handoffStore: messageService.metaAgentService.handoffStore,
+    });
+    app.use('/api/meta-agent', metaAgentRouter);
+  }
+
   const { installExistingStore, normalizeExistingCheckout } = require('../storefront/existing-store');
   installExistingStore(app, {
     repository: messageService.firestoreRepo,
