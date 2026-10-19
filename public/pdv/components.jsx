@@ -457,6 +457,305 @@ window.PdvComponents = (() => {
     </div>;
   }
 
+  function FinalizedOrderDetails({ order, onOpenSeparation }) {
+    const startMs = Date.parse(order.createdAt);
+    const endMs = Date.parse(order.completedAt || order.deliveredAt || order.paidAt || order.updatedAt);
+    const totalSeconds = (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs >= startMs)
+      ? (endMs - startMs) / 1000
+      : null;
+
+    const formatDur = (sec) => {
+      if (sec == null || !Number.isFinite(sec) || sec < 0) return 'Tempo não registrado';
+      if (sec < 60) return `${Math.round(sec)} seg`;
+      const mins = Math.floor(sec / 60);
+      const hrs = Math.floor(mins / 60);
+      const remM = mins % 60;
+      if (hrs === 0) return `${mins} min`;
+      if (remM === 0) return `${hrs} h`;
+      return `${hrs} h ${remM} min`;
+    };
+
+    const isSelfService = order.source === 'WEB_CATALOG' ||
+      !order.createdBy ||
+      ['ONLINE', 'SYSTEM', 'AUTOATENDIMENTO'].includes(order.createdBy.id) ||
+      order.createdBy.role === 'SYSTEM' ||
+      order.createdBy.name === 'Catálogo online' ||
+      order.createdBy.name === 'Autoatendimento';
+
+    const sellerTitle = isSelfService
+      ? (order.source === 'WHATSAPP' || order.channel === 'WHATSAPP'
+          ? '🤖 Autoatendimento (WhatsApp Conflora IA)'
+          : '🌐 Autoatendimento (Loja Virtual Conflora)')
+      : (order.createdBy?.name || order.sellerName || order.operatorName || 'Colaborador Conflora');
+
+    const sellerSub = isSelfService
+      ? 'Pedido realizado diretamente pelo cliente no catálogo online sem vendedor físico'
+      : (order.createdBy?.email ? `${order.createdBy.role || 'Vendedor'} · ${order.createdBy.email}` : (order.createdBy?.role || 'Vendedor Conflora'));
+
+    const isDelivery = Boolean(order.deliveryAddress || order.deliveryStatus || order.fulfillment === 'DELIVERY');
+    const driverName = order.deliveredBy?.name || order.assignedDriver?.name || 'Equipe Conflora';
+
+    const routeSeconds = order.deliveryMetrics?.durationSeconds ??
+      (order.deliveredAt && (order.departedAt || order.acceptedAt)
+        ? (Date.parse(order.deliveredAt) - Date.parse(order.departedAt || order.acceptedAt)) / 1000
+        : null);
+
+    const cleanPhone = String(order.customerPhone || '').replace(/\D/g, '');
+
+    const printReceipt = () => {
+      if (window.ConfloraOrderDisplay?.renderReceipt) {
+        const receiptWindow = window.open('', '_blank', 'width=420,height=600');
+        if (receiptWindow) {
+          receiptWindow.document.write('<html><head><title>Comprovante Conflora</title><link rel="stylesheet" href="/store-assets/order-display.css"></head><body style="padding:16px;"></body></html>');
+          receiptWindow.document.body.appendChild(window.ConfloraOrderDisplay.renderReceipt(order));
+          receiptWindow.document.close();
+          setTimeout(() => receiptWindow.print(), 300);
+        }
+      } else {
+        window.print();
+      }
+    };
+
+    const sendWhatsAppReceipt = () => {
+      if (!cleanPhone) return;
+      const itemsText = (order.items || []).map(item => `• ${item.quantity}x ${item.name} (${money(item.total || item.price * item.quantity)})`).join('%0A');
+      const msg = `*CONFLORA HORTA E VIVEIRO*%0A%0AOlá, *${order.customerName || 'Cliente'}*!%0ASua compra foi finalizada com sucesso! 🌱%0A%0A*Comanda:* %23${order.ticketNumber || String(order.id).slice(-6).toUpperCase()}%0A*Total:* ${money(order.total)}%0A*Pagamento:* ${paymentLabel(order.paymentMethod)}%0A%0A*Itens do Pedido:*%0A${itemsText}%0A%0AAgradecemos pela preferência! Ficamos à disposição.`;
+      window.open(`https://wa.me/55${cleanPhone}?text=${msg}`, '_blank');
+    };
+
+    return (
+      <div className="space-y-3 pt-2">
+        {/* 1. CARTÃO DE DESTAQUE: TEMPO DE ATENDIMENTO & STATUS */}
+        <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-green-50 border border-emerald-200 shadow-2xs">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">⏱️</span>
+              <div>
+                <span className="text-[10px] uppercase font-black tracking-wider text-emerald-800 block">Tempo do Pedido à Finalização</span>
+                <strong className="text-base font-black text-emerald-950">
+                  {totalSeconds ? formatDur(totalSeconds) : 'Venda Concluída'}
+                </strong>
+              </div>
+            </div>
+            <span className="text-xs font-black px-2.5 py-1 rounded-full bg-emerald-600 text-white shadow-2xs">
+              ✅ Finalizada
+            </span>
+          </div>
+          <div className="mt-2.5 pt-2 border-t border-emerald-200/60 flex items-center justify-between text-xs text-slate-600">
+            <span>🕒 Pedido: <strong>{dateTime(order.createdAt)}</strong></span>
+            <span>🏁 Finalizado: <strong>{dateTime(order.completedAt || order.deliveredAt || order.paidAt)}</strong></span>
+          </div>
+        </div>
+
+        {/* 2. QUEM COMPROU, QUEM VENDEU & QUEM ENTREGOU (GRID) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          {/* QUEM COMPROU */}
+          <div className="p-3 rounded-2xl bg-white border border-slate-200/90 shadow-2xs">
+            <span className="text-[10px] uppercase font-black tracking-wider text-slate-400 block mb-1">
+              👤 Quem comprou
+            </span>
+            <p className="font-black text-sm text-slate-900 leading-tight">
+              {order.customerName || 'Cliente Balcão'}
+            </p>
+            {cleanPhone && (
+              <p className="text-xs text-slate-600 mt-1 flex items-center gap-1.5 font-medium">
+                <span>📱</span>
+                <span>{order.customerPhone}</span>
+              </p>
+            )}
+            {order.customerEmail && (
+              <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+                ✉️ {order.customerEmail}
+              </p>
+            )}
+            {(order.customerDocument || order.customerCpfCnpj) && (
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                📄 Doc: {order.customerDocument || order.customerCpfCnpj}
+              </p>
+            )}
+          </div>
+
+          {/* QUEM VENDEU */}
+          <div className="p-3 rounded-2xl bg-white border border-slate-200/90 shadow-2xs">
+            <span className="text-[10px] uppercase font-black tracking-wider text-slate-400 block mb-1">
+              🏷️ Quem vendeu
+            </span>
+            <p className="font-black text-sm text-slate-900 leading-tight flex items-center gap-1.5">
+              {isSelfService ? <span>🌐</span> : <span>👨‍🌾</span>}
+              <span>{sellerTitle}</span>
+            </p>
+            <p className="text-[11px] text-slate-500 mt-1 leading-snug">
+              {sellerSub}
+            </p>
+            {isSelfService && (
+              <span className="inline-block mt-1 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-100 text-blue-800">
+                Autoatendimento
+              </span>
+            )}
+          </div>
+
+          {/* QUEM ENTREGOU / MODALIDADE */}
+          <div className="p-3 rounded-2xl bg-white border border-slate-200/90 shadow-2xs sm:col-span-2">
+            <div className="flex items-start justify-between">
+              <div>
+                <span className="text-[10px] uppercase font-black tracking-wider text-slate-400 block mb-1">
+                  {isDelivery ? '🛵 Quem entregou' : '🏬 Modalidade'}
+                </span>
+                <p className="font-black text-sm text-slate-900 leading-tight flex items-center gap-1.5">
+                  {isDelivery ? <span>🛵</span> : <span>🏬</span>}
+                  <span>{isDelivery ? driverName : 'Retirada no Balcão da Horta'}</span>
+                </p>
+                {isDelivery && order.deliveryAddress && (
+                  <p className="text-xs text-slate-700 mt-1 font-medium">
+                    📍 {order.deliveryAddress}
+                    {order.deliveryLocation?.reference && (
+                      <span className="text-slate-500 block text-[11px]">Ref: {order.deliveryLocation.reference}</span>
+                    )}
+                  </p>
+                )}
+              </div>
+              {isDelivery && routeSeconds && (
+                <div className="text-right">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Tempo em rota</span>
+                  <span className="text-xs font-black text-sky-800 bg-sky-100 px-2 py-0.5 rounded-full">
+                    {formatDur(routeSeconds)}
+                  </span>
+                </div>
+              )}
+            </div>
+            {isDelivery && (order.deliveryMetrics?.distanceKm || order.deliveryRoute?.distanceMeters) && (
+              <div className="mt-2 pt-2 border-t border-slate-100 text-xs text-slate-500 flex items-center gap-2">
+                <span>🛣️ Distância percorrida/estimada:</span>
+                <strong className="text-slate-700">
+                  {order.deliveryMetrics?.distanceKm
+                    ? `${Number(order.deliveryMetrics.distanceKm).toFixed(2)} km`
+                    : `${(order.deliveryRoute.distanceMeters / 1000).toFixed(2)} km`}
+                </strong>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 3. PAGAMENTO DETALHADO & RECEBIMENTO */}
+        <div className="p-3.5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs space-y-2">
+          <span className="text-[10px] uppercase font-black tracking-wider text-slate-400 block">
+            💳 Pagamento e Liquidação
+          </span>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-slate-600">Forma de pagamento:</span>
+            <span className="font-black text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg">
+              {paymentLabel(order.paymentMethod)}
+            </span>
+          </div>
+
+          {order.paymentParts && order.paymentParts.length > 1 && (
+            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+              <span className="text-[11px] font-bold text-slate-500 block">Divisão do pagamento:</span>
+              {order.paymentParts.map((part, idx) => (
+                <div key={idx} className="flex justify-between text-xs font-medium text-slate-700">
+                  <span>• {paymentLabel(part.method)}</span>
+                  <strong className="text-slate-900">{money(part.amount)}</strong>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {order.cashReceivedAmount && Number(order.cashReceivedAmount) > Number(order.total) && (
+            <div className="flex items-center justify-between text-xs text-slate-600 pt-1 border-t border-slate-100">
+              <span>Recebido em dinheiro: {money(order.cashReceivedAmount)}</span>
+              <span className="font-bold text-emerald-800">Troco: {money(order.cashChange || 0)}</span>
+            </div>
+          )}
+
+          {(order.financialReceiver?.name || order.receivedBy?.name) && (
+            <div className="text-[11px] text-slate-500 pt-1 border-t border-slate-100 flex items-center gap-1">
+              <span>Recebido / conferido por:</span>
+              <strong className="text-slate-700">{order.financialReceiver?.name || order.receivedBy?.name}</strong>
+            </div>
+          )}
+        </div>
+
+        {/* 4. RESUMO DOS ITENS */}
+        <div className="p-3.5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">
+              🛍️ Itens da Venda ({(order.items || []).length})
+            </span>
+            {onOpenSeparation && (
+              <button
+                type="button"
+                onClick={onOpenSeparation}
+                className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <span>Ver conferência dos itens</span>
+                <span>→</span>
+              </button>
+            )}
+          </div>
+          <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+            {(order.items || []).map((item, idx) => (
+              <div key={idx} className="flex items-center justify-between text-xs py-1 border-b border-slate-100 last:border-b-0">
+                <span className="font-medium text-slate-800 flex-1 pr-2 truncate">
+                  <strong className="text-slate-900 mr-1.5">{item.quantity} {item.unit || 'un'}</strong>
+                  {item.name}
+                </span>
+                <span className="font-bold text-slate-900 whitespace-nowrap">
+                  {money(item.total || (item.price * item.quantity))}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-2.5 pt-2 border-t border-slate-200 flex items-center justify-between text-xs">
+            <span className="text-slate-500">Subtotal:</span>
+            <span className="font-bold text-slate-800">{money(order.subtotal || order.total)}</span>
+          </div>
+          {order.discountAmount > 0 && (
+            <div className="flex items-center justify-between text-xs text-emerald-700 font-bold">
+              <span>Desconto ({order.discountPercent || 0}%):</span>
+              <span>-{money(order.discountAmount)}</span>
+            </div>
+          )}
+          <div className="flex items-center justify-between text-sm font-black text-emerald-950 pt-1">
+            <span>Total Final Pago:</span>
+            <span className="text-base text-emerald-800">{money(order.total)}</span>
+          </div>
+        </div>
+
+        {/* 5. AÇÕES RÁPIDAS (IMPRIMIR RECIBO & WHATSAPP) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+          <button
+            type="button"
+            onClick={printReceipt}
+            className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer border border-slate-300"
+          >
+            <span>🖨️</span>
+            <span>Imprimir Comprovante</span>
+          </button>
+
+          {cleanPhone ? (
+            <button
+              type="button"
+              onClick={sendWhatsAppReceipt}
+              className="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
+            >
+              <span>💬</span>
+              <span>Enviar no WhatsApp</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onOpenSeparation}
+              className="py-2.5 px-3 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+            >
+              <span>📦</span>
+              <span>Conferência de Produtos</span>
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   function OrderDetails({
     order,
     onClose,
@@ -731,6 +1030,8 @@ window.PdvComponents = (() => {
       }
     }
 
+    const isFinalized = Boolean(order.completedAt || order.deliveryStatus === 'DELIVERED' || order.status === 'COMPLETED' || (order.paymentStatus === 'APPROVED' && !canReceive && !canAdvance));
+
     return <Panel title={`Comanda #${order.ticketNumber || String(order.id).slice(-6).toUpperCase()}`} onClose={onClose}>{order.pixMode === 'MANUAL' && !order.completedAt && canReceive && <ManualPixReview order={order} />}
       <div className="space-y-2 text-sm">
         <div className="flex items-center justify-between bg-slate-50 border border-slate-200/80 p-2.5 rounded-xl">
@@ -777,6 +1078,8 @@ window.PdvComponents = (() => {
           onDepart={handleDepartFromModal}
           canDepart={Boolean(onStartDelivery)}
         />
+
+        {isFinalized && <FinalizedOrderDetails order={order} onOpenSeparation={() => setShowSeparationModal(true)} />}
 
         {extraContent}
         {order.requiresRefund && <p role="alert" className="rounded-lg bg-amber-50 p-3 font-bold text-amber-900">Recebimento parcial de {money(order.refundDue)} pendente de conciliação ou estorno pela loja.</p>}

@@ -314,14 +314,6 @@ function PdvDelivery({ user, onBack }) {
         )}
       </div>
     )}
-
-    {/* Completed */}
-    {selected.deliveryStatus === 'DELIVERED' && (
-      <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-3">
-        <p className="text-xs font-black text-emerald-950">✅ Entrega concluída por {selected.deliveredBy?.name || selected.assignedDriver?.name || 'Equipe Conflora'}</p>
-        <p className="text-xs text-slate-600 mt-1">{selected.deliveryAddress}</p>
-      </div>
-    )}
   </div>;
 
   return <main className="min-h-screen bg-[#F4F6F5] font-sans text-slate-800">
