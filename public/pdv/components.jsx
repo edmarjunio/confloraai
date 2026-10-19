@@ -53,11 +53,75 @@ window.PdvComponents = (() => {
     return <Panel title="Buscar cliente" layer={70} onClose={onClose}><label className="text-sm font-bold">Nome do cliente<input autoFocus className={field} placeholder="Digite pelo menos 4 letras do nome" value={query} onChange={(event) => setQuery(event.target.value)} /></label><div className="mt-3 space-y-2">{loading && <p role="status">Buscando clientes…</p>}{error && <p role="alert" className="text-red-700">{error}</p>}{!loading && query.trim().length >= 4 && !rows.length && !error && <p>Nenhum cliente encontrado.</p>}{rows.map((customer) => <button key={customer.id} type="button" className="w-full rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-left transition hover:shadow-md" onClick={() => onSelect(customer)}><strong className="block">{customer.name}</strong><span className="mt-1 block text-xs text-slate-600">{customer.phone || 'Sem telefone'}{customer.address ? ' · ' + customer.address : ''}</span></button>)}</div></Panel>;
   }
   function PaymentPartsEditor({ parts, onChange, total, customerId, allowedMethods }) {
-    const labels = Object.fromEntries(Object.entries({ PIX: 'Pix', DINHEIRO: 'Dinheiro', DEBITO: 'Débito', CREDITO: 'Crédito', FIADO: 'Fiado' }).filter(([method]) => !allowedMethods || allowedMethods.includes(method)));
+    const methodOptions = [
+      { id: 'DINHEIRO', label: '💵 Dinheiro' },
+      { id: 'DEBITO', label: '💳 Débito' },
+      { id: 'CREDITO', label: '💳 Crédito' },
+      { id: 'PIX', label: '⚡ Pix' },
+      { id: 'FIADO', label: '📝 Fiado' },
+    ].filter(item => !allowedMethods || allowedMethods.includes(item.id))
+     .filter(item => item.id !== 'FIADO' || customerId);
+
     const update = (index, values) => onChange(parts.map((part, current) => current === index ? { ...part, ...values } : part));
     const sum = parts.reduce((value, part) => value + Math.round(Number(part.amount || 0) * 100), 0);
-    const remaining = (Math.round(total * 100) - sum) / 100;
-    return <section className="my-3 space-y-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3"><strong className="text-xs">Dividir pagamento</strong>{parts.map((part, index) => <div key={index} className="rounded-xl border border-emerald-100 bg-white p-2"><PaymentMethodButtons value={part.method} onChange={(method) => update(index, { method })} labels={labels} disabledMethods={Object.keys(labels).filter((value) => (value === 'FIADO' && !customerId) || parts.some((entry, current) => current !== index && entry.method === value))} suffix={` · parcela ${index + 1}`} /><input aria-label={`Valor da parcela ${index + 1}`} type="number" min="0.01" step="0.01" value={part.amount} onChange={(event) => update(index, { amount: event.target.value })} className="w-24 rounded-lg border p-2 text-xs" /><button type="button" aria-label={`Remover parcela ${index + 1}`} onClick={() => onChange(parts.filter((_, current) => current !== index))}>✕</button></div>)}<p className="text-xs font-bold">{remaining >= 0 ? 'Falta distribuir: ' : 'Excedente: '}{money(Math.abs(remaining))}</p>{parts.length < Object.keys(labels).length && <button type="button" className="text-xs underline" onClick={() => onChange([...parts, { method: Object.keys(labels).find((method) => !parts.some((part) => part.method === method)), amount: Math.max(0, remaining).toFixed(2) }])}>Adicionar forma de pagamento</button>}</section>;
+    const totalCents = Math.round(Number(total || 0) * 100);
+    const remaining = (totalCents - sum) / 100;
+
+    return <section className="my-3 space-y-2.5 rounded-2xl border-2 border-emerald-200 bg-emerald-50/90 p-3.5">
+      <div className="flex items-center justify-between">
+        <strong className="text-xs font-black text-emerald-950 uppercase tracking-wide">Formas de Pagamento</strong>
+        <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${remaining === 0 ? 'bg-emerald-200 text-emerald-900' : remaining > 0 ? 'bg-amber-200 text-amber-900' : 'bg-red-200 text-red-900'}`}>
+          {remaining === 0 ? '✓ Total preenchido' : remaining > 0 ? `Falta ${money(remaining)}` : `Excesso ${money(-remaining)}`}
+        </span>
+      </div>
+      <div className="space-y-2">
+        {parts.map((part, index) => <div key={index} className="flex flex-wrap items-center gap-2 rounded-xl border border-emerald-100 bg-white p-2.5 shadow-xs">
+          <span className="text-xs font-black text-emerald-800 bg-emerald-100 rounded px-1.5 py-0.5">#{index + 1}</span>
+          <select
+            value={part.method}
+            onChange={(event) => update(index, { method: event.target.value })}
+            className="flex-1 min-w-[130px] rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs font-bold text-slate-800"
+          >
+            {methodOptions.map(opt => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
+          </select>
+          <div className="flex items-center gap-1">
+            <span className="text-xs font-bold text-slate-400">R$</span>
+            <input
+              aria-label={`Valor da parcela ${index + 1}`}
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={part.amount}
+              onChange={(event) => update(index, { amount: event.target.value })}
+              className="w-28 rounded-lg border border-slate-300 p-2 text-xs font-bold text-emerald-950"
+              placeholder="0,00"
+            />
+          </div>
+          {parts.length > 1 && <button
+            type="button"
+            title="Remover parcela"
+            aria-label={`Remover parcela ${index + 1}`}
+            className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-red-100 text-slate-500 hover:text-red-600 flex items-center justify-center font-bold text-xs transition cursor-pointer"
+            onClick={() => onChange(parts.filter((_, current) => current !== index))}
+          >✕</button>}
+        </div>)}
+      </div>
+      <div className="pt-1 flex items-center justify-between">
+        <p className="text-xs font-bold text-slate-700">
+          {remaining === 0 ? '✓ Valor total distribuído com sucesso!' : remaining > 0 ? `⚠️ Falta distribuir: ${money(remaining)}` : `⚠️ Excedente: ${money(-remaining)}`}
+        </p>
+        {parts.length < methodOptions.length && remaining > 0 && <button
+          type="button"
+          className="text-xs font-bold text-emerald-800 hover:underline flex items-center gap-1 cursor-pointer"
+          onClick={() => {
+            const unusedMethod = methodOptions.find(opt => !parts.some(p => p.method === opt.id))?.id || methodOptions[0].id;
+            onChange([...parts, { method: unusedMethod, amount: Math.max(0, remaining).toFixed(2) }]);
+          }}
+        >
+          + Adicionar forma ({money(remaining)})
+        </button>}
+      </div>
+    </section>;
   }
   function Topbar({ user, onSearch, searchValue, searchInputRef, onCashier, hideCashier }) {
     const ref = useRef(null);
@@ -282,44 +346,113 @@ window.PdvComponents = (() => {
   }
 
   function OrderDetails({ order, onClose, canReceive = false, canConfirmManualPix = false, busy = false, error = '', onReceive, onManualPix, canAdvance = false, onAdvance, deliveryMode = false, extraContent, canApproveCredit = false }) {
-    const initialMethod = ['CARTAO', 'CARD', 'MISTO'].includes(order.paymentMethod) ? '' : order.paymentMethod === 'CASH' ? 'DINHEIRO' : order.paymentMethod || 'DINHEIRO';
-    const [paymentMethod, setPaymentMethod] = useState(initialMethod);
-    const [cashAmount, setCashAmount] = useState(Number(order.total || 0).toFixed(2));
+    const total = Number(order.total || 0);
+    const totalCents = Math.round(total * 100);
+    const initialMethod = ['CARTAO', 'CARD', 'MISTO'].includes(order.paymentMethod) ? 'CREDITO' : order.paymentMethod === 'CASH' ? 'DINHEIRO' : order.paymentMethod || 'DINHEIRO';
+
+    const [parts, setParts] = useState(() => {
+      if (Array.isArray(order.paymentParts) && order.paymentParts.length > 1) {
+        return order.paymentParts.map(p => ({ method: p.method, amount: String(p.amount) }));
+      }
+      return [{ method: initialMethod, amount: total.toFixed(2) }];
+    });
+
     const [copied, setCopied] = useState(false);
     const [manualPixNote, setManualPixNote] = useState('');
     const [manualProofSeen, setManualProofSeen] = useState(false);
     const [proofId, setProofId] = useState('');
+
     useEffect(() => {
-      setPaymentMethod(initialMethod);
-      setCashAmount(Number(order.total || 0).toFixed(2));
+      if (Array.isArray(order.paymentParts) && order.paymentParts.length > 1) {
+        setParts(order.paymentParts.map(p => ({ method: p.method, amount: String(p.amount) })));
+      } else {
+        setParts([{ method: initialMethod, amount: total.toFixed(2) }]);
+      }
       setCopied(false);
       setManualPixNote('');
       setManualProofSeen(false);
-    }, [order.id, order.status, order.paymentMethod]);
-    const [splitPayment, setSplitPayment] = useState(order.paymentParts?.length > 1);
-    const [paymentParts, setPaymentParts] = useState(order.paymentParts?.length > 1 ? order.paymentParts : [{ method: 'DINHEIRO', amount: '' }, { method: 'CREDITO', amount: '' }]);
-    const totalCents = Math.round(Number(order.total) * 100);
-    const enteredCents = Math.round(Number(cashAmount) * 100);
-    const remainingCents = totalCents - enteredCents;
-    const invalidAmount = splitPayment
-      ? paymentParts.some(part => !part.method || !Number.isFinite(Number(part.amount)) || Number(part.amount) <= 0) || paymentParts.reduce((sum, part) => sum + Math.round(Number(part.amount) * 100), 0) !== totalCents || new Set(paymentParts.map(part => part.method)).size !== paymentParts.length
-      : !Number.isFinite(enteredCents) || enteredCents <= 0 || remainingCents > 0 || (paymentMethod !== 'DINHEIRO' && remainingCents !== 0);
-    const enableSplitPayment = () => {
-      const firstAmount = Math.min(totalCents, Math.max(0, enteredCents || 0));
-      const method = paymentMethod || 'DINHEIRO';
-      setPaymentParts([{ method, amount: (firstAmount / 100).toFixed(2) }, { method: method === 'CREDITO' ? 'DINHEIRO' : 'CREDITO', amount: ((totalCents - firstAmount) / 100).toFixed(2) }]);
-      setSplitPayment(true);
+    }, [order.id, order.status, order.paymentMethod, order.total]);
+
+    const methodLabels = {
+      DINHEIRO: '💵 Dinheiro',
+      DEBITO: '💳 Débito',
+      CREDITO: '💳 Crédito',
+      PIX: window.CONFLORA_PIX_MODE === 'MANUAL' ? '⚡ Pix (Manual)' : '⚡ Pix (QR Code)',
+      ...(!deliveryMode ? { FIADO: '📝 Fiado (Admin)' } : {})
     };
+    const availableMethods = Object.keys(methodLabels).filter(m => (m !== 'FIADO' || order.customerId));
+
+    const sumCents = parts.reduce((sum, p) => sum + Math.round(Number(p.amount || 0) * 100), 0);
+    const remainingCents = totalCents - sumCents;
+    const isSingle = parts.length === 1;
+    const isSingleCash = isSingle && parts[0].method === 'DINHEIRO';
+    const singleCashTendered = isSingleCash ? Math.round(Number(parts[0].amount || 0) * 100) : 0;
+    const cashChange = isSingleCash && singleCashTendered >= totalCents ? (singleCashTendered - totalCents) / 100 : 0;
+
+    const allAmountsValid = parts.every(p => Number(p.amount || 0) > 0);
+    const uniqueMethods = new Set(parts.map(p => p.method)).size === parts.length;
+    const isExactMatch = sumCents === totalCents && allAmountsValid && uniqueMethods;
+    const canFinalize = isSingleCash ? (singleCashTendered >= totalCents) : isExactMatch;
+
     const [directPix, setDirectPix] = useState(order.pixMode === 'MANUAL');
-    const hasPixPart = splitPayment ? paymentParts.some((part) => part.method === 'PIX') : paymentMethod === 'PIX';
+    const hasPixPart = parts.some((p) => p.method === 'PIX');
     const needsManualProof = (directPix || window.CONFLORA_PIX_MODE === 'MANUAL') && hasPixPart;
     const pixCopyPaste = order.pixData?.pixCopiaECola || order.pixCopiaECola || '';
-    const pixAmount = order.paymentMethod !== 'PIX' ? Number(order.total || 0) : (order.paymentParts || [{ method: order.paymentMethod, amount: order.total }])
-      .filter((part) => part.method === 'PIX').reduce((sum, part) => sum + Number(part.amount || 0), 0);
+    const pixAmount = (order.paymentParts || parts).filter((p) => p.method === 'PIX').reduce((sum, p) => sum + Number(p.amount || 0), 0) || total;
+
     const copyPixCode = async () => {
       try { await navigator.clipboard.writeText(pixCopyPaste); setCopied(true); }
       catch { setCopied(false); }
     };
+
+    const handlePart0Amount = (val) => {
+      const valNum = Number(val);
+      const valCents = Math.round(valNum * 100);
+      if (Number.isFinite(valCents) && valCents > 0 && valCents < totalCents) {
+        const remVal = ((totalCents - valCents) / 100).toFixed(2);
+        if (parts.length === 1) {
+          const nextMethod = availableMethods.find(m => m !== parts[0].method) || 'DINHEIRO';
+          setParts([
+            { method: parts[0].method, amount: val },
+            { method: nextMethod, amount: remVal }
+          ]);
+          return;
+        }
+      }
+      setParts(parts.map((p, idx) => idx === 0 ? { ...p, amount: val } : p));
+    };
+
+    const updatePart = (index, updates) => {
+      setParts(parts.map((p, idx) => idx === index ? { ...p, ...updates } : p));
+    };
+
+    const removePart = (index) => {
+      const filtered = parts.filter((_, idx) => idx !== index);
+      if (filtered.length === 1) {
+        filtered[0] = { ...filtered[0], amount: total.toFixed(2) };
+      }
+      setParts(filtered);
+    };
+
+    const addPart = () => {
+      const unusedMethod = availableMethods.find(m => !parts.some(p => p.method === m)) || availableMethods[0];
+      const autoAmount = remainingCents > 0 ? (remainingCents / 100).toFixed(2) : '0.00';
+      setParts([...parts, { method: unusedMethod, amount: autoAmount }]);
+    };
+
+    const handleConfirmReceive = () => {
+      const isSplit = parts.length > 1;
+      const finalMethod = isSplit ? 'MISTO' : needsManualProof ? 'PIX_MANUAL' : parts[0].method;
+      const finalCash = (!isSplit && parts[0].method === 'DINHEIRO') ? parts[0].amount : null;
+      const finalParts = isSplit ? parts.map(p => ({ ...p, amount: Number(p.amount) })) : undefined;
+      onReceive(order, finalMethod, finalCash, finalParts, {
+        manualPix: needsManualProof,
+        proofSeen: manualProofSeen,
+        note: manualPixNote,
+        proofId,
+      });
+    };
+
     return <Panel title={`Comanda #${order.ticketNumber || String(order.id).slice(-6).toUpperCase()}`} onClose={onClose}>{order.pixMode === 'MANUAL' && !order.completedAt && canReceive && <ManualPixReview order={order} />}
       <div className="space-y-2 text-sm">
         <p className="font-bold text-lg">{order.customerName || 'Cliente Balcão'}</p>
@@ -344,22 +477,194 @@ window.PdvComponents = (() => {
           </div>}
         </section>}
         {canAdvance && <button type="button" className={button + ' mt-4 w-full'} disabled={busy} onClick={() => onAdvance(order)}>Confirmar comanda e aguardar pagamento</button>}
-        {canReceive && <section className="mt-4 space-y-2 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
-          <h3 className="font-black text-emerald-950">{deliveryMode ? 'Receber na entrega' : 'Receber no caixa'}</h3>
-          <PaymentMethodButtons value={paymentMethod} onChange={setPaymentMethod} labels={{ DINHEIRO: '💵 Dinheiro', DEBITO: '💳 Débito', CREDITO: '💳 Crédito', PIX: window.CONFLORA_PIX_MODE === 'MANUAL' ? 'Pix · conferência do caixa' : 'Pix · QR Code / Copia e Cola', ...(!deliveryMode ? { FIADO: 'Fiado · aprovação do Admin' } : {}) }} disabledMethods={order.customerId ? [] : ['FIADO', 'SALDO_CLIENTE']} />
-          <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={splitPayment} onChange={(event) => event.target.checked ? enableSplitPayment() : setSplitPayment(false)} />Usar mais de uma forma de pagamento</label>
-          {splitPayment && <PaymentPartsEditor parts={paymentParts} onChange={setPaymentParts} total={Number(order.total)} customerId={order.customerId} allowedMethods={deliveryMode ? ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO'] : ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO', 'FIADO']} />}
-          {hasPixPart && <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={directPix} onChange={(event) => setDirectPix(event.target.checked)} />Pix já recebido: confirmar manualmente</label>}
-          {needsManualProof && <div className="space-y-2"><PixProofUpload targetType="ORDER" targetId={order.id} onChange={setProofId} /><label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={manualProofSeen} onChange={(event) => setManualProofSeen(event.target.checked)} />Conferi o valor do Pix e a conta recebedora da Conflora.</label><label className="block text-xs">Observação do comprovante<textarea className={field} value={manualPixNote} onChange={(event) => setManualPixNote(event.target.value)} /></label></div>}
-          {paymentMethod && !splitPayment && <label className="block text-xs font-bold text-slate-700">Valor nesta forma de pagamento (R$)<input className={field} type="number" min="0.01" step="0.01" value={cashAmount} onChange={(event) => setCashAmount(event.target.value)} /></label>}
-          {paymentMethod === 'DINHEIRO' && !splitPayment && Number(cashAmount) >= Number(order.total || 0) && <p className="text-right text-xs font-bold text-emerald-900">Troco: {money(Number(cashAmount) - Number(order.total || 0))}</p>}
-          {!splitPayment && remainingCents > 0 && <div role="status" className="rounded-xl bg-amber-100 p-3 font-bold text-amber-950">Falta pagar {money(remainingCents / 100)}. Adicione outra forma de pagamento para concluir.<button type="button" className={button + ' mt-2 w-full'} onClick={enableSplitPayment}>Adicionar outra forma de pagamento</button></div>}
-          {!splitPayment && paymentMethod !== 'DINHEIRO' && remainingCents < 0 && <p role="alert" className="text-sm font-bold text-red-800">O valor informado excede o total em {money(-remainingCents / 100)}. Ajuste para continuar.</p>}
-          {!order.customerId && ['FIADO', 'SALDO_CLIENTE'].includes(paymentMethod) && <p className="text-xs text-amber-900">Selecione um cliente cadastrado antes de receber em fiado ou usar saldo.</p>}
+        {canReceive && <section className="mt-4 rounded-2xl border-2 border-emerald-300 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between border-b border-emerald-100 pb-2 mb-3">
+            <div>
+              <h3 className="text-base font-black text-emerald-950 flex items-center gap-1.5">
+                <span>{deliveryMode ? '🛵 Receber na Entrega' : '💵 Receber no Caixa'}</span>
+              </h3>
+              <p className="text-xs text-slate-500 font-medium">Informe a forma e confirme o valor exato</p>
+            </div>
+            <div className="text-right">
+              <span className="text-[10px] uppercase font-bold text-slate-500 block">Total do pedido</span>
+              <span className="text-base font-black text-emerald-800">{money(order.total)}</span>
+            </div>
+          </div>
 
-          <button type="button" className={button + ' w-full'} disabled={busy || invalidAmount || (!splitPayment && !paymentMethod) || (needsManualProof && (!proofId || !manualProofSeen || manualPixNote.trim().length < 8)) || (!splitPayment && paymentMethod === 'DINHEIRO' && Number(cashAmount) < Number(order.total || 0)) || (!splitPayment && ['FIADO', 'SALDO_CLIENTE'].includes(paymentMethod) && !order.customerId)} onClick={() => onReceive(order, splitPayment ? 'MISTO' : needsManualProof ? 'PIX_MANUAL' : paymentMethod, !splitPayment && paymentMethod === 'DINHEIRO' ? cashAmount : null, splitPayment ? paymentParts.map((part) => ({ ...part, amount: Number(part.amount) })) : undefined, { manualPix: needsManualProof, proofSeen: manualProofSeen, note: manualPixNote, proofId })}>
-            {busy ? 'Processando…' : hasPixPart && !needsManualProof ? 'Gerar QR Code Pix' : 'Confirmar pagamento e finalizar'}
-          </button>
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+              {parts.length > 1 ? '1ª Forma de pagamento:' : 'Forma de pagamento:'}
+            </label>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {availableMethods.map(m => (
+                <button
+                  type="button"
+                  key={m}
+                  className={`py-2.5 px-2 rounded-xl text-xs font-black transition border cursor-pointer ${
+                    parts[0].method === m
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                  onClick={() => updatePart(0, { method: m })}
+                >
+                  {methodLabels[m]}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-2.5">
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                {parts.length > 1 ? `Valor na 1ª forma (${methodLabels[parts[0].method]}):` : 'Valor recebido (R$):'}
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-2.5 text-sm font-bold text-slate-400">R$</span>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  className="w-full pl-10 pr-3 py-2 text-base font-black text-emerald-950 border border-slate-300 rounded-xl bg-white focus:border-emerald-500 focus:outline-none"
+                  value={parts[0].amount}
+                  onChange={(e) => handlePart0Amount(e.target.value)}
+                  placeholder="0,00"
+                />
+              </div>
+            </div>
+          </div>
+
+          {parts.length > 1 && (
+            <div className="mt-3 space-y-2.5 border-t border-emerald-100 pt-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-slate-700 uppercase tracking-wide">
+                  Pagamento Complementar
+                </span>
+                <span className="text-[11px] text-slate-500 font-medium">
+                  {parts.length} formas divididas
+                </span>
+              </div>
+
+              {parts.slice(1).map((part, idx) => {
+                const partIndex = idx + 1;
+                return (
+                  <div key={partIndex} className="p-2.5 rounded-xl border border-emerald-200 bg-emerald-50/70 flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-black text-emerald-800 bg-emerald-200 rounded px-1.5 py-0.5">
+                      #{partIndex + 1}
+                    </span>
+                    <select
+                      value={part.method}
+                      onChange={(e) => updatePart(partIndex, { method: e.target.value })}
+                      className="flex-1 min-w-[130px] rounded-lg border border-slate-300 bg-white p-2 text-xs font-bold text-slate-800"
+                    >
+                      {availableMethods.map(m => (
+                        <option key={m} value={m}>{methodLabels[m]}</option>
+                      ))}
+                    </select>
+                    <div className="relative w-32">
+                      <span className="absolute left-2.5 top-1.5 text-xs font-bold text-slate-400">R$</span>
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={part.amount}
+                        onChange={(e) => updatePart(partIndex, { amount: e.target.value })}
+                        className="w-full pl-8 pr-2 py-1.5 text-xs font-bold text-emerald-950 border border-slate-300 rounded-lg bg-white"
+                        placeholder="0,00"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      title="Remover esta forma"
+                      className="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs flex items-center justify-center cursor-pointer transition"
+                      onClick={() => removePart(partIndex)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                );
+              })}
+
+              {remainingCents > 0 && (
+                <button
+                  type="button"
+                  className="text-xs font-bold text-emerald-700 hover:text-emerald-900 hover:underline flex items-center gap-1 cursor-pointer py-1"
+                  onClick={addPart}
+                >
+                  + Adicionar outra forma de pagamento ({money(remainingCents / 100)})
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="mt-3">
+            {isSingleCash && cashChange > 0 && (
+              <div className="p-3 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-900 font-black text-sm flex items-center justify-between">
+                <span>💵 Troco a devolver ao cliente:</span>
+                <span className="text-base text-emerald-950">{money(cashChange)}</span>
+              </div>
+            )}
+            {remainingCents > 0 && (
+              <div className="p-3 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold flex items-center justify-between">
+                <span>⚠️ Falta receber para cobrir o total:</span>
+                <span className="text-sm font-black text-amber-950">{money(remainingCents / 100)}</span>
+              </div>
+            )}
+            {!isSingleCash && remainingCents < 0 && (
+              <div className="p-3 rounded-xl bg-red-50 border border-red-300 text-red-900 text-xs font-bold flex items-center justify-between">
+                <span>⚠️ O valor informado excede o total:</span>
+                <span className="text-sm font-black text-red-950">Excesso de {money(-remainingCents / 100)}</span>
+              </div>
+            )}
+            {isExactMatch && (
+              <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold flex items-center gap-1.5">
+                <span>✅ Valor total de {money(order.total)} preenchido com sucesso!</span>
+              </div>
+            )}
+          </div>
+
+          {needsManualProof && (
+            <div className="mt-3 space-y-2 border-t border-emerald-200 pt-3">
+              <PixProofUpload targetType="ORDER" targetId={order.id} onChange={setProofId} />
+              <label className="flex items-start gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                <input type="checkbox" checked={manualProofSeen} onChange={(e) => setManualProofSeen(e.target.checked)} className="mt-0.5" />
+                <span>Conferi o recebimento do Pix na conta bancária da Conflora.</span>
+              </label>
+              <textarea
+                className="w-full p-2 border border-slate-300 rounded-lg text-xs"
+                rows={2}
+                placeholder="Observação do comprovante (ex: comprovante conferido no ato)"
+                value={manualPixNote}
+                onChange={(e) => setManualPixNote(e.target.value)}
+              />
+            </div>
+          )}
+
+          <div className="sticky bottom-0 bg-white/95 backdrop-blur-md pt-3 pb-1 border-t border-slate-200 mt-4 z-20">
+            <button
+              type="button"
+              disabled={busy || !canFinalize || (needsManualProof && (!proofId || !manualProofSeen || manualPixNote.trim().length < 8))}
+              className={`w-full py-4 px-6 text-base font-black rounded-2xl shadow-lg transition active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                canFinalize
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                  : 'bg-slate-300 text-slate-600'
+              }`}
+              onClick={handleConfirmReceive}
+            >
+              {busy ? (
+                'Processando…'
+              ) : !canFinalize && remainingCents > 0 ? (
+                `⚠️ Falta preencher ${money(remainingCents / 100)} para finalizar`
+              ) : !canFinalize && remainingCents < 0 ? (
+                `⚠️ Ajuste o valor excedente de ${money(-remainingCents / 100)}`
+              ) : needsManualProof && (!proofId || !manualProofSeen || manualPixNote.trim().length < 8) ? (
+                '⚠️ Anexe e confirme o comprovante Pix'
+              ) : deliveryMode ? (
+                '🛵 Confirmar Recebimento e Concluir Entrega'
+              ) : isSingleCash && cashChange > 0 ? (
+                `✅ Confirmar Recebimento (Troco: ${money(cashChange)})`
+              ) : (
+                `✅ Confirmar Pagamento de ${money(order.total)}`
+              )}
+            </button>
+          </div>
         </section>}
         {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-xs text-red-800">{error}</p>}
       </div>
