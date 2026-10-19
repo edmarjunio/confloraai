@@ -1,7 +1,35 @@
 const { createHash } = require('node:crypto');
 const { PdvRepository } = require('../orders/pdv.repository');
+const { resolveHdProductImage, isKgProduct } = require('./image-resolver');
+const { getProductCareDetails } = require('./product-care');
+const { buildProductInformation } = require('./product-information');
+
 const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
-const columns = { codigo: 'sku', sku: 'sku', nome: 'name', produto: 'name', descricao: 'name', preco: 'price', valor: 'price', categoria: 'category', subcategoria: 'subcategory', unidade: 'unit', estoque: 'stock', status: 'status' };
+
+const columns = {
+  codigo: 'sku',
+  sku: 'sku',
+  id: 'sku',
+  'product id': 'sku',
+  product_id: 'sku',
+  nome: 'name',
+  produto: 'name',
+  descricao: 'name',
+  'descrição': 'name',
+  preco: 'price',
+  preço: 'price',
+  valor: 'price',
+  categoria: 'category',
+  subcategoria: 'subcategory',
+  unidade: 'unit',
+  'unidade de medida': 'unit',
+  unidade_de_medida: 'unit',
+  estoque: 'stock',
+  'em estoque': 'stock',
+  em_estoque: 'stock',
+  status: 'status'
+};
+
 const invalid = message => Object.assign(new Error(message), { status: 400 });
 
 function parseCsv(input) {
@@ -36,7 +64,10 @@ function parseCsv(input) {
 }
 
 function decimal(value, precision, field) {
-  const text = String(value).trim().replace(/^R\$\s*/, '');
+  let text = String(value ?? '').trim().replace(/^R\$\s*/i, '');
+  if (/^\d{1,3}(?:,\d{3})+\.\d+$/.test(text)) {
+    text = text.replace(/,/g, '');
+  }
   const pattern = precision ? new RegExp('^\\d+(?:[.,]\\d{1,' + precision + '})?$') : /^\d+$/;
   if (!pattern.test(text)) throw invalid(`${field}: use número sem separador de milhar, com até ${precision} casas decimais.`);
   const number = Number(text.replace(',', '.'));
@@ -49,35 +80,93 @@ function parseProductList(input) {
   const headers = ['sku', 'nome', 'preco', 'categoria', 'subcategoria', 'unidade', 'estoque', 'status'];
   const rows = input.map((item) => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) throw invalid('Cada produto JSON deve ser um objeto.');
-    const values = [item.sku ?? item.codigo, item.name ?? item.nome, item.price ?? item.preco, item.category ?? item.categoria, item.subcategory ?? item.subcategoria ?? '', item.unit ?? item.unidade, item.stock ?? item.estoque, item.status ?? (item.active === false ? 'INATIVO' : 'ATIVO')];
-    if (values.some(value => !['string', 'number'].includes(typeof value) || String(value).length > 1000)) throw invalid('Campos JSON ausentes ou inválidos. Use sku, name, price, category, unit e stock.');
-    return values.map(value => String(value).trim());
+    const values = [item.sku ?? item.codigo ?? item.id ?? item['Product ID'], item.name ?? item.nome ?? item.descricao ?? item['DESCRIÇÃO'], item.price ?? item.preco ?? item.valor ?? item.VALOR, item.category ?? item.categoria ?? item.CATEGORIA, item.subcategory ?? item.subcategoria ?? item.SUBCATEGORIA ?? '', item.unit ?? item.unidade ?? item['UNIDADE DE MEDIDA'] ?? '', item.stock ?? item.estoque ?? item['EM ESTOQUE'] ?? '', item.status ?? item.STATUS ?? (item.active === false ? 'INATIVO' : 'ATIVO')];
+    if (values.slice(0, 4).some(value => value === undefined || value === null || !['string', 'number'].includes(typeof value) || String(value).length > 1000)) throw invalid('Campos JSON ausentes ou inválidos. Use sku, name, price e category.');
+    return values.map(value => String(value ?? '').trim());
   });
   return [headers, ...rows];
 }
 
 function prepareImport(csv) {
-  const table = Array.isArray(csv) ? parseProductList(csv) : parseCsv(csv); const headers = table.shift().map(header => columns[normalize(header)]);
+  const table = Array.isArray(csv) ? parseProductList(csv) : parseCsv(csv);
+  const rawHeaders = table.shift();
+  const headers = rawHeaders.map(header => columns[normalize(header)]);
   if (headers.some(header => !header) || new Set(headers).size !== headers.length) throw invalid('Cabeçalhos inválidos ou repetidos. Use o modelo disponível.');
-  for (const header of ['sku', 'name', 'price', 'category', 'unit', 'stock']) if (!headers.includes(header)) throw invalid('Coluna obrigatória ausente: ' + header);
+  for (const header of ['sku', 'name', 'price', 'category']) if (!headers.includes(header)) throw invalid('Coluna obrigatória ausente: ' + header);
   const seen = new Set(); const errors = []; const products = [];
   table.forEach((cells, index) => {
     try {
       if (cells.length !== headers.length) throw invalid('Quantidade de colunas diferente do cabeçalho.');
       const row = Object.fromEntries(headers.map((header, position) => [header, cells[position]]));
-      if (!/^[\p{L}\p{N}._-]{1,64}$/u.test(row.sku)) throw invalid('Código obrigatório: até 64 letras, números, ponto, traço ou sublinhado.');
+      if (!row.sku && !row.name) return; // ignora linha vazia
+      if (String(row.sku).toLowerCase() === 'product id' || String(row.name).toLowerCase() === 'descricao') return;
+      if (!/^[\p{L}\p{N}._\s-]{1,64}$/u.test(row.sku)) throw invalid('Código obrigatório: até 64 letras, números, ponto, traço, espaço ou sublinhado.');
       const key = normalize(row.sku);
       if (seen.has(key)) throw invalid('Código repetido no arquivo.'); seen.add(key);
       if (!row.name || row.name.length > 180 || !row.category || row.category.length > 80) throw invalid('Informe nome e categoria válidos.');
-      const unit = normalize(row.unit).toUpperCase();
-      if (!['UN', 'KG'].includes(unit)) throw invalid('Unidade deve ser UN ou KG.');
+      
+      const rawUnit = row.unit ? normalize(row.unit).toUpperCase() : '';
+      const unit = rawUnit && ['UN', 'KG'].includes(rawUnit) ? rawUnit : (isKgProduct(row.name, rawUnit) ? 'KG' : 'UN');
+      
       const price = decimal(row.price, 2, 'Preço');
       if (price <= 0) throw invalid('Preço deve ser maior que zero.');
-      const stock = decimal(row.stock, unit === 'KG' ? 3 : 0, 'Estoque');
+      
+      const rawStock = row.stock !== undefined && row.stock !== null && String(row.stock).trim() !== '' ? row.stock : (row.status === 'INATIVO' ? '0' : '50');
+      const stock = decimal(rawStock, unit === 'KG' ? 3 : 0, 'Estoque');
+      
       const status = (row.status || 'ATIVO').toUpperCase();
       if (!['ATIVO', 'INATIVO'].includes(status)) throw invalid('Status deve ser ATIVO ou INATIVO.');
+      
       const id = 'prd-' + createHash('sha256').update(key).digest('hex').slice(0, 32);
-      products.push({ id, sku: row.sku, name: row.name, canonicalName: row.name, descricao: row.name, price, valor_num: price, category: row.category, subcategory: String(row.subcategory || '').slice(0, 80), unit, unidade: unit, saleUnit: { code: unit, label: unit === 'KG' ? 'kg' : 'unidade', minimum: unit === 'KG' ? 0.1 : 1, increment: unit === 'KG' ? 0.1 : 1 }, stockQuantity: stock, estoque: stock, reservedQuantity: 0, status, STATUS: status, images: [], imageUrl: '', source: 'CSV_IMPORT' });
+      const subcategory = String(row.subcategory || '').slice(0, 80);
+      const hdPhoto = resolveHdProductImage(row.name, row.category, subcategory);
+      const care = getProductCareDetails({ name: row.name, category: row.category, subcategory });
+      const info = buildProductInformation({ name: row.name, category: row.category, subcategory });
+      const desc = info.descriptionAi || `${row.name} está disponível na Conflora Horta e Viveiro.`;
+
+      products.push({
+        id,
+        sku: row.sku,
+        name: row.name,
+        canonicalName: row.name,
+        descricao: row.name,
+        'DESCRIÇÃO': row.name,
+        price,
+        valor_num: price,
+        VALOR: price,
+        category: row.category,
+        categoria: row.category,
+        CATEGORIA: row.category,
+        subcategory,
+        subcategoria: subcategory,
+        SUBCATEGORIA: subcategory,
+        unit,
+        unidade: unit,
+        saleUnit: {
+          code: unit,
+          label: unit === 'KG' ? 'kg' : 'unidade',
+          minimum: unit === 'KG' ? 0.1 : 1,
+          increment: unit === 'KG' ? 0.1 : 1
+        },
+        stockQuantity: stock,
+        estoque: stock,
+        EM_ESTOQUE: stock,
+        reservedQuantity: 0,
+        status,
+        STATUS: status,
+        images: hdPhoto ? [hdPhoto] : [],
+        imageUrl: hdPhoto || '',
+        imagePathCache: hdPhoto || '',
+        source: 'CSV_IMPORT',
+        cuidados_basicos: care.cuidados_basicos || info.cuidados_basicos || '',
+        ambiente_ideal: care.ambiente_ideal || '',
+        dicas_armazenamento: care.dicas_armazenamento || '',
+        durabilidade: care.durabilidade || '',
+        descriptionAi: desc,
+        descricao_ia: desc,
+        iluminacao: info.iluminacao || '',
+        rega: info.rega || '',
+      });
     } catch (error) { if (errors.length < 100) errors.push({ line: index + 2, error: error.message }); }
   });
   const importId = createHash('sha256').update(JSON.stringify(products)).digest('hex');
