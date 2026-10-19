@@ -25,18 +25,29 @@
         ><img id="logo" src="/store-assets/brands/conflora-logo.png" alt="Conflora Horta e Viveiro" /><span
           ><strong id="storeName">Conflora Horta e Viveiro</strong><small id="subtitle"></small></span
       ></a>
-      <label class="search cf-topbar-search"
-        ><span data-icon="search" aria-hidden="true"></span>
+      <form
+        role="search"
+        class="search cf-topbar-search"
+        autocomplete="off"
+        onsubmit="event.preventDefault(); return false;"
+      >
+        <span data-icon="search" aria-hidden="true"></span>
         <input
           id="search"
+          name="catalog_search_term"
           type="search"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
+          spellcheck="false"
+          data-form-type="other"
           placeholder="O que você procura?"
           data-i18n-placeholder="header.search_placeholder"
           aria-label="Buscar produtos"
           data-i18n-aria="header.search_aria"
         />
-        <button type="button" id="searchBtn" class="search-btn" data-i18n="header.search_btn">Buscar</button>
-      </label>
+        <button type="submit" id="searchBtn" class="search-btn" data-i18n="header.search_btn">Buscar</button>
+      </form>
 
       <div class="header-actions cf-topbar-actions">
         <!-- SELETOR DE IDIOMAS (PT, EN, ES, FR) -->
@@ -408,7 +419,7 @@
             <label for="teamSelectUser" class="team-field-label" data-i18n="team.switch_operator">Selecione seu perfil:</label>
             <select id="teamSelectUser" class="team-select-input"></select>
             <label for="teamPinInput" class="team-field-label" style="margin-top: 8px; display: block;">PIN de Segurança:</label>
-            <input id="teamPinInput" type="password" inputmode="numeric" maxlength="6" class="team-select-input" placeholder="Digite seu PIN" />
+            <input id="teamPinInput" type="password" inputmode="numeric" maxlength="6" class="team-select-input" placeholder="Digite seu PIN" autocomplete="one-time-code" />
             <div class="team-selector-actions">
               <button id="teamConfirmOpBtn" class="team-btn-confirm" type="button" data-i18n="common.save">Confirmar Operador</button>
               <button id="teamCancelOpBtn" class="team-btn-cancel" type="button" data-i18n="common.cancel">Cancelar</button>

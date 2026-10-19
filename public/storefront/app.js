@@ -885,7 +885,16 @@ try {
   trackStorefrontEvent("page_view", { resultCount: state.products.length });
   await route();
   const topbarIntent = new URLSearchParams(location.search);
-  if (topbarIntent.has('q')) { $('#search').value = topbarIntent.get('q'); catalog.render(); }
+  if (topbarIntent.has('q')) {
+    const query = topbarIntent.get('q');
+    if (!/@/.test(query)) {
+      $('#search').value = query;
+      catalog.render();
+    }
+  } else if ($('#search') && /@/.test($('#search').value)) {
+    $('#search').value = '';
+    catalog.render();
+  }
 
   if (saved) refreshPublicCatalog().catch(() => {});
   // Login resolution does not block the public catalogue or its first render.

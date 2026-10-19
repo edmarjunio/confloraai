@@ -414,7 +414,11 @@ export function createCatalog(state, add, navigate) {
   }
 
   function render() {
-    const rawQuery = $("#search").value.trim();
+    let rawQuery = $("#search") ? $("#search").value.trim() : "";
+    if (/@/.test(rawQuery)) {
+      if ($("#search")) $("#search").value = "";
+      rawQuery = "";
+    }
     const activeProducts = state.products.filter(
       (product) => product.status !== "INATIVO" && product.isAvailable !== false,
     );
@@ -436,6 +440,9 @@ export function createCatalog(state, add, navigate) {
           showingFavorites = !showingFavorites;
           selectedCategory = "";
           pageSize = 24;
+          if ($("#search") && /@/.test($("#search").value)) {
+            $("#search").value = "";
+          }
           state.trackEvent?.("category_filter", { category: showingFavorites ? "Curtidos" : "Todas" });
           render();
         },
@@ -448,6 +455,9 @@ export function createCatalog(state, add, navigate) {
           showingFavorites = false;
           selectedCategory = "";
           pageSize = 24;
+          if ($("#search") && /@/.test($("#search").value)) {
+            $("#search").value = "";
+          }
           state.trackEvent?.("category_filter", { category: "Todas" });
           render();
         },
@@ -461,6 +471,9 @@ export function createCatalog(state, add, navigate) {
             showingFavorites = false;
             selectedCategory = category.id;
             pageSize = 24;
+            if ($("#search") && /@/.test($("#search").value)) {
+              $("#search").value = "";
+            }
             state.trackEvent?.("category_filter", { category: category.name });
             render();
           },
@@ -507,14 +520,29 @@ export function createCatalog(state, add, navigate) {
     renderedItems = list;
     $("#products").replaceChildren(...list.slice(0, pageSize).map((product) => renderCard(product)));
     if (!list.length) {
-      $("#products").append(
+      const emptyElements = [
         element("p", {
           class: "empty",
           text: showingFavorites
             ? "Você ainda não salvou produtos. Toque no coração para guardá-los aqui."
             : "Nenhum produto encontrado. Tente outra busca.",
         }),
-      );
+      ];
+      if (rawQuery) {
+        emptyElements.push(
+          element("button", {
+            type: "button",
+            class: "quiet",
+            style: "margin: 0.5rem auto; display: block; text-decoration: underline; cursor: pointer;",
+            text: "Limpar busca e ver produtos",
+            onclick: () => {
+              if ($("#search")) $("#search").value = "";
+              render();
+            },
+          }),
+        );
+      }
+      $("#products").append(...emptyElements);
     }
     $("#resultCount").textContent = `${list.length} produtos`;
     $("#catalogTitle").textContent = showingFavorites
