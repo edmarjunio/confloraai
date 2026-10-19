@@ -180,6 +180,7 @@ class OrderService {
     const isPix = !order.paymentMethod || /pix/i.test(order.paymentMethod);
     order.status = isPix ? ORDER_STATUS.CONFIRMED_AWAITING_PAYMENT : ORDER_STATUS.CONFIRMED_AWAITING_DELIVERY;
     order.confirmedAt = new Date().toISOString();
+    order.orderId = order.orderId || `ord-wa-${Date.now()}`;
 
     // Realiza a baixa de estoque atômica no Firestore
     const stockDeduction = await this.firestoreRepo.deductStock(order.items, phone).catch((err) => {
@@ -192,6 +193,16 @@ class OrderService {
     }
 
     await this.firestoreRepo.saveOrder(phone, order);
+    if (typeof this.firestoreRepo.createDirectOrder === 'function') {
+      await this.firestoreRepo.createDirectOrder({
+        id: order.orderId,
+        orderId: order.orderId,
+        ...order,
+        phone,
+      }).catch((err) => {
+        Logger.warn('Aviso: falha ao registrar cópia histórica do pedido WhatsApp', { error: err.message });
+      });
+    }
 
     // Salvar preferências no perfil do cliente para compras futuras ("O de sempre")
     const existingProfile = await this.firestoreRepo.getCustomerProfile(phone);

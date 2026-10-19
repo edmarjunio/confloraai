@@ -1,7 +1,6 @@
 const { INTENTS } = require('../router/message.router');
 const Logger = require('../shared/logger');
 const { formatCurrency } = require('../shared/string.util');
-const { isApprovedPixPayment } = require('../integrations/mercado-pago.client');
 
 class MessageService {
   /**
@@ -23,7 +22,6 @@ class MessageService {
     firestoreRepo,
     orderService,
     whatsappClient,
-    mercadoPagoClient = null,
     learningService = null,
   }) {
     this.router = router;
@@ -32,8 +30,8 @@ class MessageService {
     this.catalogRepo = catalogRepo;
     this.firestoreRepo = firestoreRepo;
     this.orderService = orderService;
-    this.whatsappClient = whatsappClient;
-    this.mercadoPagoClient = mercadoPagoClient;
+    this.outgoing = require('./conversation-outbox').createConversationOutbox(firestoreRepo, whatsappClient);
+    this.whatsappClient = this.outgoing.client;
     this.learningService = learningService;
   }
 
@@ -48,6 +46,24 @@ class MessageService {
    * @returns {Promise<{ reply: string, intent: string, imagesSent?: number, latencyMs: number }>}
    */
   async handleCustomerMessage({
+    ...payload
+  }) {
+    if (!payload.messageId) return this.processCustomerMessage(payload);
+    const { IncomingMessageService } = require('./incoming-message.service');
+    this.incoming ||= new IncomingMessageService(this.firestoreRepo);
+    const claim = await this.incoming.claim(payload.messageId);
+    if (claim.completed) return { reply: '', intent: 'DUPLICATE', latencyMs: 0 };
+    try {
+      const result = await this.outgoing.run(payload.messageId, () => this.processCustomerMessage(payload));
+      await this.incoming.finish(claim);
+      return result;
+    } catch (error) {
+      await this.incoming.finish(claim, error);
+      throw error;
+    }
+  }
+
+  async processCustomerMessage({
     phone,
     message,
     customerName = '',
@@ -57,14 +73,7 @@ class MessageService {
     const startTime = performance.now();
 
     // 1. Prevenção de duplicidade (Idempotência da Meta)
-    if (messageId) {
-      const isDuplicate = await this.firestoreRepo.isDuplicateMessage(messageId);
-      if (isDuplicate) {
-        Logger.info(`Mensagem duplicada ignorada: ${messageId}`);
-        return { reply: '', intent: 'DUPLICATE', latencyMs: 0 };
-      }
-      await this.firestoreRepo.markMessageProcessed(messageId);
-    }
+    // The public entry point owns the durable claim and marks completion only on success.
 
     // 2. Marcar mensagem como lida no WhatsApp (apenas para IDs válidos da Meta)
     if (messageId && this.whatsappClient) {
@@ -85,59 +94,12 @@ class MessageService {
     const customerProfile = await this.firestoreRepo.getCustomerProfile(phone);
     const pendingOrder = await this.firestoreRepo.getOrder(phone);
 
-    // Comprovantes só podem confirmar pagamentos conferidos diretamente no Mercado Pago.
+    // Comprovantes enviados por conversa não confirmam pagamentos.
     const pendingPixSale = await this.firestoreRepo.findPendingPixOrderByPhone(phone);
-    if (pendingPixSale) {
-      const isReceiptText =
-        /comprovante|pago|pix|conflora|transferencia|transferência|efetuado|concluido|concluído|sucesso|autentic|chave/i.test(message) ||
-        message.includes('[COMPROVANTE_ENVIADO]') ||
-        message.length > 25;
-
-      if (isReceiptText) {
-        let verifiedPayment = null;
-        try {
-          const payments =
-            await this.mercadoPagoClient?.findPaymentsByOrderId(pendingPixSale.id);
-          verifiedPayment = payments?.find((payment) =>
-            isApprovedPixPayment(payment, pendingPixSale),
-          );
-        } catch (error) {
-          Logger.error('Falha ao consultar o pagamento PIX no Mercado Pago', error, {
-            orderId: pendingPixSale.id,
-          });
-        }
-
-        let autoPixReply;
-        if (verifiedPayment) {
-          await this.firestoreRepo.confirmOrderPayment(pendingPixSale.id, {
-            verifiedVia: 'MERCADO_PAGO_WEBHOOK',
-            paymentTransactionId: verifiedPayment.id,
-            paymentAmount: verifiedPayment.transaction_amount,
-          });
-          autoPixReply =
-            `✅ Pagamento PIX confirmado pelo Mercado Pago.\n\n` +
-            `Pedido #${pendingPixSale.ticketNumber || pendingPixSale.id.slice(-8)} ` +
-            `no valor de ${formatCurrency(pendingPixSale.total)}. Obrigado pela compra!`;
-        } else {
-          autoPixReply =
-            'Recebemos sua mensagem, mas ainda não identificamos um PIX aprovado ' +
-            'para este pedido. Comprovantes e pagamentos agendados não confirmam ' +
-            'a venda; aguarde a confirmação do Mercado Pago.';
-        }
-        await this.firestoreRepo.appendMessage(phone, 'assistant', autoPixReply);
-        if (this.whatsappClient) {
-          await this.whatsappClient.sendTextMessage(phone, autoPixReply);
-        }
-        const latencyMs = Math.round((performance.now() - startTime) * 100) / 100;
-        return {
-          reply: autoPixReply,
-          intent: verifiedPayment
-            ? 'PIX_RECEIPT_VERIFIED'
-            : 'PIX_RECEIPT_AWAITING_PAYMENT',
-          imagesSent: 0,
-          latencyMs,
-        };
-      }
+    if (pendingPixSale?.pixMode === 'MANUAL' && /comprovante|pago|pix|transfer[eê]ncia|\[COMPROVANTE_ENVIADO\]/i.test(message)) {
+      const reply = 'Para confirmar seu Pix, envie o comprovante na página do seu pedido no site. O caixa ou administrador confere o recebimento na conta bancária antes de aprovar. Esta mensagem não confirma o pagamento.';
+      if (this.whatsappClient) await this.whatsappClient.sendTextMessage(phone, reply);
+      return { reply, intent: 'MANUAL_PIX_AWAITING_REVIEW', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
     }
     if (verifyOnly) {
       return {

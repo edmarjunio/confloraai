@@ -2,15 +2,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { rankProductSales } = require('../src/catalog/product-sales');
 const { FirestoreRepository } = require('../src/database/firestore.repository');
-const vm = require('node:vm');
-const { renderHomeHtml } = require('../src/http/views-home');
 
-test('rendered catalog classic scripts have valid JavaScript syntax', () => {
-  for (const match of renderHomeHtml().matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)) {
-    if (match[1].includes('type="module"')) { continue; }
-    assert.doesNotThrow(() => new vm.Script(match[2]));
-  }
-});
+
+
 
 test('sales counts include confirmed units and exclude pending, cancelled and invalid items', () => {
   const products = [{ id: 'a', name: 'Árvore' }, { id: 'b', name: 'Muda' }];

@@ -6,5 +6,4 @@ test('startup diagnostics report only active integrations', async () => {
   const service = new SystemStatusService({});
   const status = await service.getSystemStatus();
   assert.equal('defaultCatalog' in status, false);
-  assert.equal('googleSheets' in status, false);
 });

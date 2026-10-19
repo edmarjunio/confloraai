@@ -75,6 +75,25 @@ class WhatsAppClient {
     return this.postRequest('/messages', { messaging_product: 'whatsapp', to, type: 'image', image: { id: media.id, caption } });
   }
 
+  async sendDocumentBuffer(to, buffer, filename, caption = '') {
+    if (!this.token || !config.whatsapp.phoneNumberId) throw new Error('WhatsApp não configurado. Baixe o PDF e configure a integração para enviar.');
+    const form = new FormData();
+    form.set('messaging_product', 'whatsapp');
+    form.set('file', new Blob([buffer], { type: 'application/pdf' }), filename);
+    const response = await fetch(this.baseUrl + '/media', {
+      method: 'POST', headers: { Authorization: 'Bearer ' + this.token }, body: form, signal: AbortSignal.timeout(15000),
+    });
+    if (!response.ok) throw new Error('Não foi possível anexar o PDF ao WhatsApp (HTTP ' + response.status + ').');
+    const media = await response.json();
+    if (!media.id) throw new Error('O WhatsApp não retornou o documento.');
+    const template = process.env.WHATSAPP_CASHIER_REPORT_TEMPLATE;
+    if (template) return this.sendTemplate(to, template, config.whatsapp.templates.language || 'pt_BR', [
+      { type: 'header', parameters: [{ type: 'document', document: { id: media.id, filename } }] },
+      { type: 'body', parameters: [{ type: 'text', text: caption }] },
+    ]);
+    return this.postRequest('/messages', { messaging_product: 'whatsapp', to, type: 'document', document: { id: media.id, filename, caption } });
+  }
+
   async sendPdvText(to, text) {
     const template = process.env.WHATSAPP_PDV_TEXT_TEMPLATE || config.whatsapp.templates.customerOrder;
     if (!template) { return this.sendTextMessage(to, text); }
@@ -148,11 +167,18 @@ class WhatsAppClient {
 
       const data = await response.json();
       if (!response.ok) {
-        Logger.error('Erro na resposta da Meta Graph API', null, { status: response.status, data });
+        const code = Number(data?.error?.code) || null;
+        const authenticationFailed = response.status === 401 || code === 190;
+        const message = authenticationFailed
+          ? 'WhatsApp: token recusado pela Meta. Atualize WHATSAPP_TOKEN com um token válido e reinicie o servidor.'
+          : `WhatsApp: solicitação recusada pela Meta (HTTP ${response.status}${code ? `, código ${code}` : ''}).`;
+        const error = Object.assign(new Error(message), { status: response.status, code });
+        Logger.error(message, null, { status: response.status, code });
+        throw error;
       }
       return data;
     } catch (error) {
-      Logger.error('Falha de conexão com a Meta Graph API', error);
+      if (!error.status) Logger.error('Falha de conexão com a Meta Graph API', error);
       throw error;
     }
   }

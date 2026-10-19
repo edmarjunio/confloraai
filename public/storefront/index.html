@@ -2,36 +2,10 @@
 <html lang="pt-BR">
   <head>
     <script src="/store-assets/tab-session.js"></script>
+    <script src="/store-assets/error-monitor.js"></script>
     <link rel="stylesheet" href="/store-assets/order-display.css" />
     <script src="/store-assets/order-display.js"></script>
     <meta charset="utf-8" />
-    <script>
-      (function() {
-        try {
-          var _fetch = typeof window !== 'undefined' ? window.fetch : null;
-          var _current = _fetch ? _fetch.bind(window) : null;
-          var desc = {
-            get: function() { return _current; },
-            set: function(fn) { _current = fn; },
-            configurable: true,
-            enumerable: true
-          };
-          try {
-            Object.defineProperty(window, 'fetch', desc);
-          } catch (_) {}
-          try {
-            if (typeof Window !== 'undefined' && Window.prototype) {
-              Object.defineProperty(Window.prototype, 'fetch', desc);
-            }
-          } catch (_) {}
-          try {
-            if (typeof window !== 'undefined' && window.__proto__) {
-              Object.defineProperty(window.__proto__, 'fetch', desc);
-            }
-          } catch (_) {}
-        } catch (_) {}
-      })();
-    </script>
     <meta
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
@@ -39,19 +13,19 @@
     <meta name="theme-color" content="#2E9348" />
     <title>Loja</title>
     <link rel="stylesheet" href="/store-assets/v5/store.css" />
-    <link rel="stylesheet" href="/store-assets/site-header.css" />
+    <link rel="stylesheet" href="/store-assets/site-header.css?v=topbar-1" />
     <link rel="stylesheet" href="/store-assets/design-system.css" />
     <link id="storeIcon" rel="icon" href="data:," />
     <link rel="stylesheet" href="/store-assets/delivery.css" />
 </head>
   <body>
     <a class="skip" href="#main" data-i18n="nav.skip_to_products">Ir para os produtos</a>
-    <header class="header conflora-site-header">
-      <a id="brand" class="brand conflora-site-brand has-logo" href="#"
+    <header class="header conflora-site-header cf-topbar-layout">
+      <a id="brand" class="brand conflora-site-brand has-logo cf-topbar-brand" href="#"
         ><img id="logo" src="/store-assets/brands/conflora-logo.png" alt="Conflora Horta e Viveiro" /><span
           ><strong id="storeName">Conflora Horta e Viveiro</strong><small id="subtitle"></small></span
       ></a>
-      <label class="search"
+      <label class="search cf-topbar-search"
         ><span data-icon="search" aria-hidden="true"></span>
         <input
           id="search"
@@ -64,7 +38,7 @@
         <button type="button" id="searchBtn" class="search-btn" data-i18n="header.search_btn">Buscar</button>
       </label>
 
-      <div class="header-actions">
+      <div class="header-actions cf-topbar-actions">
         <!-- SELETOR DE IDIOMAS (PT, EN, ES, FR) -->
         <div class="lang-selector-wrapper">
           <select id="languageSelect" class="lang-select" aria-label="Idioma / Language">
@@ -76,31 +50,32 @@
         </div>
 
         <span id="region"></span>
-        <button id="headerAccountIdentity" class="header-account-identity" type="button" hidden aria-label="Abrir minha conta">
+        <button id="headerAccountIdentity" class="header-account-identity cf-topbar-identity" type="button" hidden aria-label="Abrir minha conta">
           <span data-icon="user" aria-hidden="true"></span>
           <span class="header-account-copy">
             <strong id="headerAccountName"></strong>
             <small id="headerAccountRole"></small>
           </span>
         </button>
-        <button id="cartButton" aria-haspopup="dialog">
+        <button class="cf-topbar-pill cf-topbar-dark" id="cartButton" aria-haspopup="dialog">
           <span data-icon="cart" aria-hidden="true"></span>
           <span class="cart-label" data-i18n="header.cart">Sacola</span> <span id="cartCount">0</span>
         </button>
-        <button id="cashierShortcut" type="button" aria-label="Ir para o Caixa" title="Ir para o Caixa" hidden>
-          <span data-icon="register" aria-hidden="true"></span><span>IR PARA O CAIXA</span>
+        <button class="cf-topbar-pill cf-topbar-cashier" id="cashierShortcut" type="button" aria-label="Caixa" title="Caixa" hidden>
+          <span data-icon="register" aria-hidden="true"></span><span>CAIXA</span>
         </button>
         <button id="customerAccountShortcut" class="header-history-button" type="button" aria-label="Minha conta: saldo e histórico" hidden>
           <span data-icon="history" aria-hidden="true"></span><span>MINHA CONTA</span>
           <small id="customerDebtBadge" hidden></small>
         </button>
         <button id="accountButton" class="header-login-button" type="button" hidden data-i18n="header.login">Entrar</button>
-        <button id="adminSettingsButton" class="admin-settings-button" type="button" title="Configurações administrativas" aria-label="Abrir configurações administrativas" hidden>
+        <button id="adminSettingsButton" class="admin-settings-button cf-topbar-menu" type="button" title="Navegar pelas páginas" aria-label="Menu da loja" hidden>
           <span data-icon="menu" aria-hidden="true"></span>
         </button>
       </div>
     </header>
 
+    <nav class="cf-page-toolbar" aria-label="Voltar à página anterior"><button type="button" class="cf-back-button" data-site-back>← Voltar</button></nav>
     <main id="main" class="main">
       <section id="catalogView">
         <div class="section-title">
@@ -181,7 +156,7 @@
       <div class="dialog-header">
         <h2 id="cartTitle" data-i18n="cart.title">Sua sacola</h2>
         <button id="cartClearButton" type="button" data-i18n="cart.clear_all" aria-label="Esvaziar sacola" data-i18n-aria="cart.clear_all">Esvaziar</button>
-        <button id="cartCloseButton" type="button" aria-label="Fechar sacola" data-i18n-aria="cart.close_aria">Fechar ×</button>
+        <button id="cartCloseButton" type="button" aria-label="Fechar sacola" data-i18n-aria="cart.close_aria"><span aria-hidden="true">»</span></button>
       </div>
       <section id="checkoutCustomer" aria-labelledby="checkoutCustomerTitle">
         <h3 id="checkoutCustomerTitle">
@@ -417,10 +392,23 @@
             <button id="teamSwitchOpBtn" class="team-switch-btn" type="button" data-i18n="team.switch_operator">Trocar</button>
           </div>
 
+          <!-- SELETOR EXCLUSIVO DO DONO (TESTE DE 4 PERFIS) -->
+          <div id="ownerQuickSwitchBox" class="team-op-selector-box hidden" style="margin-bottom: 12px; background: #fefce8; border: 1px solid #fde047;">
+            <label class="team-field-label" style="color: #854d0e; font-weight: 800;">👑 Modo Teste (Exclusivo Dono):</label>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px;">
+              <button type="button" class="owner-role-btn" data-role="ADMIN" style="padding: 8px; border-radius: 8px; border: 1px solid #ca8a04; background: #fff; font-weight: 700; font-size: 12px; cursor: pointer;">👑 ADMIN</button>
+              <button type="button" class="owner-role-btn" data-role="CAIXA" style="padding: 8px; border-radius: 8px; border: 1px solid #ca8a04; background: #fff; font-weight: 700; font-size: 12px; cursor: pointer;">💵 CAIXA</button>
+              <button type="button" class="owner-role-btn" data-role="VENDEDOR" style="padding: 8px; border-radius: 8px; border: 1px solid #ca8a04; background: #fff; font-weight: 700; font-size: 12px; cursor: pointer;">🛍️ VENDEDOR</button>
+              <button type="button" class="owner-role-btn" data-role="ENTREGADOR" style="padding: 8px; border-radius: 8px; border: 1px solid #ca8a04; background: #fff; font-weight: 700; font-size: 12px; cursor: pointer;">🛵 ENTREGADOR</button>
+            </div>
+          </div>
+
           <!-- SELETOR RÁPIDO DE OPERADOR -->
           <div id="teamOpSelectorBox" class="team-op-selector-box hidden">
             <label for="teamSelectUser" class="team-field-label" data-i18n="team.switch_operator">Selecione seu perfil:</label>
             <select id="teamSelectUser" class="team-select-input"></select>
+            <label for="teamPinInput" class="team-field-label" style="margin-top: 8px; display: block;">PIN de Segurança:</label>
+            <input id="teamPinInput" type="password" inputmode="numeric" maxlength="6" class="team-select-input" placeholder="Digite seu PIN" />
             <div class="team-selector-actions">
               <button id="teamConfirmOpBtn" class="team-btn-confirm" type="button" data-i18n="common.save">Confirmar Operador</button>
               <button id="teamCancelOpBtn" class="team-btn-cancel" type="button" data-i18n="common.cancel">Cancelar</button>
@@ -483,6 +471,7 @@
       </div>
     </div>
 
+    <script src="/store-assets/site-navigation.js?v=1"></script>
     <script src="/store-assets/delivery-maps.js"></script>
   <script src="/store-assets/render-image.js"></script>
     <script src="/store-assets/product-card.js"></script>

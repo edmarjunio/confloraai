@@ -1,28 +1,27 @@
 const { renderFirebaseAuthScript } = require('./firebase-client');
 const { GOOGLE_ANALYTICS_TAG } = require('./analytics');
+const { createHash } = require('node:crypto');
+const { readFileSync } = require('node:fs');
+const { resolve } = require('node:path');
 
-const FETCH_SHIM_SCRIPT = `<script>
-  (function() {
-    try {
-      var _fetch = typeof window !== 'undefined' ? window.fetch : null;
-      var _current = _fetch ? _fetch.bind(window) : null;
-      var desc = {
-        get: function() { return _current; },
-        set: function(fn) { _current = fn; },
-        configurable: true,
-        enumerable: true
-      };
-      try { Object.defineProperty(window, 'fetch', desc); } catch (_) {}
-      try { if (typeof Window !== 'undefined' && Window.prototype) Object.defineProperty(Window.prototype, 'fetch', desc); } catch (_) {}
-      try { if (typeof window !== 'undefined' && window.__proto__) Object.defineProperty(window.__proto__, 'fetch', desc); } catch (_) {}
-    } catch (_) {}
-  })();
-</script>`;
+// Keep the admin markup, shared card and its styles on the same release,
+// even when an older storefront worker controls this tab.
+const productAssetsVersion = createHash('sha256')
+  .update(readFileSync(resolve(__dirname, '../../public/storefront/design-system.css')))
+  .update(readFileSync(resolve(__dirname, '../../public/storefront/admin-shell-v1.css')))
+  .update(readFileSync(resolve(__dirname, '../../public/storefront/site-header.css')))
+  .update(readFileSync(resolve(__dirname, '../../public/storefront/topbar.js')))
+  .update(readFileSync(resolve(__dirname, '../../public/storefront/site-navigation.js')))
+  .update(readFileSync(resolve(__dirname, '../../public/storefront/product-card.js')))
+  .update(readFileSync(resolve(__dirname, '../../public/storefront/stock-counting.js')))
+  .update(readFileSync(resolve(__dirname, '../../public/storefront/cashier-report-actions.js')))
+  .digest('hex').slice(0, 12);
+
+
 
 function renderAdminHtml(storeConfig) {
   const escape = value => String(value || '').replace(/[&<>"']/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[character]);
   const name = escape(storeConfig?.identity.name || 'Administração');
-  const logo = escape(storeConfig?.branding.logoUrl || '/store-assets/placeholder.svg');
   const colors = storeConfig?.branding.colors || {};
   const color = (key, fallback) => /^#[0-9a-f]{6}$/i.test(colors[key]) ? colors[key] : fallback;
   return `<!DOCTYPE html>
@@ -35,11 +34,15 @@ function renderAdminHtml(storeConfig) {
   <script src="/store-assets/tab-session.js"></script>
     <link rel="stylesheet" href="/store-assets/order-display.css" />
     <script src="/store-assets/order-display.js"></script>
-  ${FETCH_SHIM_SCRIPT}
 
-  <link rel="stylesheet" href="/store-assets/admin-shell-v1.css">
-  <link rel="stylesheet" href="/store-assets/site-header.css">
-  <link rel="stylesheet" href="/store-assets/design-system.css">
+  <link rel="stylesheet" href="/store-assets/admin-shell-v1.css?v=${productAssetsVersion}">
+  <link rel="stylesheet" href="/store-assets/site-header.css?v=${productAssetsVersion}">
+  <script src="/store-assets/site-navigation.js?v=1"></script>
+  <script src="/store-assets/error-history.js" defer></script>
+  <script src="/store-assets/product-import.js" defer></script>
+  <script src="/store-assets/error-monitor.js"></script>
+  <script src="/store-assets/topbar.js?v=${productAssetsVersion}"></script>
+  <link rel="stylesheet" href="/store-assets/design-system.css?v=${productAssetsVersion}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -55,18 +58,6 @@ function renderAdminHtml(storeConfig) {
     .stock-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
     .stock-toolbar-actions { display:flex; gap:8px; flex-wrap:wrap; }
     .stock-search { width:min(100%, 420px); padding:11px 14px; border:1px solid var(--border); border-radius:12px; font:inherit; }
-    .stock-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:14px; }
-    .stock-card { border:1px solid var(--border); border-radius:16px; background:#fff; padding:14px; display:grid; gap:12px; cursor:pointer; box-shadow:0 2px 6px rgba(15,23,42,.05); transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
-    .stock-card:hover { transform:translateY(-2px); box-shadow:0 9px 22px rgba(15,23,42,.12); border-color:#86c99a; }
-    .stock-card-head { display:flex; align-items:center; gap:12px; min-width:0; }
-    .stock-card render-image { width:64px; height:64px; flex:none; overflow:hidden; border-radius:12px; background:#f1f5f3; }
-    .stock-card render-image img { width:100%; height:100%; object-fit:cover; }
-    .stock-card-name { font-weight:800; font-size:14px; color:#0f172a; overflow-wrap:anywhere; }
-    .stock-card-category { font-size:11px; color:#64748b; margin-top:4px; }
-    .stock-card-balance { font-size:13px; color:#475569; }
-    .stock-card-balance strong { font-size:20px; color:var(--primary-dark); }
-    .stock-card-actions { display:flex; gap:8px; flex-wrap:wrap; }
-    .stock-card-actions .action-btn { flex:1; justify-content:center; }
     .stock-movement-row { padding:10px 12px; border:1px solid #e2e8f0; border-radius:10px; background:#fff; color:#475569; font-size:12px; line-height:1.5; }
     .stock-adjust-modal .modal-card { width:min(100% - 24px, 520px); border-radius:20px; padding:24px; }
     .stock-adjust-form { display:grid; gap:14px; margin-top:16px; }
@@ -77,7 +68,7 @@ function renderAdminHtml(storeConfig) {
     .admin-products-toolbar { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:18px; }
     .admin-products-toolbar h2 { margin:0; }
     .admin-add-product { min-height:48px; padding:12px 20px; border:0; border-radius:14px; background:var(--primary); color:#fff; font-weight:800; font-size:14px; box-shadow:0 5px 14px rgba(46,147,72,.22); }
-    .admin-product-dialog { width:min(980px, calc(100vw - 32px)); max-width:none; max-height:calc(100dvh - 32px); padding:0; border:1px solid #dbe6dd; border-radius:22px; overflow:auto; background:#fff; color:#17251a; box-shadow:0 24px 80px rgba(15,23,42,.28); }
+    .admin-product-dialog { margin:auto; width:min(980px, calc(100vw - 32px)); max-width:none; max-height:calc(100dvh - 32px); padding:0; border:1px solid #dbe6dd; border-radius:22px; overflow:auto; background:#fff; color:#17251a; box-shadow:0 24px 80px rgba(15,23,42,.28); }
     .admin-product-dialog::backdrop { background:rgba(15,23,42,.48); backdrop-filter:blur(3px); }
     .admin-product-dialog__surface { padding:24px; }
     .admin-product-dialog__header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:18px; }
@@ -91,42 +82,24 @@ function renderAdminHtml(storeConfig) {
 
 </head>
 <body>
+  <conflora-topbar context="admin" managed></conflora-topbar>
   <div class="container">
-    <header class="conflora-site-header">
-      <a href="/" class="conflora-site-brand" aria-label="${name} — página inicial">
-        <img src="${logo}" alt="" />
-        <span><strong>${name}</strong><small>Horta e Viveiro · Mineiros - GO</small></span>
-      </a>
-      <span class="conflora-site-header__context">Administração</span>
-
-      <div class="header-actions">
-        <div class="user-pill" id="userHeaderPill">
-          <span>Operador:</span>
-          <img id="loggedUserPhoto" alt="Foto do operador" referrerpolicy="no-referrer" hidden style="width:28px; height:28px; border-radius:50%; object-fit:cover;" />
-          <strong id="loggedUserName">Carregando...</strong>
-          <span class="role-badge" id="loggedUserRole">ADMIN</span>
-        </div>
-        <button class="header-btn" onclick="openLoginModal()">Trocar operador</button>
-        <button class="header-btn" onclick="logoutAdmin()" title="Sair da conta de operador/admin">Sair</button>
-        <a href="/caixa" class="header-btn admin-cashier-link" aria-label="Ir para o Caixa">▣ IR PARA O CAIXA</a>
-        <a href="/admin-gerencial" class="header-btn" style="background:#0f172a; color:#fff;" title="Painel Gerencial Executivo & Looker Studio">📊 Painel Gerencial</a>
-        <button class="header-btn notification-button" onclick="showTab('notifs')" aria-label="Notificações">Avisos <span id="notifBadge">0</span></button>
-        <a href="/configuracoes" class="header-btn">Personalizar loja</a>
-        <a href="/" class="header-btn catalog-link">Ver catálogo ↗</a>
-      </div>
-    </header>
-
-    <!-- NAVEGAÇÃO POR ABAS (FILTRADAS AUTOMATICAMENTE POR CARGO) -->
-    <div class="nav-tabs" id="navTabsContainer">
-      <!-- Abas ADMIN -->
-      <button class="nav-btn active" id="tabBtn-cashier" onclick="showTab('cashier')">Caixa/Vendas</button>
-      <button class="nav-btn" id="tabBtn-orders" onclick="showTab('orders')">Comandas</button>
-      <button class="nav-btn" id="tabBtn-stock" onclick="showTab('stock')">Estoque</button>
-      <button class="nav-btn" id="tabBtn-products" onclick="showTab('products')">Produtos</button>
-      <button class="nav-btn" id="tabBtn-team" onclick="showTab('team')">Equipe</button>
-      <button class="nav-btn" id="tabBtn-status" onclick="showTab('status')">Teste de conexões/servidor</button>
-      <button class="nav-btn" id="tabBtn-analytics" onclick="showTab('analytics')">Eventos</button>
-    </div>
+    <nav class="cf-work-actions" aria-label="Opções administrativas">
+      <button type="button" class="cf-back-button" data-site-back>← Voltar</button>
+      <span id="adminPageLabel">Administração</span>
+      <span id="ownerProfileSwitcherWrap" style="display:none; align-items:center; gap:6px; background:#fefce8; border:1px solid #fde047; padding:3px 8px; border-radius:8px;">
+        <span style="font-size:11px; font-weight:800; color:#854d0e;">👑 Perfil Teste:</span>
+        <select id="ownerProfileSelect" onchange="switchOwnerProfile(this.value)" style="background:#fff; color:#1e293b; border:1px solid #cbd5e1; border-radius:6px; padding:3px 6px; font-size:11px; font-weight:700; cursor:pointer;">
+          <option value="ADMIN">ADMIN (Total)</option>
+          <option value="CAIXA">CAIXA (PDV)</option>
+          <option value="VENDEDOR">VENDEDOR (Comandas/Pix)</option>
+          <option value="ENTREGADOR">ENTREGADOR (Entregas)</option>
+        </select>
+      </span>
+      <button class="header-btn" onclick="openLoginModal()">Trocar operador</button>
+      <button class="header-btn cf-notification-button" onclick="showTab('notifs')" aria-label="Notificações" title="Notificações não lidas"><svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg><span id="notifBadge">0</span></button>
+      <button class="cf-danger-button" onclick="logoutAdmin()">Sair</button>
+    </nav>
 
     <!-- ABA 1: ANALYTICS & MÉTRICAS (EXCLUSIVA ADMIN) -->
     <div id="tab-analytics" class="tab-content">
@@ -210,6 +183,7 @@ function renderAdminHtml(storeConfig) {
         </div>
       </div>
 
+      <cashier-report-actions id="adminCashierReport"></cashier-report-actions>
       <div class="stat-grid" >
         <div class="stat-card">
           <div class="stat-label">Vendas Totais Hoje</div>
@@ -273,19 +247,36 @@ function renderAdminHtml(storeConfig) {
     <!-- ABA 5: CONTROLE DE ESTOQUE -->
     <div id="tab-stock" class="tab-content">
       <div class="admin-section-heading">
-        <div><h2>Estoque</h2><p class="muted">Toque no cartão para somar uma unidade; use os botões para entrada, baixa ou contagem exata.</p></div>
-        <div class="stock-toolbar-actions">
-          <button type="button" id="stockControlToggle" class="action-btn btn-gray" aria-pressed="false" onclick="toggleStockControl()" disabled>Carregando controle…</button>
-          <button type="button" class="action-btn btn-green" onclick="openStockAdjustment('ENTRY')">＋ Entrada de estoque</button>
-          <button type="button" class="action-btn btn-red" onclick="openStockAdjustment('EXIT')">− Baixa de estoque</button>
-        </div>
+        <div><h2>Entrada e conferência de estoque</h2><p class="muted">Busque o produto, digite a quantidade real e conclua a conferência. Também pode contar com toques.</p></div>
       </div>
-      <p id="stockControlHelp" class="muted" role="status"></p>
+      <section id="stockControlBanner" class="stock-control-banner" aria-label="Controle de estoque">
+        <div><strong>Controle de estoque nas vendas</strong><p id="stockControlHelp" role="status"></p></div>
+        <button type="button" id="stockControlToggle" class="action-btn" aria-pressed="false" onclick="toggleStockControl()" disabled>Carregando controle…</button>
+      </section>
       <div class="stock-toolbar">
-        <input type="search" id="stockSearchInput" class="stock-search" placeholder="Buscar produto no estoque…" oninput="filterStockCards()" />
+        <input type="search" id="stockSearchInput" class="stock-search" aria-label="Buscar produto no estoque" placeholder="1. Busque o produto pelo nome ou categoria…" oninput="filterStockCards()" />
         <span id="stockProductsCount" class="muted" role="status"></span>
       </div>
-      <div class="stock-cards" id="stockCardsGrid"></div>
+      <div class="stock-count-toolbar" role="group" aria-label="Tipo de contagem">
+        <button type="button" id="stockModeEntry" class="action-btn btn-green" aria-pressed="true" onclick="StockCounting.setMode('ENTRY')">＋ Receber produtos</button>
+        <button type="button" id="stockModeCount" class="action-btn btn-gray" aria-pressed="false" onclick="StockCounting.setMode('SET')">✓ Conferir o que tenho</button>
+        <button type="button" class="action-btn btn-green" onclick="StockCounting.createProduct()">＋ Cadastrar produto</button>
+      </div>
+      <p id="stockCountingHelp" class="stock-count-help"></p>
+      <div class="stock-count-summary">
+        <strong id="stockDraftSummary">Nenhum produto contado</strong>
+        <button type="button" id="stockUndo" class="action-btn btn-gray" onclick="StockCounting.undo()" disabled>↶ Desfazer último toque</button>
+        <button type="button" id="stockSave" class="action-btn btn-green" onclick="StockCounting.save()" disabled>Salvar entradas</button>
+      </div>
+      <p id="stockCountingStatus" role="status" aria-live="polite"></p>
+      <div class="admin-products-grid" id="stockCardsGrid"></div>
+      <details class="stock-extra-actions">
+        <summary>Outros ajustes de estoque</summary>
+        <div class="stock-toolbar-actions">
+          <button type="button" class="action-btn btn-gray" onclick="openStockAdjustment('ENTRY')">Entrada por quantidade</button>
+          <button type="button" class="action-btn btn-gray" onclick="openStockAdjustment('EXIT')">Baixa com justificativa</button>
+        </div>
+      </details>
       <div class="card" style="margin-top:22px;">
         <h3>Movimentações recentes</h3>
         <div id="stockMovementsList" class="muted">Carregando movimentações…</div>
@@ -339,12 +330,13 @@ function renderAdminHtml(storeConfig) {
 
     <!-- ABA 7: CADASTRO DE PRODUTOS COM MÚLTIPLAS IMAGENS (ADMIN) -->
     <div id="tab-products" class="tab-content">
+      <button type="button" class="action-btn btn-green" onclick="window.ConfloraProductImport.open()">Importar planilha de produtos</button>
       <div class="admin-products-toolbar">
         <h2>Cadastro de produtos</h2>
         <button type="button" class="admin-add-product" onclick="openNewProductDialog()">＋ ADICIONAR PRODUTO</button>
       </div>
       <button type="button" class="action-btn btn-gray" onclick="showTab('price')">Abrir consulta e ajuste de preços</button>
-      <dialog id="productEditorDialog" class="admin-product-dialog" aria-labelledby="productFormTitle">
+      <dialog id="productEditorDialog" oncancel="event.preventDefault(); closeProductEditorDialog()" class="admin-product-dialog" aria-labelledby="productFormTitle">
         <div class="admin-product-dialog__surface">
           <div class="admin-product-dialog__header">
             <div>
@@ -396,7 +388,7 @@ function renderAdminHtml(storeConfig) {
               <input type="file" id="formProdCameraFile" accept="image/*" capture="environment" onchange="handleProdPhotoFileSelect(event)" />
             </label>
           </div>
-          <div style="font-size:10px; color:#15803d; margin-top:2px;">⚡ <strong>Qualidade Máxima &amp; Zoom HD:</strong> Fotos são otimizadas no servidor antes do envio ao Firebase Storage e ficam disponíveis no catálogo.</div>
+          <div style="font-size:10px; color:#15803d; margin-top:2px;">⚡ <strong>Qualidade Máxima &amp; Zoom HD:</strong> Os arquivos originais são preservados no armazenamento. Clique na foto para ampliar; use as setas para ordenar. A primeira foto é a capa.</div>
           <div id="formProdPhotoPreviewBox" style="display:none; margin-top:8px; padding:10px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
               <div style="font-size:12px; font-weight:bold; color:#14532d;">📸 Galeria de Fotos (<span id="formProdPhotoCount">0</span> foto(s)):</div>
@@ -425,6 +417,7 @@ function renderAdminHtml(storeConfig) {
         <div style="grid-column: 1/-1; display:flex; gap:8px; flex-wrap:wrap;">
           <button type="submit" class="action-btn btn-green">💾 Salvar no Firestore</button>
           <button type="button" class="action-btn btn-gray" onclick="closeProductEditorDialog()">Cancelar</button>
+          <button type="button" id="deleteEditingProduct" class="action-btn btn-red" hidden onclick="deleteProduct(document.getElementById('formProdId').value)">Excluir produto</button>
         </div>
       </form>
         </div>
@@ -439,19 +432,7 @@ function renderAdminHtml(storeConfig) {
         </div>
         <p id="productStatusCount" role="status" style="font-size:13px;"></p>
       </div>
-      <div class="table-scroll" tabindex="0" role="region" aria-label="Tabela de dados"><table>
-        <thead>
-          <tr>
-            <th>Foto</th>
-            <th>Nome</th>
-            <th>Categoria</th>
-            <th>Preço</th>
-            <th>Estoque</th>
-            <th>Ações</th>
-          </tr>
-        </thead>
-        <tbody id="adminProductsTableBody"></tbody>
-      </table></div>
+      <div id="adminProductsGrid" class="admin-products-grid" aria-label="Produtos para editar"></div>
     </div>
 
     <!-- ABA 8: EQUIPE & PERMISSÕES (ADMIN) -->
@@ -501,6 +482,14 @@ function renderAdminHtml(storeConfig) {
       <div id="adminStatusDashboardContainer">
         <div style="padding:30px; text-align:center; color:#64748b;">Carregando diagnósticos em tempo real...</div>
       </div>
+      <section style="margin-top:28px" aria-label="Histórico de erros">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><h2>Histórico de erros</h2><button type="button" id="errorHistoryRefresh" class="action-btn btn-gray">Atualizar histórico</button></div>
+        <p style="font-size:13px;color:#64748b">Falhas do servidor e do navegador. Acesso exclusivo do administrador.</p>
+        <p id="errorHistoryStatus" role="status">O histórico será carregado ao abrir esta página.</p>
+        <div id="errorHistoryList"></div>
+        <button type="button" id="errorHistoryMore" class="action-btn btn-gray" hidden>Carregar registros anteriores</button>
+        <p style="font-size:12px;color:#64748b">Se o site estiver indisponível, consulte os <a href="https://console.cloud.google.com/logs/query?project=confloraai" target="_blank" rel="noopener noreferrer">logs no Google Cloud</a>.</p>
+      </section>
     </div>
   </div>
 
@@ -673,17 +662,20 @@ function renderAdminHtml(storeConfig) {
   </div>
 
   <script src="/store-assets/render-image.js"></script>
-  <script src="/store-assets/product-card.js"></script>
+  <script src="/store-assets/product-card.js?v=${productAssetsVersion}"></script>
+  <script src="/store-assets/stock-counting.js?v=${productAssetsVersion}"></script>
+  <script src="/store-assets/cashier-report-actions.js?v=${productAssetsVersion}"></script>
   <script>
     // ESTADO GLOBAL
     let currentUser = null;
-    fetch('/api/auth/me').then(res => res.json()).then(data => {
+    window.ConfloraSession.apiFetch('/api/auth/me').then(res => res.json()).then(data => {
       currentUser = data.user;
-      if (currentUser && ['ADMIN', 'CAIXA', 'VENDEDOR'].includes(currentUser.role)) closeLoginModal();
+      if (currentUser && ['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(currentUser.role)) closeLoginModal();
       applyUserRoleUI();
     }).catch(() => { currentUser = null; applyUserRoleUI(); });
 
     let allProducts = [];
+    window.addEventListener('products-imported', () => loadAdminProducts());
     let allOrders = [];
     let currentSelectedUserIdForLogin = '';
 
@@ -691,13 +683,44 @@ function renderAdminHtml(storeConfig) {
       return String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
     }
 
+    async function switchOwnerProfile(targetRole) {
+      if (!targetRole) return;
+      try {
+        const res = await window.ConfloraSession.apiFetch('/api/auth/switch-profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role: targetRole }),
+        });
+        const data = await res.json();
+        if (res.ok && data.success && data.user) {
+          currentUser = data.user;
+          applyUserRoleUI();
+        } else {
+          alert(data.error || 'Erro ao alternar perfil de teste.');
+        }
+      } catch {
+        alert('Erro de conexão ao alternar perfil.');
+      }
+    }
+
     function applyUserRoleUI() {
-      if (currentUser?.role === 'ENTREGADOR') { location.replace('/caixa'); return; }
+      document.querySelector('conflora-topbar').user = currentUser;
+      const switcherWrap = document.getElementById('ownerProfileSwitcherWrap');
+      const switcherSelect = document.getElementById('ownerProfileSelect');
+      if (switcherWrap && switcherSelect) {
+        if (currentUser && currentUser.canSwitchProfiles) {
+          switcherWrap.style.display = 'inline-flex';
+          switcherSelect.value = currentUser.role || 'ADMIN';
+        } else {
+          switcherWrap.style.display = 'none';
+        }
+      }
+      if (currentUser?.role === 'ENTREGADOR' && !currentUser?.canSwitchProfiles) { location.replace('/caixa'); return; }
       const photo = document.getElementById('loggedUserPhoto');
       photo.hidden = !currentUser?.picture;
       if (currentUser?.picture) photo.src = currentUser.picture;
       else photo.removeAttribute('src');
-      if (!currentUser || !['ADMIN', 'CAIXA', 'VENDEDOR'].includes(currentUser.role)) {
+      if (!currentUser || !['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(currentUser.role)) {
         document.getElementById('loggedUserName').innerText = 'Não autenticado';
         const roleEl = document.getElementById('loggedUserRole');
         roleEl.innerText = 'BLOQUEADO';
@@ -719,11 +742,16 @@ function renderAdminHtml(storeConfig) {
       roleEl.innerText = currentUser.role || 'OPERADOR';
       roleEl.className = 'role-badge ' + (currentUser.role === 'CAIXA' ? 'caixa' : '');
 
+      document.getElementById('adminCashierReport').hidden = !['ADMIN', 'CAIXA'].includes(currentUser.role);
+      document.getElementById('adminCashierReport').setAttribute('scope-label', currentUser.role === 'ADMIN' ? 'Caixa geral da loja · hoje' : 'Somente o seu caixa · hoje');
       const isAdmin = currentUser.role === 'ADMIN';
+      const isDriver = currentUser.role === 'ENTREGADOR';
 
       const visibleTabs = isAdmin
         ? ['cashier', 'orders', 'stock', 'products', 'team', 'status', 'analytics']
-        : ['cashier'];
+        : isDriver
+          ? ['orders', 'cashier']
+          : ['cashier'];
       for (const tab of ['cashier', 'orders', 'stock', 'products', 'team', 'status', 'analytics']) {
         const button = document.getElementById('tabBtn-' + tab);
         if (button) button.style.display = visibleTabs.includes(tab) ? 'block' : 'none';
@@ -731,16 +759,27 @@ function renderAdminHtml(storeConfig) {
       const salesFilter = document.getElementById('adminSalesFilterWrap');
       if (salesFilter) salesFilter.hidden = !isAdmin;
       const alterationsButton = document.getElementById('cashierAlterationsButton');
-      if (alterationsButton) alterationsButton.hidden = currentUser.role === 'VENDEDOR';
-      showTab('cashier');
+      if (alterationsButton) alterationsButton.hidden = ['VENDEDOR', 'ENTREGADOR'].includes(currentUser.role);
+      const defaultTab = isDriver ? 'orders' : 'cashier';
+      const requestedTab = new URLSearchParams(location.search).get('tab') || defaultTab;
+      showTab(document.getElementById('tab-' + requestedTab) && (isAdmin || visibleTabs.includes(requestedTab) || ['diff', 'price', 'notifs'].includes(requestedTab)) ? requestedTab : defaultTab, { replace: true });
     }
 
-    function showTab(tab) {
+    window.addEventListener('cf-admin-navigate', event => showTab(event.detail.tab));
+    window.addEventListener('popstate', () => showTab(new URLSearchParams(location.search).get('tab') || 'cashier', { fromHistory: true }));
+    function showTab(tab, options = {}) {
       if (!currentUser || !['ADMIN', 'CAIXA', 'VENDEDOR'].includes(currentUser.role)) return;
       const isAdmin = currentUser.role === 'ADMIN';
       const isStaffAuxiliaryTab = ['diff', 'price', 'notifs'].includes(tab);
       if (!isAdmin && tab !== 'cashier' && !(['CAIXA', 'VENDEDOR'].includes(currentUser.role) && ['diff', 'price', 'notifs'].includes(tab))) return;
       if (!document.getElementById('tab-' + tab)) return;
+      if (!options.fromHistory) {
+        const url = new URL(location.href); url.searchParams.set('tab', tab);
+        if (options.replace || location.search === url.search) history.replaceState({ confloraNavigation: true }, '', url);
+        else history.pushState({ confloraNavigation: true }, '', url);
+      }
+      const names = { cashier: 'Caixa/Vendas', orders: 'Comandas', stock: 'Estoque', products: 'Produtos', team: 'Equipe', status: 'Sistema e erros', analytics: 'Eventos', notifs: 'Notificações', price: 'Preços', diff: 'Solicitações de correção' };
+      document.getElementById('adminPageLabel').textContent = names[tab] || 'Administração';
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
       document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
       
@@ -759,7 +798,7 @@ function renderAdminHtml(storeConfig) {
       if (tab === 'products') loadAdminProducts();
       if (tab === 'team') loadTeam();
       if (tab === 'notifs') loadNotifications();
-      if (tab === 'status') loadAdminStatusData();
+      if (tab === 'status') { loadAdminStatusData(); window.ConfloraErrorHistory?.load(); }
     }
 
     // 1. EVENTOS DO CATÁLOGO & INDICADORES PARA MARKETING
@@ -768,7 +807,7 @@ function renderAdminHtml(storeConfig) {
       status.textContent = 'Buscando eventos coletados…';
       try {
         const days = Number(document.getElementById('analyticsPeriod').value || 30);
-        const res = await fetch('/api/admin/analytics/events?days=' + encodeURIComponent(days));
+        const res = await window.ConfloraSession.apiFetch('/api/admin/analytics/events?days=' + encodeURIComponent(days));
         const metrics = await res.json();
         if (!res.ok) throw new Error(metrics.error || 'Não foi possível carregar os eventos.');
         const number = value => Number(value || 0).toLocaleString('pt-BR');
@@ -818,7 +857,7 @@ function renderAdminHtml(storeConfig) {
         const operator = isAdmin ? document.getElementById('adminSalesFilter')?.value || '' : '';
         const selectedOperatorName = isAdmin ? document.getElementById('adminSalesFilter')?.selectedOptions?.[0]?.textContent || '' : '';
         const url = '/api/admin/daily-metrics' + (operator ? '?operator=' + encodeURIComponent(operator) + '&operatorName=' + encodeURIComponent(selectedOperatorName) : '');
-        const res = await fetch(url);
+        const res = await window.ConfloraSession.apiFetch(url);
         const m = await res.json();
         if (!res.ok) throw new Error(m.error || 'Não foi possível carregar as vendas.');
         document.getElementById('cashierTotalToday').innerText = 'R$ ' + Number(m.totalRevenue || 0).toFixed(2).replace('.', ',');
@@ -856,7 +895,7 @@ function renderAdminHtml(storeConfig) {
             <td>\${itemsTxt}</td>
             <td>\${escapeHtml(o.paymentMethod || 'PIX')}</td>
             <td><strong>R$ \${Number(o.total || 0).toFixed(2).replace('.', ',')}</strong></td>
-            <td><span class="badge \${o.status === 'CONFIRMED' ? 'badge-confirmed' : 'badge-pending'}">\${escapeHtml(o.status)}</span></td>
+            <td><span class="badge \${o.status === 'CONFIRMED' ? 'badge-confirmed' : 'badge-pending'}">\${escapeHtml(({ AWAITING_PAYMENT: 'AGUARDANDO PAGAMENTO', AWAITING_CASHIER: 'AGUARDANDO PAGAMENTO', AWAITING_PIX: 'AGUARDANDO PAGAMENTO PIX', CREATING_PIX: 'PREPARANDO PIX', AWAITING_CONFIRMATION: 'AGUARDANDO CONFIRMAÇÃO', CONFIRMED: 'CONFIRMADO', PAID_CONFIRMED: 'PAGO', DELIVERED: 'ENTREGUE', CANCELLED: 'CANCELADO', PENDING: 'PENDENTE' })[o.status] || 'EM ANDAMENTO')}</span></td>
             <td>
               <button class="action-btn btn-amber" style="padding:4px 8px;" onclick="openAlterationModal('\${o.id}')" title="Corrigir se errou no lançamento">✏️ Corrigir Venda</button>
             </td>
@@ -872,7 +911,7 @@ function renderAdminHtml(storeConfig) {
     async function loadAlterations() {
       const container = document.getElementById('alterationsListContainer');
       try {
-        const res = await fetch('/api/admin/alterations');
+        const res = await window.ConfloraSession.apiFetch('/api/admin/alterations');
         const list = await res.json();
         container.innerHTML = '';
         
@@ -933,13 +972,13 @@ function renderAdminHtml(storeConfig) {
           container.appendChild(card);
         });
       } catch (err) {
-        container.innerHTML = 'Erro ao carregar alterações: ' + err.message;
+        container.innerHTML = 'Erro ao carregar alterações: ' + escapeHtml(err.message);
       }
     }
 
     async function approveAlteration(requestId) {
       if (!confirm('Deseja consolidar esta alteração no pedido e atualizar o estoque?')) return;
-      const res = await fetch('/api/admin/alterations/' + requestId + '/review', {
+      const res = await window.ConfloraSession.apiFetch('/api/admin/alterations/' + requestId + '/review', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'APPROVED', reviewedBy: currentUser.name })
@@ -967,7 +1006,7 @@ function renderAdminHtml(storeConfig) {
       const reason = document.getElementById('rejectionReasonText').value.trim();
       if (!reason) { alert('Por favor, informe o motivo do cancelamento para o atendente.'); return; }
 
-      const res = await fetch('/api/admin/alterations/' + id + '/review', {
+      const res = await window.ConfloraSession.apiFetch('/api/admin/alterations/' + id + '/review', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'REJECTED', reviewedBy: currentUser.name, rejectionReason: reason })
@@ -982,7 +1021,7 @@ function renderAdminHtml(storeConfig) {
 
     // 4. SOLICITAÇÃO DE ALTERAÇÃO PELO CAIXA
     async function openAlterationModal(orderId) {
-      const res = await fetch('/api/admin/orders');
+      const res = await window.ConfloraSession.apiFetch('/api/admin/orders');
       const orders = await res.json();
       const ord = orders.find(o => String(o.id) === String(orderId));
       if (!ord) return;
@@ -1001,7 +1040,7 @@ function renderAdminHtml(storeConfig) {
 
     async function submitAlterationRequest() {
       const orderId = document.getElementById('altOrderId').value;
-      const res = await fetch('/api/admin/orders');
+      const res = await window.ConfloraSession.apiFetch('/api/admin/orders');
       const orders = await res.json();
       const orig = orders.find(o => String(o.id) === String(orderId));
 
@@ -1014,7 +1053,7 @@ function renderAdminHtml(storeConfig) {
 
       const proposed = { ...orig, customerName: newCust, paymentMethod: newPay, total: newTot };
 
-      await fetch('/api/admin/alterations', {
+      await window.ConfloraSession.apiFetch('/api/admin/alterations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1037,13 +1076,14 @@ function renderAdminHtml(storeConfig) {
       const container = document.getElementById('notificationsContainer');
       try {
         if (!currentUser) return;
-        const res = await fetch('/api/admin/notifications?userId=' + currentUser.id);
+        const res = await window.ConfloraSession.apiFetch('/api/admin/notifications?userId=' + currentUser.id);
         const list = await res.json();
         container.replaceChildren();
 
         const notifications = Array.isArray(list) ? list : [];
         const unreadCount = notifications.filter(n => !n.read).length;
         document.getElementById('notifBadge').innerText = unreadCount;
+        document.getElementById('notifBadge').hidden = unreadCount === 0;
 
         if (notifications.length === 0) {
           const empty = document.createElement('p');
@@ -1104,7 +1144,7 @@ function renderAdminHtml(storeConfig) {
     }
 
     async function renderDiscountApprovals(container) {
-      const response = await fetch('/api/admin/discount-approvals');
+      const response = await window.ConfloraSession.apiFetch('/api/admin/discount-approvals');
       if (!response.ok) return;
       const approvals = await response.json();
       if (!Array.isArray(approvals) || approvals.length === 0) return;
@@ -1176,7 +1216,7 @@ function renderAdminHtml(storeConfig) {
       button.disabled = true;
       alternateButton.disabled = true;
       try {
-        const response = await fetch('/api/admin/discount-approvals/' + encodeURIComponent(approvalId) + '/review', {
+        const response = await window.ConfloraSession.apiFetch('/api/admin/discount-approvals/' + encodeURIComponent(approvalId) + '/review', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action, rejectionReason }),
@@ -1204,7 +1244,7 @@ function renderAdminHtml(storeConfig) {
     // 6. CONSULTA RÁPIDA DE PREÇO
     async function loadPriceProducts() {
       try {
-        const res = await fetch('/api/inventory');
+        const res = await window.ConfloraSession.apiFetch('/api/inventory');
         if (res.ok) {
           const data = await res.json();
           const list = safeExtractProductsAdmin(data);
@@ -1248,9 +1288,9 @@ function renderAdminHtml(storeConfig) {
         const tr = document.createElement('tr');
         const img = getProductImageUrl(p);
         tr.innerHTML = \`
-          <td><img src="\${img}" class="prod-thumb" /></td>
-          <td><strong>\${p.descricao || p.name}</strong></td>
-          <td>\${p.categoria || p.category || ''} • \${p.subcategoria || ''}</td>
+          <td><img src="\${escapeHtml(img)}" class="prod-thumb" /></td>
+          <td><strong>\${escapeHtml(p.descricao || p.name)}</strong></td>
+          <td>\${escapeHtml(p.categoria || p.category || '')} • \${escapeHtml(p.subcategoria || '')}</td>
           <td><strong style="color:#15803d; font-size:15px;">R$ \${Number(p.valor_num || p.price || 0).toFixed(2).replace('.', ',')}</strong></td>
           <td><span style="font-weight:bold;">\${p.stockQuantity ?? p.estoque ?? 0}</span> \${getAdminProductSaleUnit(p) === 'KG' ? 'kg' : 'un.'} em estoque</td>
         \`;
@@ -1260,7 +1300,7 @@ function renderAdminHtml(storeConfig) {
 
     // 7. EQUIPE & PERMISSÕES
     async function loadTeam() {
-      const res = await fetch('/api/admin/auth/users');
+      const res = await window.ConfloraSession.apiFetch('/api/admin/auth/users');
       const users = await res.json();
       const tbody = document.getElementById('teamTableBody');
       tbody.innerHTML = '';
@@ -1269,8 +1309,8 @@ function renderAdminHtml(storeConfig) {
         const tr = document.createElement('tr');
         const role = u.role || 'CLIENTE';
         tr.innerHTML = \`
-          <td><strong>\${u.name || 'Sem nome'}</strong></td>
-          <td>\${u.email}</td>
+          <td><strong>\${escapeHtml(u.name || 'Sem nome')}</strong></td>
+          <td>\${escapeHtml(u.email)}</td>
           <td>
             <select onchange="changeUserRole('\${u.id}', this.value)" style="padding:4px 8px; border-radius:6px; font-weight:700; font-size:12px; border:1px solid #cbd5e1; background:\${role === 'ADMIN' ? '#dcfce7' : (role === 'CAIXA' ? '#e0f2fe' : '#f8fafc')}; color:\${role === 'ADMIN' ? '#166534' : (role === 'CAIXA' ? '#0369a1' : '#475569')}; cursor:pointer;" \${u.id === 'usr-edmar' ? 'disabled' : ''}>
               <option value="CLIENTE" \${role === 'CLIENTE' ? 'selected' : ''}>👤 CLIENTE (Padrão)</option>
@@ -1292,7 +1332,7 @@ function renderAdminHtml(storeConfig) {
 
     async function changeUserRole(userId, newRole) {
       try {
-        const res = await fetch('/api/admin/users/' + encodeURIComponent(userId) + '/role', {
+        const res = await window.ConfloraSession.apiFetch('/api/admin/users/' + encodeURIComponent(userId) + '/role', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ role: newRole }),
@@ -1332,7 +1372,7 @@ function renderAdminHtml(storeConfig) {
       const role = document.getElementById('uRole').value;
       const pin = document.getElementById('uPin').value;
 
-      await fetch('/api/admin/users', {
+      await window.ConfloraSession.apiFetch('/api/admin/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, name, email, role, pin, active: true })
@@ -1345,13 +1385,13 @@ function renderAdminHtml(storeConfig) {
 
     async function deleteUser(id) {
       if (!confirm('Deseja excluir o acesso deste funcionário?')) return;
-      await fetch('/api/admin/users/' + id, { method: 'DELETE' });
+      await window.ConfloraSession.apiFetch('/api/admin/users/' + id, { method: 'DELETE' });
       loadTeam();
     }
 
     // 8. LOGIN / TROCA DE OPERADOR
     async function openLoginModal(automatic = false) {
-      const res = await fetch('/api/admin/auth/users');
+      const res = await window.ConfloraSession.apiFetch('/api/admin/auth/users');
       const users = await res.json();
       const listEl = document.getElementById('userSelectList');
       listEl.innerHTML = '';
@@ -1361,7 +1401,7 @@ function renderAdminHtml(storeConfig) {
         btn.style.cssText = 'padding:10px 14px; border:1px solid #cbd5e1; border-radius:8px; cursor:pointer; display:flex; justify-content:space-between; align-items:center;';
         btn.innerHTML = \`
           <div>
-            <strong>\${u.name}</strong><br>
+            <strong>\${escapeHtml(u.name)}</strong><br>
             <span style="font-size:11px; color:#64748b;">\${u.role}</span>
           </div>
           <span style="font-size:12px; color:#15803d; font-weight:bold;">Selecionar ➔</span>
@@ -1391,7 +1431,7 @@ function renderAdminHtml(storeConfig) {
 
     async function performLogin() {
       const pin = document.getElementById('loginPinInput').value;
-      const res = await fetch('/api/admin/auth/login', {
+      const res = await window.ConfloraSession.apiFetch('/api/admin/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: currentSelectedUserIdForLogin, pin })
@@ -1441,7 +1481,7 @@ function renderAdminHtml(storeConfig) {
         if (window.signOutGoogle) {
           try { await window.signOutGoogle(); } catch (error) { alert('Erro ao sair: ' + error.message); return; }
         }
-        await fetch('/api/auth/logout', { method: 'POST' });
+        await window.ConfloraSession.apiFetch('/api/auth/logout', { method: 'POST' });
         currentUser = null;
         localStorage.removeItem('conflora_user');
         localStorage.removeItem('conflora_op');
@@ -1455,7 +1495,7 @@ function renderAdminHtml(storeConfig) {
       if (!container) return;
       container.innerHTML = '<div style="padding:30px;text-align:center;color:#64748b;">Consultando WhatsApp e Firestore...</div>';
       try {
-        const response = await fetch('/api/admin/system-status');
+        const response = await window.ConfloraSession.apiFetch('/api/admin/system-status');
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Falha ao consultar o diagnóstico.');
         const cards = [
@@ -1478,31 +1518,6 @@ function renderAdminHtml(storeConfig) {
         container.innerHTML = '<div style="color:#ef4444;padding:20px;text-align:center;">Erro ao carregar diagnóstico: ' + error.message + '</div>';
       }
     }
-    async function testWebhookFromAdmin() {
-      const box = document.getElementById('adminTestResultBox');
-      if (box) {
-        box.style.display = 'block';
-        box.style.background = '#f1f5f9';
-        box.style.color = '#334155';
-        box.innerHTML = '⏳ Enviando ping para rota /webhook do WhatsApp...';
-      }
-      try {
-        const res = await fetch('/api/admin/test-webhook', { method: 'POST' });
-        const d = await res.json();
-        if (box) {
-          box.style.background = '#dcfce7';
-          box.style.color = '#166534';
-          box.innerHTML = '✅ <strong>Webhook WhatsApp OK:</strong> Rota <code>/webhook</code> respondeu com sucesso em ' + (d.pingLatencyMs || 0) + 'ms. ' + (d.message || '');
-        }
-      } catch (err) {
-        if (box) {
-          box.style.background = '#fee2e2';
-          box.style.color = '#991b1b';
-          box.innerHTML = '❌ <strong>Erro no teste do Webhook:</strong> ' + err.message;
-        }
-      }
-    }
-
     // 9. ESTOQUE ÁGIL (+1, +5, +10)
     let stockControlActive = null;
     function renderStockControl() {
@@ -1510,15 +1525,16 @@ function renderAdminHtml(storeConfig) {
       button.hidden = currentUser?.role !== 'ADMIN';
       button.disabled = stockControlActive === null;
       button.setAttribute('aria-pressed', String(stockControlActive === true));
-      button.className = 'action-btn ' + (stockControlActive ? 'btn-green' : 'btn-gray');
-      button.textContent = stockControlActive ? '✓ Estoque ativo · Desativar' : 'Ativar estoque';
+      document.getElementById('stockControlBanner').dataset.enabled = String(stockControlActive === true);
+      button.className = 'action-btn ' + (stockControlActive ? 'btn-green' : 'btn-amber');
+      button.textContent = stockControlActive === null ? 'Verificar controle de estoque' : stockControlActive ? '✓ Estoque ativo · Desativar' : 'Venda livre · Ativar estoque';
       document.getElementById('stockControlHelp').textContent = stockControlActive === null ? 'Não foi possível consultar o controle de estoque.' : stockControlActive
         ? 'Estoque ativo: as vendas exigem saldo disponível e a baixa ocorre na confirmação do pagamento.'
         : 'Venda livre: venda sem cadastrar entradas de estoque, inclusive no Pix. Reservas anteriores continuam protegidas.';
     }
     async function loadStockControl() {
       try {
-        const response = await fetch('/api/admin/inventory-settings');
+        const response = await window.ConfloraSession.apiFetch('/api/admin/inventory-settings');
         if (!response.ok) throw new Error('Falha ao consultar o estoque.');
         const settings = await response.json();
         stockControlActive = settings.stockControlEnabled;
@@ -1531,7 +1547,7 @@ function renderAdminHtml(storeConfig) {
       if (button.disabled) return;
       button.disabled = true;
       try {
-        const response = await fetch('/api/admin/inventory-settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stockControlEnabled: !stockControlActive }) });
+        const response = await window.ConfloraSession.apiFetch('/api/admin/inventory-settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stockControlEnabled: !stockControlActive }) });
         const settings = await response.json();
         if (!response.ok) throw new Error(settings.error || 'Não foi possível salvar o controle de estoque.');
         stockControlActive = settings.stockControlEnabled;
@@ -1541,7 +1557,7 @@ function renderAdminHtml(storeConfig) {
     async function loadStockProducts() {
       await loadStockControl();
       try {
-        const res = await fetch('/api/inventory');
+        const res = await window.ConfloraSession.apiFetch('/api/inventory');
         if (res.ok) {
           const data = await res.json();
           const list = safeExtractProductsAdmin(data);
@@ -1565,107 +1581,24 @@ function renderAdminHtml(storeConfig) {
     }
 
     function filterStockCards() {
-      if (!Array.isArray(allProducts)) allProducts = [];
-      const query = String(document.getElementById('stockSearchInput')?.value || '').trim().toLocaleLowerCase('pt-BR');
-      const grid = document.getElementById('stockCardsGrid');
-      if (!grid) return;
-      grid.replaceChildren();
-      const products = allProducts.filter(product => {
-        const searchableText = [product.name, product.descricao, product.category, product.categoria, product.subcategory, product.subcategoria]
-          .filter(Boolean).join(' ').toLocaleLowerCase('pt-BR');
-        return !query || searchableText.includes(query);
+      window.StockCounting.configure({
+        userId: currentUser?.id || '',
+        getProducts: () => allProducts,
+        getUnit: getAdminProductSaleUnit,
+        updateBalance: updateStockBalance,
+        refreshMovements: loadStockMovements,
+        adjust: openStockAdjustment,
+        create: () => {
+          openNewProductDialog();
+          document.getElementById('formProdName').value = document.getElementById('stockSearchInput').value.trim();
+          returnToStock = true;
+        },
       });
-      const count = document.getElementById('stockProductsCount');
-      if (count) count.textContent = \`\${products.length} produto\${products.length === 1 ? '' : 's'}\`;
-      products.forEach(product => {
-        const card = document.createElement('div');
-        card.className = 'stock-card';
-        card.dataset.productId = product.id;
-        card.setAttribute('role', 'button');
-        card.setAttribute('tabindex', '0');
-        const stockUnit = getAdminProductSaleUnit(product);
-        card.setAttribute('aria-label', stockUnit === 'KG' ? \`Adicionar 1 kg de \${product.name || product.descricao || 'produto'} ao estoque\` : \`Adicionar uma unidade de \${product.name || product.descricao || 'produto'} ao estoque\`);
-        const image = document.createElement('render-image');
-        image.setAttribute('alt', product.name || product.descricao || 'Produto');
-        image.setAttribute('loading', 'lazy');
-        image.setAttribute('fallback-src', '/store-assets/placeholder.svg');
-        const candidates = window.ConfloraProductCard?.getImageCandidates(product) || [getProductImageUrl(product)];
-        image.setAttribute('image-candidates', JSON.stringify(candidates));
-        image.setAttribute('src', candidates[0] || '/store-assets/placeholder.svg');
-        const head = document.createElement('div');
-        head.className = 'stock-card-head';
-        head.appendChild(image);
-        const meta = document.createElement('div');
-        meta.style.minWidth = '0';
-        const name = document.createElement('div');
-        name.className = 'stock-card-name';
-        name.textContent = product.name || product.descricao || 'Produto sem nome';
-        const category = document.createElement('div');
-        category.className = 'stock-card-category';
-        category.textContent = window.ConfloraProductCard?.getCategory(product) || product.category || product.categoria || '';
-        meta.append(name, category);
-        head.appendChild(meta);
-        const balance = document.createElement('div');
-        balance.className = 'stock-card-balance';
-        balance.append('Estoque atual: ');
-        const quantity = document.createElement('strong');
-        quantity.id = 'stk-' + product.id;
-        quantity.textContent = String(product.stockQuantity ?? product.estoque ?? 0);
-        balance.append(quantity, stockUnit === 'KG' ? ' kg' : ' un');
-        const actions = document.createElement('div');
-        actions.className = 'stock-card-actions';
-        const addButton = document.createElement('button');
-        addButton.type = 'button';
-        addButton.className = 'action-btn btn-green';
-        addButton.textContent = stockUnit === 'KG' ? '＋1 kg Entrada' : '＋1 Entrada';
-        addButton.addEventListener('click', () => addStock(product.id, 1));
-        const countButton = document.createElement('button');
-        countButton.type = 'button';
-        countButton.className = 'action-btn btn-gray';
-        countButton.textContent = 'Contagem';
-        countButton.addEventListener('click', () => openStockAdjustment('SET', product.id));
-        const exitButton = document.createElement('button');
-        exitButton.type = 'button';
-        exitButton.className = 'action-btn btn-red';
-        exitButton.textContent = 'Baixa';
-        exitButton.addEventListener('click', () => openStockAdjustment('EXIT', product.id));
-        actions.append(addButton, countButton, exitButton);
-        card.append(head, balance, actions);
-        card.addEventListener('click', event => {
-          if (!event.target.closest('button')) addStock(product.id, 1);
-        });
-        card.addEventListener('keydown', event => {
-          if ((event.key === 'Enter' || event.key === ' ') && !event.target.closest('button')) {
-            event.preventDefault();
-            addStock(product.id, 1);
-          }
-        });
-        grid.appendChild(card);
-      });
+      window.StockCounting.render();
     }
 
     function createStockRequestId() {
       return window.crypto?.randomUUID?.() || \`stock-\${Date.now()}-\${Math.random().toString(36).slice(2, 12)}\`;
-    }
-
-    async function addStock(productId, quantity) {
-      const selector = \`.stock-card[data-product-id="\${CSS.escape(String(productId))}"]\`;
-      const card = document.querySelector(selector);
-      if (card?.dataset.saving === 'true') return;
-      if (card) { card.dataset.saving = 'true'; card.setAttribute('aria-busy', 'true'); }
-      try {
-        const response = await fetch('/api/admin/stock/adjustments', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ productId, operation: 'ENTRY', quantity, requestId: createStockRequestId() }),
-        });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Não foi possível atualizar o estoque.');
-        updateStockBalance(productId, data.newStock);
-      } catch (error) {
-        alert(error.message || 'Não foi possível atualizar o estoque.');
-      } finally {
-        if (card) { card.dataset.saving = 'false'; card.removeAttribute('aria-busy'); }
-      }
     }
 
     function updateStockBalance(productId, value) {
@@ -1675,6 +1608,7 @@ function renderAdminHtml(storeConfig) {
       if (element) element.textContent = String(stock);
       const product = allProducts.find(item => String(item.id) === String(productId));
       if (product) { product.stockQuantity = stock; product.estoque = stock; }
+      window.StockCounting?.refreshBalances();
     }
 
     function openStockAdjustment(operation, productId = '') {
@@ -1738,7 +1672,7 @@ function renderAdminHtml(storeConfig) {
       submitButton.disabled = true;
       errorMessage.hidden = true;
       try {
-        const response = await fetch('/api/admin/stock/adjustments', {
+        const response = await window.ConfloraSession.apiFetch('/api/admin/stock/adjustments', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ productId, operation, quantity, reason, requestId: createStockRequestId() }),
         });
@@ -1759,7 +1693,7 @@ function renderAdminHtml(storeConfig) {
       const container = document.getElementById('stockMovementsList');
       if (!container) return;
       try {
-        const response = await fetch('/api/admin/stock/movements?limit=20');
+        const response = await window.ConfloraSession.apiFetch('/api/admin/stock/movements?limit=20');
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Não foi possível carregar as movimentações.');
         const movements = Array.isArray(data.movements) ? data.movements : [];
@@ -1794,7 +1728,7 @@ function renderAdminHtml(storeConfig) {
     }
     async function loadAdminProducts() {
       try {
-        const res = await fetch('/api/inventory');
+        const res = await window.ConfloraSession.apiFetch('/api/inventory');
         if (res.ok) {
           const data = await res.json();
           const list = safeExtractProductsAdmin(data);
@@ -1810,27 +1744,21 @@ function renderAdminHtml(storeConfig) {
       renderAdminProducts();
     }
     function renderAdminProducts() {
-      const tbody = document.getElementById('adminProductsTableBody');
-      tbody.innerHTML = '';
-
+      const grid = document.getElementById('adminProductsGrid');
+      grid.replaceChildren();
       const visible = allProducts.filter(p => productStatusFilter === 'TODOS' || productIsInactive(p) === (productStatusFilter === 'INATIVO'));
       document.getElementById('productStatusCount').textContent = visible.length + ' produto(s) · ' + (productStatusFilter === 'TODOS' ? 'Todos os status' : productStatusFilter === 'INATIVO' ? 'Inativos' : 'Ativos');
-      visible.forEach(p => {
-        const tr = document.createElement('tr');
-        const img = getProductImageUrl(p);
-        tr.innerHTML = \`
-          <td><img src="\${img}" class="prod-thumb" /></td>
-          <td><strong>\${p.descricao || p.name}</strong>\${productIsInactive(p) ? '<p style="color:#92400e; background:#fef3c7; padding:6px 8px; border-radius:6px; font-size:12px; margin-top:6px;">INATIVO — oculto no catálogo, indisponível para compra.</p>' : ''}</td>
-          <td>\${p.categoria || p.category || ''}</td>
-          <td>R$ \${Number(p.valor_num || p.price || 0).toFixed(2).replace('.', ',')}</td>
-          <td><strong style="color:#15803d;">\${p.stockQuantity ?? p.estoque ?? 0}</strong> \${getAdminProductSaleUnit(p) === 'KG' ? 'kg' : 'un.'}</td>
-          <td>
-            <button class="action-btn btn-blue" style="padding:4px 8px;" onclick="editProduct('\${p.id}')">✏️ Editar</button>
-            <button class="action-btn btn-red" style="padding:4px 8px;" onclick="deleteProduct('\${p.id}')">🗑️ Excluir</button>
-          </td>
-        \`;
-        tbody.appendChild(tr);
+      const fragment = document.createDocumentFragment();
+      visible.forEach(product => {
+        const card = document.createElement('render-product-card');
+        card.setAttribute('variant', 'admin');
+        card.product = product;
+        card.addEventListener('cf-product-card-action', event => {
+          if (['edit', 'open'].includes(event.detail.action)) editProduct(product.id);
+        });
+        fragment.appendChild(card);
       });
+      grid.appendChild(fragment);
     }
 
     function slugifyClient(text) {
@@ -1839,6 +1767,7 @@ function renderAdminHtml(storeConfig) {
     }
 
     let pendingPhotosList = [];
+    let previewProduct = null;
 
     function renderPendingPhotosGrid() {
       const box = document.getElementById('formProdPhotoPreviewBox');
@@ -1848,8 +1777,25 @@ function renderAdminHtml(storeConfig) {
       if (!box || !grid) return;
 
       if (pendingPhotosList.length === 0) {
-        box.style.display = 'none';
         if (base64Input) base64Input.value = '';
+        if (countSpan) countSpan.textContent = '0';
+        grid.replaceChildren();
+        box.style.display = previewProduct ? 'block' : 'none';
+        if (previewProduct) {
+          const preview = document.createElement('button');
+          preview.type = 'button';
+          preview.style.cssText = 'grid-column:1/-1;background:white;padding:12px;border:0;border-radius:12px';
+          preview.setAttribute('aria-label', 'Ampliar imagem exibida no catálogo');
+          const image = document.createElement('img');
+          image.src = previewProduct.imageFallbackUrl || '/store-assets/placeholder.svg';
+          image.alt = previewProduct.name || previewProduct.descricao || 'Imagem do produto';
+          image.style.cssText = 'display:block;width:100%;height:240px;object-fit:contain';
+          const caption = document.createElement('p');
+          caption.textContent = 'Imagem ilustrativa do catálogo. Adicione fotos reais para definir a capa deste produto.';
+          preview.append(image, caption);
+          preview.onclick = () => openProductPhoto(image.src, image.alt);
+          grid.appendChild(preview);
+        }
         return;
       }
 
@@ -1875,19 +1821,67 @@ function renderAdminHtml(storeConfig) {
 
         card.innerHTML =
           '<div style="position:relative; width:100%; height:80px; border-radius:6px; overflow:hidden; background:#f1f5f9;">' +
-            '<img src="' + imgSrc + '" style="width:100%; height:100%; object-fit:cover;" alt="Foto" />' +
+            '<img src="' + escapeHtml(imgSrc) + '" style="width:100%; height:100%; object-fit:cover;" alt="Foto" />' +
             badge +
           '</div>' +
-          '<div style="font-size:10px; font-weight:bold; color:#334155; width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:center;" title="' + label + '">' +
-            label +
+          '<div style="font-size:10px; font-weight:bold; color:#334155; width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:center;" title="' + escapeHtml(label) + '">' +
+            escapeHtml(label) +
           '</div>' +
           '<div style="display:flex; gap:4px; width:100%; justify-content:center; margin-top:2px;">' +
             capaBtn +
             '<button type="button" onclick="removePendingPhoto(' + index + ')" title="Remover esta foto" style="font-size:10px; padding:2px 6px; border:1px solid #fecaca; border-radius:4px; background:#fef2f2; color:#dc2626; cursor:pointer;">🗑️</button>' +
           '</div>';
 
+        if (isPrimary) card.style.gridColumn = '1 / -1';
+        const preview = card.querySelector('img');
+        preview.parentElement.style.height = isPrimary ? '280px' : '120px';
+        preview.style.objectFit = 'contain';
+        const expand = document.createElement('button');
+        expand.type = 'button';
+        expand.setAttribute('aria-label', 'Ampliar foto ' + (index + 1));
+        expand.style.cssText = 'display:block;width:100%;height:100%;padding:0;border:0;background:transparent;cursor:zoom-in';
+        preview.replaceWith(expand);
+        expand.appendChild(preview);
+        expand.onclick = () => openProductPhoto(imgSrc, label);
+        const actions = card.lastElementChild;
+        [-1, 1].forEach(direction => {
+          const move = document.createElement('button');
+          move.type = 'button';
+          move.textContent = direction < 0 ? '←' : '→';
+          move.title = direction < 0 ? 'Mover foto antes' : 'Mover foto depois';
+          move.disabled = index + direction < 0 || index + direction >= pendingPhotosList.length;
+          move.onclick = () => {
+            [pendingPhotosList[index], pendingPhotosList[index + direction]] = [pendingPhotosList[index + direction], pendingPhotosList[index]];
+            renderPendingPhotosGrid();
+          };
+          actions.appendChild(move);
+        });
         grid.appendChild(card);
       });
+    }
+
+    function openProductPhoto(url, label) {
+      const dialog = document.createElement('dialog');
+      dialog.setAttribute('aria-label', 'Foto ampliada do produto');
+      dialog.style.cssText = 'position:fixed;inset:0;margin:auto;width:100vw;height:100dvh;max-width:none;max-height:none;padding:20px;border:0;background:#101810;color:white';
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.textContent = 'Fechar ✕';
+      close.style.cssText = 'position:absolute;right:20px;top:20px;padding:12px 20px;z-index:1;border-radius:24px;background:white;color:#123b25';
+      close.onclick = () => dialog.close();
+      const image = document.createElement('img');
+      image.src = url;
+      image.alt = label;
+      image.style.cssText = 'display:block;width:100%;height:100%;object-fit:contain;cursor:zoom-in';
+      image.onclick = () => {
+        const zoomed = image.dataset.zoomed === 'true';
+        image.dataset.zoomed = String(!zoomed);
+        image.style.cssText = zoomed ? 'display:block;width:100%;height:100%;object-fit:contain;cursor:zoom-in' : 'display:block;max-width:none;width:auto;height:auto;cursor:zoom-out';
+      };
+      dialog.append(close, image);
+      dialog.addEventListener('close', () => dialog.remove(), { once: true });
+      document.body.appendChild(dialog);
+      dialog.showModal();
     }
 
     function setPrimaryPendingPhoto(index) {
@@ -1925,7 +1919,7 @@ function renderAdminHtml(storeConfig) {
       const id = document.getElementById('formProdId').value || 'novo';
       const oversizedFile = files.find((file) => file.size > 20 * 1024 * 1024);
       if (oversizedFile) {
-        alert('Cada foto deve ter até 20 MB. A imagem original será otimizada no servidor.');
+        alert('Cada foto deve ter até 20 MB. O arquivo original será preservado.');
         return;
       }
       const tagsInput = document.getElementById('formProdTags');
@@ -1947,6 +1941,7 @@ function renderAdminHtml(storeConfig) {
         };
         pendingPhotosList.push(upload);
       });
+      renderPendingPhotosGrid();
     }
 
     let productUnitTouched = false;
@@ -1990,13 +1985,12 @@ function renderAdminHtml(storeConfig) {
       document.getElementById('formProdDesc').value = p.descriptionAi || p.descricao_ia || '';
       document.getElementById('formProdPhotoBase64').value = '';
 
-      // Carrega fotos existentes do produto no gerenciador de fotos
-      pendingPhotosList = [];
-      const existingImgs = (Array.isArray(p.images) && p.images.length > 0)
-        ? p.images.filter(Boolean)
-        : (p.imageUrl || p.imageurl ? [p.imageUrl || p.imageurl] : []);
-
-      existingImgs.filter(isStoredProductImageUrl).forEach((url, i) => {
+      // Reuse the catalog image resolver for legacy fields and Storage paths.
+      clearAllPendingPhotos();
+      previewProduct = p;
+      document.getElementById('deleteEditingProduct').hidden = false;
+      const existingImgs = window.ConfloraProductCard?.getImageCandidates(p) || [];
+      existingImgs.forEach((url, i) => {
         pendingPhotosList.push({
           url,
           dataUrl: url,
@@ -2010,7 +2004,9 @@ function renderAdminHtml(storeConfig) {
       document.getElementById('productEditorDialog').showModal();
     }
 
+    let returnToStock = false;
     function openNewProductDialog() {
+      returnToStock = false;
       showTab('products');
       resetProdForm();
       document.getElementById('productFormTitle').textContent = 'Novo produto no catálogo';
@@ -2022,9 +2018,12 @@ function renderAdminHtml(storeConfig) {
       const dialog = document.getElementById('productEditorDialog');
       if (dialog?.open) dialog.close();
       resetProdForm();
+      if (returnToStock) { returnToStock = false; showTab('stock'); }
     }
 
     function resetProdForm() {
+      previewProduct = null;
+      document.getElementById('deleteEditingProduct').hidden = true;
       document.getElementById('prodForm').reset();
       document.getElementById('formProdId').value = '';
       document.getElementById('formProdUnit').value = 'UN';
@@ -2038,12 +2037,13 @@ function renderAdminHtml(storeConfig) {
 
     async function deleteProduct(id) {
       if (!confirm('Deseja excluir este produto e suas fotos?')) return;
-      const response = await fetch('/api/admin/products/' + id, { method: 'DELETE' });
+      const response = await window.ConfloraSession.apiFetch('/api/admin/products/' + id, { method: 'DELETE' });
       const result = await response.json();
       if (!response.ok) {
         alert('Não foi possível excluir o produto: ' + (result.error || 'Falha ao remover o produto.'));
         return;
       }
+      closeProductEditorDialog();
       loadAdminProducts();
     }
 
@@ -2086,7 +2086,7 @@ function renderAdminHtml(storeConfig) {
         descriptionAi: desc,
       };
 
-      const res = await fetch('/api/admin/products', {
+      const res = await window.ConfloraSession.apiFetch('/api/admin/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -2097,7 +2097,7 @@ function renderAdminHtml(storeConfig) {
         document.getElementById('formProdId').value = id;
         try {
           for (const upload of newUploads) {
-            const photoResponse = await fetch('/api/admin/products/' + encodeURIComponent(id) + '/photo', {
+            const photoResponse = await window.ConfloraSession.apiFetch('/api/admin/products/' + encodeURIComponent(id) + '/photo', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/octet-stream',
@@ -2123,7 +2123,7 @@ function renderAdminHtml(storeConfig) {
             ...pendingPhotosList.filter(photo => photo.isExisting && photo.url).map(photo => photo.url),
             ...externalImgs,
           ])];
-          const finalResponse = await fetch('/api/admin/products', {
+          const finalResponse = await window.ConfloraSession.apiFetch('/api/admin/products', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -2142,11 +2142,12 @@ function renderAdminHtml(storeConfig) {
           alert('Produto salvo, mas não foi possível concluir o ciclo das fotos: ' + error.message + '. Tente novamente.');
           return;
         }
-        alert('✅ Produto salvo e fotos enviadas ao Firebase Storage em alta qualidade para zoom!');
+        if (!returnToStock) alert('✅ Produto salvo e fotos enviadas ao Firebase Storage em alta qualidade para zoom!');
         document.getElementById('productEditorDialog').close();
         resetProdForm();
         loadAdminProducts();
         loadPriceProducts();
+        if (returnToStock) { returnToStock = false; showTab('stock'); }
       } else {
         alert('Erro ao salvar no Firestore: ' + (data.error || 'Falha'));
       }
@@ -2156,7 +2157,7 @@ function renderAdminHtml(storeConfig) {
     async function loadAllOrders() {
       const container = document.getElementById('allOrdersListContainer');
       try {
-        const res = await fetch('/api/admin/orders');
+        const res = await window.ConfloraSession.apiFetch('/api/admin/orders');
         const orders = await res.json();
         container.innerHTML = '';
         if (orders.length === 0) {
@@ -2182,7 +2183,7 @@ function renderAdminHtml(storeConfig) {
           container.appendChild(div);
         });
       } catch (err) {
-        container.innerHTML = 'Erro ao carregar histórico: ' + err.message;
+        container.innerHTML = 'Erro ao carregar histórico: ' + escapeHtml(err.message);
       }
     }
 
@@ -2190,7 +2191,7 @@ function renderAdminHtml(storeConfig) {
     async function openManualOrderModal() {
       if (!allProducts.length) {
         try {
-          const response = await fetch('/api/inventory');
+          const response = await window.ConfloraSession.apiFetch('/api/inventory');
           const data = await response.json();
           if (!response.ok) throw new Error(data.error || 'Não foi possível carregar os produtos.');
           allProducts = safeExtractProductsAdmin(data);
@@ -2232,7 +2233,7 @@ function renderAdminHtml(storeConfig) {
       const items = [{ productId: p.id, name: p.descricao || p.name, price: Number(p.valor_num || p.price || 0), quantity: qty }];
 
       try {
-        const response = await fetch('/api/admin/orders/manual', {
+        const response = await window.ConfloraSession.apiFetch('/api/admin/orders/manual', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ customerName: name, customerPhone: phone, items, paymentMethod: pay })
@@ -2240,18 +2241,7 @@ function renderAdminHtml(storeConfig) {
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Não foi possível registrar a venda.');
 
-        if (result.order?.paymentCheckoutUrl) {
-          const paymentWindow = window.open(result.order.paymentCheckoutUrl, '_blank', 'noopener,noreferrer');
-          if (!paymentWindow) {
-            window.prompt('Copie o link seguro do pagamento Pix:', result.order.paymentCheckoutUrl);
-          }
-          const receiptWarning = result.receiptDelivery?.sent === false
-            ? ' Aviso: ' + result.receiptDelivery.reason
-            : '';
-          alert('Venda registrada. Aguardando aprovação do Pix pelo Mercado Pago.' + receiptWarning);
-        } else {
-          alert('Venda registrada com sucesso no caixa!');
-        }
+        alert(result.order?.paymentMethod === 'PIX' ? 'Pedido registrado. Abra a comanda para acompanhar ou conferir o Pix.' : 'Venda registrada com sucesso no caixa!');
         closeManualOrderModal();
         loadCashierDaily();
       } catch (error) {
@@ -2261,7 +2251,7 @@ function renderAdminHtml(storeConfig) {
 
     async function seedDefaultConflora() {
       if (!confirm('Deseja restaurar o catálogo oficial da Conflora Horta e Viveiro no Firestore?')) return;
-      const res = await fetch('/api/admin/seed-catalog', { method: 'POST' });
+      const res = await window.ConfloraSession.apiFetch('/api/admin/seed-catalog', { method: 'POST' });
       const d = await res.json();
       if (d.success) {
         alert('Catálogo completo sincronizado no Firestore com sucesso!');

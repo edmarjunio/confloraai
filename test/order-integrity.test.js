@@ -49,6 +49,7 @@ function transactionalStore(initial) {
 function setup(mode, overrides = {}) {
   const order = { id: 'sale', status: 'PENDING', paymentMethod: 'PIX', total: 20,
     items: [{ productId: 'plant', name: 'Muda', price: 10, quantity: 2 }], ...overrides };
+  if (order.paymentMethod === 'PIX' && !order.pixData) order.pixData = { txid: 'A'.repeat(32) };
   const product = { id: 'plant', name: 'Muda', stockQuantity: 10 };
   const store = mode === 'transaction' ? transactionalStore({
     'orders/sale': order, 'products/plant': product,
@@ -62,7 +63,7 @@ function setup(mode, overrides = {}) {
     stock: () => store ? store.read('products/plant').stockQuantity : repo.inMemoryProducts.get('plant').stockQuantity };
 }
 
-const verification = { verifiedVia: 'MERCADO_PAGO_WEBHOOK', paymentTransactionId: '12345', paymentAmount: 20 };
+const verification = { verifiedVia: 'SICREDI_PIX_WEBHOOK', pixTxid: 'A'.repeat(32), paymentTransactionId: 'E' + '1'.repeat(31), paymentAmount: 20 };
 for (const mode of ['memory', 'transaction']) {
   test(`${mode}: repeated concurrent confirmations deduct once`, async () => {
     const state = setup(mode);
@@ -248,11 +249,15 @@ test('Firestore transaction: competing drivers claim one delivery and receipt co
   const pdv = new PdvRepository(state.repo); const driver = { id: 'driver', name: 'Entregador', role: 'ENTREGADOR' }; const other = { id: 'driver2', name: 'Outro', role: 'ENTREGADOR' };
   const results = await Promise.allSettled([pdv.assignDelivery('sale', driver), pdv.assignDelivery('sale', other)]);
   assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
-  const assigned = state.order().assignedDriver; state.store.failCommit = true;
+  const assigned = state.order().assignedDriver; await pdv.startDelivery('sale', assigned); state.store.failCommit = true;
   await assert.rejects(pdv.receive('sale', assigned, null, 20, 'DINHEIRO', { finishDelivery: true }), /Commit/);
   assert.equal(state.order().deliveryStatus, 'OUT_FOR_DELIVERY'); assert.equal(state.stock(), 10);
+  assert.equal(state.store.read('delivery_driver_metrics/' + assigned.id), undefined);
   state.store.failCommit = false; await pdv.receive('sale', assigned, null, 20, 'DINHEIRO', { finishDelivery: true });
   assert.equal(state.order().deliveryStatus, 'DELIVERED'); assert.equal(state.order().paymentStatus, 'APPROVED'); assert.equal(state.stock(), 8);
+  assert.equal(state.store.read('delivery_driver_metrics/' + assigned.id).deliveries, 1);
+  await pdv.receive('sale', assigned, null, 20, 'DINHEIRO', { finishDelivery: true });
+  assert.equal(state.store.read('delivery_driver_metrics/' + assigned.id).deliveries, 1);
 });
 
 for (const mode of ['memory', 'transaction']) {

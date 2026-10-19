@@ -51,7 +51,7 @@ function createStoreAuth(repo) {
             "sessions",
             digest(token),
           );
-          if (session?.expiresAt > Date.now()) {
+          if ((session?.expiresAt?.toMillis?.() ?? new Date(session?.expiresAt).getTime()) > Date.now()) {
             const user = await repo.get(req.tenantId, "users", session.userId);
             if (user?.active) {
               req.storeUser = publicUser(user);
@@ -106,7 +106,7 @@ function createStoreAuth(repo) {
       const token = randomBytes(32).toString("hex");
       await repo.put(req.tenantId, "sessions", digest(token), {
         userId: user.id,
-        expiresAt: Date.now() + 43200000,
+        expiresAt: new Date(Date.now() + 43200000),
       });
       res.setHeader("Set-Cookie", cookie(req, token, 43200));
       return publicUser(user);

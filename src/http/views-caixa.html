@@ -1,53 +1,20 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
+  <script src="/store-assets/error-monitor.js"></script>
     <script src="/store-assets/tab-session.js"></script>
     <link rel="stylesheet" href="/store-assets/order-display.css" />
     <script src="/store-assets/order-display.js"></script>
   <meta charset="UTF-8">
-  <script>
-    (function() {
-      try {
-        var _fetch = typeof window !== 'undefined' ? window.fetch : null;
-        var _current = _fetch ? _fetch.bind(window) : null;
-        var desc = {
-          get: function() { return _current; },
-          set: function(fn) { _current = fn; },
-          configurable: true,
-          enumerable: true
-        };
-        try { Object.defineProperty(window, 'fetch', desc); } catch (_) {}
-        try { if (typeof Window !== 'undefined' && Window.prototype) Object.defineProperty(Window.prototype, 'fetch', desc); } catch (_) {}
-        try { if (typeof window !== 'undefined' && window.__proto__) Object.defineProperty(window.__proto__, 'fetch', desc); } catch (_) {}
-      } catch (_) {}
-    })();
-  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>PDV Com Flora — Caixa & Frente de Loja</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="/store-assets/site-header.css">
-  <link rel="stylesheet" href="/store-assets/design-system.css">
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
-          },
-          colors: {
-            brand: {
-              dark: '#0F381E',
-              green: '#109E46',
-              light: '#F4F6F5',
-            }
-          }
-        }
-      }
-    }
-  </script>
+  <link rel="stylesheet" href="/pdv-assets/dist/__PDV_STYLES__">
+  <link rel="stylesheet" href="/store-assets/site-header.css?v=topbar-1">
+  <link rel="stylesheet" href="/store-assets/design-system.css?v=cashier-report-1">
+
   <style>
     body {
       font-family: 'Inter', system-ui, -apple-system, sans-serif;
@@ -77,21 +44,18 @@
     }
   </style>
 
-  <!-- React 18 & ReactDOM -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <!-- Babel Standalone para rodar o componente JSX exatamente igual -->
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <link rel="stylesheet" href="/store-assets/delivery.css" />
 </head>
 <body>
   <div id="root"></div>
+  <script>window.CONFLORA_PIX_MODE = __PIX_MODE__;</script>
 
   <script src="/store-assets/delivery-maps.js"></script>
   <script src="/store-assets/render-image.js"></script>
+  <script src="/store-assets/site-navigation.js?v=1"></script>
+  <script src="/store-assets/topbar.js?v=1"></script>
   <script src="/store-assets/product-card.js"></script>
-  <script type="text/babel" src="/pdv-assets/components.jsx"></script>
-  <script type="text/babel" src="/pdv-assets/delivery.jsx"></script>
-  <script type="text/babel" src="/pdv-assets/app.jsx"></script>
+  <script src="/store-assets/cashier-report-actions.js?v=1"></script>
+  <script src="/pdv-assets/dist/__PDV_SCRIPT__" defer></script>
 </body>
 </html>

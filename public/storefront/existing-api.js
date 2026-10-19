@@ -4,7 +4,7 @@ import { readJsonResponse } from "./ui.js";
 export function createExistingApi() {
   let catalogPromise;
   async function request(path, options = {}) {
-    const response = await fetch(path, {
+    const response = await window.ConfloraSession.apiFetch(path, {
       credentials: "same-origin",
       signal: AbortSignal.timeout(15000),
       ...options,
@@ -73,7 +73,8 @@ export function createExistingApi() {
       return request("/api" + route, options);
     }
     if (route === "/assistant") {
-      return request("/api/storefront/assistant", options);
+      const { reply } = await request("/api/chat", options);
+      return { message: reply };
     }
     if (route === "/inventory-settings") {
       if (options.method === "PUT") {

@@ -21,7 +21,6 @@ const { useState, useEffect, useRef, useMemo } = React;
     const Plus = (p) => <IconBase {...p}><path d="M5 12h14"/><path d="M12 5v14"/></IconBase>;
     const Minus = (p) => <IconBase {...p}><path d="M5 12h14"/></IconBase>;
     const X = (p) => <IconBase {...p}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></IconBase>;
-    const Menu = (p) => <IconBase {...p}><path d="M3 6h18M3 12h18M3 18h18"/></IconBase>;
     const ShoppingBag = (p) => (
       <IconBase {...p}>
         <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>
@@ -30,7 +29,6 @@ const { useState, useEffect, useRef, useMemo } = React;
     const Check = (p) => <IconBase {...p}><polyline points="20 6 9 17 4 12"/></IconBase>;
     const Info = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></IconBase>;
     const Heart = ({ fill = "none", ...p }) => <IconBase {...p} fill={fill}><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/></IconBase>;
-    const LogOut = (p) => <IconBase {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></IconBase>;
     const ChevronDown = (p) => <IconBase {...p}><path d="m6 9 6 6 6-6"/></IconBase>;
     const Percent = (p) => (
       <IconBase {...p}>
@@ -163,26 +161,11 @@ const { useState, useEffect, useRef, useMemo } = React;
 
     function readStorefrontProductImages() {
       try {
-        const raw = localStorage.getItem('conflora_catalog_cache_v2') || localStorage.getItem('conflora_catalog_cache');
-        const cachedProducts = raw ? JSON.parse(raw) : [];
-        if (!Array.isArray(cachedProducts)) return new Map();
-
-        return new Map(cachedProducts.map((product) => {
-          const productId = String(product?.id ?? product?.product_id ?? '').trim();
-          const images = [
-            ...(Array.isArray(product?.images) ? product.images : []),
-            product?.imageUrl,
-            product?.imageurl,
-          ]
-            .map((image) => typeof image === 'string' ? image : image?.url || image?.imageUrl || image?.src || image?.downloadURL || '')
-            .filter((image) => /^https:\/\/(?:firebasestorage|storage)\.googleapis\.com\//i.test(String(image).trim())
-              || /^\/api\/images\//i.test(String(image).trim())
-              || /^\/store-assets\//i.test(String(image).trim()));
-          return [productId, [...new Set(images)]];
-        }).filter(([productId, images]) => productId && images.length));
-      } catch (_) {
-        return new Map();
-      }
+        localStorage.removeItem('conflora:public-catalog:v1:main:conflora');
+        localStorage.removeItem('conflora_catalog_cache');
+        localStorage.removeItem('conflora_catalog_cache_v2');
+      } catch (_) {}
+      return new Map();
     }
 
     function App() {
@@ -247,7 +230,10 @@ const { useState, useEffect, useRef, useMemo } = React;
       const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
       const [selectedCustomerId, setSelectedCustomerId] = useState('');
       const [customerNotification, setCustomerNotification] = useState('');
+      const [customerError, setCustomerError] = useState('');
+      useEffect(() => { if (customerError) document.getElementById('customerSaveError')?.focus(); }, [customerError]);
       const [isSavingCustomer, setIsSavingCustomer] = useState(false);
+      const shouldPersistCustomer = Boolean(selectedCustomerId || tempCustomerPhone.trim() || tempCustomerEmail.trim() || tempCustomerAddress.trim() || tempCustomerCpf.trim());
 
       // Discount & Freight (Nex F3 and F9 equivalents)
       const [discountPercent, setDiscountPercent] = useState(0);
@@ -256,7 +242,7 @@ const { useState, useEffect, useRef, useMemo } = React;
       // Mobile Bottom Sheet mode: 'collapsed' | 'peek' (tempo real) | 'expanded'
       const [mobileSheetMode, setMobileSheetMode] = useState('peek');
       const [activeModal, setActiveModal] = useState(null); // 'pay' | 'discount' | 'freight' | 'receipt' | 'customer' | 'debt_settle'
-      const [cashierPage, setCashierPage] = useState(null);
+      const [cashierPage, setCashierPage] = useState(() => ({ commands: 'orders', deliveries: 'deliveries' })[new URLSearchParams(location.search).get('view')] || null);
       const [paymentMethod, setPaymentMethod] = useState('pix');
       const [deferToCashier, setDeferToCashier] = useState(false);
       const [splitPayment, setSplitPayment] = useState(false);
@@ -276,14 +262,14 @@ const { useState, useEffect, useRef, useMemo } = React;
       const searchInputRef = useRef(null);
 
       useEffect(() => {
-        fetch('/api/auth/me').then((res) => res.ok ? res.json() : null).then((data) => {
+        window.ConfloraSession.apiFetch('/api/auth/me').then((res) => res.ok ? res.json() : null).then((data) => {
           if (data?.user && ['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(data.user.role)) setCurrentUser(data.user);
         }).finally(() => setAuthReady(true));
       }, []);
       useEffect(() => {
         if (!currentUser || currentUser.role === 'ENTREGADOR') return;
         let cancelled = false;
-        fetch('/api/caixa/favorites')
+        window.ConfloraSession.apiFetch('/api/caixa/favorites')
           .then(async (response) => {
             const data = await response.json();
             if (!response.ok) throw new Error(data.error || 'Não foi possível carregar os favoritos.');
@@ -312,7 +298,7 @@ const { useState, useEffect, useRef, useMemo } = React;
       }, [favoriteProductIds]);
       useEffect(() => {
         if (!currentUser || currentUser.role === 'ENTREGADOR') return;
-        fetch('/api/caixa/products').then((res) => { if (!res.ok) throw new Error('Não foi possível carregar produtos.'); return res.json(); }).then((rows) => {
+        window.ConfloraSession.apiFetch('/api/caixa/products').then((res) => { if (!res.ok) throw new Error('Não foi possível carregar produtos.'); return res.json(); }).then((rows) => {
           const storefrontImagesById = readStorefrontProductImages();
           setProducts(rows.map((item) => {
             const productId = String(item.id ?? item.productId ?? item.sku ?? '').trim();
@@ -384,7 +370,7 @@ const { useState, useEffect, useRef, useMemo } = React;
         setTempCustomerLocation(customerLocation);
         setTempCustomerNotes(customerNotes);
         setSelectedCustomerId(customerId);
-        setCustomerNotification('');
+        setCustomerNotification(''); setCustomerError('');
         setActiveModal('customer');
       };
 
@@ -397,7 +383,7 @@ const { useState, useEffect, useRef, useMemo } = React;
       };
 
       const handleQuickPurchaseCustomer = () => {
-        if (orderType === 'DELIVERY' && (!tempCustomerName.trim() || !/^\d{10,13}$/.test(tempCustomerPhone.replace(/\D/g, '')) || tempCustomerAddress.trim().length < 8)) { setCustomerNotification('Preencha nome, WhatsApp e endereço completo para entrega.'); return; }
+        if (orderType === 'DELIVERY' && (!tempCustomerName.trim() || !/^\d{10,13}$/.test(tempCustomerPhone.replace(/\D/g, '')) || tempCustomerAddress.trim().length < 8)) { setCustomerError('Preencha nome, WhatsApp e endereço completo para entrega.'); return; }
         setCustomerId('');
         setCustomerCreditBalance(0);
         setTempCustomerEmail('');
@@ -422,9 +408,10 @@ const { useState, useEffect, useRef, useMemo } = React;
           return;
         }
 
+        setCustomerError('');
         setIsSavingCustomer(true);
         try {
-          const res = await fetch('/api/caixa/customers', {
+          const res = await window.ConfloraSession.apiFetch('/api/caixa/customers', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -442,7 +429,7 @@ const { useState, useEffect, useRef, useMemo } = React;
 
           const saved = await res.json().catch(() => ({}));
           if (!res.ok) {
-            setCustomerNotification(saved.error || 'Não foi possível salvar o cadastro do cliente.');
+            setCustomerError(saved.error || 'Não foi possível salvar o cadastro do cliente.');
             setIsSavingCustomer(false);
             return;
           }
@@ -461,23 +448,19 @@ const { useState, useEffect, useRef, useMemo } = React;
             setIsSavingCustomer(false);
           }, 700);
         } catch (error) {
-          setCustomerNotification(error.message || 'Falha de conexão ao salvar o cliente.');
+          setCustomerError(error.message || 'Falha de conexão ao salvar o cliente.');
           setIsSavingCustomer(false);
         }
       };
 
       const handleAddCustomer = async () => {
-        if (orderType === 'DELIVERY' && (!tempCustomerName.trim() || !/^\d{10,13}$/.test(tempCustomerPhone.replace(/\D/g, '')) || tempCustomerAddress.trim().length < 8)) { setCustomerNotification('Para entrega, informe nome, WhatsApp com DDD e endereço completo: rua, número, bairro e cidade.'); return; }
+        if (orderType === 'DELIVERY' && (!tempCustomerName.trim() || !/^\d{10,13}$/.test(tempCustomerPhone.replace(/\D/g, '')) || tempCustomerAddress.trim().length < 8)) { setCustomerError('Para entrega, informe nome, WhatsApp com DDD e endereço completo: rua, número, bairro e cidade.'); return; }
         const name = tempCustomerName.trim();
         if (!name) {
           alert('Por favor, informe ao menos o nome do cliente.');
           return;
         }
-        const hasAdditionalData = Boolean(
-          tempCustomerPhone.trim() || tempCustomerEmail.trim() || tempCustomerAddress.trim() || tempCustomerCpf.trim()
-        );
-
-        if (hasAdditionalData || selectedCustomerId) {
+        if (shouldPersistCustomer) {
           await handleSaveCustomerToDatabase();
         } else {
           handleQuickPurchaseCustomer();
@@ -659,7 +642,7 @@ const { useState, useEffect, useRef, useMemo } = React;
           prev.map((p) => (String(p.id) === id ? { ...p, isShortcut: nextFavorites.has(id) } : p))
         );
         favoriteSaveQueueRef.current = favoriteSaveQueueRef.current.catch(() => {}).then(async () => {
-          const response = await fetch('/api/caixa/favorites', {
+          const response = await window.ConfloraSession.apiFetch('/api/caixa/favorites', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ favoriteProductIds: favoriteIds }),
@@ -710,7 +693,7 @@ const { useState, useEffect, useRef, useMemo } = React;
         const fingerprint = JSON.stringify(payload);
         if (!operationRef.current || operationRef.current.fingerprint !== fingerprint) operationRef.current = { fingerprint, id: crypto.randomUUID() };
         try {
-          const res = await fetch('/api/caixa/orders', {
+          const res = await window.ConfloraSession.apiFetch('/api/caixa/orders', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ...payload, requestId: operationRef.current.id })
@@ -1216,35 +1199,11 @@ const { useState, useEffect, useRef, useMemo } = React;
             {activeModal === 'approval' && <PdvComponents.DiscountApproval approval={discountApproval} onClose={() => setActiveModal(null)} onOrder={(order) => { setCompletedOrder(order); setActiveModal('receipt'); }} />}
             {activeModal === 'debt_settle' && <PdvComponents.DebtSettlement onClose={() => setActiveModal(null)} />}
             {/* Com Flora Standard Website Header adapted for POS */}
-            <header className="conflora-site-header sticky top-0 z-20 !flex-col !items-stretch">
-              <div className="mx-auto flex min-w-0 w-full max-w-[1600px] flex-wrap items-center gap-3">
-                <PdvComponents.SiteBrand />
-
-                {/* Search fills the available space; quantity stays beside the user controls. */}
-                <div className="order-4 flex w-full basis-full flex-none items-center sm:order-2 sm:w-auto sm:min-w-0 sm:flex-1 sm:basis-0">
-                  <div className="relative flex-1">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      ref={searchInputRef}
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Nome, categoria ou descrição (Ex.: plantas de sombra, plantas para jardim, flores, e etc)"
-                      className="w-full pl-9 pr-8 py-2 bg-slate-100/90 hover:bg-slate-100 focus:bg-white rounded-full text-xs sm:text-sm text-slate-800 placeholder-slate-400 border border-slate-200 focus:border-emerald-600 focus:outline-none transition"
-                    />
-                    {searchQuery && (
-                      <button
-                        onClick={() => setSearchQuery('')}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-
-                </div>
-
-                {/* Exact Nex-inspired "Quant: 1" Pill */}
+            <div className="sticky top-0 z-20 bg-white">
+              <PdvComponents.Topbar hideCashier user={currentUser} onCashier={() => setCashierPage(null)} onSearch={setSearchQuery} searchValue={searchQuery} searchInputRef={searchInputRef} />
+              <div className="cf-page-toolbar cf-pos-context">
+                <button type="button" className="cf-back-button" onClick={() => window.ConfloraNavigation.back()}>← Voltar</button><h1 className="font-extrabold text-emerald-950">Caixa</h1>
+                {/* Quantity multiplier remains next to the cashier actions. */}
                 <div
                     className="order-2 flex shrink-0 items-center bg-white border border-slate-300 rounded-full px-2.5 py-1.5 shadow-xs sm:order-3"
                     title="Multiplicador de quantidade para o próximo item clicado"
@@ -1276,35 +1235,9 @@ const { useState, useEffect, useRef, useMemo } = React;
                     </button>
                 </div>
 
-                {/* Right Status Actions */}
-                {['ADMIN', 'CAIXA'].includes(currentUser.role) && <button type="button" className="cf-button !rounded-full text-xs" onClick={() => setCashierPage('deliveries')}>🛵 Entregas</button>}
-                <div className="order-3 ml-auto flex items-center gap-2 sm:order-4">
-                  <div className="max-w-36 text-right sm:max-w-52">
-                    <p className="truncate text-xs font-extrabold text-slate-800">{currentUser.name || currentUser.email}</p>
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">{currentUser.role}</p>
-                  </div>
-                  {String(currentUser.role || '').toUpperCase() === 'ADMIN' && (
-                    <button
-                      type="button"
-                      onClick={() => window.location.assign('/admin')}
-                      className="inline-flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full border border-slate-300 bg-white p-2 text-slate-700 transition hover:-translate-y-0.5 hover:border-emerald-600 hover:bg-green-50 hover:text-emerald-700 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
-                      title="Configurações administrativas"
-                      aria-label="Abrir configurações administrativas"
-                    >
-                      <Menu className="h-5 w-5" />
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }); window.location.reload(); }}
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-rose-600 px-3 py-2 text-xs font-extrabold text-white shadow-sm transition hover:bg-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2"
-                  >
-                    <LogOut className="h-3.5 w-3.5" />
-                    Sair
-                  </button>
-                </div>
+                {['ADMIN', 'CAIXA'].includes(currentUser.role) && <button type="button" className="cf-button" onClick={() => setCashierPage('deliveries')}>🛵 Entregas</button>}
+                <button type="button" className="cf-danger-button" onClick={async () => { await window.ConfloraSession.apiFetch('/api/auth/logout', { method: 'POST' }); window.location.reload(); }}>Sair</button>
               </div>
-
               <nav className="cashier-command-nav mx-auto mt-3 mb-4 grid w-full max-w-[1600px] grid-cols-3 gap-2 border-t border-slate-100 pt-3 sm:gap-3 lg:mx-0 lg:w-2/3" aria-label="Ações do caixa por atalho">
                 <button type="button" className={shortcutButtonClass} disabled={cart.length === 0} onClick={() => setActiveModal('pay')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F1</kbd><span>Pagar</span></button>
                 <button type="button" className={shortcutButtonClass} onClick={() => setCashierPage('orders')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F2</kbd><span>Comandas</span></button>
@@ -1315,7 +1248,7 @@ const { useState, useEffect, useRef, useMemo } = React;
               </nav>
 
               {/* Com Flora Category Pills Row */}
-              <div className="mx-auto flex min-w-0 w-full max-w-[1600px] items-center justify-between gap-3 lg:mx-0 lg:w-2/3">
+              <div className="cf-pos-categories mx-auto flex min-w-0 w-full max-w-[1600px] items-center justify-between gap-3 lg:mx-0 lg:w-2/3">
                 <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
                   {categoryTabs.map((cat) => {
                     const isActive = selectedCategory === cat.id;
@@ -1334,17 +1267,17 @@ const { useState, useEffect, useRef, useMemo } = React;
                   })}
                 </div>
               </div>
-            </header>
+            </div>
 
             {/* 2/3 + 1/3 SPLIT MAIN CONTENT */}
             <main
-              className={"flex-1 max-w-[1600px] w-full mx-auto p-3 sm:p-5 grid grid-cols-1 md:grid-cols-12 gap-5 items-start " + (deviceView === 'mobile-preview' ? 'pb-6' : 'pb-64 md:pb-6')}
+              className={"cf-work-body cf-pos-main flex-1 max-w-[1600px] w-full mx-auto p-3 sm:p-5 grid grid-cols-1 md:grid-cols-12 gap-5 items-start " + (deviceView === 'mobile-preview' ? 'pb-6' : 'pb-64 md:pb-6')}
             >
               {/* LEFT SECTION (2/3 - 8 Columns): 4-per-row Product Cards */}
               <section
                 className={(deviceView === 'mobile-preview'
                   ? 'col-span-12'
-                  : 'md:col-span-8') + " flex flex-col gap-3"}
+                  : 'col-span-12 lg:col-span-8 cf-pos-products') + " flex flex-col gap-3"}
               >
                 {/* Section Title & Counter */}
                 <div className="flex items-center justify-between">
@@ -1412,10 +1345,12 @@ const { useState, useEffect, useRef, useMemo } = React;
               {/* RIGHT SECTION (1/3 - 4 Columns): Real-Time Cashier Receipt Panel */}
               {deviceView !== 'mobile-preview' && (
                 <aside
-                  className="fixed top-16 z-30 hidden h-[calc(100dvh-5rem)] min-h-0 lg:block"
+                  className="cf-cashier-receipt fixed z-30 hidden min-h-0 lg:block"
                   style={{
-                    right: 'max(calc((100vw - 1600px) / 2), 16px)',
-                    width: 'min(calc((100vw - 48px) / 3), 520px)',
+                    top: 'calc(var(--cf-topbar-height, 72px) + 12px)',
+                    height: 'calc(100dvh - var(--cf-topbar-height, 72px) - 24px)',
+                    right: '24px',
+                    width: 'var(--cf-pos-aside-width)',
                   }}
                 >
                   {renderCashierPanel()}
@@ -1497,6 +1432,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                     </button>
                   </div>
 
+                  {customerError && <div id="customerSaveError" role="alert" tabIndex="-1" className="cf-error-banner"><strong>Não foi possível adicionar o cliente</strong><span>{customerError}</span>{/e-mail|email/i.test(customerError) && <span>Use BUSCAR CLIENTE para selecionar o cadastro existente ou confira o e-mail informado.</span>}</div>}
                   {/* Feedback notification if any */}
                   {customerNotification && (
                     <div className="mt-3 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
@@ -1561,12 +1497,15 @@ const { useState, useEffect, useRef, useMemo } = React;
                       </div>
 
                       <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                        <label htmlFor="customer-email" className="block text-xs font-bold text-slate-700 mb-1">
                           E-mail da conta do cliente (opcional):
                         </label>
                         <input
                           type="email"
+                          id="customer-email"
                           value={tempCustomerEmail}
+                          aria-invalid={!!customerError && /e-mail|email/i.test(customerError)}
+                          aria-describedby={customerError ? 'customerSaveError' : undefined}
                           onChange={(e) => setTempCustomerEmail(e.target.value)}
                           placeholder="cliente@email.com"
                           className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-600 focus:outline-none text-slate-800"
@@ -1604,18 +1543,18 @@ const { useState, useEffect, useRef, useMemo } = React;
                   <div className="pt-3 border-t border-slate-100 space-y-2.5">
                     {/* Live Status Indicator */}
                     <div className={"text-[11px] p-2.5 rounded-xl border flex items-center justify-between " + (
-                      !(tempCustomerPhone.trim() || tempCustomerAddress.trim() || tempCustomerCpf.trim())
+                      !shouldPersistCustomer
                         ? 'bg-amber-50/80 border-amber-200 text-amber-900'
                         : 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
                     )}>
-                      {!(tempCustomerPhone.trim() || tempCustomerAddress.trim() || tempCustomerCpf.trim()) ? (
+                      {!shouldPersistCustomer ? (
                         <div className="flex items-center gap-1.5">
                           <span className="font-bold">⚡ Compra Rápida:</span>
                           <span className="text-[10px] text-amber-800">Somente nome preenchido · Não será salvo na base</span>
                         </div>
                       ) : (
                         <div className="flex items-center gap-1.5">
-                          <span className="font-bold">💾 Cadastro Completo:</span>
+                          <span className="font-bold">💾 Cadastro:</span>
                           <span className="text-[10px] text-emerald-800">Dados informados · Será cadastrado na base para futuras compras</span>
                         </div>
                       )}
@@ -1721,7 +1660,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                   </p>
                   <div hidden={splitPayment} className={splitPayment ? 'hidden' : 'grid grid-cols-2 gap-2 mb-3 sm:grid-cols-5'}>
                     {[
-                      { id: 'pix', label: 'Pix · QR Code / Copia e Cola', icon: QrCode },
+                      { id: 'pix', label: window.CONFLORA_PIX_MODE === 'MANUAL' ? 'Pix · conferência do caixa' : 'Pix · QR Code / Copia e Cola', icon: QrCode },
                       { id: 'debito', label: 'Cartão de débito', icon: CreditCard },
                       { id: 'credito', label: 'Cartão de crédito', icon: CreditCard },
                       { id: 'dinheiro', label: 'Dinheiro', icon: Banknote },
@@ -1778,7 +1717,7 @@ const { useState, useEffect, useRef, useMemo } = React;
 
                   {paymentMethod === 'pix' && !splitPayment && !deferToCashier && (
                     <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-medium mb-3">
-                      💠 <strong>Pix Sicredi:</strong> QR Code e chave Pix Copia e Cola com o valor fixo travado de <strong>{formatBRL(finalTotal)}</strong>. Pedido baixado automaticamente quando pago!
+                      {window.CONFLORA_PIX_MODE === 'MANUAL' ? <>Pix manual: copie a chave após registrar o pedido. O caixa confere o recebimento e o comprovante antes de confirmar a venda.</> : <>💠 <strong>Pix Sicredi:</strong> QR Code e chave Pix Copia e Cola com o valor fixo travado de <strong>{formatBRL(finalTotal)}</strong>. Pedido baixado automaticamente quando pago!</>}
                     </div>
                   )}
 
@@ -1818,7 +1757,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                       className={primaryActionButtonClass + ' w-2/3 px-4 py-3 text-sm active:scale-98'}
                     >
                       <Check className="w-4 h-4" />
-                      <span>{isSubmittingSale ? 'Processando...' : deferToCashier ? 'Enviar comanda ao caixa' : splitPayment ? 'Confirmar pagamentos' : currentUser.role === 'VENDEDOR' && paymentMethod !== 'pix' ? 'Enviar comanda ao caixa' : paymentMethod === 'pix' ? 'Gerar Pix Sicredi' : paymentMethod === 'fiado' && currentUser.role !== 'ADMIN' ? 'Solicitar aprovação do fiado' : paymentMethod === 'credito_cliente' ? 'Usar saldo do cliente' : customerId ? 'Finalizar venda' : customerName && customerName !== 'Cliente Balcão' ? 'Adicionar cliente e finalizar venda' : 'Finalizar venda'}</span>
+                      <span>{isSubmittingSale ? 'Processando...' : deferToCashier ? 'Enviar comanda ao caixa' : splitPayment ? 'Confirmar pagamentos' : currentUser.role === 'VENDEDOR' && paymentMethod !== 'pix' ? 'Enviar comanda ao caixa' : paymentMethod === 'pix' ? (window.CONFLORA_PIX_MODE === 'MANUAL' ? 'Registrar Pix pendente' : 'Gerar Pix Sicredi') : paymentMethod === 'fiado' && currentUser.role !== 'ADMIN' ? 'Solicitar aprovação do fiado' : paymentMethod === 'credito_cliente' ? 'Usar saldo do cliente' : customerId ? 'Finalizar venda' : customerName && customerName !== 'Cliente Balcão' ? 'Adicionar cliente e finalizar venda' : 'Finalizar venda'}</span>
                     </button>
                   </div>
                 </div>

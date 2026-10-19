@@ -132,7 +132,7 @@ test("admin edits config and generic product specifications, cannot access anoth
   await expect(page.locator("#subtitle")).toHaveText(
     "Loja de teste atualizada",
   );
-  await page.getByRole("button", { name: "Produtos", exact: true }).click();
+  await page.locator('#adminView').getByRole('button', { name: 'Produtos', exact: true }).click();
   await page
     .locator(".admin-product-row")
     .filter({ hasText: "Substrato" })

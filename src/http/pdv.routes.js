@@ -1,4 +1,4 @@
-const { financialReceiver, isDelivery, assertAssignedDelivery, canReceiveOrder } = require('../orders/delivery-policy');
+const { financialReceiver, isDelivery, isDeliverySettled, assertAssignedDelivery, canConfirmManualPix } = require('../orders/delivery-policy');
 const { PaymentProofStorage } = require('../orders/payment-proof');
 const { timingSafeEqual, randomUUID } = require('node:crypto');
 const { PdvRepository } = require('../orders/pdv.repository');
@@ -86,20 +86,22 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
   service.debtPix = debtPix;
   const route = (handler) => async (req, res) => {
     try { await handler(req, res); }
-    catch (error) { Logger.warn('Operação PDV não concluída', { error: error.message }); res.status(400).json({ error: error.message }); }
+    catch (error) { Logger.warn('Operação PDV não concluída', { error: error.message, requestId: req.requestId }); res.status(error.status || (/Firestore|banco.*indisponível/i.test(error.message) ? 503 : 400)).json({ error: error.message, requestId: req.requestId }); }
   };
   const requireCustomer = (req, res, next) => req.user ? next() : res.status(401).json({ error: 'Entre na sua conta.' });
   app.post('/api/customer/debt-pix', requireCustomer, route(async (req, res) => res.json({ success: true, charge: await debtPix.create(req.body, req.user) })));
   app.get('/api/customer/debt-pix/:id', requireCustomer, route(async (req, res) => res.json({ success: true, charge: await debtPix.read(req.params.id, req.user) })));
   app.use('/api/caixa', requireStaff, (req, res, next) => {
     if (req.user.role !== 'ENTREGADOR') return next();
-    if (/^\/deliveries(?:\/[^/]+\/(?:accept|release|complete|receive))?$/.test(req.path) || req.path === '/orders/stream' || /^\/payment-proofs(?:\/[^/]+)?$/.test(req.path)) return next();
+    if (/^\/deliveries(?:\/[^/]+\/(?:accept|start|release|complete|receive))?$/.test(req.path) || req.path === '/orders/stream' || /^\/payment-proofs(?:\/[^/]+)?$/.test(req.path)) return next();
     res.status(403).json({ error: 'Seu perfil permite apenas suas entregas e os recebimentos vinculados a elas.' });
   });
+  require('../orders/manual-pix.routes').installManualPixRoutes(app, { store, proofStorage, service });
   const requireDeliveryStaff = (req, res, next) => ['ADMIN', 'CAIXA', 'ENTREGADOR'].includes(req.user.role) ? next() : res.status(403).json({ error: 'Sem acesso às entregas.' });
   app.get('/api/caixa/deliveries', requireDeliveryStaff, route(async (req, res) => res.json(await service.listDeliveries(req.user))));
   app.post('/api/caixa/deliveries/:id/dispatch', requireCashier, route(async (req, res) => res.json({ order: await store.dispatchDelivery(req.params.id, actor(req.user)) })));
   app.post('/api/caixa/deliveries/:id/accept', requireDeliveryStaff, route(async (req, res) => res.json({ order: await service.assignDelivery(req.params.id, req.user) })));
+  app.post('/api/caixa/deliveries/:id/start', requireDeliveryStaff, route(async (req, res) => res.json({ order: await service.startDelivery(req.params.id, req.user, req.body) })));
   app.post('/api/caixa/deliveries/:id/release', requireDeliveryStaff, route(async (req, res) => res.json({ order: await service.releaseDelivery(req.params.id, req.user) })));
   app.post('/api/caixa/deliveries/:id/complete', requireDeliveryStaff, route(async (req, res) => res.json(await service.completeDelivery(req.params.id, req.user, req.body))));
   app.post('/api/caixa/deliveries/:id/receive', requireDeliveryStaff, route(async (req, res) => {
@@ -110,7 +112,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     if (parts.some((part) => ['FIADO', 'SALDO_CLIENTE'].includes(part.method))) throw new Error('Fiado e crédito devem ser autorizados no caixa antes da entrega.');
     if (parts.some((part) => part.method === 'PIX') && !isManualPix) return res.status(202).json({ order: await service.requestPixAtCashier(existing.id, req.user, parts) });
     const verification = parts.some((part) => part.method === 'PIX') ? manualPixVerification(existing, parts, req.body) : null;
-    const order = await store.receive(existing.id, actor(req.user), verification, (req.body.receivedAmount === null || req.body.receivedAmount === undefined) ? null : Number(req.body.receivedAmount), existing.pixData?.txid ? null : method, { requestedParts: parts, finishDelivery: true, sendFinalReceipt: !verification });
+    const order = await store.receive(existing.id, actor(req.user), verification, (req.body.receivedAmount === null || req.body.receivedAmount === undefined) ? null : Number(req.body.receivedAmount), existing.pixData?.txid ? null : method, { requestedParts: parts, finishDelivery: true, actualDistanceKm: req.body.actualDistanceKm, sendFinalReceipt: !verification });
     if (verification) { for (const id of await store.ensurePaymentNotifications(order.id)) await service.deliver(id); }
     else await service.deliver(`${order.id}-final-receipt`);
     res.json({ order });
@@ -151,9 +153,13 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     }
     const customer = await store.transaction(async (tx) => {
       const previous = await tx.get('customers', id);
+      const identityId = email ? require('node:crypto').createHash('sha256').update(email).digest('hex') : null;
+      const identity = identityId ? await tx.get('customer_emails', identityId) : null;
+      if (identity && identity.customerId !== id) throw Object.assign(new Error('Este e-mail já está vinculado a outro cadastro de cliente.'), { status: 409 });
       const nameSearch = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
       const saved = { ...previous, id, name, nameSearch, phone, phoneDigits: phone, email, ...(req.body.deliveryLocation ? { deliveryLocation: require('../orders/pdv.service').normalizeDeliveryLocation(req.body.deliveryLocation) } : {}), cpfCnpj: String(req.body.cpfCnpj || '').slice(0, 30), address: String(req.body.address || '').slice(0, 250), notes: String(req.body.notes || '').slice(0, 250), updatedAt: new Date().toISOString() };
       tx.set('customers', id, saved);
+      if (identityId) tx.set('customer_emails', identityId, { customerId: id });
       return saved;
     });
     res.status(201).json({ success: true, customer });
@@ -175,7 +181,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     heartbeat.unref?.();
     const unsubscribe = store.watchOpenOrders((orders) => {
       if (closed) return;
-      const visibleOrders = orders.filter((order) => (order.source === 'PDV' || order.source === 'WEB_CATALOG') && (req.user.role !== 'ENTREGADOR' || (isDelivery(order) && (['PENDING_DELIVERY', 'PENDING_DISPATCH'].includes(order.deliveryStatus) || order.assignedDriver?.id === req.user.id))));
+      const visibleOrders = orders.filter((order) => (order.source === 'PDV' || order.source === 'WEB_CATALOG') && (req.user.role !== 'ENTREGADOR' || isDelivery(order)) && (req.user.role !== 'VENDEDOR' || order.createdBy?.id === req.user.id));
       send('orders-changed', { orderIds: visibleOrders.map((order) => order.id), updatedAt: new Date().toISOString() });
     }, () => {
       if (!closed) send('stream-fallback', { updatedAt: new Date().toISOString() });
@@ -191,16 +197,24 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     if (!approval || (req.user.role !== 'ADMIN' && approval.requestedBy !== req.user.id)) { return res.sendStatus(404); }
     res.json(approval);
   }));
-  app.get('/api/caixa/orders', route(async (req, res) => {
+  const cashierSnapshot = async (user, query = {}) => {
     const orders = (await repository.getAllOrders(10000)).filter((order) => ['PDV', 'WEB_CATALOG'].includes(order.source));
-    const range = reportRange(req.query);
-    const isAdmin = req.user.role === 'ADMIN';
-    const canViewPersonalOrder = (order) => isAdmin || order.createdBy?.id === req.user.id || financialReceiver(order)?.id === req.user.id;
-    const canViewOpenOrder = (order) => canViewPersonalOrder(order) || (req.user.role === 'CAIXA' && !order.completedAt && order.status !== 'CANCELLED');
+    const range = reportRange(query);
+    const isAdmin = user.role === 'ADMIN';
+    const canViewPersonalOrder = (order) => isAdmin || order.createdBy?.id === user.id || financialReceiver(order)?.id === user.id;
+    const canViewOpenOrder = (order) => canViewPersonalOrder(order) || (user.role === 'CAIXA' && !order.completedAt && order.status !== 'CANCELLED');
     const openOrders = orders.filter((order) => !order.completedAt && order.status !== 'CANCELLED' &&
       canViewOpenOrder(order));
+    const activeDeliveries = orders.filter(order => isDelivery(order) && order.status !== 'CANCELLED' &&
+      order.deliveryStatus !== 'DELIVERED' && (canViewPersonalOrder(order) || user.role === 'CAIXA') &&
+      order.creditApprovalStatus !== 'PENDING' &&
+      (['PREPARING_DELIVERY', 'OUT_FOR_DELIVERY'].includes(order.deliveryStatus) ||
+        (order.paymentMethod !== 'PIX' && !(order.paymentParts || []).some(part => ['PIX', 'FIADO'].includes(part.method))) || isDeliverySettled(order)));
+    const awaitingDriver = activeDeliveries.filter(order => ['PENDING_DELIVERY', 'PENDING_DISPATCH', 'PREPARING_DELIVERY'].includes(order.deliveryStatus));
+    const outForDelivery = activeDeliveries.filter(order => order.deliveryStatus === 'OUT_FOR_DELIVERY');
+    const deliveryIds = new Set([...awaitingDriver, ...outForDelivery].map(order => order.id));
     const pendingConfirmation = openOrders.filter((order) => order.status === 'AWAITING_CONFIRMATION');
-    const pendingPayment = openOrders.filter((order) => ['AWAITING_CASHIER', 'AWAITING_PAYMENT', 'CREATING_PIX', 'AWAITING_PIX', 'PENDING'].includes(order.status));
+    const pendingPayment = openOrders.filter((order) => !deliveryIds.has(order.id) && ['AWAITING_CASHIER', 'AWAITING_PAYMENT', 'CREATING_PIX', 'AWAITING_PIX', 'PENDING'].includes(order.status));
     const history = orders.filter((order) => canViewPersonalOrder(order) && isWithinRange(order.paidAt || order.completedAt || order.createdAt, range));
     const completed = history.filter((order) => order.completedAt && order.status !== 'CANCELLED');
     const confirmed = completed.filter((order) => order.paymentStatus === 'ON_ACCOUNT');
@@ -210,12 +224,12 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
       store.list('debt_settlements', 'type', 'CREDITO_CLIENTE'),
     ]);
     const allSettlements = [...new Map(settlementGroups.flat().map((row) => [row.id, row])).values()];
-    const debtHistory = allSettlements.filter((row) => ['QUITACAO_FIADO', 'CREDITO_CLIENTE'].includes(row.entryType || row.type || 'QUITACAO_FIADO') && (isAdmin || row.receivedBy?.id === req.user.id) && isWithinRange(row.createdAt, range));
-    const mySales = completed.filter((order) => order.createdBy?.id === req.user.id);
-    const myReceipts = completed.filter((order) => financialReceiver(order)?.id === req.user.id);
-    const myDebtReceipts = debtHistory.filter((row) => row.receivedBy?.id === req.user.id);
+    const debtHistory = allSettlements.filter((row) => ['QUITACAO_FIADO', 'CREDITO_CLIENTE'].includes(row.entryType || row.type || 'QUITACAO_FIADO') && (isAdmin || row.receivedBy?.id === user.id) && isWithinRange(row.createdAt, range));
+    const mySales = completed.filter((order) => order.createdBy?.id === user.id);
+    const myReceipts = completed.filter((order) => financialReceiver(order)?.id === user.id);
+    const myDebtReceipts = debtHistory.filter((row) => row.receivedBy?.id === user.id);
     const receivedOrders = completed.filter((order) => order.paymentStatus === 'APPROVED' || order.paymentParts?.some((part) => ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO'].includes(part.method)));
-    const closingOrders = isAdmin ? receivedOrders : receivedOrders.filter((order) => financialReceiver(order)?.id === req.user.id);
+    const closingOrders = isAdmin ? receivedOrders : receivedOrders.filter((order) => financialReceiver(order)?.id === user.id);
     const closingSettlements = isAdmin ? debtHistory : myDebtReceipts;
     const byPayment = paymentTotals(closingOrders, closingSettlements);
     const sum = (rows, field) => rows.reduce((total, row) => total + Number(row[field] || 0), 0);
@@ -227,15 +241,17 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
       customerCreditUsed: closingOrders.reduce((sum, order) => sum + partAmount(order, 'SALDO_CLIENTE'), 0),
       debtReceived: sum(closingSettlements, 'amount'),
       totalReceived: receivedTotal(closingOrders) + sum(closingSettlements, 'amount'),
-      confirmedDebt: (isAdmin ? confirmed : confirmed.filter((order) => order.createdBy?.id === req.user.id || financialReceiver(order)?.id === req.user.id)).reduce((sum, order) => sum + partAmount(order, 'FIADO'), 0),
+      confirmedDebt: (isAdmin ? confirmed : confirmed.filter((order) => order.createdBy?.id === user.id || financialReceiver(order)?.id === user.id)).reduce((sum, order) => sum + partAmount(order, 'FIADO'), 0),
       byPayment,
     };
-    res.json({
+    return {
       range,
       pendingConfirmation,
       pendingPayment,
       confirmed,
       paid,
+      awaitingDriver,
+      outForDelivery,
       history: history.sort((a, b) => String(b.paidAt || b.completedAt || b.createdAt).localeCompare(String(a.paidAt || a.completedAt || a.createdAt))),
       debtHistory: debtHistory.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))),
       metrics: {
@@ -245,34 +261,59 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
         orderCount: mySales.length,
       },
       closing,
-    });
+      cashierOrders: closingOrders,
+      cashierSettlements: closingSettlements,
+    };
+  };
+  app.get('/api/caixa/orders', route(async (req, res) => {
+    const { cashierOrders, ...board } = await cashierSnapshot(req.user, req.query);
+    delete board.cashierSettlements;
+    res.json({ ...board, cashierOrderIds: cashierOrders.map(order => order.id) });
+  }));
+  const createReport = async (user, query) => {
+    const snapshot = await cashierSnapshot(user, query);
+    const { createCashierSnapshotPdf } = require('../reports/cashier-snapshot-pdf');
+    return { buffer: await createCashierSnapshotPdf(snapshot, user), range: snapshot.range };
+  };
+  app.get('/api/caixa/report.pdf', requireCashier, route(async (req, res) => {
+    const report = await createReport(req.user, req.query);
+    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="caixa-' + report.range.from + '.pdf"', 'Cache-Control': 'private, no-store' });
+    res.send(report.buffer);
+  }));
+  app.post('/api/caixa/report/send-whatsapp', requireCashier, route(async (req, res) => {
+    const phone = normalizePhone(ownerPhone);
+    if (!phone || !whatsapp?.sendDocumentBuffer) return res.status(503).json({ error: 'Configure o WhatsApp da loja para enviar o relatório.' });
+    const report = await createReport(req.user, req.body);
+    const result = await whatsapp.sendDocumentBuffer(phone, report.buffer, 'caixa-' + report.range.from + '.pdf', 'Relatório do caixa ' + report.range.from + ' - ' + (req.user.role === 'ADMIN' ? 'Geral da loja' : req.user.name));
+    if (result?.mock || !result?.messages?.length) return res.status(502).json({ error: 'O WhatsApp não confirmou o envio. O PDF continua disponível para baixar.' });
+    res.json({ success: true, message: 'PDF enviado ao WhatsApp da loja.' });
   }));
   const findOrder = async (req) => {
     const order = await store.read('orders', req.params.id);
     const canViewOrder = order && (
       req.user.role === 'ADMIN' || order.createdBy?.id === req.user.id || financialReceiver(order)?.id === req.user.id ||
-      (req.user.role === 'CAIXA' && !order.completedAt && order.status !== 'CANCELLED')
+      (req.user.role === 'CAIXA' && (!order.completedAt || isDelivery(order) && order.deliveryStatus !== 'DELIVERED') && order.status !== 'CANCELLED')
     );
     if (!order || !['PDV', 'WEB_CATALOG'].includes(order.source) || !canViewOrder) { throw new Error('Comanda não encontrada para este usuário.'); }
     return order;
   };
   app.get('/api/caixa/orders/:id', route(async (req, res) => res.json(await findOrder(req))));
-  app.post('/api/caixa/payment-proofs', requireDeliveryStaff, route(async (req, res) => {
+  app.post('/api/caixa/payment-proofs', requireStaff, route(async (req, res) => {
     const { targetType, targetId, dataUrl } = req.body;
     if (!['ORDER', 'DEBT'].includes(targetType) || !/^[a-zA-Z0-9_-]{1,128}$/.test(targetId || '')) throw new Error('Selecione o pagamento do comprovante.');
     if (targetType === 'ORDER') {
       const order = await store.read('orders', targetId);
-      if (!order || order.completedAt || order.status === 'CANCELLED' || !canReceiveOrder(order, req.user)) throw new Error('Pagamento não está pendente ou não pertence a você.');
+      if (!order || order.completedAt || order.status === 'CANCELLED' || !canConfirmManualPix(order, req.user)) throw new Error('Pagamento não está pendente ou não pertence a você.');
     }
-    if (req.user.role === 'ENTREGADOR' && targetType !== 'ORDER') throw new Error('Entregador só pode anexar comprovante da própria entrega.');
+    if (['ENTREGADOR', 'VENDEDOR'].includes(req.user.role) && targetType !== 'ORDER') throw new Error('Este perfil só pode anexar comprovante de uma comanda própria.');
     const file = await proofStorage.save(dataUrl);
     const proof = { ...file, fileName: String(req.body.fileName || 'comprovante').replace(/[^\p{L}\p{N}._ -]/gu, '').slice(0, 100), targetType, targetId, uploadedBy: req.user.id, createdAt: new Date().toISOString() };
     await store.transaction(async (tx) => tx.set('payment_proofs', proof.id, proof));
     res.status(201).json({ id: proof.id, fileName: proof.fileName, size: proof.size });
   }));
-  app.get('/api/caixa/payment-proofs/:id', requireDeliveryStaff, route(async (req, res) => {
+  app.get('/api/caixa/payment-proofs/:id', requireStaff, route(async (req, res) => {
     const proof = await store.read('payment_proofs', req.params.id);
-    if (!proof || (req.user.role === 'ENTREGADOR' && proof.uploadedBy !== req.user.id)) return res.sendStatus(404);
+    if (!proof || (['ENTREGADOR', 'VENDEDOR'].includes(req.user.role) && proof.uploadedBy !== req.user.id)) return res.sendStatus(404);
     if (req.user.role === 'ENTREGADOR') {
       const order = proof.targetType === 'ORDER' ? await store.read('orders', proof.targetId) : null;
       if (!order || order.assignedDriver?.id !== req.user.id || order.status === 'CANCELLED') return res.sendStatus(404);
@@ -313,21 +354,24 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
       for (const id of await store.ensurePaymentNotifications(order.id)) await service.deliver(id);
     }
     const receiptId = `${order.id}-${verification ? 'customer-paid' : 'final-receipt'}`;
+    await service.queueOperationalNotifications(order);
     await service.deliver(receiptId);
     const delivery = await store.read('pdv_outbox', receiptId);
     res.json({ success: true, order, receiptText: formatOrderReceipt(order), receiptDelivery: { sent: delivery?.status === 'SENT' && Boolean(order.customerPhone), reason: delivery?.lastError || (order.customerPhone ? '' : 'Sem WhatsApp informado.') } });
   }));
-  app.post('/api/caixa/orders/:id/confirm-manual-pix', requireCashier, route(async (req, res) => {
+  app.post('/api/caixa/orders/:id/confirm-manual-pix', requireStaff, route(async (req, res) => {
     const existing = await findOrder(req);
-    if (existing.paymentMethod !== 'PIX' || !['CREATING_PIX', 'AWAITING_PIX'].includes(existing.status)) { throw new Error('Este pedido não está aguardando confirmação Pix.'); }
+    if (!canConfirmManualPix(existing, req.user) || !['CREATING_PIX', 'AWAITING_PIX', 'AWAITING_CASHIER', 'AWAITING_PAYMENT', 'PENDING'].includes(existing.status)) { throw new Error('Este pedido não está aguardando confirmação Pix.'); }
     if (Number.isFinite(Date.parse(existing.pixExpiresAt || '')) && Date.parse(existing.pixExpiresAt) <= Date.now()) {
       await service.expirePixOrder(existing.id);
       throw new Error('Esta cobrança Pix venceu e o estoque está sendo liberado. Confira o histórico do pedido.');
     }
     const receiver = actor(req.user);
-    const verification = manualPixVerification(existing, existing.paymentParts || [{ method: 'PIX', amount: existing.total }], req.body);
-    const order = await store.receive(existing.id, receiver, verification);
+    const parts = existing.pixData?.txid ? existing.paymentParts || [{ method: 'PIX', amount: existing.total }] : [{ method: 'PIX', amount: existing.total }];
+    const verification = manualPixVerification(existing, parts, req.body);
+    const order = await store.receive(existing.id, receiver, verification, null, existing.pixData?.txid ? null : 'PIX', { requestedParts: parts });
     const notificationIds = await store.ensurePaymentNotifications(order.id);
+    await service.queueOperationalNotifications(order);
     for (const id of notificationIds) await service.deliver(id);
     res.json({ success: true, order, receiptText: formatOrderReceipt(order) });
   }));
@@ -343,7 +387,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
   }));
   app.post('/api/caixa/orders/:id/cancel', route(async (req, res) => {
     const order = await findOrder(req);
-    if (order.paymentMethod === 'PIX') { return res.status(409).json({ error: 'Cobranças Pix exigem cancelamento e conciliação no Sicredi.' }); }
+    if (order.paymentMethod === 'PIX' && order.pixMode !== 'MANUAL') { return res.status(409).json({ error: 'Cobranças Pix exigem cancelamento e conciliação no Sicredi.' }); }
     res.json(await repository.cancelOrder(req.params.id, String(req.body.reason || '')));
   }));
   app.post('/tasks/expire-pix', async (req, res) => {
@@ -415,14 +459,16 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
   app.get('/api/admin/pdv/pending-deliveries', route(async (_req, res) => res.json(await store.list('pdv_outbox', 'status', 'PENDING'))));
   // A scheduler can call this protected endpoint when Cloud Run scales to zero.
   app.post('/internal/pdv/retry-notifications', async (req, res) => {
-    if (!secureEqual(req.headers.authorization, process.env.PDV_WORKER_SECRET ? `Bearer ${process.env.PDV_WORKER_SECRET}` : '')) { return res.sendStatus(401); }
+    const workerSecret = process.env.PDV_WORKER_SECRET || process.env.TASK_SECRET;
+    if (!secureEqual(req.headers.authorization, workerSecret ? `Bearer ${workerSecret}` : '')) { return res.sendStatus(401); }
     try { await service.retryMessages(); res.sendStatus(200); } catch { res.sendStatus(503); }
   });
   if (process.env.NODE_ENV !== 'test') {
-    const timer = setInterval(() => Promise.all([service.retryMessages(), service.expirePixOrders()]).catch((error) => Logger.warn('Fila PDV pendente', { error: error.message })), 15000);
+    const timer = setInterval(() => Promise.all([service.retryMessages(), service.expirePixOrders()]).catch((error) => Logger.error('Fila PDV pendente', error, { source: 'WORKER' })), 15000);
     timer.unref();
   }
   app.locals.pdv = { service, store };
+  require('./whatsapp-admin.routes').installWhatsappAdminRoutes(app, { whatsapp, store });
   return { service, store };
 }
 module.exports = { installPdvRoutes, requireStaff, requireCashier, businessDate, reportRange, paymentTotals };

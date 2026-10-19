@@ -325,7 +325,8 @@ test('WhatsApp failure is retried independently from the sale and resumes after 
   s.whatsapp.sendImageBuffer = async () => { s.sent.push({ image: true }); return { messages: [{ id: 'image' }] }; };
   await s.repository.updateMessage(`${order.id}-receipt`, { nextAttemptAt: 0 });
   await s.service.retryMessages();
-  assert.equal(s.sent.length, 2);
+  assert.equal(s.sent.filter(message => message.image || message.phone === order.customerPhone).length, 2);
+  assert.equal(s.sent.filter(message => message.text?.includes('NOVO PEDIDO')).length, 1);
   assert.equal((await s.repository.read('pdv_outbox', `${order.id}-receipt`)).status, 'SENT');
 });
 
@@ -584,7 +585,7 @@ test('cashier can manually confirm a Pix only after recording proof review; audi
   const sellerAttempt = await fetch(`${base}/api/caixa/orders/${order.id}/confirm-manual-pix`, {
     method: 'POST', headers: { cookie: sellerCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ proofSeen: true, note: 'Comprovante conferido no caixa' }),
   });
-  assert.equal(sellerAttempt.status, 403);
+  assert.equal(sellerAttempt.status, 400);
 });
 
 test('manual mixed Pix uses the Pix installment and concurrent confirmations send one receipt', async (t) => {
@@ -845,11 +846,21 @@ test('online pickup and delivery cash/card orders appear directly in payment que
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
   const board = await (await fetch(`${origin}/api/caixa/orders?from=${today}&to=${today}`, { headers: { cookie } })).json();
   assert.deepEqual(board.pendingConfirmation, []);
-  assert.deepEqual(board.pendingPayment.map((order) => order.id).sort(), ids.sort());
+  assert.deepEqual(board.pendingPayment.map((order) => order.id).sort(), ids.slice(0, 2).sort());
+  assert.deepEqual(board.awaitingDriver.map((order) => order.id).sort(), ids.slice(2).sort());
+  assert.deepEqual(board.outForDelivery, []);
   assert.equal(s.chargeCalls.length, 0); assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 4);
   const deliveries = await app.locals.pdv.service.listDeliveries({ id: 'driver', role: 'ENTREGADOR' });
   assert.equal(deliveries.available.length, 2);
   assert.ok(deliveries.available.every(order => order.customerName === 'Cliente online' && order.items[0].name === 'Muda'));
+  const driver = { id: 'driver', name: 'Entregador teste', role: 'ENTREGADOR' };
+  await app.locals.pdv.service.assignDelivery(ids[2], driver);
+  await app.locals.pdv.service.startDelivery(ids[2], driver);
+  const updatedBoard = await (await fetch(`${origin}/api/caixa/orders?from=${today}&to=${today}`, { headers: { cookie } })).json();
+  assert.equal(updatedBoard.outForDelivery[0].id, ids[2]);
+  assert.equal(updatedBoard.outForDelivery[0].assignedDriver.name, driver.name);
+  assert.equal(updatedBoard.awaitingDriver.length, 1);
+
   const response = await post(`/api/caixa/orders/${ids[0]}/confirm`, { paymentMethod: 'DINHEIRO', receivedAmount: 10 }, cookie);
   assert.equal(response.status, 200); assert.equal((await response.json()).order.paymentStatus, 'APPROVED');
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 19);
@@ -869,7 +880,7 @@ test('manual Pix requires a stored proof bound to this order and cashier before 
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
 });
 
-test('payment proof upload validates content, protects files, and rejects seller uploads', async (t) => {
+test('payment proof upload validates content and protects files', async (t) => {
   const s = setup(); const app = createApp({ messageService: { firestoreRepo: s.base, whatsappClient: s.whatsapp }, sicrediClient: s.pix });
   const server = app.listen(0); t.after(() => server.close()); const origin = `http://127.0.0.1:${server.address().port}`;
   const post = (path, body, cookie = '') => fetch(origin + path, { method: 'POST', headers: { cookie, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -877,7 +888,7 @@ test('payment proof upload validates content, protects files, and rejects seller
   const cookie = await login(cashier); const sellerCookie = await login(seller);
   const order = await app.locals.pdv.service.create({ ...s.input, deferToCashier: true }, seller);
   const body = { targetType: 'ORDER', targetId: order.id, dataUrl: proofData, fileName: 'comprovante.pdf' };
-  assert.equal((await post('/api/caixa/payment-proofs', body, sellerCookie)).status, 403);
+  assert.equal((await post('/api/caixa/payment-proofs', { ...body, targetType: 'DEBT' }, sellerCookie)).status, 400);
   assert.equal((await post('/api/caixa/payment-proofs', { ...body, dataUrl: 'data:image/png;base64,' + Buffer.from('<html>fake</html>').toString('base64') }, cookie)).status, 400);
   const proofId = await uploadProof(origin, cookie, order.id);
   assert.equal((await fetch(origin + '/api/caixa/payment-proofs/' + proofId)).status, 401);
@@ -927,7 +938,8 @@ test('delivery: dispatcher releases cash order, only one driver accepts and paym
   const attempts = await Promise.allSettled([s.service.assignDelivery(order.id, driver), s.service.assignDelivery(order.id, other)]);
   assert.equal(attempts.filter((result) => result.status === 'fulfilled').length, 1);
   const assigned = await s.repository.read('orders', order.id); const winner = assigned.assignedDriver;
-  assert.equal(assigned.deliveryStatus, 'OUT_FOR_DELIVERY');
+  assert.equal(assigned.deliveryStatus, 'PREPARING_DELIVERY');
+  await s.service.startDelivery(order.id, winner);
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
   await assert.rejects(s.service.completeDelivery(order.id, winner), /recebimento/);
   await assert.rejects(s.repository.receive(order.id, winner.id === driver.id ? other : driver, null, 20, 'DINHEIRO', { finishDelivery: true }), /responsável/);
@@ -936,7 +948,7 @@ test('delivery: dispatcher releases cash order, only one driver accepts and paym
   await s.repository.receive(order.id, winner, null, 20, 'DINHEIRO', { finishDelivery: true });
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18); assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 0);
   assert.equal((await s.service.listDeliveries(winner)).completed.length, 1);
-  assert.equal((await s.service.listDeliveries(winner.id === driver.id ? other : driver)).completed.length, 0);
+  assert.equal((await s.service.listDeliveries(winner.id === driver.id ? other : driver)).completed.length, 1);
 });
 
 test('delivery: verified prepaid Pix becomes available and delivery completion does not deduct stock again', async () => {
@@ -947,6 +959,7 @@ test('delivery: verified prepaid Pix becomes available and delivery completion d
   await s.service.handlePix(order.pixData.txid, 'E' + '8'.repeat(31));
   assert.equal((await s.repository.read('orders', order.id)).deliveryStatus, 'PENDING_DELIVERY');
   await s.service.assignDelivery(order.id, driver);
+  await s.service.startDelivery(order.id, driver);
   const result = await s.service.completeDelivery(order.id, driver);
   assert.equal(result.order.deliveryStatus, 'DELIVERED');
   await s.service.completeDelivery(order.id, driver);
@@ -963,12 +976,14 @@ test('delivery HTTP isolates drivers, permits assigned payment with proof and de
   const login = async (user) => (await post('/api/admin/auth/login', { userId: user.id, pin: user.pin })).headers.get('set-cookie').split(';')[0];
   const cookie = await login(driver); const otherCookie = await login(other); const cashierCookie = await login(cashier);
   for (const path of ['/api/caixa/products', '/api/caixa/orders', '/api/caixa/customers', '/api/admin/orders']) assert.equal((await fetch(origin + path, { headers: { cookie } })).status, 403);
-  for (const path of ['/api/orders', '/api/storefront/orders', '/api/caixa/orders']) assert.equal((await post(path, {}, cookie)).status, 403);
+  assert.equal((await post('/api/caixa/orders', {}, cookie)).status, 403);
+  for (const path of ['/api/orders', '/api/storefront/orders']) assert.equal((await post(path, {}, cookie)).status, 400);
   const order = await app.locals.pdv.service.create({ ...s.input, orderType: 'DELIVERY', customerName: 'Maria', customerPhone: '64999991234', deliveryAddress: 'Rua 10, 20, Centro, Mineiros GO' }, seller);
   const base = '/api/caixa/deliveries/' + order.id;
   assert.equal((await post(base + '/dispatch', {}, cookie)).status, 403);
   assert.equal((await post(base + '/dispatch', {}, cashierCookie)).status, 200);
   assert.equal((await post(base + '/accept', {}, cookie)).status, 200);
+  assert.equal((await post(base + '/start', {}, cookie)).status, 200);
   assert.equal((await post(base + '/accept', {}, otherCookie)).status, 400);
   assert.equal((await post(base + '/complete', {}, cookie)).status, 400);
   assert.equal((await post(base + '/receive', { paymentMethod: 'PIX_MANUAL', proofSeen: true, note: 'Pix conferido na entrega' }, cookie)).status, 400);
@@ -976,6 +991,7 @@ test('delivery HTTP isolates drivers, permits assigned payment with proof and de
   assert.equal((await post(base + '/release', {}, cookie)).status, 200);
   assert.equal((await fetch(origin + '/api/caixa/payment-proofs/' + proofId, { headers: { cookie } })).status, 404);
   assert.equal((await post(base + '/accept', {}, cookie)).status, 200);
+  assert.equal((await post(base + '/start', {}, cookie)).status, 200);
   assert.equal((await fetch(origin + '/api/caixa/payment-proofs/' + proofId, { headers: { cookie } })).status, 200);
   assert.equal((await post(base + '/receive', { paymentMethod: 'PIX_MANUAL', proofSeen: true, note: 'Pix conferido na entrega', proofId }, otherCookie)).status, 400);
   const payment = await post(base + '/receive', { paymentMethod: 'PIX_MANUAL', proofSeen: true, note: 'Pix conferido na entrega', proofId }, cookie);
@@ -993,6 +1009,7 @@ test('delivery: mixed Pix at the door preserves reservation and bank confirmatio
   const s = setup(); const driver = { id: 'driver', name: 'Entregador', role: 'ENTREGADOR' };
   const order = await s.service.create({ ...s.input, orderType: 'DELIVERY', customerName: 'Maria', customerPhone: '64999991234', deliveryAddress: 'Rua 10, 20, Centro, Mineiros GO' }, seller);
   await s.repository.dispatchDelivery(order.id, actor(cashier)); await s.service.assignDelivery(order.id, driver);
+  await s.service.startDelivery(order.id, driver);
   const pending = await s.service.requestPixAtCashier(order.id, driver, [{ method: 'DINHEIRO', amount: 8 }, { method: 'PIX', amount: 12 }]);
   assert.equal(s.chargeCalls[0].amount, 12); assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 2);
   s.pix.checkReceivedPayment = async (endToEndId) => ({ isPaid: true, raw: { txid: pending.pixData.txid, endToEndId, chave: 'pix-key', valor: '12.00', devolucoes: [] } });
@@ -1043,6 +1060,7 @@ test('delivery credit requires Admin approval before a driver can claim; approva
     assert.equal(approved.paymentStatus, 'ON_ACCOUNT');
     assert.equal((await s.service.listDeliveries(driver)).available.length, 1);
     await s.service.assignDelivery(order.id, driver);
+  await s.service.startDelivery(order.id, driver);
     await s.service.completeDelivery(order.id, driver);
     await s.service.completeDelivery(order.id, driver);
     await s.repository.receive(order.id, actor(admin));
@@ -1094,4 +1112,165 @@ test('online credit links customer account once, requires Admin, and remains in 
   assert.equal((await (await get('/api/customer/ledger', customerCookie)).json()).balance, 10);
   assert.equal(s.base.inMemoryCustomers.get(order.customerId).phone, '64999991234');
   assert.equal((await (await get('/api/customer/orders', customerCookie)).json()).orders.length, 2);
+});
+
+
+test('delivery lifecycle is shared, departure and metrics are idempotent, only owner/Admin can change it', async () => {
+  const s = setup(); const driver = { id: 'driver', name: 'Primeiro', role: 'ENTREGADOR' }; const other = { id: 'other', name: 'Segundo', role: 'ENTREGADOR' };
+  const order = await s.service.create({ ...s.input, orderType: 'DELIVERY', customerName: 'Maria', customerPhone: '64999991234', deliveryAddress: 'Rua 10, 20, Centro, Mineiros GO' }, seller);
+  await assert.rejects(s.service.startDelivery(order.id, driver), /responsável/);
+  const claimed = await s.service.assignDelivery(order.id, driver);
+  assert.equal(claimed.deliveryStatus, 'PREPARING_DELIVERY');
+  assert.equal(s.sent.filter(message => message.text?.includes('saiu para entrega')).length, 0);
+  assert.equal((await s.service.listDeliveries(other)).separating[0].assignedDriver.id, driver.id);
+  await assert.rejects(s.service.startDelivery(order.id, other), /responsável/);
+  await assert.rejects(s.repository.receive(order.id, driver, null, 20, 'DINHEIRO', { finishDelivery: true }), /Aceite/);
+  const payload = { route: { distanceMeters: 4000, durationSeconds: 600 } };
+  const started = await s.service.startDelivery(order.id, driver, payload);
+  const retried = await s.service.startDelivery(order.id, driver, payload);
+  assert.equal(started.departedAt, retried.departedAt);
+  assert.equal(started.deliveryHistory.length, 2);
+  assert.equal((await s.service.listDeliveries(other)).inRoute[0].assignedDriver.id, driver.id);
+  assert.equal(s.sent.filter(message => message.text?.includes('saiu para entrega')).length, 1);
+  await assert.rejects(s.repository.receive(order.id, driver, null, 20, 'DINHEIRO', { finishDelivery: true, actualDistanceKm: -4 }), /distância/);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
+  await s.repository.receive(order.id, driver, null, 20, 'DINHEIRO', { finishDelivery: true, actualDistanceKm: 5 });
+  await s.repository.receive(order.id, driver, null, 20, 'DINHEIRO', { finishDelivery: true, actualDistanceKm: 5 });
+  const board = await s.service.listDeliveries(other);
+  assert.equal(board.completed.length, 1); assert.equal(board.completed[0].deliveryMetrics.distanceKm, 5);
+  assert.equal(board.performance[0].deliveries, 1); assert.equal(board.performance[0].actualKm, 5);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
+  assert.equal((await s.repository.list('delivery_events', 'orderId', order.id)).length, 3);
+});
+
+test('returning a delivery preserves audit and prevents another driver from changing it', async () => {
+  const s = setup(); const driver = { id: 'driver', name: 'Primeiro', role: 'ENTREGADOR' }; const other = { id: 'other', name: 'Segundo', role: 'ENTREGADOR' };
+  const order = await s.service.create({ ...s.input, orderType: 'DELIVERY', customerName: 'Maria', customerPhone: '64999991234', deliveryAddress: 'Rua 10, 20, Centro, Mineiros GO' }, seller);
+  await s.service.assignDelivery(order.id, driver); await s.service.startDelivery(order.id, driver);
+  await assert.rejects(s.service.releaseDelivery(order.id, other), /responsável/);
+  const released = await s.service.releaseDelivery(order.id, driver);
+  assert.equal(released.departedAt, null); assert.equal(released.assignedDriver, null);
+  assert.equal(released.deliveryHistory[2].previousDriver.id, driver.id);
+  assert.ok(released.deliveryHistory[2].previousDeparture);
+  await s.service.assignDelivery(order.id, other);
+  assert.equal((await s.service.listDeliveries(driver)).separating[0].assignedDriver.id, other.id);
+  assert.equal((await s.repository.list('delivery_events', 'orderId', order.id)).length, 4);
+});
+
+
+test('seller confirms only own manual Pix with uploaded proof; cash and other orders stay forbidden', async t => {
+  const s = setup();
+  const app = createApp({ messageService: { firestoreRepo: s.base, whatsappClient: s.whatsapp }, sicrediClient: s.pix });
+  const server = app.listen(0); t.after(() => server.close());
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const login = await fetch(origin + '/api/admin/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: seller.id, pin: seller.pin }) });
+  const cookie = login.headers.get('set-cookie').split(';')[0];
+  const post = (path, body) => fetch(origin + path, { method: 'POST', headers: { cookie, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const order = await app.locals.pdv.service.create({ ...s.input, deferToCashier: true }, seller);
+  const endpoint = `/api/caixa/orders/${order.id}/confirm-manual-pix`;
+  assert.equal((await post(endpoint, { proofSeen: true, note: 'Valor conferido na conta' })).status, 400);
+  assert.equal((await post(`/api/caixa/orders/${order.id}/confirm`, { paymentMethod: 'DINHEIRO' })).status, 403);
+  const proofId = await uploadProof(origin, cookie, order.id);
+  assert.equal((await post(endpoint, { proofId, proofSeen: true, note: 'Valor conferido na conta' })).status, 200);
+  const saved = await s.repository.read('orders', order.id);
+  assert.equal(saved.paymentStatus, 'APPROVED');
+  assert.equal(saved.manualPixConfirmedBy.id, seller.id);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
+  assert.equal(s.chargeCalls.length, 0);
+  assert.equal((await post(endpoint, { proofId, proofSeen: true, note: 'Valor conferido na conta' })).status, 400);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
+  const other = await app.locals.pdv.service.create({ ...s.input, requestId: randomUUID(), deferToCashier: true }, cashier);
+  assert.equal((await post(`/api/caixa/orders/${other.id}/confirm-manual-pix`, { proofId, proofSeen: true, note: 'Valor conferido na conta' })).status, 400);
+  assert.equal((await post('/api/caixa/payment-proofs', { targetType: 'ORDER', targetId: other.id, dataUrl: proofData })).status, 400);
+});
+
+test('paid bank response cannot finalize unavailable reserved stock; retry completes once after stock correction', async () => {
+  const s = setup();
+  const order = await s.service.create({ ...s.input, paymentMethod: 'PIX' }, seller);
+  const endToEndId = 'E' + '7'.repeat(31);
+  s.pix.checkReceivedPayment = async () => ({ isPaid: true, raw: { txid: order.pixData.txid, endToEndId, chave: 'pix-key', valor: '20.00', devolucoes: [] } });
+  const product = s.base.inMemoryProducts.get('plant');
+  s.base.inMemoryProducts.set('plant', { ...product, stockQuantity: 1 });
+  await assert.rejects(s.service.handlePix(order.pixData.txid, endToEndId), /insuficiente/);
+  assert.equal((await s.repository.read('orders', order.id)).completedAt, undefined);
+  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 2);
+  s.base.inMemoryProducts.set('plant', product);
+  await s.service.handlePix(order.pixData.txid, endToEndId);
+  await s.service.handlePix(order.pixData.txid, endToEndId);
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
+  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 0);
+});
+
+
+test('pending WhatsApp charge is skipped after expiration instead of sending a cancelled QR', async () => {
+  const s = setup();
+  s.whatsapp.sendImageBuffer = async () => { throw new Error('offline'); };
+  const order = await s.service.create({ ...s.input, paymentMethod: 'PIX', customerId: 'customer' }, seller);
+  await s.repository.transaction(async tx => tx.set('orders', order.id, { ...await tx.get('orders', order.id), pixExpiresAt: new Date(Date.now() - 1000).toISOString() }));
+  await s.service.expirePixOrder(order.id);
+  let sent = false;
+  s.whatsapp.sendImageBuffer = async () => { sent = true; return { messages: [{ id: 'image' }] }; };
+  await s.repository.updateMessage(`${order.id}-receipt`, { nextAttemptAt: 0 });
+  await s.service.retryMessages();
+  assert.equal(sent, false);
+  assert.equal((await s.repository.read('pdv_outbox', `${order.id}-receipt`)).status, 'SKIPPED');
+  assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
+  assert.equal(s.base.inMemoryProducts.get('plant').reservedQuantity, 0);
+});
+
+test('concurrent Sicredi requests share authentication and recover after token failure', async () => {
+  let calls = 0;
+  const client = new SicrediPixClient({ clientId: 'id', clientSecret: 'secret', certificate: 'cert', privateKey: 'key', pixKey: 'key', request: async () => {
+    calls++;
+    await new Promise(resolve => setTimeout(resolve, 5));
+    if (calls === 1) throw new Error('temporarily unavailable');
+    return { access_token: 'test-token', expires_in: 3600 };
+  } });
+  const failed = await Promise.allSettled(Array.from({ length: 10 }, () => client.getAccessToken()));
+  assert.ok(failed.every(result => result.status === 'rejected'));
+  assert.equal(calls, 1);
+  assert.deepEqual(await Promise.all(Array.from({ length: 10 }, () => client.getAccessToken())), Array(10).fill('test-token'));
+  assert.equal(calls, 2);
+  assert.equal(await client.getAccessToken(), 'test-token');
+  assert.equal(calls, 2);
+});
+
+
+test('cashier PDF and WhatsApp snapshot preserve role isolation and never close or change sales', async t => {
+  const s = setup();
+  const reportAdmin = { ...admin, pin: '9999', active: true };
+  s.base.inMemoryUsers.set(admin.id, reportAdmin);
+  const documents = [];
+  s.whatsapp.sendDocumentBuffer = async (phone, buffer, filename, caption) => {
+    documents.push({ phone, buffer, filename, caption }); return { messages: [{ id: 'wamid.report' }] };
+  };
+  const app = createApp({ messageService: { firestoreRepo: s.base, whatsappClient: s.whatsapp }, sicrediClient: s.pix });
+  const server = app.listen(0); t.after(() => server.close()); const origin = `http://127.0.0.1:${server.address().port}`;
+  const post = (path, body, cookie = '') => fetch(origin + path, { method: 'POST', headers: { 'Content-Type': 'application/json', cookie }, body: JSON.stringify(body) });
+  const login = async user => (await post('/api/admin/auth/login', { userId: user.id, pin: user.pin })).headers.get('set-cookie').split(';')[0];
+  const first = await s.service.create({ ...s.input, requestId: randomUUID() }, cashier);
+  await s.repository.receive(first.id, actor(cashier));
+  const other = await s.service.create({ ...s.input, requestId: randomUUID(), items: [{ productId: 'plant', quantity: 1 }] }, secondCashier);
+  await s.repository.receive(other.id, actor(secondCashier));
+  const cashierCookie = await login(cashier);
+  const snapshot = await (await fetch(origin + '/api/caixa/orders', { headers: { cookie: cashierCookie } })).json();
+  assert.equal(snapshot.closing.totalReceived, 20);
+  assert.deepEqual(snapshot.cashierOrderIds, [first.id]);
+  const report = await fetch(origin + '/api/caixa/report.pdf?operator=admin', { headers: { cookie: cashierCookie } });
+  assert.equal(report.status, 200); assert.match(report.headers.get('content-type'), /application\/pdf/);
+  assert.match(report.headers.get('cache-control'), /no-store/);
+  assert.equal(Buffer.from(await report.arrayBuffer()).subarray(0, 5).toString(), '%PDF-');
+  const adminCookie = await login(reportAdmin);
+  const general = await (await fetch(origin + '/api/caixa/orders', { headers: { cookie: adminCookie } })).json();
+  assert.equal(general.closing.totalReceived, 30); assert.equal(general.cashierOrderIds.length, 2);
+  const before = JSON.stringify(await s.repository.read('orders', first.id));
+  assert.equal((await post('/api/caixa/report/send-whatsapp', {}, cashierCookie)).status, 200);
+  assert.equal(documents.length, 1); assert.equal(documents[0].buffer.subarray(0, 5).toString(), '%PDF-');
+  assert.match(documents[0].caption, new RegExp(cashier.name));
+  assert.equal(JSON.stringify(await s.repository.read('orders', first.id)), before);
+  const sellerCookie = await login(seller);
+  assert.equal((await fetch(origin + '/api/caixa/report.pdf', { headers: { cookie: sellerCookie } })).status, 403);
+  assert.equal((await post('/api/caixa/report/send-whatsapp', {}, sellerCookie)).status, 403);
+  s.whatsapp.sendDocumentBuffer = async () => ({ mock: true });
+  assert.equal((await post('/api/caixa/report/send-whatsapp', {}, cashierCookie)).status, 502);
 });

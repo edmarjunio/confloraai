@@ -186,12 +186,11 @@ function existingConfig(products, saved, settings = { stockControlEnabled: true 
   };
   // Preserve the checkout settings already published by the existing storefront.
   config.checkout.pix = {
-    key: process.env.STORE_PIX_KEY || "64999351616",
-    recipientName: config.identity.name,
+    ...require("../orders/pix-mode").manualPixSettings({ required: false }),
   };
   config.checkout.contactPhone =
-    process.env.OWNER_WHATSAPP_NUMBER || "5564999351616";
-  config.checkout.enabledPayments = ["PIX", "CASH", "CREDITO", "DEBITO", "FIADO"];
+    process.env.STORE_NOTIFICATION_PHONE || process.env.OWNER_WHATSAPP_NUMBER || "5564999351616";
+  config.checkout.enabledPayments = [...(config.checkout.pix.configured ? ["PIX"] : []), "CASH", "CREDITO", "DEBITO", "FIADO"];
   config.checkout.delivery = {
     enabled: true,
     label: "Entrega",
@@ -201,7 +200,7 @@ function existingConfig(products, saved, settings = { stockControlEnabled: true 
   config.checkout.pickup.label = "Retirada na loja";
   return config;
 }
-function installExistingStore(app, { repository, assistant }) {
+function installExistingStore(app, { repository, assistant, catalog }) {
   const readSettings = () => readStoreSettings(repository);
   const admin = (req) =>
     ensure(
@@ -276,9 +275,10 @@ function installExistingStore(app, { repository, assistant }) {
       .type("application/javascript")
       .send(script);
   });
-  async function products() {
-    let records = await repository.getAllProducts();
-    if (repository.getSalesOrders) {
+  async function products({ advisory = false } = {}) {
+    if (advisory && catalog) await catalog.refreshCatalog();
+    let records = advisory && Array.isArray(catalog?.rawItems) ? catalog.rawItems : await repository.getAllProducts();
+    if (!advisory && repository.getSalesOrders) {
       try {
         records = rankProductSales(records, await repository.getSalesOrders());
       } catch {
@@ -341,9 +341,9 @@ function installExistingStore(app, { repository, assistant }) {
       next(error);
     }
   });
-  app.post("/api/storefront/assistant", async (req, res, next) => {
+  app.post(["/api/storefront/assistant", "/api/chat"], async (req, res, next) => {
     try {
-      const allItems = await products();
+      const allItems = await products({ advisory: true });
       const items = allItems.filter(
         (p) => p.isAvailable && p.status !== "INATIVO",
       );
@@ -362,8 +362,7 @@ function installExistingStore(app, { repository, assistant }) {
         "Use o guia de categorias: a consultoria por IA está desativada nesta loja.",
         409,
       );
-      res.json(
-        await assistant.recommend(
+      const result = await assistant.recommend(
           config,
           saved?.assistant || {
             persona: "",
@@ -372,8 +371,8 @@ function installExistingStore(app, { repository, assistant }) {
           },
           items,
           req.body,
-        ),
-      );
+        );
+      res.json(req.path === "/api/chat" ? { reply: result.message } : result);
     } catch (error) {
       next(error);
     }
@@ -653,7 +652,7 @@ async function readStoreSettings(repository) {
         err.message?.includes("PERMISSION_DENIED") ||
         err.message?.includes("Missing or insufficient")
       ) {
-        repository._firestoreClientDisabled = true;
+        throw Object.assign(new Error("Configurações da loja indisponíveis."), { status: 503 });
       }
     }
   }

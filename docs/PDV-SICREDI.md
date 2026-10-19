@@ -59,7 +59,7 @@ A baixa de estoque é exatamente uma vez por pedido. Mensagens externas têm ent
 ## Validação
 
 - `npm run test:pdv`
-- `npm run test:pix` (inclui catálogo/PDV Sicredi, compatibilidade legada Mercado Pago e integridade do estoque)
+- `npm run test:pix` (inclui catálogo/PDV Sicredi, integridade do estoque)
 - `npx playwright test test/browser/pdv.spec.js` (pode usar `CHROMIUM_PATH` para o navegador instalado).
 - Testes de transação usam um double que recusa leituras após escritas e simula falha de commit. Não substituem homologação no Firestore e Sicredi reais.
 

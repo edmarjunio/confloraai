@@ -5,26 +5,13 @@ function renderAdminGerencialHtml() {
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <script>
-    (function() {
-      try {
-        var _fetch = typeof window !== 'undefined' ? window.fetch : null;
-        var _current = _fetch ? _fetch.bind(window) : null;
-        var desc = {
-          get: function() { return _current; },
-          set: function(fn) { _current = fn; },
-          configurable: true,
-          enumerable: true
-        };
-        try { Object.defineProperty(window, 'fetch', desc); } catch (_) {}
-        try { if (typeof Window !== 'undefined' && Window.prototype) Object.defineProperty(Window.prototype, 'fetch', desc); } catch (_) {}
-        try { if (typeof window !== 'undefined' && window.__proto__) Object.defineProperty(window.__proto__, 'fetch', desc); } catch (_) {}
-      } catch (_) {}
-    })();
-  </script>
+  <script src="/store-assets/error-monitor.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Conflora — Fechamento diário</title>
-  <link rel="stylesheet" href="/store-assets/site-header.css">
+  <script src="/store-assets/tab-session.js"></script>
+  <link rel="stylesheet" href="/store-assets/site-header.css?v=topbar-1">
+  <script src="/store-assets/site-navigation.js?v=1"></script>
+  <script src="/store-assets/topbar.js?v=1"></script>
   <link rel="stylesheet" href="/store-assets/design-system.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -469,28 +456,122 @@ function renderAdminGerencialHtml() {
       .toast { bottom: calc(14px + env(safe-area-inset-bottom)); max-width: calc(100vw - 24px); text-align: center; }
       button, .btn-action { min-height: 42px; }
     }
+    /* Executive overview: numbers first, operational detail on demand. */
+    .main-container.cf-work-body { max-width:1600px; padding-top:28px; padding-bottom:40px; }
+    .executive-heading { margin-bottom:28px; }
+    .executive-heading p { color:#138441; letter-spacing:.12em; font-size:11px; font-weight:800; margin-bottom:8px; }
+    .executive-heading h1 { font-size:clamp(28px,4vw,40px); letter-spacing:-.04em; margin-bottom:8px; }
+    .executive-heading span { color:var(--muted); font-size:14px; }
+    .period-analytics { padding:24px; margin-bottom:24px; background:white; }
+    .period-analytics h2,.seasonal-panel h2 { font-size:22px; letter-spacing:-.02em; }
+    .period-summary-grid { grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin:22px 0; }
+    .period-metric { padding:22px; border-radius:18px; background:#f5faf6; border:1px solid #e0ebe2; min-width:0; }
+    .period-metric strong { display:block; font-size:clamp(25px,3vw,40px); letter-spacing:-.04em; font-variant-numeric:tabular-nums; line-height:1.2; margin:10px 0; overflow-wrap:anywhere; }
+    .period-metric:first-child { background:#123c26; color:white; }
+    .period-metric:first-child :is(span,strong,small) { color:white; }
+    .period-metric small { display:block; line-height:1.5; }
+    .details-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .details-grid > * { min-width:0; }
+    .product-rankings { margin-top:20px; }
+    .product-rankings h3,.period-analytics h3 { font-size:15px; margin-bottom:16px; }
+    .product-number-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:16px; padding:12px 0; border-bottom:1px solid #edf1ee; font-size:13px; }
+    .product-number-row span { overflow-wrap:anywhere; }
+    .product-number-row strong { font-variant-numeric:tabular-nums; text-align:right; white-space:nowrap; }
+    .year-highlight { display:grid; gap:8px; margin:20px 0; padding:24px; border-radius:18px; background:#f1f9f3; }
+    .year-highlight strong { font-size:clamp(30px,5vw,48px); color:#123c26; letter-spacing:-.04em; font-variant-numeric:tabular-nums; }
+    .seasonal-mobile-hint { display:none; }
+    .period-evolution > summary { font-weight:700; cursor:pointer; }
+    .period-evolution[open] > summary { margin-bottom:20px; }
+    .seasonal-scroll { width:100%; overflow-x:auto; margin-top:20px; }
+    .seasonal-table { width:100%; border-collapse:collapse; font-size:13px; }
+    .seasonal-table :is(th,td) { padding:16px 12px; border-bottom:1px solid #e7eee9; text-align:left; vertical-align:top; }
+    .seasonal-table th { color:#65756b; font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
+    .seasonal-table td:nth-child(2) { color:#123c26; font-weight:800; white-space:nowrap; }
+    .seasonal-table td:first-child { text-transform:capitalize; font-weight:700; }
+    .seasonal-panel { margin-bottom:24px; padding:24px; }
+    .daily-closing { border:1px solid #dce6df; border-radius:18px; padding:20px; background:white; }
+    .daily-closing > summary { cursor:pointer; font-size:16px; font-weight:800; padding:6px 0; }
+    .daily-closing[open] > summary { margin-bottom:24px; }
+    .period-date input { min-height:42px; border-radius:12px; border:1px solid #dbe5df; padding:8px 12px; }
+    .period-controls { align-items:end; gap:12px; }
+    @media(max-width:700px) {
+      .period-summary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+      .period-metric { padding:14px; }
+      .period-metric strong { font-size:25px; }
+      .period-analytics,.seasonal-panel,.daily-closing { padding:16px; }
+      .details-grid { grid-template-columns:minmax(0,1fr); }
+      .product-number-row { grid-template-columns:minmax(0,1fr); gap:5px; }
+      .product-number-row strong { text-align:left; }
+      .seasonal-mobile-hint { display:block; }
+      .seasonal-table { min-width:720px; }
+      .period-row { min-width:0; }
+      .period-presets { flex-wrap:wrap; }
+    }
   </style>
 </head>
 <body>
 
   <!-- CABEÇALHO -->
-  <header class="conflora-site-header">
-    <a href="/" class="conflora-site-brand" aria-label="Conflora — página inicial">
-      <img src="/store-assets/brands/conflora-logo.png" alt="" />
-      <span><strong>Conflora Horta e Viveiro</strong><small>Mineiros - GO</small></span>
-    </a>
-    <span class="conflora-site-header__context">Fechamento diário</span>
-
-    <div class="header-actions">
-      <a href="/caixa" class="btn-action">Ir ao Caixa / PDV</a>
-      <a href="/admin" class="btn-action">Admin completo</a>
-      <button id="btnSendReport" class="btn-action primary" onclick="sendDailyReport()" hidden>Enviar para Júnior</button>
-    </div>
-  </header>
+  <conflora-topbar></conflora-topbar>
+  <nav class="cf-work-actions" aria-label="Opções do painel gerencial">
+    <span>Painel Gerencial</span>
+    <button type="button" class="cf-back-button" data-site-back>← Voltar</button>
+    <button id="btnSendReport" class="btn-action primary" onclick="sendDailyReport()" hidden>Enviar para Júnior</button>
+  </nav>
 
   <!-- CONTEÚDO PRINCIPAL -->
-  <div class="main-container">
+  <div class="main-container cf-work-body">
 
+    <section class="executive-heading"><div><p>GESTÃO DA CONFLORA</p><h1>Resultados da loja</h1><span>Vendas, recebimentos e produtos. Os números que ajudam a decidir.</span></div></section>
+    <section class="panel-card period-analytics" aria-labelledby="periodAnalyticsTitle">
+      <div class="panel-header">
+        <h2 class="panel-title" id="periodAnalyticsTitle">Quanto vendemos?</h2>
+        <span class="panel-tag">Vendas do caixa e do catálogo</span>
+      </div>
+      <div class="period-controls">
+        <label class="period-date">Escolher mês<input type="month" id="selectedMonth" aria-label="Mês das vendas" onchange="selectReportMonth()"></label>
+        <div class="period-presets" role="group" aria-label="Períodos rápidos">
+          <button type="button" class="btn-action" onclick="setPeriodPreset('week')">7 dias</button>
+          <button type="button" class="btn-action" onclick="setPeriodPreset('month')">Este mês</button>
+          <button type="button" class="btn-action" onclick="setPeriodPreset('year')">Este ano</button>
+        </div>
+        <label class="period-date">De<input type="date" id="periodFrom" aria-label="Data inicial do acompanhamento" onchange="periodComparisonMode='previous';loadPeriodMetrics()" /></label>
+        <label class="period-date">Até<input type="date" id="periodTo" aria-label="Data final do acompanhamento" onchange="periodComparisonMode='previous';loadPeriodMetrics()" /></label>
+        <button type="button" id="periodRefresh" class="btn-action primary period-refresh" onclick="loadPeriodMetrics()">Atualizar período</button>
+      </div>
+      <p id="periodStatus" class="period-empty" role="status">Selecione um período para carregar as vendas.</p>
+      <div class="period-summary-grid">
+        <article class="period-metric"><span>Vendas registradas</span><strong id="periodSales">R$ 0,00</strong><small id="periodSalesChange">—</small></article>
+        <article class="period-metric"><span>Dinheiro recebido</span><strong id="periodReceived">R$ 0,00</strong><small id="periodReceivedChange">—</small></article>
+        <article class="period-metric"><span>Vendas no fiado</span><strong id="periodOnAccount">R$ 0,00</strong><small id="periodOnAccountChange">—</small></article>
+        <article class="period-metric"><span>Crédito antecipado recebido</span><strong id="periodAdvanceCredit">R$ 0,00</strong><small id="periodAdvanceCreditChange">—</small></article>
+        <article class="period-metric"><span>Vendas</span><strong id="periodOrders">0</strong><small id="periodOrdersChange">—</small></article>
+        <article class="period-metric"><span>Ticket médio</span><strong id="periodTicket">R$ 0,00</strong><small id="periodTicketChange">—</small></article>
+      </div>
+      <div class="details-grid">
+        <section class="period-insight"><div class="panel-title">Dia da semana com maior faturamento</div><strong id="periodStrongestWeekday">—</strong><p id="periodWeekdayNote" class="period-empty">Compara os dias da semana no período selecionado.</p></section>
+        <section class="panel-card"><div class="panel-title">Vendas e recebimentos por forma</div><div id="periodPayments" class="period-list"><span class="period-empty">Aguardando dados…</span></div></section>
+      </div>
+    <section class="panel-card seasonal-panel" aria-labelledby="seasonalTitle">
+      <div class="panel-header"><div><h2 id="seasonalTitle">O que mais vende em cada mês?</h2><p class="period-empty">Histórico real do ano escolhido. Meses sem registros não indicam previsão de vendas.</p></div><label class="period-date">Ano<input id="seasonalYear" type="number" min="2000" max="2100" aria-label="Ano do histórico mensal" onchange="loadSeasonalMetrics()"></label></div>
+      <div class="year-highlight"><span>Vendas no ano</span><strong id="yearSales">—</strong><small id="yearSalesChange">—</small></div>
+      <p id="seasonalStatus" role="status" class="period-empty"></p>
+      <p class="seasonal-mobile-hint period-empty">Deslize a tabela para o lado para ver os produtos líderes.</p><div class="seasonal-scroll"><table class="seasonal-table"><thead><tr><th>Mês</th><th>Vendas</th><th>Comparação anual</th><th>Líder em quantidade</th><th>Líder em valor</th></tr></thead><tbody id="monthlyLeaders"></tbody></table></div>
+    </section>
+      <h2 class="panel-title">Produtos no período selecionado</h2>
+      <label class="period-date">Unidade do ranking<select id="rankingUnit" aria-label="Unidade do ranking" onchange="if(lastPeriodResult)renderPeriodMetrics(lastPeriodResult)"><option value="all">Todas (medidas diferentes)</option><option value="kg">Quilos</option><option value="un.">Unidades</option></select></label>
+      <p class="period-empty">Margem, perdas e cobertura de estoque: indisponíveis até registrar custos e histórico de disponibilidade. Nenhuma previsão é estimada sem esses dados.</p>
+      <div class="details-grid product-rankings">
+        <section class="panel-card"><h3>Mais vendidos · quantidade</h3><div id="periodProducts" class="period-list"></div></section>
+        <section class="panel-card"><h3>Mais vendidos · valor</h3><div id="periodProductsValue" class="period-list"></div></section>
+        <section class="panel-card"><h3>Menos vendidos · quantidade</h3><div id="periodLeastQuantity" class="period-list"></div></section>
+        <section class="panel-card"><h3>Menos vendidos · valor</h3><div id="periodLeastValue" class="period-list"></div></section>
+      </div>
+      <p id="unsoldProductsNote" class="period-empty"></p>
+      <p class="period-empty">Quantidade respeita a unidade de cada produto. Quilos e unidades não representam o mesmo volume. Valor dos produtos considera descontos e exclui entrega.</p>
+      <details class="panel-card period-evolution"><summary>Ver evolução das vendas por dia/semana</summary><div id="periodDaily" class="period-list"></div></details>
+    </section>
+    <details class="daily-closing" ontoggle="if(this.open)loadExecutiveMetrics()"><summary>Fechamento e detalhes do dia</summary>
     <!-- DATA DO FECHAMENTO -->
     <div class="toolbar">
       <div class="toolbar-right">
@@ -510,39 +591,6 @@ function renderAdminGerencialHtml() {
       </div>
     </div>
 
-    <section class="panel-card period-analytics" aria-labelledby="periodAnalyticsTitle">
-      <div class="panel-header">
-        <div class="panel-title" id="periodAnalyticsTitle">Acompanhamento de vendas</div>
-        <span class="panel-tag">Vendas do caixa e do catálogo</span>
-      </div>
-      <div class="period-controls">
-        <div class="period-presets" role="group" aria-label="Períodos rápidos">
-          <button type="button" class="btn-action" onclick="setPeriodPreset('week')">7 dias</button>
-          <button type="button" class="btn-action" onclick="setPeriodPreset('month')">Este mês</button>
-          <button type="button" class="btn-action" onclick="setPeriodPreset('year')">Este ano</button>
-        </div>
-        <label class="period-date">De<input type="date" id="periodFrom" aria-label="Data inicial do acompanhamento" onchange="loadPeriodMetrics()" /></label>
-        <label class="period-date">Até<input type="date" id="periodTo" aria-label="Data final do acompanhamento" onchange="loadPeriodMetrics()" /></label>
-        <button type="button" id="periodRefresh" class="btn-action primary period-refresh" onclick="loadPeriodMetrics()">Atualizar período</button>
-      </div>
-      <p id="periodStatus" class="period-empty" role="status">Selecione um período para carregar as vendas.</p>
-      <div class="period-summary-grid">
-        <article class="period-metric"><span>Vendas registradas</span><strong id="periodSales">R$ 0,00</strong><small id="periodSalesChange">—</small></article>
-        <article class="period-metric"><span>Dinheiro recebido</span><strong id="periodReceived">R$ 0,00</strong><small id="periodReceivedChange">—</small></article>
-        <article class="period-metric"><span>Fiado a receber</span><strong id="periodOnAccount">R$ 0,00</strong><small id="periodOnAccountChange">—</small></article>
-        <article class="period-metric"><span>Crédito antecipado recebido</span><strong id="periodAdvanceCredit">R$ 0,00</strong><small id="periodAdvanceCreditChange">—</small></article>
-        <article class="period-metric"><span>Vendas</span><strong id="periodOrders">0</strong><small id="periodOrdersChange">—</small></article>
-        <article class="period-metric"><span>Ticket médio</span><strong id="periodTicket">R$ 0,00</strong><small id="periodTicketChange">—</small></article>
-      </div>
-      <div class="details-grid">
-        <section class="period-insight"><div class="panel-title">Dia da semana com maior faturamento</div><strong id="periodStrongestWeekday">—</strong><p id="periodWeekdayNote" class="period-empty">Compara os dias da semana no período selecionado.</p></section>
-        <section class="panel-card"><div class="panel-title">Vendas e recebimentos por forma</div><div id="periodPayments" class="period-list"><span class="period-empty">Aguardando dados…</span></div></section>
-      </div>
-      <div class="details-grid">
-        <section class="panel-card"><div class="panel-title">Produtos mais vendidos</div><div id="periodProducts" class="period-list"><span class="period-empty">Aguardando dados…</span></div></section>
-        <section class="panel-card"><div class="panel-title">Movimento por dia</div><div id="periodDaily" class="period-list"><span class="period-empty">Aguardando dados…</span></div></section>
-      </div>
-    </section>
 
     <!-- INDICADORES DO DIA -->
     <div class="summary-grid">
@@ -648,25 +696,32 @@ function renderAdminGerencialHtml() {
         <div class="ranking-list" id="topProductsValue"><div class="metric-empty">Carregando produtos...</div></div>
       </div>
     </div>
+    </details>
   </div>
 
   <div id="toast" class="toast hidden"></div>
 
   <!-- Interações do painel -->
   <script>
+    let periodComparisonMode = 'month';
+    let periodRequestVersion = 0;
+    let lastPeriodResult = null;
+    let seasonalRequestVersion = 0;
     document.addEventListener('DOMContentLoaded', initializeDashboard);
     document.addEventListener('keydown', handleDashboardShortcut);
 
     async function initializeDashboard() {
       document.getElementById('reportDate').value = getBusinessToday();
       setPeriodPreset('month', false);
+      document.getElementById('selectedMonth').value = getBusinessToday().slice(0,7);
+      document.getElementById('seasonalYear').value = getBusinessToday().slice(0,4);
       updateDateButtonLabel();
       try {
-        const response = await fetch('/api/auth/me');
+        const response = await window.ConfloraSession.apiFetch('/api/auth/me');
         const data = await response.json();
         if (response.ok && data.user && data.user.role === 'ADMIN') {
           document.getElementById('btnSendReport').hidden = false;
-          await Promise.all([loadExecutiveMetrics(), loadPeriodMetrics()]);
+          await Promise.all([loadPeriodMetrics(), loadSeasonalMetrics()]);
           return;
         }
         showToast('Painel disponível somente para ADMIN.');
@@ -696,6 +751,8 @@ function renderAdminGerencialHtml() {
     }
 
     function setPeriodPreset(period, refresh = true) {
+      periodComparisonMode = period === 'week' ? 'previous' : period;
+      document.querySelectorAll('.period-presets button').forEach(button => button.classList.toggle('primary', button.getAttribute('onclick').includes("'" + period + "'")));
       const today = getBusinessToday();
       const [year, month] = today.split('-');
       const from = period === 'week' ? addCalendarDays(today, -6)
@@ -717,6 +774,7 @@ function renderAdminGerencialHtml() {
     }
 
     function renderPeriodMetrics(result) {
+      lastPeriodResult = result;
       const current = result.current || {};
       const comparison = result.comparison || {};
       document.getElementById('periodSales').textContent = formatCurrency(current.sales);
@@ -753,11 +811,14 @@ function renderAdminGerencialHtml() {
         ? paymentRows.map((payment) => '<div class="period-row"><span class="period-row-label">' + payment.label + '</span><span class="period-row-label">Vendas ' + formatCurrency(payment.sales) + ' · recebimentos ' + formatCurrency(payment.receipts) + '</span><strong>' + (payment.orderCount || 0) + ' venda(s)</strong></div>').join('')
         : '<span class="period-empty">Nenhuma venda ou recebimento no período.</span>';
 
-      const products = current.topProducts || [];
-      const maxQuantity = Math.max(1, ...products.map((product) => Number(product.quantity || 0)));
-      document.getElementById('periodProducts').innerHTML = products.length
-        ? products.map((product) => '<div class="period-row"><span class="period-row-label" title="' + escapeHtml(product.name) + '">' + escapeHtml(product.name) + '</span><span class="period-bar-track"><span class="period-bar-fill" style="display:block;width:' + Math.min(100, Number(product.quantity || 0) / maxQuantity * 100) + '%"></span></span><strong>' + product.quantity + ' un. · ' + formatCurrency(product.revenue) + '</strong></div>').join('')
-        : '<span class="period-empty">Nenhum produto vendido neste período.</span>';
+      const allRankings = current.rankings || {};
+      const unit = document.getElementById('rankingUnit').value;
+      const rankings = unit === 'all' ? allRankings : allRankings.byUnit?.[unit] || {};
+      renderPeriodProducts('periodProducts', rankings.mostByQuantity || current.topProducts || []);
+      renderPeriodProducts('periodProductsValue', rankings.mostByRevenue || []);
+      renderPeriodProducts('periodLeastQuantity', rankings.leastByQuantity || []);
+      renderPeriodProducts('periodLeastValue', rankings.leastByRevenue || []);
+      document.getElementById('unsoldProductsNote').textContent = (rankings.unsoldCount || 0) + ' produto(s) ativo(s) sem venda neste período. ' + (rankings.unsoldWithStock || 0) + ' com estoque; ' + (rankings.unsoldWithoutStock || 0) + ' sem estoque. Saldo atual não informa a disponibilidade histórica.';
 
       let series = Array.isArray(current.daily) ? current.daily : [];
       if (series.length > 31) {
@@ -790,7 +851,59 @@ function renderAdminGerencialHtml() {
         : '<span class="period-empty">Sem dados para exibir.</span>';
     }
 
+    function renderPeriodProducts(id, products) {
+      const host = document.getElementById(id); host.replaceChildren();
+      if (!products.length) { host.textContent = 'Nenhum produto neste período.'; return; }
+      products.forEach((product, index) => {
+        const row = document.createElement('div'); row.className = 'product-number-row';
+        const name = document.createElement('span'); name.textContent = (index + 1) + '. ' + product.name;
+        const numbers = document.createElement('strong'); numbers.textContent = Number(product.quantity).toLocaleString('pt-BR', { maximumFractionDigits: 3 }) + ' ' + (product.unit || 'un.') + ' · ' + formatCurrency(product.revenue);
+        row.append(name, numbers); host.append(row);
+      });
+    }
+    function selectReportMonth() {
+      const month = document.getElementById('selectedMonth').value;
+      if (!/^\\d{4}-\\d{2}$/.test(month)) return;
+      const [year, number] = month.split('-').map(Number);
+      const last = new Date(Date.UTC(year, number, 0)).toISOString().slice(0,10);
+      document.getElementById('periodFrom').value = month + '-01';
+      document.getElementById('periodTo').value = month === getBusinessToday().slice(0,7) ? getBusinessToday() : last;
+      periodComparisonMode = 'month'; loadPeriodMetrics();
+    }
+    async function loadSeasonalMetrics() {
+      const version = ++seasonalRequestVersion;
+      const year = Number(document.getElementById('seasonalYear').value);
+      const status = document.getElementById('seasonalStatus');
+      if (!Number.isInteger(year) || year < 2000 || year > 2100) { status.textContent = 'Escolha um ano entre 2000 e 2100.'; return; }
+      status.textContent = 'Carregando histórico mensal…';
+      try {
+        const today = getBusinessToday();
+        const to = year === Number(today.slice(0,4)) ? today : year + '-12-31';
+        const response = await window.ConfloraSession.apiFetch('/api/admin/executive-period-metrics?from=' + year + '-01-01&to=' + to + '&comparisonMode=year');
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Não foi possível carregar o histórico.');
+        if (version !== seasonalRequestVersion) return;
+        document.getElementById('yearSales').textContent = formatCurrency(result.current.sales);
+        document.getElementById('yearSalesChange').textContent = comparisonText(result.comparison.sales);
+        const current = new Map((result.current.monthly || []).map(row => [row.month, row]));
+        const previous = new Map((result.previous.monthly || []).map(row => [row.month.slice(5), row]));
+        const host = document.getElementById('monthlyLeaders'); host.replaceChildren();
+        for (let number = 1; number <= 12; number++) {
+          const key = year + '-' + String(number).padStart(2,'0');
+          const month = current.get(key); const before = previous.get(key.slice(5));
+          const quantity = month?.rankings.mostByQuantity[0]; const value = month?.rankings.mostByRevenue[0];
+          const change = before?.sales ? ((Number(month?.sales || 0) - before.sales) / before.sales * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '% vs ' + (year - 1) : 'Sem base anterior';
+          const label = new Date(Date.UTC(year, number - 1, 1)).toLocaleDateString('pt-BR', { month: 'long', timeZone:'UTC' });
+          const values = [label, formatCurrency(month?.sales || 0), key > today.slice(0,7) ? 'Ainda não realizado' : change, quantity ? quantity.name + ' · ' + quantity.quantity.toLocaleString('pt-BR') + ' ' + quantity.unit : 'Sem vendas', value ? value.name + ' · ' + formatCurrency(value.revenue) : 'Sem vendas'];
+          const row = document.createElement('tr');
+          values.forEach(text => { const cell = document.createElement('td'); cell.textContent = text; row.append(cell); }); host.append(row);
+        }
+        status.textContent = 'Comparação com o ano anterior até a mesma data. Meses em andamento são parciais; valores de vendas incluem frete, ranking de produtos não.';
+      } catch (error) { if (version === seasonalRequestVersion) status.textContent = error.message; }
+    }
+
     async function loadPeriodMetrics() {
+      const requestVersion = ++periodRequestVersion;
       const from = document.getElementById('periodFrom').value;
       const to = document.getElementById('periodTo').value;
       if (!from || !to || from > to) {
@@ -801,14 +914,14 @@ function renderAdminGerencialHtml() {
       button.disabled = true;
       document.getElementById('periodStatus').textContent = 'Carregando vendas e recebimentos…';
       try {
-        const response = await fetch('/api/admin/executive-period-metrics?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to));
+        const response = await window.ConfloraSession.apiFetch('/api/admin/executive-period-metrics?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to) + '&comparisonMode=' + periodComparisonMode);
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Não foi possível carregar o período.');
-        renderPeriodMetrics(data);
+        if (requestVersion === periodRequestVersion) renderPeriodMetrics(data);
       } catch (error) {
-        document.getElementById('periodStatus').textContent = error.message;
+        if (requestVersion === periodRequestVersion) document.getElementById('periodStatus').textContent = error.message;
       } finally {
-        button.disabled = false;
+        if (requestVersion === periodRequestVersion) button.disabled = false;
       }
     }
 
@@ -870,7 +983,7 @@ function renderAdminGerencialHtml() {
       refreshButton.disabled = true;
       refreshButton.classList.add('is-loading');
       try {
-        const res = await fetch('/api/admin/executive-metrics?date=' + encodeURIComponent(date));
+        const res = await window.ConfloraSession.apiFetch('/api/admin/executive-metrics?date=' + encodeURIComponent(date));
         if (res.status === 401 || res.status === 403) {
           showToast('Acesso restrito ao Administrador.');
           return;
@@ -955,7 +1068,7 @@ function renderAdminGerencialHtml() {
       button.disabled = true;
       button.innerHTML = '<span class="loading-spinner"></span> Enviando relatório...';
       try {
-        const response = await fetch('/api/admin/executive-metrics/send-whatsapp', {
+        const response = await window.ConfloraSession.apiFetch('/api/admin/executive-metrics/send-whatsapp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ date: document.getElementById('reportDate').value }),
@@ -979,10 +1092,10 @@ function renderAdminGerencialHtml() {
       button.disabled = true;
       button.textContent = 'Registrando fechamento...';
       try {
-        const response = await fetch('/api/admin/cashier/close-day', {
+        const response = await window.ConfloraSession.apiFetch('/api/admin/cashier/close-day', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ date }),
+          body: JSON.stringify({ date, requestId: sessionStorage.getItem('closing:' + date) || (() => { const id = crypto.randomUUID(); sessionStorage.setItem('closing:' + date, id); return id; })() }),
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Não foi possível registrar o fechamento.');

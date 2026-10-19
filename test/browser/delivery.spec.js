@@ -34,14 +34,30 @@ test('driver receives new orders live without dispatch, accepts an order, sees r
   await dialog.getByRole('button', { name: 'Ocultar mapa da rota', exact: true }).click();
   await expect(dialog.locator('.cf-receipt')).toContainText('Planta Teste');
   await expect(dialog.locator('.cf-receipt')).not.toContainText('*');
-  await dialog.getByRole('button', { name: 'Separar produtos e assumir entrega', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Assumir e separar pedido', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'PEDIDOS EM SEPARAÇÃO', exact: true })).toContainText('Cliente Rota E2E');
+  await expect(dialog.getByRole('heading', { name: 'Receber na entrega', exact: true })).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Saí da horta · iniciar entrega', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'EM ROTA', exact: true })).toContainText('Saiu da horta há');
   await expect(dialog.getByRole('heading', { name: 'Receber na entrega', exact: true })).toBeVisible();
+  await dialog.getByLabel('Quilômetros percorridos (opcional)').fill('2.5');
   await dialog.getByRole('button', { name: '💵 Dinheiro', exact: true }).click();
   await dialog.getByRole('button', { name: 'Confirmar pagamento e finalizar', exact: true }).click();
   await expect(dialog).toContainText('Pago / finalizado');
-  await expect(page.getByRole('region', { name: 'ENTREGUE', exact: true })).toContainText('Cliente Rota E2E');
+  await expect(page.getByRole('region', { name: 'PEDIDOS FINALIZADOS/ENTREGUE', exact: true })).toContainText('Cliente Rota E2E');
+  await expect(page.getByRole('region', { name: 'PEDIDOS FINALIZADOS/ENTREGUE', exact: true })).toContainText('Km percorridos informados: 2,5 km');
   await page.screenshot({ path: 'test-results/delivery-mobile-finished.png' });
   expect(await page.locator('html').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+  await dialog.getByRole('button', { name: 'Fechar', exact: true }).click();
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.getByText('Desempenho dos entregadores', { exact: true }).click();
+  await expect(page.locator('main')).toContainText('Km informados: 2,5 km');
+  const action = page.getByRole('button', { name: 'Abrir recibo e detalhes da comanda ' + order.ticketNumber });
+  await action.hover();
+  await expect(action).toHaveCSS('box-shadow', 'none');
+  await expect(action).toHaveCSS('transform', 'none');
+  await expect(action.locator('..')).not.toHaveCSS('box-shadow', 'none');
+  await page.screenshot({ path: 'test-results/delivery-team-board-desktop.png', fullPage: true });
 });
 
 test('customer selects delivery pin using address search and GPS without requiring email', async ({ page, context }) => {
@@ -73,4 +89,59 @@ test('delivery map controls stay visible without a configured key and disappear 
   await page.locator('[name=address]').fill('Rua das Flores, 20, Centro');
   await page.locator('input[name=fulfillment][value=pickup]').check();
   await expect(picker).toBeHidden();
+});
+
+
+test('all drivers follow separation and routes live, while only the assigned driver can act', async ({ page, browser }) => {
+  const operator = await browser.newContext({ baseURL: 'http://127.0.0.1:8099' });
+  const observerId = 'driver-observer-' + randomUUID().slice(0, 8);
+  try {
+    expect((await operator.request.post('/api/admin/auth/login', { data: { userId: 'usr-edmar', pin: '1234' } })).ok()).toBe(true);
+    expect((await operator.request.post('/api/admin/users', { data: { id: observerId, name: 'Entregador Observador', role: 'ENTREGADOR', pin: '4545', active: true } })).ok()).toBe(true);
+    const sale = await operator.request.post('/api/caixa/orders', { data: { requestId: randomUUID(), items: [{ productId: 'test-plant', quantity: 1 }], paymentMethod: 'DINHEIRO', orderType: 'DELIVERY', customerName: 'Entrega de outro entregador', customerPhone: '64999991234', deliveryAddress: 'Rua das Flores, 20, Centro, Mineiros GO' } });
+    expect(sale.ok()).toBe(true); const { order } = await sale.json();
+    await page.goto('/caixa'); await page.getByLabel('Usuário').selectOption(observerId); await page.getByLabel('PIN', { exact: true }).fill('4545'); await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+    const open = () => page.getByRole('button', { name: 'Abrir recibo e detalhes da comanda ' + order.ticketNumber });
+    await expect(open()).toBeVisible();
+    expect((await operator.request.post('/api/admin/auth/login', { data: { userId: 'usr-entregador1', pin: '2222' } })).ok()).toBe(true);
+    expect((await operator.request.post(`/api/caixa/deliveries/${order.id}/accept`, { data: {} })).ok()).toBe(true);
+    await expect(page.getByRole('region', { name: 'PEDIDOS EM SEPARAÇÃO', exact: true })).toContainText('Entrega de outro entregador');
+    await open().click(); const dialog = page.getByRole('dialog', { name: `Comanda #${order.ticketNumber}` });
+    await expect(dialog).toContainText('Somente o responsável ou Admin pode alterar');
+    await expect(dialog.getByRole('button', { name: 'Saí da horta · iniciar entrega', exact: true })).toHaveCount(0);
+    await dialog.getByRole('button', { name: 'Fechar', exact: true }).click();
+    expect((await operator.request.post(`/api/caixa/deliveries/${order.id}/start`, { data: { route: { distanceMeters: 3000, durationSeconds: 600 } } })).ok()).toBe(true);
+    await expect(page.getByRole('region', { name: 'EM ROTA', exact: true })).toContainText('Entrega de outro entregador');
+    await expect(page.getByRole('region', { name: 'EM ROTA', exact: true })).toContainText('Saiu da horta há');
+    expect((await operator.request.post(`/api/caixa/deliveries/${order.id}/receive`, { data: { paymentMethod: 'DINHEIRO', receivedAmount: 25 } })).ok()).toBe(true);
+    await expect(page.getByRole('region', { name: 'PEDIDOS FINALIZADOS/ENTREGUE', exact: true })).toContainText('Entrega de outro entregador');
+  } finally { await operator.close(); }
+});
+
+
+test('delivery screen survives unavailable card styling scripts', async ({ page }) => {
+  const cashier = await page.context().browser().newContext({ baseURL: 'http://127.0.0.1:8099' });
+  await cashier.request.post('/api/admin/auth/login', { data: { userId: 'usr-caixa1', pin: '0000' } });
+  const response = await cashier.request.post('/api/caixa/orders', { data: { requestId: randomUUID(), items: [{ productId: 'test-plant', quantity: 1 }], paymentMethod: 'DINHEIRO', deferToCashier: true, orderType: 'DELIVERY', customerName: 'Teste elevação', customerPhone: '64999991234', deliveryAddress: 'Rua Flores, 20, Centro' } });
+  expect(response.ok()).toBe(true);
+  const { order } = await response.json();
+  await cashier.close();
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.route('**/pdv-assets/vendor/styled-components.js', route => route.fulfill({ status: 404, body: '' }));
+  expect((await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-entregador1', pin: '2222' } })).ok()).toBe(true);
+  await page.goto('/caixa');
+  await expect(page.getByRole('heading', { name: '🛵 Entregas', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'AGUARDANDO ENTREGADOR', exact: true })).toBeVisible();
+  await page.route('**/pdv-assets/order-card.styles.js', route => route.fulfill({ status: 404, body: '' }));
+  await page.reload();
+  await expect(page.getByRole('heading', { name: '🛵 Entregas', exact: true })).toBeVisible();
+  const action = page.getByRole('button', { name: 'Abrir recibo e detalhes da comanda ' + order.ticketNumber });
+  await action.hover();
+  await expect(action).toHaveCSS('box-shadow', 'none');
+  await expect(action).toHaveCSS('transform', 'none');
+  await expect(action.locator('..')).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, -2)');
+  await expect(action.locator('..')).toHaveCSS('box-shadow', 'rgba(15, 56, 30, 0.2) 0px 8px 20px 0px');
+  await page.screenshot({ path: 'test-results/card-hover-fallback.png' });
+  expect(errors).toEqual([]);
 });

@@ -11,6 +11,9 @@ class CustomerDebtPixService {
   }
 
   async create(input, user) {
+    if (require('./pix-mode').pixMode() !== 'SICREDI') {
+      throw Object.assign(new Error('A quitação por Pix está sendo conferida pelo caixa. Fale com a loja para registrar o pagamento da dívida.'), { status: 409 });
+    }
     const customer = await this.profile(user);
     const id = requestId(input.requestId);
     const amount = Number(input.amount);

@@ -1,5 +1,6 @@
+const { recordDeliveryEvent, completionMetrics, mergeDriverPerformance } = require('./delivery-metrics');
 const { formatOrderReceipt } = require('./receipt.util');
-const { isDelivery, isDeliverySettled, assertAssignedDelivery, canReceiveOrder } = require('./delivery-policy');
+const { isDelivery, isDeliverySettled, assertAssignedDelivery, canReceiveOrder, canConfirmManualPix } = require('./delivery-policy');
 const { requireManualProof } = require('./payment-proof');
 const { createHash } = require('node:crypto');
 const { remainingStock, validateStockQuantity } = require('./order-integrity');
@@ -11,7 +12,7 @@ const { setInterval, clearInterval } = require('node:timers');
 class PdvRepository {
   constructor(repository) {
     this.repository = repository;
-    this.memory = new Map();
+    this.memory = repository.pdvMemory ||= new Map();
     this.queue = Promise.resolve();
   }
 
@@ -27,7 +28,7 @@ class PdvRepository {
       }));
     }
     if (!repo.isInMemory || repo.firestore) { throw new Error('Firestore indisponível. Operação não registrada.'); }
-    const operation = this.queue.then(async () => {
+    const operation = (repo.pdvQueue || this.queue).then(async () => {
       const collections = { orders: repo.inMemoryOrders, products: repo.inMemoryProducts, customers: repo.inMemoryCustomers, users: repo.inMemoryUsers, discount_approvals: repo.inMemoryDiscountApprovals };
       const writes = [];
       const mapFor = (collection) => {
@@ -55,10 +56,27 @@ class PdvRepository {
       return result;
     });
     this.queue = operation.catch(() => {});
+    repo.pdvQueue = this.queue;
     return operation;
   }
 
   async read(collection, id) { return this.transaction((tx) => tx.get(collection, id)); }
+
+  async expiredPixOrders() {
+    const repo = this.repository;
+    const now = new Date().toISOString();
+    const statuses = ['AWAITING_PAYMENT', 'CREATING_PIX', 'AWAITING_PIX', 'PENDING'];
+    if (repo.firestore && !repo._firestoreClientDisabled) {
+      const snapshot = await repo.firestore.collection('orders')
+        .where('status', 'in', statuses).limit(500).get();
+      return snapshot.docs
+        .map(doc => ({ ...doc.data(), id: doc.id }))
+        .filter(order => Date.parse(order.pixExpiresAt || order.paymentExpiresAt || '') <= Date.parse(now))
+        .slice(0, 100);
+    }
+    if (!repo.isInMemory || repo.firestore) throw new Error('Firestore indisponível.');
+    return [...repo.inMemoryOrders.values()].filter(order => statuses.includes(order.status) && Date.parse(order.pixExpiresAt || order.paymentExpiresAt || '') <= Date.parse(now)).slice(0, 100);
+  }
 
   async list(collection, field, value) {
     const repo = this.repository;
@@ -74,11 +92,16 @@ class PdvRepository {
   watchOpenOrders(onChange, onError = () => {}) {
     const repo = this.repository;
     if (repo.firestore && !repo._firestoreClientDisabled) {
-      return repo.firestore.collection('orders')
-        .where('status', 'in', ['AWAITING_CONFIRMATION', 'AWAITING_CASHIER', 'AWAITING_PAYMENT', 'CREATING_PIX', 'AWAITING_PIX', 'PENDING', 'CONFIRMED', 'PAID_CONFIRMED', 'DELIVERED'])
-        .onSnapshot((snapshot) => {
-          onChange(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id })));
-        }, onError);
+      const snapshots = new Map();
+      const queries = [
+        repo.firestore.collection('orders').where('status', 'in', ['AWAITING_CONFIRMATION', 'AWAITING_CASHIER', 'AWAITING_PAYMENT', 'CREATING_PIX', 'AWAITING_PIX', 'PENDING']).limit(1000),
+        repo.firestore.collection('orders').where('completedAt', '>=', new Date(Date.now() - 7 * 86400000).toISOString()).orderBy('completedAt', 'desc').limit(200),
+      ];
+      const stops = queries.map((query, index) => query.onSnapshot(snapshot => {
+        snapshots.set(index, snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+        onChange([...new Map([...snapshots.values()].flat().map(order => [order.id, order])).values()]);
+      }, onError));
+      return () => stops.forEach(stop => stop());
     }
     if (!repo.isInMemory || repo.firestore) {
       onError(new Error('Firestore indisponível para acompanhar comandas em tempo real.'));
@@ -140,15 +163,19 @@ class PdvRepository {
     return this.repository.cancelOrder(orderId, reason);
   }
 
-  async listDeliveryOrders(actor) {
+  async listDeliveryOrders(_actor) {
     const database = this.repository.firestore;
     if (database && !this.repository._firestoreClientDisabled) {
       const collection = database.collection('orders');
-      const open = collection.where('deliveryStatus', 'in', ['PENDING_DISPATCH', 'PENDING_DELIVERY', 'OUT_FOR_DELIVERY']);
-      let completed = collection.where('deliveryStatus', '==', 'DELIVERED');
-      if (actor.role === 'ENTREGADOR') completed = completed.where('assignedDriver.id', '==', actor.id);
-      const snapshots = await Promise.all([open.get(), completed.orderBy('deliveredAt', 'desc').limit(100).get()]);
-      return snapshots.flatMap((snapshot) => snapshot.docs.map((document) => ({ ...document.data(), id: document.id })));
+      const open = collection.where('deliveryStatus', 'in', ['PENDING_DISPATCH', 'PENDING_DELIVERY', 'PREPARING_DELIVERY', 'OUT_FOR_DELIVERY']);
+      const completed = collection.where('deliveryStatus', '==', 'DELIVERED').limit(200);
+      const [openSnap, completedSnap] = await Promise.all([open.get(), completed.get()]);
+      const openDocs = openSnap.docs.map((document) => ({ ...document.data(), id: document.id }));
+      const completedDocs = completedSnap.docs
+        .map((document) => ({ ...document.data(), id: document.id }))
+        .sort((a, b) => String(b.deliveredAt || '').localeCompare(String(a.deliveredAt || '')))
+        .slice(0, 100);
+      return [...openDocs, ...completedDocs];
     }
     return this.list('orders', 'orderType', 'DELIVERY');
   }
@@ -158,7 +185,7 @@ class PdvRepository {
     return this.transaction(async (tx) => {
       const order = await tx.get('orders', orderId);
       if (!isDelivery(order) || order.status === 'CANCELLED') throw new Error('Pedido de entrega não encontrado.');
-      if (['OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.deliveryStatus)) throw new Error('Este pedido já saiu para entrega.');
+      if (['PREPARING_DELIVERY', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.deliveryStatus)) throw new Error('Este pedido já saiu para entrega.');
       if (order.paymentMethod === 'PIX' && !isDeliverySettled(order)) throw new Error('Confirme o Pix antes de liberar a entrega.');
       const reservation = !order.inventoryReserved && !order.stockDeducted ? await prepareStockReservation(tx, order.items) : null;
       const now = new Date().toISOString();
@@ -174,16 +201,36 @@ class PdvRepository {
     return this.transaction(async (tx) => {
       const order = await tx.get('orders', orderId);
       if (!isDelivery(order) || order.status === 'CANCELLED') throw new Error('Pedido de entrega não encontrado.');
-      if (order.deliveryStatus === 'OUT_FOR_DELIVERY' && order.assignedDriver?.id === actor.id) return order;
+      if (['PREPARING_DELIVERY', 'OUT_FOR_DELIVERY'].includes(order.deliveryStatus) && order.assignedDriver?.id === actor.id) return order;
       if ((!['PENDING_DELIVERY', 'PENDING_DISPATCH'].includes(order.deliveryStatus)) || order.creditApprovalStatus === 'PENDING' || order.assignedDriver?.id) throw new Error('Esta entrega não está disponível. Outro entregador pode ter aceitado.');
       if (order.paymentMethod === 'PIX' && !isDeliverySettled(order)) throw new Error('O pagamento Pix ainda não foi confirmado.');
       if ((order.paymentParts || [{ method: order.paymentMethod }]).some(part => part.method === 'FIADO') && !isDeliverySettled(order)) throw new Error('O fiado aguarda aprovação de um administrador.');
       const now = new Date().toISOString();
       const reservation = !order.inventoryReserved && !order.stockDeducted ? await prepareStockReservation(tx, order.items) : null;
       if (reservation) applyStockReservation(tx, reservation, now);
-      const updated = { ...order, ...(reservation ? { inventoryReserved: !reservation.trackingDisabled, reservedItems: reservation.reservedItems } : {}), deliveryStatus: 'OUT_FOR_DELIVERY', assignedDriver: actor, acceptedAt: now, updatedAt: now };
+      const updated = { ...order, ...(reservation ? { inventoryReserved: !reservation.trackingDisabled, reservedItems: reservation.reservedItems } : {}), deliveryStatus: 'PREPARING_DELIVERY', assignedDriver: actor, acceptedAt: now, departedAt: null, deliveryRoute: null, deliveryMetrics: null, updatedAt: now, deliveryHistory: recordDeliveryEvent(tx, order, 'PREPARING_DELIVERY', actor, now) };
       tx.set('orders', orderId, updated);
-      const id = `${orderId}-delivery-${now.replace(/[^0-9]/g, '')}`;
+      return updated;
+    });
+  }
+
+  async startDelivery(orderId, actor, route) {
+    if (!['ADMIN', 'CAIXA', 'ENTREGADOR'].includes(actor?.role)) throw new Error('Sem permissão para iniciar entregas.');
+    return this.transaction(async tx => {
+      const order = await tx.get('orders', orderId);
+      if (!isDelivery(order) || order.status === 'CANCELLED' || (actor.role !== 'ADMIN' && order.assignedDriver?.id !== actor.id)) throw new Error('Apenas o responsável pode iniciar esta entrega.');
+      if (order.deliveryStatus === 'OUT_FOR_DELIVERY') return order;
+      if (order.deliveryStatus !== 'PREPARING_DELIVERY') throw new Error('Assuma e separe os produtos antes de sair para entrega.');
+      if (order.creditApprovalStatus === 'PENDING' || (order.paymentMethod === 'PIX' && !isDeliverySettled(order))) throw new Error('Aguarde a aprovação do pagamento antes de sair.');
+      const now = new Date().toISOString();
+      const distanceMeters = Number(route?.distanceMeters);
+      const durationSeconds = Number(route?.durationSeconds);
+      const deliveryRoute = route ? { distanceMeters, durationSeconds, source: 'GOOGLE_ROUTE_ESTIMATE', calculatedAt: now } : null;
+      if (route && (!Number.isFinite(distanceMeters) || distanceMeters <= 0 || distanceMeters > 10000000 || !Number.isFinite(durationSeconds) || durationSeconds <= 0 || durationSeconds > 604800)) throw new Error('Distância ou duração da rota inválida.');
+      const updated = { ...order, deliveryStatus: 'OUT_FOR_DELIVERY', departedAt: now, departedBy: actor, deliveryRoute, updatedAt: now,
+        deliveryHistory: recordDeliveryEvent(tx, order, 'OUT_FOR_DELIVERY', actor, now, { deliveryRoute }) };
+      tx.set('orders', orderId, updated);
+      const id = `${orderId}-departure-${order.acceptedAt.replace(/[^0-9]/g, '')}`;
       tx.set('pdv_outbox', id, { id, kind: 'delivery-departure', orderId, status: 'PENDING', attempts: 0 });
       return updated;
     });
@@ -191,20 +238,26 @@ class PdvRepository {
 
   async releaseDelivery(orderId, actor) {
     return this.transaction(async (tx) => {
-      const order = await tx.get('orders', orderId); assertAssignedDelivery(order, actor);
-      const updated = { ...order, deliveryStatus: 'PENDING_DELIVERY', assignedDriver: null, updatedAt: new Date().toISOString() };
+      const order = await tx.get('orders', orderId);
+      if (!isDelivery(order) || order.status === 'CANCELLED' || !['PREPARING_DELIVERY', 'OUT_FOR_DELIVERY'].includes(order.deliveryStatus) || (actor?.role !== 'ADMIN' && order.assignedDriver?.id !== actor?.id)) throw new Error('Apenas o responsável pode devolver esta entrega.');
+      const now = new Date().toISOString();
+      const updated = { ...order, deliveryStatus: 'PENDING_DELIVERY', assignedDriver: null, acceptedAt: null, departedAt: null, deliveryRoute: null, deliveryMetrics: null, updatedAt: now, deliveryHistory: recordDeliveryEvent(tx, order, 'PENDING_DELIVERY', actor, now, { previousDriver: order.assignedDriver || null, previousDeparture: order.departedAt || '' }) };
       tx.set('orders', orderId, updated); return updated;
     });
   }
 
-  async markDelivered(orderId, actor, notes = '') {
+  async markDelivered(orderId, actor, notes = '', actualDistanceKm) {
     return this.transaction(async (tx) => {
       const order = await tx.get('orders', orderId);
       if (order?.deliveryStatus === 'DELIVERED' && (actor.role === 'ADMIN' || order.deliveredBy?.id === actor.id)) return order;
       assertAssignedDelivery(order, actor);
       if (!isDeliverySettled(order)) throw new Error('Receba o pagamento antes de concluir a entrega.');
       const now = new Date().toISOString();
-      const updated = { ...order, deliveryStatus: 'DELIVERED', deliveredAt: now, deliveredBy: actor, deliveryNotes: String(notes).slice(0, 500), updatedAt: now };
+      const deliveryMetrics = completionMetrics(order, now, actualDistanceKm);
+      const driver = order.assignedDriver || actor;
+      const previousStats = await tx.get('delivery_driver_metrics', driver.id);
+      const updated = { ...order, deliveryStatus: 'DELIVERED', deliveredAt: now, deliveredBy: actor, deliveryNotes: String(notes).slice(0, 500), deliveryMetrics, deliveryHistory: recordDeliveryEvent(tx, order, 'DELIVERED', actor, now), updatedAt: now };
+      tx.set('delivery_driver_metrics', driver.id, mergeDriverPerformance(previousStats, updated, now));
       updated.receiptText = formatOrderReceipt(updated);
       tx.set('orders', orderId, updated); return updated;
     });
@@ -275,7 +328,7 @@ class PdvRepository {
   }
 
   /** Stock, debt, attribution, payment and notification intent commit together. */
-  async receive(orderId, receiver, verification = null, cashReceived = null, paymentMethodOverride = null, { sendFinalReceipt = false, requestedParts, finishDelivery = false } = {}) {
+  async receive(orderId, receiver, verification = null, cashReceived = null, paymentMethodOverride = null, { sendFinalReceipt = false, requestedParts, finishDelivery = false, actualDistanceKm } = {}) {
     const inventory = await this.repository.getInventorySettings();
     return this.transaction(async (tx) => {
       const order = await tx.get('orders', orderId);
@@ -285,6 +338,7 @@ class PdvRepository {
       if (finishDelivery) assertAssignedDelivery(order, receiver);
       if (receiver?.role === 'ENTREGADOR' && !canReceiveOrder(order, receiver)) throw new Error('Sem permissão para receber esta entrega.');
       if (order.completedAt) { return { ...order, alreadyConfirmed: true }; }
+      if (order.pixMode === 'MANUAL' && order.paymentProofId && verification?.manualPixProofId !== order.paymentProofId) throw new Error('O comprovante mudou. Atualize a comanda.');
       if (Date.parse(order.pixExpiresAt || order.paymentExpiresAt || '') <= Date.now()) {
         throw new Error('O prazo de pagamento venceu. Aguarde o cancelamento e a liberação do estoque.');
       }
@@ -304,7 +358,7 @@ class PdvRepository {
         throw new Error('Pix exige confirmação do Sicredi com identificador e valor exatos.');
       }
       if (paymentMethod === 'PIX' && verification.verifiedVia === 'MANUAL_CAIXA_PIX' &&
-        (!verification.manualPixProofSeen || String(verification.manualPixNote || '').trim().length < 8 || !canReceiveOrder(order, receiver))) {
+        (!verification.manualPixProofSeen || String(verification.manualPixNote || '').trim().length < 8 || !canConfirmManualPix(order, receiver))) {
         throw new Error('Confirmação manual do Pix exige comprovante conferido e justificativa pelo menos 8 caracteres.');
       }
       if (paymentMethod !== 'PIX' && !canReceiveOrder(order, receiver)) { throw new Error('Somente o caixa pode receber esta comanda.'); }
@@ -346,6 +400,9 @@ class PdvRepository {
       const totalMinor = Math.round(amountFor('SALDO_CLIENTE') * 100);
       if (usingCredit && creditMinor < totalMinor) { throw new Error('O crédito disponível foi alterado e não cobre mais o total. Atualize o saldo antes de confirmar.'); }
       const manualPixProof = verification?.verifiedVia === 'MANUAL_CAIXA_PIX' ? await requireManualProof(tx, verification, receiver, 'ORDER', order.id) : null;
+      const deliveryMetrics = finishDelivery ? completionMetrics(order, now, actualDistanceKm) : null;
+      const deliveryDriver = finishDelivery ? order.assignedDriver || receiver : null;
+      const previousDeliveryStats = finishDelivery ? await tx.get('delivery_driver_metrics', deliveryDriver.id) : null;
       // No transaction reads after this point.
       for (const { id, quantity, product, stock, ownReservation } of products) {
         tx.set('products', id, { ...product, stockQuantity: stock, estoque: stock,
@@ -360,9 +417,9 @@ class PdvRepository {
         ...(order.creditApprovalStatus === 'PENDING' && !onAccount ? { creditApprovalStatus: 'NOT_REQUIRED' } : {}),
         ...(onAccount && receiver?.role === 'ADMIN' ? { creditApprovalStatus: 'APPROVED', creditApprovedBy: receiver, creditApprovedAt: now } : {}),
         ...(isDelivery(order) && (!order.deliveryStatus || order.deliveryStatus === 'PENDING_DISPATCH') ? { deliveryStatus: 'PENDING_DELIVERY' } : {}),
-        ...(finishDelivery ? { deliveryStatus: 'DELIVERED', deliveredBy: receiver, deliveredAt: now } : {}), paymentMethod, paymentParts: paymentParts.map((part) => ({ ...part, receivedBy, status: part.method === 'FIADO' ? 'ON_ACCOUNT' : 'APPROVED' })), receivedBy, cashierName: receivedBy.name, cashierEmail: receivedBy.email || '', status: 'CONFIRMED',
+        ...(finishDelivery ? { deliveryStatus: 'DELIVERED', deliveredBy: receiver, deliveredAt: now, deliveryMetrics, deliveryHistory: recordDeliveryEvent(tx, order, 'DELIVERED', receiver, now) } : {}), paymentMethod, paymentParts: paymentParts.map((part) => ({ ...part, receivedBy, receivedAt: part.receivedAt || (part.status === 'RECEIVED_AT_CASHIER' ? order.createdAt : now), status: part.method === 'FIADO' ? 'ON_ACCOUNT' : 'APPROVED' })), receivedBy, cashierName: receivedBy.name, cashierEmail: receivedBy.email || '', status: 'CONFIRMED',
         paymentStatus: onAccount ? 'ON_ACCOUNT' : 'APPROVED', paidAt: onAccount ? null : now,
-        completedAt: now, stockDeducted: true, stockDeductedAt: order.stockDeductedAt || now,
+        completedAt: now, ...(order.pixMode === 'MANUAL' ? { paymentReviewStatus: 'APPROVED' } : {}), stockDeducted: true, stockDeductedAt: order.stockDeductedAt || now,
         inventoryReserved: false, reservationReleasedAt: order.inventoryReserved ? now : order.reservationReleasedAt || '',
         verifiedVia: verification ? (verification.verifiedVia || 'SICREDI_PIX_WEBHOOK') : 'CAIXA', updatedAt: now,
         ...(amountFor('DINHEIRO') ? { cashReceived: tendered, changeGiven: (Math.round(tendered * 100) - Math.round(amountFor('DINHEIRO') * 100)) / 100 } : {}),
@@ -383,7 +440,10 @@ class PdvRepository {
           receivedBy, notes: 'Crédito do cliente utilizado em uma venda.', createdAt: now,
         });
       }
-      if (finishDelivery) completed.receiptText = formatOrderReceipt(completed);
+      if (finishDelivery) {
+        completed.receiptText = formatOrderReceipt(completed);
+        tx.set('delivery_driver_metrics', deliveryDriver.id, mergeDriverPerformance(previousDeliveryStats, completed, now));
+      }
       tx.set('orders', order.id, completed);
       if (verification) {
         for (const kind of ['customer-paid', 'owner-paid']) {
@@ -437,7 +497,7 @@ class PdvRepository {
   async claimMessage(id) {
     return this.transaction(async (tx) => {
       const job = await tx.get('pdv_outbox', id);
-      if (!job || job.status === 'SENT' || job.nextAttemptAt > Date.now() || job.leaseUntil > Date.now()) { return null; }
+      if (!job || job.status !== 'PENDING' || job.nextAttemptAt > Date.now() || job.leaseUntil > Date.now()) { return null; }
       const claimed = { ...job, leaseUntil: Date.now() + 120000, attempts: job.attempts + 1 };
       tx.set('pdv_outbox', id, claimed);
       return claimed;

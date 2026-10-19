@@ -52,7 +52,7 @@ Invoke-DevGcloud -Arguments @('projects', 'add-iam-policy-binding', $DevProject,
     "--member=serviceAccount:$DevBuildAccount", '--role=roles/run.builder', '--condition=None') | Out-Null
 
 $secrets = @(Get-DevGcloud -Arguments @('secrets', 'list'))
-foreach ($name in @('mercado-pago-access-token', 'mercado-pago-webhook-secret', 'conflora-admin-secret', 'conflora-task-secret')) {
+foreach ($name in @('conflora-admin-secret', 'conflora-task-secret')) {
     if (-not ($secrets | Where-Object { $_.name -like "*/secrets/$name" })) {
         Invoke-DevGcloud -Arguments @('secrets', 'create', $name, '--replication-policy=automatic')
     }

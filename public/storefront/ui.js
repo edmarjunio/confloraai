@@ -81,7 +81,7 @@ export function createApi(slug) {
       route === "/assistant" ? 45000 : 15000,
     );
     try {
-      const response = await fetch(
+      const response = await window.ConfloraSession.apiFetch(
         `/api/stores/${encodeURIComponent(slug)}${route}`,
         {
           method,

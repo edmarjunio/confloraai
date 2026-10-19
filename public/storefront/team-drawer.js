@@ -18,16 +18,20 @@ export function initTeamDrawer() {
 
   if (!drawerBtn || !overlay || !sheet) {return;}
 
+  const ownerQuickSwitchBox = document.getElementById('ownerQuickSwitchBox');
+  const pinInput = document.getElementById('teamPinInput');
+
   let currentOperator = {
-    name: 'Atendente Caixa',
-    role: 'CAIXA',
+    name: 'Não autenticado',
+    role: 'VISITANTE',
     id: '',
+    canSwitchProfiles: false,
   };
 
-  // Carrega operador salvo ou busca da sessão
+  // Carrega operador autenticado exclusivamente da sessão segura do servidor
   async function loadCurrentOperator() {
     try {
-      const res = await fetch('/api/auth/me');
+      const res = await window.ConfloraSession.apiFetch('/api/auth/me');
       if (res.ok) {
         const data = await res.json();
         if (data && data.user) {
@@ -35,6 +39,7 @@ export function initTeamDrawer() {
             name: data.user.name || 'Colaborador',
             role: data.user.role || 'CAIXA',
             id: data.user.id || '',
+            canSwitchProfiles: Boolean(data.user.canSwitchProfiles),
           };
           updateDrawerUI();
           return;
@@ -44,24 +49,21 @@ export function initTeamDrawer() {
       // ignore
     }
 
-    // Fallback no localStorage
-    const savedName = localStorage.getItem('conflora_operator_name');
-    const savedRole = localStorage.getItem('conflora_operator_role');
-    const savedId = localStorage.getItem('conflora_operator_id');
-    if (savedName) {
-      currentOperator = {
-        name: savedName,
-        role: savedRole || 'CAIXA',
-        id: savedId || '',
-      };
-    }
+    currentOperator = {
+      name: 'Não autenticado',
+      role: 'VISITANTE',
+      id: '',
+      canSwitchProfiles: false,
+    };
     updateDrawerUI();
   }
 
   function updateDrawerUI() {
-    const isDriver = String(currentOperator.role).toUpperCase() === 'ENTREGADOR';
-    const isCaixa = String(currentOperator.role).toUpperCase() === 'CAIXA';
-    const isAdmin = String(currentOperator.role).toUpperCase() === 'ADMIN';
+    const roleUpper = String(currentOperator.role).toUpperCase();
+    const isDriver = roleUpper === 'ENTREGADOR';
+    const isSeller = roleUpper === 'VENDEDOR';
+    const isCaixa = roleUpper === 'CAIXA';
+    const isAdmin = roleUpper === 'ADMIN';
 
     const opNameEl = document.getElementById('teamOpName');
     const opBadgeEl = document.getElementById('teamOpRoleBadge');
@@ -70,21 +72,48 @@ export function initTeamDrawer() {
 
     if (opNameEl) {opNameEl.textContent = currentOperator.name;}
     if (opBadgeEl) {
-      opBadgeEl.textContent = isDriver ? 'CARGO: ENTREGADOR' : isCaixa ? 'CARGO: CAIXA' : (isAdmin ? 'CARGO: ADMIN' : 'COLABORADOR');
+      opBadgeEl.textContent = isDriver
+        ? 'CARGO: ENTREGADOR'
+        : isSeller
+          ? 'CARGO: VENDEDOR'
+          : isCaixa
+            ? 'CARGO: CAIXA'
+            : isAdmin
+              ? 'CARGO: ADMIN'
+              : 'FAÇA LOGIN COM PIN';
       opBadgeEl.className = 'team-role-badge ' + (isAdmin ? 'admin' : 'caixa');
     }
     if (subtitleEl) {
-      subtitleEl.textContent = isDriver ? 'Entregas e recebimentos na rota' : isCaixa
-        ? 'Caixa Liberado · Acesso exclusivo às suas vendas de hoje'
-        : 'Administração Geral Liberada';
+      subtitleEl.textContent = isDriver
+        ? 'Entregas e recebimentos na rota'
+        : isSeller
+          ? 'Vendedor · Comandas e Pix'
+          : isCaixa
+            ? 'Caixa Liberado · Acesso exclusivo às suas vendas de hoje'
+            : isAdmin
+              ? 'Administração Geral Liberada'
+              : 'Identifique seu cargo com PIN';
     }
     if (caixaDescEl) {
-      caixaDescEl.textContent = isDriver ? 'Aceitar pedidos, abrir a rota e confirmar entregas' : isCaixa
-        ? 'Acesso estrito às suas vendas e números de hoje'
-        : 'Frente de Caixa Geral e Balcão';
+      caixaDescEl.textContent = isDriver
+        ? 'Aceitar pedidos, abrir a rota e confirmar entregas'
+        : isSeller
+          ? 'Atendimento, geração de comandas e Pix'
+          : isCaixa
+            ? 'Acesso estrito às suas vendas e números de hoje'
+            : 'Frente de Caixa Geral e Balcão';
     }
 
-    // Se for CAIXA: Esconde completamente todas as ferramentas de administração e Looker
+    if (ownerQuickSwitchBox) {
+      ownerQuickSwitchBox.classList.toggle('hidden', !currentOperator.canSwitchProfiles);
+      ownerQuickSwitchBox.querySelectorAll('.owner-role-btn').forEach((btn) => {
+        const isCurrent = btn.getAttribute('data-role') === roleUpper;
+        btn.style.background = isCurrent ? '#15803d' : '#fff';
+        btn.style.color = isCurrent ? '#fff' : '#1f2937';
+      });
+    }
+
+    // Se não for ADMIN: Esconde completamente todas as ferramentas de administração e Looker
     if (adminSection) {
       adminSection.style.display = isAdmin ? 'block' : 'none';
     }
@@ -92,6 +121,36 @@ export function initTeamDrawer() {
     if (teamLinkCaixa) {
       teamLinkCaixa.href = '/caixa?operatorName=' + encodeURIComponent(currentOperator.name) + '&userId=' + encodeURIComponent(currentOperator.id);
     }
+  }
+
+  if (ownerQuickSwitchBox) {
+    ownerQuickSwitchBox.querySelectorAll('.owner-role-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const targetRole = btn.getAttribute('data-role');
+        if (!targetRole) return;
+        try {
+          const res = await window.ConfloraSession.apiFetch('/api/auth/switch-profile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role: targetRole }),
+          });
+          const data = await res.json();
+          if (res.ok && data.success && data.user) {
+            currentOperator = {
+              name: data.user.name || 'Edmar Júnio',
+              role: data.user.role,
+              id: data.user.id,
+              canSwitchProfiles: Boolean(data.user.canSwitchProfiles),
+            };
+            updateDrawerUI();
+          } else {
+            alert(data.error || 'Não foi possível alternar o perfil.');
+          }
+        } catch {
+          alert('Erro de conexão ao alternar perfil.');
+        }
+      });
+    });
   }
 
   function openDrawer() {
@@ -140,15 +199,16 @@ export function initTeamDrawer() {
     if (!selectUser) {return;}
     selectUser.innerHTML = '<option value="">Carregando operadores...</option>';
     try {
-      const res = await fetch('/api/admin/auth/users');
+      const res = await window.ConfloraSession.apiFetch('/api/admin/auth/users');
       if (res.ok) {
         const users = await res.json();
         if (Array.isArray(users) && users.length > 0) {
-          selectUser.innerHTML = users.map(u => `
-            <option value="${u.id}" data-name="${u.name}" data-role="${u.role}" ${u.name === currentOperator.name ? 'selected' : ''}>
-              ${u.role === 'ADMIN' ? '👑' : '👤'} ${u.name} (${u.role})
-            </option>
-          `).join('');
+          selectUser.replaceChildren(...users.map(user => {
+            const option = document.createElement('option'); option.value = user.id;
+            option.dataset.name = user.name; option.dataset.role = user.role;
+            option.textContent = `${user.name} (${user.role})`; option.selected = user.name === currentOperator.name;
+            return option;
+          }));
           return;
         }
       }
@@ -156,29 +216,43 @@ export function initTeamDrawer() {
       // ignore
     }
 
-    // Fallback padrão de operadores
-    selectUser.innerHTML = `
-      <option value="op-caixa-1" data-name="Atendente Caixa" data-role="CAIXA">👤 Atendente Caixa (CAIXA)</option>
-      <option value="op-caixa-2" data-name="Edmar Júnio" data-role="CAIXA">👤 Edmar Júnio (CAIXA)</option>
-      <option value="op-admin" data-name="Administrador Conflora" data-role="ADMIN">👑 Administrador (ADMIN)</option>
-    `;
+    selectUser.innerHTML = '<option value="">Nenhum operador disponível</option>';
   }
 
   if (confirmOpBtn && selectUser) {
-    confirmOpBtn.addEventListener('click', () => {
+    confirmOpBtn.addEventListener('click', async () => {
       const opt = selectUser.selectedOptions[0];
-      if (!opt) {return;}
-      const name = opt.getAttribute('data-name') || opt.textContent.trim();
-      const role = opt.getAttribute('data-role') || 'CAIXA';
+      if (!opt || !selectUser.value) {return;}
       const id = selectUser.value;
+      const pin = pinInput ? pinInput.value.trim() : '';
+      if (!pin) {
+        alert('Digite seu PIN de segurança para confirmar o operador.');
+        return;
+      }
 
-      currentOperator = { name, role, id };
-      localStorage.setItem('conflora_operator_name', name);
-      localStorage.setItem('conflora_operator_role', role);
-      localStorage.setItem('conflora_operator_id', id);
-
-      updateDrawerUI();
-      opSelectorBox.classList.add('hidden');
+      try {
+        const res = await window.ConfloraSession.apiFetch('/api/admin/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: id, pin }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          alert(data.error || 'PIN incorreto.');
+          return;
+        }
+        currentOperator = {
+          name: data.user.name,
+          role: data.user.role,
+          id: data.user.id,
+          canSwitchProfiles: Boolean(data.user.canSwitchProfiles),
+        };
+        if (pinInput) pinInput.value = '';
+        updateDrawerUI();
+        opSelectorBox.classList.add('hidden');
+      } catch {
+        alert('Erro ao validar PIN no servidor.');
+      }
     });
   }
 

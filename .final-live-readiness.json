@@ -1,0 +1,24 @@
+{
+  "origin": "https://confloraai-6scra4tigq-rj.a.run.app",
+  "checkedAt": "2026-10-18T17:55:39.055Z",
+  "results": [
+    {
+      "check": "backend",
+      "http": 200,
+      "revision": null,
+      "paymentMode": "MERCADO_PAGO",
+      "manualPixReady": false
+    },
+    {
+      "check": "history_access_control",
+      "http": 401,
+      "protected": true
+    },
+    {
+      "check": "whatsapp_connection",
+      "http": 200,
+      "verified": true,
+      "sender": "+1 555-152-7087"
+    }
+  ]
+}

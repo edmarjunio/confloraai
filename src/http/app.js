@@ -100,30 +100,12 @@ const { verifyFirebaseToken } = require('../security/firebase-auth');
 const Logger = require('../shared/logger');
 const { SignatureValidator } = require('../security/signature.validator');
 const { SystemStatusService } = require('../services/system-status.service');
-const { renderHomeHtml, renderAdminHtml, renderCaixaHtml, renderAdminGerencialHtml } = require('./views');
-const { MercadoPagoClient, isApprovedPixPayment } = require('../integrations/mercado-pago.client');
+const { renderAdminHtml, renderCaixaHtml, renderAdminGerencialHtml } = require('./views');
 const { SicrediPixClient } = require('../integrations/sicredi-pix.client');
 const { formatOrderReceipt } = require('../orders/receipt.util');
 const { getBusinessDate, isValidReportDate } = require('../reports/daily-executive-metrics');
 const { formatDailyExecutiveReport, normalizeWhatsAppNumber } = require('../reports/daily-executive-report');
 
-const FETCH_SHIM_SCRIPT = `<script>
-  (function() {
-    try {
-      var _fetch = typeof window !== 'undefined' ? window.fetch : null;
-      var _current = _fetch ? _fetch.bind(window) : null;
-      var desc = {
-        get: function() { return _current; },
-        set: function(fn) { _current = fn; },
-        configurable: true,
-        enumerable: true
-      };
-      try { Object.defineProperty(window, 'fetch', desc); } catch (_) {}
-      try { if (typeof Window !== 'undefined' && Window.prototype) Object.defineProperty(Window.prototype, 'fetch', desc); } catch (_) {}
-      try { if (typeof window !== 'undefined' && window.__proto__) Object.defineProperty(window.__proto__, 'fetch', desc); } catch (_) {}
-    } catch (_) {}
-  })();
-</script>`;
 
 function renderPrivacyPolicyHtml() {
   return `<!DOCTYPE html>
@@ -132,7 +114,6 @@ function renderPrivacyPolicyHtml() {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Política de Privacidade | Conflora Horta e Viveiro</title>
-  ${FETCH_SHIM_SCRIPT}
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #2d3748; max-width: 800px; margin: 0 auto; padding: 24px 16px; background-color: #f7fafc; }
     .card { background: white; padding: 36px 28px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
@@ -203,7 +184,6 @@ function renderDataDeletionHtml() {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Instruções de Exclusão de Dados | Conflora AI</title>
-  ${FETCH_SHIM_SCRIPT}
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #2d3748; max-width: 800px; margin: 0 auto; padding: 24px 16px; background-color: #f7fafc; }
     .card { background: white; padding: 36px 28px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
@@ -246,671 +226,6 @@ function renderDataDeletionHtml() {
 </html>`;
 }
 
-function renderWhatsAppSimulatorHtml() {
-  return `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Conflora AI — WhatsApp Web Simulator & Live Firestore</title>
-  ${FETCH_SHIM_SCRIPT}
-  <style>
-    :root {
-      --wa-teal: #008069;
-      --wa-teal-dark: #005c4b;
-      --wa-teal-light: #25d366;
-      --wa-bg: #efeae2;
-      --wa-panel-bg: #f0f2f5;
-      --wa-card: #ffffff;
-      --wa-bubble-in: #ffffff;
-      --wa-bubble-out: #d9fdd3;
-      --wa-text: #111b21;
-      --wa-text-muted: #667781;
-      --wa-border: #e9edef;
-      --wa-blue-tick: #53bdeb;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background: #dadbd5;
-      color: var(--wa-text);
-      height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      overflow: hidden;
-    }
-    .app-wrapper {
-      width: 100vw;
-      height: 100vh;
-      background: var(--wa-card);
-      display: flex;
-      box-shadow: 0 6px 18px rgba(0,0,0,0.1);
-      position: relative;
-    }
-    @media (min-width: 1200px) {
-      .app-wrapper {
-        width: 98vw;
-        height: 96vh;
-        border-radius: 10px;
-        overflow: hidden;
-      }
-    }
-    /* LEFT SIDEBAR: ESTOQUE E AUDITORIA FIRESTORE */
-    .sidebar {
-      width: 380px;
-      min-width: 340px;
-      background: #ffffff;
-      border-right: 1px solid var(--wa-border);
-      display: flex;
-      flex-direction: column;
-      z-index: 2;
-    }
-    @media (max-width: 768px) {
-      .sidebar { display: none; }
-    }
-    .sidebar-header {
-      background: var(--wa-panel-bg);
-      padding: 12px 16px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 1px solid var(--wa-border);
-    }
-    .db-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 11px;
-      font-weight: 700;
-      color: #03543f;
-      background: #def7ec;
-      padding: 4px 10px;
-      border-radius: 12px;
-    }
-    .db-badge::before {
-      content: "";
-      width: 7px;
-      height: 7px;
-      background: #31c48d;
-      border-radius: 50%;
-    }
-    .tabs-bar {
-      display: flex;
-      background: var(--wa-panel-bg);
-      border-bottom: 1px solid var(--wa-border);
-    }
-    .tab-btn {
-      flex: 1;
-      padding: 10px 8px;
-      font-size: 12px;
-      font-weight: 600;
-      text-align: center;
-      border: none;
-      background: none;
-      cursor: pointer;
-      color: var(--wa-text-muted);
-      border-bottom: 2px solid transparent;
-      transition: all 0.2s;
-    }
-    .tab-btn.active {
-      color: var(--wa-teal);
-      border-bottom-color: var(--wa-teal);
-      background: #ffffff;
-    }
-    .customer-config {
-      padding: 10px 14px;
-      background: #f8fafc;
-      border-bottom: 1px solid var(--wa-border);
-      font-size: 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-    .config-row {
-      display: flex;
-      gap: 6px;
-    }
-    .config-input {
-      flex: 1;
-      padding: 6px 10px;
-      border: 1px solid #cbd5e0;
-      border-radius: 6px;
-      font-size: 12px;
-      outline: none;
-    }
-    .config-input:focus { border-color: var(--wa-teal); }
-    .sidebar-content {
-      flex: 1;
-      overflow-y: auto;
-      padding: 8px;
-    }
-    .product-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 10px;
-      border-radius: 8px;
-      border: 1px solid #f1f5f9;
-      margin-bottom: 6px;
-      transition: background 0.15s;
-    }
-    .product-item:hover { background: #f8fafc; }
-    .product-thumb {
-      width: 44px;
-      height: 44px;
-      border-radius: 6px;
-      object-fit: cover;
-      background: #e2e8f0;
-      flex-shrink: 0;
-    }
-    .product-info { flex: 1; min-width: 0; }
-    .product-title {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--wa-text);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .product-sub {
-      font-size: 11px;
-      color: var(--wa-text-muted);
-      margin-top: 2px;
-    }
-    .stock-badge {
-      display: inline-block;
-      font-size: 11px;
-      font-weight: 700;
-      padding: 3px 8px;
-      border-radius: 10px;
-      background: #e0f2fe;
-      color: #0369a1;
-      flex-shrink: 0;
-      text-align: right;
-    }
-    .stock-badge.low {
-      background: #fee2e2;
-      color: #b91c1c;
-    }
-    .movement-item {
-      padding: 8px 10px;
-      border-left: 3px solid var(--wa-teal);
-      background: #f8fafc;
-      border-radius: 0 6px 6px 0;
-      margin-bottom: 8px;
-      font-size: 12px;
-    }
-    .movement-date { font-size: 10px; color: var(--wa-text-muted); }
-
-    /* RIGHT CHAT AREA: WHATSAPP WEB AUTHENTIC UI */
-    .chat-area {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      background: var(--wa-bg);
-      position: relative;
-    }
-    .chat-header {
-      background: var(--wa-panel-bg);
-      padding: 10px 16px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      border-bottom: 1px solid var(--wa-border);
-      z-index: 2;
-    }
-    .avatar-wrapper {
-      position: relative;
-      width: 42px;
-      height: 42px;
-      border-radius: 50%;
-      background: var(--wa-teal);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-size: 20px;
-      flex-shrink: 0;
-    }
-    .chat-header-info { flex: 1; }
-    .chat-header-name {
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--wa-text);
-    }
-    .chat-header-status {
-      font-size: 12px;
-      color: var(--wa-text-muted);
-    }
-    .chat-body {
-      flex: 1;
-      overflow-y: auto;
-      padding: 16px 24px;
-      background-color: #efeae2;
-      background-image: radial-gradient(#d4cdc4 1px, transparent 1px);
-      background-size: 20px 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    .enc-notice {
-      align-self: center;
-      background: #ffeecd;
-      border-radius: 8px;
-      padding: 6px 14px;
-      font-size: 11px;
-      color: #54656f;
-      text-align: center;
-      max-width: 80%;
-      margin-bottom: 10px;
-      box-shadow: 0 1px 1px rgba(0,0,0,0.06);
-    }
-    .bubble {
-      max-width: 68%;
-      padding: 8px 12px;
-      border-radius: 7.5px;
-      font-size: 14.2px;
-      line-height: 1.45;
-      position: relative;
-      word-wrap: break-word;
-      white-space: pre-wrap;
-      box-shadow: 0 1px 0.5px rgba(11,20,26,0.13);
-    }
-    .bubble.user {
-      align-self: flex-end;
-      background: var(--wa-bubble-out);
-      border-top-right-radius: 0;
-    }
-    .bubble.assistant {
-      align-self: flex-start;
-      background: var(--wa-bubble-in);
-      border-top-left-radius: 0;
-    }
-    .bubble-meta {
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-      gap: 4px;
-      font-size: 11px;
-      color: var(--wa-text-muted);
-      margin-top: 4px;
-      float: right;
-      padding-left: 10px;
-    }
-    .blue-ticks {
-      color: var(--wa-blue-tick);
-      font-weight: bold;
-    }
-    .bubble-img {
-      max-width: 100%;
-      border-radius: 6px;
-      margin-bottom: 6px;
-      display: block;
-    }
-
-    /* QUICK PILLS BAR */
-    .quick-bar {
-      padding: 8px 16px;
-      background: #f7fafc;
-      border-top: 1px solid var(--wa-border);
-      display: flex;
-      flex-wrap: nowrap;
-      overflow-x: auto;
-      gap: 6px;
-      scrollbar-width: none;
-    }
-    .quick-bar::-webkit-scrollbar { display: none; }
-    .pill-btn {
-      background: #ffffff;
-      border: 1px solid #cbd5e1;
-      border-radius: 16px;
-      padding: 5px 12px;
-      font-size: 12px;
-      color: #334155;
-      cursor: pointer;
-      white-space: nowrap;
-      transition: all 0.15s;
-    }
-    .pill-btn:hover {
-      background: var(--wa-teal);
-      color: white;
-      border-color: var(--wa-teal);
-    }
-    .pill-btn.highlight {
-      background: #dcfce7;
-      border-color: #86efac;
-      color: #166534;
-      font-weight: 600;
-    }
-    .pill-btn.highlight:hover {
-      background: #16a34a;
-      color: white;
-    }
-
-    /* WHATSAPP INPUT FOOTER */
-    .chat-footer {
-      background: var(--wa-panel-bg);
-      padding: 10px 16px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      border-top: 1px solid var(--wa-border);
-    }
-    .input-icon-btn {
-      background: none;
-      border: none;
-      font-size: 20px;
-      color: #54656f;
-      cursor: pointer;
-      padding: 4px;
-    }
-    .message-input {
-      flex: 1;
-      background: #ffffff;
-      border: 1px solid transparent;
-      border-radius: 8px;
-      padding: 10px 14px;
-      font-size: 14.5px;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-    .message-input:focus { border-color: #cbd5e1; }
-    .send-circle-btn {
-      width: 42px;
-      height: 42px;
-      border-radius: 50%;
-      background: var(--wa-teal);
-      border: none;
-      color: white;
-      font-size: 18px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: background 0.2s;
-      flex-shrink: 0;
-    }
-    .send-circle-btn:hover { background: var(--wa-teal-dark); }
-    .send-circle-btn:disabled { background: #cbd5e1; cursor: not-allowed; }
-
-    /* TOAST NOTIFICATION */
-    .toast {
-      position: absolute;
-      top: 70px;
-      right: 24px;
-      background: #0f172a;
-      color: white;
-      padding: 12px 18px;
-      border-radius: 8px;
-      font-size: 13px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-      z-index: 100;
-      opacity: 0;
-      transform: translateY(-10px);
-      transition: all 0.3s;
-      pointer-events: none;
-      max-width: 320px;
-    }
-    .toast.show { opacity: 1; transform: translateY(0); }
-  </style>
-</head>
-<body>
-  <div class="app-wrapper">
-    <!-- SIDEBAR COM ESTOQUE AO VIVO NO FIRESTORE -->
-    <div class="sidebar">
-      <div class="sidebar-header">
-        <div>
-          <strong style="font-size: 14px; color: var(--wa-teal);">Conflora Viveiro</strong>
-          <div style="font-size: 11px; color: var(--wa-text-muted);">Painel do Administrador</div>
-        </div>
-        <span class="db-badge">Firestore (confloraai)</span>
-      </div>
-
-      <div class="tabs-bar">
-        <button class="tab-btn active" id="tabStockBtn" onclick="switchTab('stock')">Estoque em Tempo Real</button>
-        <button class="tab-btn" id="tabMoveBtn" onclick="switchTab('movements')">Baixas & Movimentações</button>
-        <button class="tab-btn" id="tabMetaBtn" onclick="switchTab('meta')">Links Meta</button>
-      </div>
-
-      <div class="customer-config">
-        <div style="font-weight: 600; color: #475569;">Simular com seu número:</div>
-        <div class="config-row">
-          <input type="text" id="custPhone" class="config-input" value="5564999351616" placeholder="Telefone com DDD" style="width: 140px;" />
-          <input type="text" id="custName" class="config-input" value="Edmar Júnio" placeholder="Seu Nome" />
-        </div>
-      </div>
-
-      <div class="sidebar-content" id="sidebarStockContent">
-        <div id="productList">
-          <div style="padding: 20px; text-align: center; color: var(--wa-text-muted); font-size: 13px;">Carregando produtos do Firestore...</div>
-        </div>
-      </div>
-
-      <div class="sidebar-content" id="sidebarMoveContent" style="display: none;">
-        <div id="movementList">
-          <div style="padding: 20px; text-align: center; color: var(--wa-text-muted); font-size: 13px;">Nenhuma baixa realizada ainda nesta sessão.</div>
-        </div>
-      </div>
-
-      <div class="sidebar-content" id="sidebarMetaContent" style="display: none; padding: 16px;">
-        <div style="font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--wa-teal);">Páginas Oficiais de Verificação Meta:</div>
-        <div style="display: flex; flex-direction: column; gap: 8px;">
-          <a href="/politica-de-privacidade" target="_blank" style="padding: 8px 12px; background: #f1f5f9; border-radius: 6px; text-decoration: none; color: #334155; font-size: 13px; font-weight: 500;">📄 Política de Privacidade</a>
-          <a href="/exclusao-de-dados" target="_blank" style="padding: 8px 12px; background: #f1f5f9; border-radius: 6px; text-decoration: none; color: #334155; font-size: 13px; font-weight: 500;">🗑️ Exclusão de Dados (LGPD)</a>
-          <a href="/termos-de-servico" target="_blank" style="padding: 8px 12px; background: #f1f5f9; border-radius: 6px; text-decoration: none; color: #334155; font-size: 13px; font-weight: 500;">⚖️ Termos de Serviço</a>
-          <a href="/health" target="_blank" style="padding: 8px 12px; background: #f1f5f9; border-radius: 6px; text-decoration: none; color: #334155; font-size: 13px; font-weight: 500;">🩺 Health Check API</a>
-        </div>
-      </div>
-    </div>
-
-    <!-- CHAT AREA WHATSAPP WEB -->
-    <div class="chat-area">
-      <div class="chat-header">
-        <div class="avatar-wrapper">🌱</div>
-        <div class="chat-header-info">
-          <div class="chat-header-name">Conflora Horta e Viveiro & Agromadeiras</div>
-          <div class="chat-header-status">online • Atendimento Inteligente WhatsApp</div>
-        </div>
-        <div style="display: flex; gap: 14px; color: #54656f; font-size: 18px; cursor: pointer;">
-          <span>🔍</span>
-          <span title="Recarregar Estoque do Firestore" onclick="fetchInventory()">🔄</span>
-        </div>
-      </div>
-
-      <div class="chat-body" id="chatBody">
-        <div class="enc-notice">
-          🔒 As mensagens desta conversa utilizam IA Gemini e realizam baixa atômica de estoque em tempo real no Cloud Firestore (projeto confloraai).
-        </div>
-
-        <div class="bubble assistant">
-          Olá! Seja muito bem-vindo à Conflora Horta e Viveiro 🌱.
-Sou o assistente oficial de vendas. Como posso ajudar com nossas plantas, mudas ou hortaliças hoje?
-          <div class="bubble-meta"><span>10:00</span></div>
-        </div>
-      </div>
-
-      <!-- PILLS DE TESTE RÁPIDO -->
-      <div class="quick-bar">
-        <button class="pill-btn" onclick="sendPrompt('qual valor da palmeira rabo de raposa?')">🌴 Palmeira Rabo de Raposa</button>
-        <button class="pill-btn" onclick="sendPrompt('Vocês tem mini cabra??')">🐐 Mini Cabra</button>
-        <button class="pill-btn" onclick="sendPrompt('Vocês tem palmeiras?')">🌱 Consultoria Palmeiras</button>
-        <button class="pill-btn highlight" onclick="sendPrompt('Manda pra mim 3 alface cabeça de 8, 3 rucula e 5 cebolinha')">🛒 Fazer Pedido Horta</button>
-        <button class="pill-btn" onclick="sendPrompt('pode me mandar foto da palmeira rabo de raposa?')">📸 Pedir Fotos</button>
-        <button class="pill-btn" onclick="sendPrompt('Hoje vai ser no débito')">💳 Mudar Pagamento</button>
-        <button class="pill-btn highlight" onclick="sendPrompt('Pode confirmar!')">✅ Confirmar Pedido (Dá Baixa no Estoque)</button>
-      </div>
-
-      <!-- BARRA DE DIGITAÇÃO WHATSAPP -->
-      <div class="chat-footer">
-        <button class="input-icon-btn">😊</button>
-        <button class="input-icon-btn">📎</button>
-        <input type="text" id="chatInput" class="message-input" placeholder="Mensagem" onkeydown="if(event.key==='Enter') sendChatMessage()" />
-        <button id="sendCircleBtn" class="send-circle-btn" onclick="sendChatMessage()">➤</button>
-      </div>
-
-      <div class="toast" id="stockToast"></div>
-    </div>
-  </div>
-
-  <script>
-    const chatBodyEl = document.getElementById('chatBody');
-    const chatInputEl = document.getElementById('chatInput');
-    const sendCircleBtnEl = document.getElementById('sendCircleBtn');
-    const custPhoneEl = document.getElementById('custPhone');
-    const custNameEl = document.getElementById('custName');
-    const productListEl = document.getElementById('productList');
-    const movementListEl = document.getElementById('movementList');
-    const stockToastEl = document.getElementById('stockToast');
-
-    function switchTab(tab) {
-      document.getElementById('tabStockBtn').className = 'tab-btn ' + (tab === 'stock' ? 'active' : '');
-      document.getElementById('tabMoveBtn').className = 'tab-btn ' + (tab === 'movements' ? 'active' : '');
-      document.getElementById('tabMetaBtn').className = 'tab-btn ' + (tab === 'meta' ? 'active' : '');
-
-      document.getElementById('sidebarStockContent').style.display = tab === 'stock' ? 'block' : 'none';
-      document.getElementById('sidebarMoveContent').style.display = tab === 'movements' ? 'block' : 'none';
-      document.getElementById('sidebarMetaContent').style.display = tab === 'meta' ? 'block' : 'none';
-    }
-
-    function showToast(msg) {
-      stockToastEl.textContent = msg;
-      stockToastEl.classList.add('show');
-      setTimeout(() => stockToastEl.classList.remove('show'), 4000);
-    }
-
-    function getTimeString() {
-      const now = new Date();
-      return String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
-    }
-
-    function sendPrompt(text) {
-      chatInputEl.value = text;
-      sendChatMessage();
-    }
-
-    async function sendChatMessage() {
-      const text = chatInputEl.value.trim();
-      const phone = custPhoneEl.value.trim() || '5564999351616';
-      const name = custNameEl.value.trim() || 'Edmar Júnio';
-      if (!text) return;
-
-      appendBubble(text, 'user', getTimeString());
-      chatInputEl.value = '';
-      sendCircleBtnEl.disabled = true;
-
-      const typingBubble = appendBubble('Digitando...', 'assistant', getTimeString(), true);
-
-      try {
-        const res = await fetch('/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ telefone: phone, nome: name, mensagem: text }),
-        });
-        const data = await res.json();
-        typingBubble.remove();
-
-        if (data.reply) {
-          appendBubble(data.reply, 'assistant', getTimeString());
-
-          // Se a intenção foi fechar pedido, atualiza estoque na hora
-          if (data.intent === 'ORDER_CONFIRMATION') {
-            showToast('📉 Pedido confirmado! Baixa de estoque registrada no Firestore.');
-            fetchInventory();
-          }
-        } else if (data.error) {
-          appendBubble('Erro: ' + data.error, 'assistant', getTimeString());
-        }
-      } catch (err) {
-        typingBubble.remove();
-        appendBubble('Erro de conexão: ' + err.message, 'assistant', getTimeString());
-      } finally {
-        sendCircleBtnEl.disabled = false;
-        chatInputEl.focus();
-      }
-    }
-
-    function appendBubble(text, role, time, isTyping = false) {
-      const bubble = document.createElement('div');
-      bubble.className = 'bubble ' + role;
-      bubble.textContent = text;
-
-      if (!isTyping) {
-        const meta = document.createElement('div');
-        meta.className = 'bubble-meta';
-        meta.innerHTML = '<span>' + time + '</span>' + (role === 'user' ? ' <span class="blue-ticks">✓✓</span>' : '');
-        bubble.appendChild(meta);
-      }
-
-      chatBodyEl.appendChild(bubble);
-      chatBodyEl.scrollTop = chatBodyEl.scrollHeight;
-      return bubble;
-    }
-
-    async function fetchInventory() {
-      try {
-        const res = await fetch('/api/inventory');
-        const data = await res.json();
-        if (Array.isArray(data.products)) {
-          renderProducts(data.products);
-        }
-        if (Array.isArray(data.movements)) {
-          renderMovements(data.movements);
-        }
-      } catch (err) {
-        console.error('Erro ao carregar estoque:', err);
-      }
-    }
-
-    function renderProducts(products) {
-      productListEl.innerHTML = '';
-      products.forEach(p => {
-        const div = document.createElement('div');
-        div.className = 'product-item';
-        const qty = p.stockQuantity ?? p.estoque ?? 0;
-        const isLow = qty <= 5;
-        const img = p.imageUrl || p.imageurl || '/store-assets/placeholder.svg';
-
-        div.innerHTML = \`
-          <img src="\${img}" class="product-thumb" alt="\${p.descricao || p.name}" onerror="this.src='/store-assets/placeholder.svg'" />
-          <div class="product-info">
-            <div class="product-title">\${p.descricao || p.name}</div>
-            <div class="product-sub">\${p.categoria || ''} • R$ \${Number(p.valor_num || p.price || 0).toFixed(2)}</div>
-          </div>
-          <span class="stock-badge \${isLow ? 'low' : ''}">\${qty} un</span>
-        \`;
-        productListEl.appendChild(div);
-      });
-    }
-
-    function renderMovements(movements) {
-      movementListEl.innerHTML = '';
-      if (movements.length === 0) {
-        movementListEl.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--wa-text-muted); font-size: 13px;">Nenhuma baixa realizada ainda.</div>';
-        return;
-      }
-      movements.forEach(m => {
-        const div = document.createElement('div');
-        div.className = 'movement-item';
-        div.innerHTML = \`
-          <div><strong></strong>: -\${m.quantityDeducted} un</div>
-          <div style="font-size: 11px; color: #475569;">Estoque: \${m.previousStock} ➔ \${m.newStock}</div>
-          <div class="movement-date">\${new Date(m.createdAt).toLocaleTimeString()} • WhatsApp (\${m.customerPhone || 'Cliente'})</div>
-        \`;
-        const productNameElement = div.querySelector('strong');
-        productNameElement.textContent = m.productName || 'Produto';
-        productNameElement.title = m.productName || 'Produto';
-        movementListEl.appendChild(div);
-      });
-    }
-
-    // Carrega estoque ao abrir
-    fetchInventory();
-  </script>
-</body>
-</html>`;
-}
-
 function renderTermsOfServiceHtml() {
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -918,7 +233,6 @@ function renderTermsOfServiceHtml() {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Termos de Serviço | Conflora AI</title>
-  ${FETCH_SHIM_SCRIPT}
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #2d3748; max-width: 800px; margin: 0 auto; padding: 24px 16px; background-color: #f7fafc; }
     .card { background: white; padding: 36px 28px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
@@ -956,14 +270,6 @@ function whatsappCustomerPhone(phone) {
     : digits;
 }
 
-function mercadoPagoNotificationUrl() {
-  const baseUrl = String(config.tasks.serviceUrl || '').trim();
-  if (!baseUrl.startsWith('https://')) {
-    throw new Error('Configure SERVICE_URL com a URL HTTPS pública para os webhooks do Mercado Pago.');
-  }
-  return new URL('/webhooks/mercadopago', baseUrl).toString();
-}
-
 async function sendCustomerOrderReceipt(whatsappClient, phone, receiptText) {
   const targetPhone = whatsappCustomerPhone(phone);
   if (!/^\d{12,15}$/.test(targetPhone)) {
@@ -996,7 +302,7 @@ async function sendCustomerOrderReceipt(whatsappClient, phone, receiptText) {
 }
 
 async function prepareSicrediCheckoutOrder({ app, sicrediClient, taskQueueClient, order }) {
-  if (order.paymentMethod !== 'PIX') {
+  if (order.paymentMethod !== 'PIX' || order.pixMode === 'MANUAL') {
     const id = `${order.id}-receipt`;
     await app.locals.pdv.store.transaction(async (tx) => {
       if (await tx.get('pdv_outbox', id)) return;
@@ -1052,22 +358,19 @@ function createApp({
   verifyGoogleToken = verifyFirebaseToken,
   storeRepository,
   storeAssistant,
-  mercadoPagoClient,
   sicrediClient,
 }) {
   const express = getExpress();
   if (!express) { throw new Error('Express module not available'); }
-  const payments =
-    mercadoPagoClient ||
-    new MercadoPagoClient({
-      accessToken: config.mercadoPago.accessToken,
-      webhookSecret: config.mercadoPago.webhookSecret,
-    });
-  messageService.mercadoPagoClient = payments;
   const sicrediPixClient = sicrediClient || new SicrediPixClient();
   messageService.sicrediPixClient = sicrediPixClient;
   const app = express();
+  const errorHistory = new (require('../services/error-history.service').ErrorHistoryService)({ firestore: messageService.firestoreRepo.firestore, inMemory: process.env.NODE_ENV === 'test' });
+  app.locals.errorHistory = errorHistory;
+  require('./error-history.routes').installErrorCapture(app, errorHistory);
   app.locals.storefrontCheckoutLocks = new Map();
+  const incoming = new (require('../services/incoming-message.service').IncomingMessageService)(messageService.firestoreRepo);
+  app.locals.incomingMessages = incoming;
   if (config.appEnvironment === 'dev') {
     app.use((_req, res, next) => {
       res.setHeader('X-Conflora-Environment', 'dev');
@@ -1086,6 +389,7 @@ function createApp({
   });
 
   // Preserve raw body buffer for signature validation
+  app.use('/api/client-errors', express.json({ limit: '8kb' }));
   app.use(
     express.json({
       limit: '5mb',
@@ -1118,8 +422,19 @@ function createApp({
     app.use('/api/meta-agent', metaAgentRouter);
   }
 
+  app.use('/api/admin', (req, res, next) => {
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && !req.path.endsWith('/preview') && /\/(?:products|import-products|stock)(?:\/|$)/.test(req.path)) {
+      res.once('finish', () => {
+        // A failed import may already have committed earlier batches.
+        if (req.user?.role === 'ADMIN') messageService.catalogRepo?.invalidateCache?.();
+      });
+    }
+    next();
+  });
+  require('../security/request-protection').installRequestProtection(app, messageService.firestoreRepo);
   const { installExistingStore, normalizeExistingCheckout } = require('../storefront/existing-store');
   installExistingStore(app, {
+    catalog: messageService.catalogRepo,
     repository: messageService.firestoreRepo,
     assistant: storeAssistant || new StoreAssistant({ client: messageService.agentService?.getAiClient?.(), model: config.gemini.model }),
   });
@@ -1144,6 +459,34 @@ function createApp({
     await sessions.logout(req, res);
     res.json({ success: true });
   });
+  app.post('/api/auth/switch-profile', async (req, res, next) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, error: 'Sessão não autenticada.' });
+      }
+      const result = await sessions.setActiveRole(req, req.body?.role);
+      if (!result.success) {
+        return res.status(403).json(result);
+      }
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.patch('/api/auth/profile', async (req, res, next) => {
+    if (!req.user) return res.status(401).json({ error: 'Entre na sua conta.' });
+    const body = req.body || {};
+    const name = String(body.name || '').trim();
+    const phone = String(body.phone || '').replace(/\D/g, '');
+    const address = String(body.address || '').trim();
+    if (name.length < 2 || name.length > 120 || (phone && !/^\d{10,13}$/.test(phone)) || address.length > 500) return res.status(400).json({ error: 'Confira nome, WhatsApp com DDD e endereço.' });
+    try {
+      const profile = await messageService.firestoreRepo.updateOwnUserProfile(req.user.id, { name, phone, address });
+      const user = { ...req.user, name: profile.name, phone: profile.phone, address: profile.address };
+      await sessions.issue(req, res, user);
+      res.json({ user });
+    } catch (error) { next(error); }
+  });
   app.use('/api/admin', (req, res, next) => {
     if (req.path === '/auth/login' || (req.path === '/auth/users' && req.method === 'GET')) {return next();}
     if (!req.user) {return res.status(401).json({ error: 'Entre na sua conta.' });}
@@ -1153,6 +496,8 @@ function createApp({
     }
     next();
   });
+  require('./error-history.routes').installErrorHistoryRoutes(app, errorHistory);
+  require('./product-import.routes').installProductImportRoutes(app, { repository: messageService.firestoreRepo, catalog: messageService.catalogRepo });
   // Home / Cardápio Digital Conflora
   app.get(['/', '/products/:productId', '/configuracoes'], (req, res) => {
     if (process.env.STOREFRONT_STORE_SLUG) {
@@ -1188,7 +533,15 @@ function createApp({
   });
 
   // Servir relatórios em PDF gerados
-  app.use('/reports', express.static(require('node:path').resolve(__dirname, '../../public/reports')));
+  app.get('/reports/:name', sessions.resolve, async (req, res) => {
+    if (req.user?.role !== 'ADMIN') return res.sendStatus(403);
+    try {
+      const storage = new (require('../reports/private-report-storage').PrivateReportStorage)(messageService.firestoreRepo);
+      const buffer = await storage.read(req.params.name);
+      if (!buffer) return res.sendStatus(404);
+      res.set('Cache-Control', 'private, no-store').type('application/pdf').send(buffer);
+    } catch { res.sendStatus(404); }
+  });
 
   // Tela Dedicada do Caixa & Frente de Loja (Mobile & Desktop)
   app.get(['/caixa', '/pdv'], (_req, res) => {
@@ -1199,20 +552,14 @@ function createApp({
     res.status(200).send(renderCaixaHtml());
   });
 
-  // Simulador WhatsApp Oficial
-  app.get(['/simulador', '/chat-simulador'], (_req, res) => {
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.status(200).send(renderWhatsAppSimulatorHtml());
-  });
-
   // Health check
   app.get('/health', (_req, res) => {
     res.status(200).json({
       status: 'ok', uptime: process.uptime(),
       environment: config.appEnvironment,
       projectId: config.gcp.projectId,
-      paymentProvider: 'MERCADO_PAGO',
-      expectedLiveMode: config.mercadoPago.expectedLiveMode,
+      paymentProvider: require('../orders/pix-mode').pixMode(),
+      revision: process.env.K_REVISION || process.env.APP_REVISION || 'local',
     });
   });
 
@@ -1258,16 +605,28 @@ function createApp({
       return res.sendStatus(401);
     }
 
-    res.sendStatus(200);
-
     const body = req.body;
     if (body.object !== 'whatsapp_business_account' || !Array.isArray(body.entry)) {
-      return;
+      return res.sendStatus(200);
     }
 
+    try {
     for (const entry of body.entry) {
       for (const change of entry.changes || []) {
         const value = change.value;
+        for (const status of Array.isArray(value?.statuses) ? value.statuses : []) {
+          if (!status.id || !['sent', 'delivered', 'read', 'failed'].includes(status.status)) continue;
+          const jobs = await app.locals.pdv.store.list('pdv_outbox', 'providerMessageId', status.id);
+          const eventId = createHash('sha256').update(status.id + ':' + status.status).digest('hex');
+          await app.locals.pdv.store.transaction(async tx => {
+            tx.set('whatsapp_delivery_events', eventId, { id: eventId, messageId: status.id, status: status.status.toUpperCase(), timestamp: String(status.timestamp || ''), expiresAt: new Date(Date.now() + 30 * 86400000) });
+          });
+          const ranks = { ACCEPTED: 0, SENT: 1, DELIVERED: 2, READ: 3, FAILED: 4 };
+          for (const job of jobs) await app.locals.pdv.store.transaction(async tx => {
+            const current = await tx.get('pdv_outbox', job.id);
+            if ((ranks[current.deliveryStatus] ?? 0) <= ranks[status.status.toUpperCase()]) tx.set('pdv_outbox', job.id, { ...current, deliveryStatus: status.status.toUpperCase() });
+          });
+        }
         if (!value || !Array.isArray(value.messages)) {
           continue;
         }
@@ -1288,124 +647,28 @@ function createApp({
 
           const taskPayload = { phone, message: text, customerName, messageId };
 
-          if (!config.whatsapp.assistantEnabled) {
-            setImmediate(() => {
-              messageService
-                .handleCustomerMessage({ ...taskPayload, verifyOnly: true })
-                .catch((error) =>
-                  Logger.error('Falha ao verificar comprovante recebido pelo WhatsApp', error),
-                );
-            });
-            continue;
+          await incoming.accept(taskPayload);
+          if (config.whatsapp.assistantEnabled && taskQueueClient) {
+            await taskQueueClient.enqueueProcessMessage(taskPayload).catch(error => Logger.warn('Mensagem persistida; fila será retomada pelo trabalhador.', { messageId, error: error.message }));
           }
-
-          if (taskQueueClient) {
-            await taskQueueClient.enqueueProcessMessage(taskPayload).catch((err) => {
-              Logger.error('Erro ao enfileirar tarefa; processando diretamente', err);
-              messageService.handleCustomerMessage(taskPayload).catch(() => {});
-            });
-          } else {
-            setImmediate(() => {
-              messageService.handleCustomerMessage(taskPayload).catch(() => {});
-            });
-          }
+          // The durable inbox is authoritative even when Cloud Tasks is unavailable.
+          if (process.env.NODE_ENV !== 'production') setImmediate(() => messageService.handleCustomerMessage({ ...taskPayload, ...(!config.whatsapp.assistantEnabled ? { verifyOnly: true } : {}) }).catch(() => {}));
         }
       }
     }
+    res.sendStatus(200);
+    } catch (error) { Logger.error('Não foi possível persistir o webhook.', error); res.sendStatus(503); }
   });
 
-  app.post('/webhooks/mercadopago', async (req, res) => {
-    const paymentId = String(req.query['data.id'] || req.body?.data?.id || '');
-    const signatureIsValid = payments.verifyWebhookSignature({
-      signature: req.headers['x-signature'],
-      requestId: req.headers['x-request-id'],
-      paymentId,
-    });
-    if (!signatureIsValid) {
-      Logger.warn('Webhook do Mercado Pago recusado: assinatura inválida.');
-      return res.sendStatus(401);
-    }
-
-    const eventType = req.query.type || req.body?.type || req.body?.action || '';
-    if (!String(eventType).startsWith('payment')) {
-      return res.sendStatus(200);
-    }
-
-    try {
-      const payment = await payments.getPayment(paymentId);
-      const orderId = String(payment.external_reference || '');
-      if (!orderId) {
-        Logger.warn('Notificação do Mercado Pago sem referência de pedido.', {
-          paymentId,
-        });
-        return res.sendStatus(200);
-      }
-      const order = await messageService.firestoreRepo.getOrderById(orderId);
-      if (!order) {
-        Logger.warn('Pagamento do Mercado Pago ainda sem pedido correspondente.', {
-          orderId,
-          paymentId,
-        });
-        return res.sendStatus(503);
-      }
-      if (order.status === 'CANCELLED') {
-        Logger.error('PIX aprovado para um pedido cancelado; necessário tratar pagamento e pedido.', {
-          orderId,
-          paymentId,
-        });
-        return res.sendStatus(200);
-      }
-      if (
-        String(order.paymentMethod || '').toUpperCase() !== 'PIX' ||
-        !isApprovedPixPayment(payment, order)
-      ) {
-        Logger.warn('Pagamento do Mercado Pago não corresponde ao PIX do pedido.', {
-          orderId,
-          paymentId,
-          status: payment.status,
-          paymentMethod: payment.payment_method_id,
-          amount: payment.transaction_amount,
-        });
-        return res.sendStatus(200);
-      }
-      if (!['CONFIRMED', 'PAID_CONFIRMED', 'DELIVERED'].includes(order.status)) {
-        const confirmedOrder = await messageService.firestoreRepo.confirmOrderPayment(
-          order.id,
-          {
-            verifiedVia: 'MERCADO_PAGO_WEBHOOK',
-            paymentTransactionId: payment.id,
-            paymentAmount: payment.transaction_amount,
-          },
-        );
-        if (confirmedOrder.alreadyConfirmed) {
-          return res.sendStatus(200);
-        }
-        const receiptText = formatOrderReceipt({
-          ...confirmedOrder,
-          paymentStatus: 'APPROVED',
-        });
-        confirmedOrder.receiptText = receiptText;
-        await messageService.firestoreRepo.saveOrderReceipt(confirmedOrder.id, receiptText).catch((saveError) => {
-          Logger.warn('PIX confirmado; não foi possível salvar a cópia final do recibo.', { orderId, error: saveError.message });
-        });
-        const delivery = await sendCustomerOrderReceipt(
-          messageService.whatsappClient,
-          order.customerPhone,
-          receiptText,
-        );
-        if (!delivery.sent) {
-          Logger.warn('PIX confirmado; não foi possível enviar a atualização ao cliente.', {
-            orderId,
-            reason: delivery.reason,
-          });
-        }
-      }
-      return res.sendStatus(200);
-    } catch (error) {
-      Logger.error('Falha ao processar notificação do Mercado Pago.', error);
-      return res.sendStatus(500);
-    }
+  const retryIncoming = () => incoming.retry(payload => messageService.handleCustomerMessage({ ...payload, verifyOnly: !config.whatsapp.assistantEnabled }));
+  app.post('/internal/messages/retry', async (req, res) => {
+    if (!config.tasks.taskSecret || req.get('X-Conflora-Task-Secret') !== config.tasks.taskSecret) return res.sendStatus(401);
+    try { await retryIncoming(); res.sendStatus(200); } catch { res.sendStatus(503); }
   });
+  if (process.env.NODE_ENV !== 'test') {
+    const timer = require('node:timers').setInterval(() => retryIncoming().catch(error => Logger.error('Entrada de mensagens pendente', error, { source: 'WORKER' })), 15000);
+    timer.unref();
+  }
 
   // Cloud Tasks Processing Endpoint
   app.post('/tasks/processar-mensagem', async (req, res) => {
@@ -1413,7 +676,7 @@ function createApp({
       return res.status(410).json({ error: 'Atendimento automático desativado.' });
     }
     const secret = req.headers['x-conflora-task-secret'];
-    if (config.tasks.taskSecret && secret !== config.tasks.taskSecret) {
+    if (!config.tasks.taskSecret || secret !== config.tasks.taskSecret) {
       return res.sendStatus(401);
     }
 
@@ -1483,7 +746,8 @@ function createApp({
     try {
       const { query, history } = req.body || {};
       const { BotanicalConsultantService } = require('../ai/botanical-consultant');
-      const catalogProducts = await messageService.firestoreRepo.getAllProducts();
+      if (messageService.catalogRepo) await messageService.catalogRepo.refreshCatalog();
+      const catalogProducts = messageService.catalogRepo?.rawItems || await messageService.firestoreRepo.getAllProducts();
       const result = await BotanicalConsultantService.consult({
         query: query || '',
         history: history || [],
@@ -1528,7 +792,6 @@ function createApp({
 
   // Client Web Orders API
   app.post(['/api/orders', '/api/storefront/orders'], async (req, res) => {
-    if (req.user?.role === 'ENTREGADOR') return res.status(403).json({ error: 'Entregadores acessam apenas suas entregas e não podem criar pedidos.' });
     const isStorefrontOrder = req.path === '/api/storefront/orders';
     const idempotencyKey = String(req.get('Idempotency-Key') || '').trim();
     if (isStorefrontOrder && !/^[a-zA-Z0-9_-]{1,128}$/.test(idempotencyKey)) {
@@ -1652,13 +915,15 @@ function createApp({
           const receiptDelivery = prepared.receiptDelivery.sent ? prepared.receiptDelivery : replayOrder.receiptDelivery || prepared.receiptDelivery;
           return res.status(200).json({
             success: true,
-            order: { ...withoutIdempotencyFingerprint(replayOrder), receiptText, receiptDelivery },
+            order: { ...withoutIdempotencyFingerprint(replayOrder), ...(replayOrder.pixMode === 'MANUAL' ? { accessToken: require('../orders/manual-pix.routes').orderAccessToken(replayOrder) } : {}), receiptText, receiptDelivery },
             receiptDelivery,
           });
         }
       }
       let pixData = null;
-      if (resolvedPaymentMethod === 'PIX') {
+      const manualPix = resolvedPaymentMethod === 'PIX' ? require('../orders/pix-mode').manualPixSettings() : null;
+      if (manualPix) require('../orders/manual-pix.routes').orderAccessToken({ id: orderId });
+      if (resolvedPaymentMethod === 'PIX' && !manualPix) {
         if (!sicrediPixClient.isOfficialApiConfigured) {
           return res.status(503).json({ error: 'Pagamento Pix indisponível. Configure as credenciais, certificado e chave Pix do Sicredi.' });
         }
@@ -1697,12 +962,14 @@ function createApp({
         cashTendered: Number(cashTendered) || 0,
         changeDue: Number(changeDue) || 0,
         ...(idempotencyKey ? { idempotencyFingerprint: checkoutFingerprint } : {}),
-        status: resolvedPaymentMethod === 'PIX' ? 'CREATING_PIX' : resolvedPaymentMethod === 'FIADO' ? 'AWAITING_CONFIRMATION' : 'AWAITING_PAYMENT',
+        status: resolvedPaymentMethod === 'PIX' && !manualPix ? 'CREATING_PIX' : resolvedPaymentMethod === 'FIADO' ? 'AWAITING_CONFIRMATION' : 'AWAITING_PAYMENT',
         ...(resolvedPaymentMethod === 'FIADO' ? { creditApprovalStatus: 'PENDING' } : {}),
         source: 'WEB_CATALOG',
         paymentStatus: 'PENDING',
+        ...(resolvedPaymentMethod === 'PIX' ? { pixMode: manualPix ? 'MANUAL' : 'SICREDI' } : {}),
+        ...(manualPix ? { manualPix, paymentReviewStatus: 'AWAITING_PAYMENT' } : {}),
         ...(pixData ? { pixData, pixProvider: 'SICREDI', paymentProvider: 'SICREDI' } : {}),
-      }, { requirePersistence: resolvedPaymentMethod === 'PIX', reserveInventory: true });
+      }, { requirePersistence: resolvedPaymentMethod === 'PIX' && !(manualPix && messageService.firestoreRepo.isInMemory && !messageService.firestoreRepo.firestore), reserveInventory: true });
 
       let receiptDelivery = { sent: false, reason: 'Envio não solicitado.' };
       if (order.source === 'WEB_CATALOG') {
@@ -1722,57 +989,14 @@ function createApp({
         Logger.warn('Aviso: falha ao notificar administradores sobre nova venda web', { error: err.message });
       });
 
-      // Notificação ao Proprietário via WhatsApp se o client estiver ativo
-      const ownerNumber = req.storeConfig?.checkout.contactPhone || process.env.OWNER_WHATSAPP_NUMBER || '5564999351616';
-      if (messageService.whatsappClient && ownerNumber) {
-        try {
-          const itemsListText = orderItems
-            .map((it) => `• ${it.quantity}x ${it.name} (R$ ${Number(it.price || 0).toFixed(2).replace('.', ',')} un) = R$ ${(Number(it.price || 0) * Number(it.quantity || 1)).toFixed(2).replace('.', ',')}`)
-            .join('\n');
-
-          const couponText = appliedDiscount > 0
-            ? `🎟️ *Cupom:* ${resolvedCoupon} (-R$ ${appliedDiscount.toFixed(2).replace('.', ',')})\n`
-            : '';
-
-          let cashDetails = '';
-          if (paymentMethod === 'DINHEIRO') {
-            const tendered = Number(cashTendered) || 0;
-            const change = Number(changeDue) || 0;
-            if (change > 0) {
-              cashDetails = `💵 *Dinheiro em mãos:* R$ ${tendered.toFixed(2).replace('.', ',')}\n💰 *Levar de troco:* R$ ${change.toFixed(2).replace('.', ',')}\n`;
-            } else {
-              cashDetails = `💵 *Dinheiro em mãos:* R$ ${(tendered || finalTotal).toFixed(2).replace('.', ',')}\n✅ *Valor exato, não precisa de troco*\n`;
-            }
-          }
-
-          const notificationText = (
-            `🔔 *NOVO PEDIDO - ${req.storeConfig?.identity.name || 'LOJA'}* 🔔\n\n` +
-            `📦 *Pedido:* #${order.id}\n` +
-            `📅 *Data:* ${new Date().toLocaleString('pt-BR')}\n\n` +
-            `👤 *Cliente:* ${customerName}\n` +
-            `📱 *WhatsApp:* ${customerPhone}\n` +
-            `📍 *Entrega:* ${orderType === 'DELIVERY' ? deliveryAddress : '🏬 Retirada no Viveiro Conflora'}\n\n` +
-            `🛒 *Itens do Pedido:*\n` +
-            `${itemsListText}\n\n` +
-            `💵 *Subtotal:* R$ ${calculatedSubtotal.toFixed(2).replace('.', ',')}\n` +
-            `${couponText}` +
-            `💰 *Total Final:* R$ ${finalTotal.toFixed(2).replace('.', ',')}\n` +
-            `💳 *Forma de Pagamento:* ${paymentMethod}\n` +
-            `${cashDetails}`
-          );
-
-          await messageService.whatsappClient.sendTextMessage(ownerNumber, notificationText).catch(() => {});
-        } catch {
-          // Mensagem opcional de WhatsApp para dono
-        }
-      }
+      await app.locals.pdv.service.queueOperationalNotifications(order);
 
       res.status(200).json({
         success: true,
         order: {
           ...withoutIdempotencyFingerprint(order),
+          ...(order.pixMode === 'MANUAL' ? { accessToken: require('../orders/manual-pix.routes').orderAccessToken(order) } : {}),
           receiptText,
-          paymentCheckoutUrl: '',
           receiptDelivery,
         },
         receiptDelivery,
@@ -1983,7 +1207,7 @@ function createApp({
         !order.paymentTransactionId
       ) {
         return res.status(409).json({
-          error: 'O PIX só pode ser confirmado após aprovação verificada pelo Mercado Pago.',
+          error: 'O PIX só pode ser confirmado após confirmação do Sicredi ou conferência manual autorizada.',
         });
       }
       const result = await messageService.firestoreRepo.updateOrderStatus(id, status);
@@ -2025,23 +1249,11 @@ function createApp({
         });
       }
       const resolvedPaymentMethod = String(paymentMethod || 'DINHEIRO').toUpperCase();
-      const orderId = randomUUID();
-      let mercadoPagoPreference = null;
-      if (resolvedPaymentMethod === 'PIX') {
-        if (!payments.checkoutConfigured) {
-          return res.status(503).json({
-            error: 'Pagamento PIX indisponível. Configure as credenciais e o segredo de webhook do Mercado Pago.',
-          });
-        }
-        const total = normalizedItems.reduce(
-          (sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1),
-          0,
-        );
-        mercadoPagoPreference = await payments.createPixCheckout({
-          order: { id: orderId, total },
-          notificationUrl: mercadoPagoNotificationUrl(),
-        });
+      if (resolvedPaymentMethod === 'PIX' && require('../orders/pix-mode').pixMode() === 'MANUAL') {
+        const order = await app.locals.pdv.service.create({ requestId: randomUUID(), items: normalizedItems, paymentMethod: 'PIX', orderType: 'PICKUP', customerName, customerPhone, notes }, req.user);
+        return res.json({ success: true, order, receiptText: formatOrderReceipt(order) });
       }
+      const orderId = randomUUID();
       const order = await messageService.firestoreRepo.createManualOrder({
         customerName,
         customerPhone,
@@ -2052,8 +1264,6 @@ function createApp({
         notes,
         orderId,
         status: resolvedPaymentMethod === 'PIX' ? 'AWAITING_PIX' : 'CONFIRMED',
-        mercadoPagoPreferenceId: mercadoPagoPreference?.id || '',
-        paymentCheckoutUrl: mercadoPagoPreference?.checkoutUrl || '',
         requirePersistence: resolvedPaymentMethod === 'PIX',
       });
       const receiptText = formatOrderReceipt(order);
@@ -2099,7 +1309,7 @@ function createApp({
     taskQueueClient,
     ownerPhone: process.env.OWNER_WHATSAPP_NUMBER || config.whatsapp?.ownerNumber || '',
   });
-  app.use('/pdv-assets', express.static(require('node:path').resolve(__dirname, '../../public/pdv')));
+  app.use('/pdv-assets/dist', express.static(require('node:path').resolve(__dirname, '../../public/pdv/dist')));
 
   // --- API DO CAIXA & PDV RÁPIDO (CELULAR & BALCÃO) ---
   app.get('/api/caixa/products', async (_req, res) => {
@@ -2236,6 +1446,7 @@ function createApp({
         quantity,
         reason,
         requestId,
+        expectedStock: req.body.expectedStock,
         actor: { id: req.user.id, name: req.user.name },
       });
       if (movement.operation === 'EXIT' && !movement.duplicate) {
@@ -2245,7 +1456,7 @@ function createApp({
       }
       res.status(200).json(movement);
     } catch (error) {
-      const status = /não encontrado/i.test(error.message) ? 404 : /insuficiente/i.test(error.message) ? 409 : 400;
+      const status = /não encontrado/i.test(error.message) ? 404 : /insuficiente|estoque mudou|reservadas/i.test(error.message) ? 409 : 400;
       res.status(status).json({ error: error.message || 'Não foi possível ajustar o estoque.' });
     }
   });
@@ -2256,7 +1467,7 @@ function createApp({
       const product = req.body;
       await messageService.firestoreRepo.saveProduct(product);
       if (messageService.catalogRepo) {
-        messageService.catalogRepo.lastCacheTime = 0;
+        messageService.catalogRepo.invalidateCache?.();
       }
       res.status(200).json({ success: true, product });
     } catch (err) {
@@ -2315,6 +1526,7 @@ function createApp({
           quality: quality ? parseInt(quality, 10) : undefined,
           format,
           preserveZoomQuality: true,
+          preserveOriginal: true,
         });
 
         const storedImage = await messageService.firestoreRepo.uploadProductImage(photoDoc);
@@ -2351,7 +1563,7 @@ function createApp({
       await messageService.firestoreRepo.saveProduct(updatedProduct);
 
       if (messageService.catalogRepo) {
-        messageService.catalogRepo.lastCacheTime = 0;
+        messageService.catalogRepo.invalidateCache?.();
       }
 
       res.status(200).json({
@@ -2453,16 +1665,6 @@ function createApp({
     }
   });
 
-  app.post('/api/admin/test-webhook', async (_req, res) => {
-    try {
-      const t0 = Date.now();
-      const status = systemStatusService.checkWhatsAppStatus();
-      res.status(200).json({ ...status, pingLatencyMs: Date.now() - t0, pingSuccess: true });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
   // Auth: Google Sign-In (Clientes opcionais e Admin com acesso liberado)
   app.post('/api/auth/google', async (req, res) => {
     try {
@@ -2505,7 +1707,7 @@ function createApp({
       await messageService.firestoreRepo.saveUser({ ...existingUser, ...user });
 
       await sessions.issue(req, res, user);
-      res.status(200).json({ success: true, user });
+      res.status(200).json({ success: true, user: safeUser(user) });
     } catch (err) {
       Logger.error('Erro na autenticação Google', err);
       res.status(500).json({ success: false, error: err.message });
@@ -2717,32 +1919,21 @@ function createApp({
       }
 
       const isPix = approval.paymentMethod === 'PIX';
+      if (isPix) {
+        return res.status(409).json({ error: 'Esta solicitação usa o fluxo antigo. Refaça a venda no Caixa para registrar Pix manual com conferência e comprovante.' });
+      }
       const ticketNumber = String(Math.floor(100 + Math.random() * 900));
       const orderId = randomUUID();
-      let mercadoPagoPreference = null;
-      if (isPix) {
-        if (!payments.checkoutConfigured) {
-          return res.status(503).json({
-            error: 'Pagamento PIX indisponível. Configure as credenciais e o segredo de webhook do Mercado Pago.',
-          });
-        }
-        mercadoPagoPreference = await payments.createPixCheckout({
-          order: { id: orderId, total: Number(approval.total || 0), ticketNumber },
-          notificationUrl: mercadoPagoNotificationUrl(),
-        });
-      }
       const order = await repo.createManualOrder({
         ...approval,
         items: approval.items,
-        status: isPix ? 'AWAITING_PIX' : 'AWAITING_CASHIER',
+        status: 'AWAITING_CASHIER',
         ticketNumber,
         pixCode: '',
         orderId,
-        mercadoPagoPreferenceId: mercadoPagoPreference?.id || '',
-        paymentCheckoutUrl: mercadoPagoPreference?.checkoutUrl || '',
         discountAmount: approval.discountAmount,
         discountPercent: approval.discountPercent,
-        requirePersistence: isPix,
+        requirePersistence: false,
       });
       const receiptText = formatOrderReceipt(order);
       order.receiptText = receiptText;
@@ -2848,6 +2039,7 @@ function createApp({
       const metrics = await messageService.firestoreRepo.getExecutivePeriodMetrics({
         from: String(req.query.from || ''),
         to: String(req.query.to || ''),
+        comparisonMode: ['month', 'year'].includes(req.query.comparisonMode) ? req.query.comparisonMode : 'previous',
       });
       res.status(200).json(metrics);
     } catch (err) {
@@ -2892,10 +2084,17 @@ function createApp({
       if (!isValidReportDate(closingDate)) { return res.status(400).json({ error: 'Data inválida. Selecione uma data válida.' }); }
       const result = await messageService.firestoreRepo.closeCashierDay({
         date: closingDate,
+        requestId: req.body.requestId,
         closedBy: req.user?.name || req.user?.email || 'Administrador',
         notifyOwnerWhatsapp: false,
         whatsappClient: messageService.whatsappClient,
       });
+      const jobId = result.closingId + '-owner';
+      await app.locals.pdv.store.transaction(async tx => {
+        if (await tx.get('pdv_outbox', jobId)) return;
+        tx.set('pdv_outbox', jobId, { id: jobId, kind: 'closing', status: 'PENDING', attempts: 0, reportFileName: result.reportFileName, text: formatDailyExecutiveReport(result.metrics).join('\n\n') });
+      });
+      result.whatsappQueued = true;
       res.status(200).json(result);
     } catch (err) {
       Logger.error('Erro no fechamento do caixa diário', err);
@@ -2903,33 +2102,14 @@ function createApp({
     }
   });
 
-  // Local Testing Chat Endpoint
-  if (config.isDev || process.env.NODE_ENV !== 'production') {
-    app.post('/chat', async (req, res) => {
-      if (!config.whatsapp.assistantEnabled) {
-        return res.status(410).json({ error: 'Atendimento automático desativado.' });
-      }
-      const { telefone, nome, mensagem } = req.body;
-      if (!telefone || !mensagem) {
-        return res.status(400).json({ error: 'Campos "telefone" e "mensagem" são obrigatórios.' });
-      }
-
-      try {
-        const result = await messageService.handleCustomerMessage({
-          phone: telefone,
-          message: mensagem,
-          customerName: nome || 'Cliente Teste',
-          messageId: `local-${Date.now()}`,
-        });
-        const products = await messageService.firestoreRepo.getAllProducts();
-        res.status(200).json({ ...result, products });
-      } catch (error) {
-        Logger.error('Erro no endpoint /chat local', error);
-        res.status(500).json({ error: error.message });
-      }
-    });
-  }
-
+  app.use((error, req, res, _next) => {
+    if (res.headersSent) return _next(error);
+    const status = error.type === 'entity.too.large' ? 413 : error.type === 'entity.parse.failed' ? 400 : Number(error.status) || 500;
+    if (status >= 500) Logger.error('Falha na requisição', error, { requestId: req.requestId });
+    else Logger.warn('Requisição inválida', { requestId: req.requestId, status });
+    res.locals.errorCaptured = true;
+    res.status(status >= 400 && status <= 599 ? status : 500).json({ error: status === 400 ? 'Dados inválidos. Confira o formulário.' : status === 413 ? 'Arquivo ou formulário muito grande.' : 'Não foi possível concluir a operação. Tente novamente.', requestId: req.requestId });
+  });
   return app;
 }
 
@@ -2937,9 +2117,7 @@ module.exports = {
   createApp,
   getProductImageCandidates,
   getCashierProductImageCandidates,
-  renderHomeHtml,
   renderAdminHtml,
-  renderWhatsAppSimulatorHtml,
   renderPrivacyPolicyHtml,
   renderDataDeletionHtml,
   renderTermsOfServiceHtml,

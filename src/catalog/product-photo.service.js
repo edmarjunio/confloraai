@@ -212,7 +212,7 @@ function buildFirestorePhotoDocument(product, {
     contentType: finalContentType,
     data: finalBase64,
     dataUrl,
-    sizeBytes: Buffer.byteLength(finalBase64, 'utf8'),
+    sizeBytes: Buffer.byteLength(finalBase64, 'base64'),
     source,
   storageLocation: 'firebase-storage',
     createdAt: now,
@@ -230,7 +230,7 @@ async function buildOptimizedFirestorePhotoDocument(product, options = {}) {
 
   const { compressImageBase64 } = require('./image-compressor');
 
-  if (base64Data && typeof base64Data === 'string' && !base64Data.includes('<svg') && !base64Data.startsWith('PHN2Zy')) {
+  if (!options.preserveOriginal && base64Data && typeof base64Data === 'string' && !base64Data.includes('<svg') && !base64Data.startsWith('PHN2Zy')) {
     const comp = await compressImageBase64(base64Data, {
       contentType,
       maxWidth: options.maxWidth,

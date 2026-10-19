@@ -1,4 +1,5 @@
 const { getBusinessDate, isValidReportDate } = require('./daily-executive-metrics');
+const { summarizeProductSales } = require('./product-sales-metrics');
 
 const COMPLETED_STATUSES = new Set(['CONFIRMED', 'PAID_CONFIRMED', 'DELIVERED', 'COMPLETED']);
 const PAYMENT_METHODS = ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO', 'CARTAO', 'FIADO', 'SALDO_CLIENTE', 'OUTROS'];
@@ -10,18 +11,24 @@ function dayNumber(value) {
   return Math.floor(Date.parse(`${value}T00:00:00.000Z`) / 86400000);
 }
 
-function getPreviousPeriod({ from, to }) {
+function getPreviousPeriod({ from, to, comparisonMode = 'previous' }) {
   if (!isValidReportDate(from) || !isValidReportDate(to) || from > to) {
     throw new Error('Período inválido. Selecione datas válidas.');
   }
   const days = dayNumber(to) - dayNumber(from) + 1;
   if (days > 366) { throw new Error('O período máximo do painel é de 366 dias.'); }
-  const previousTo = new Date((dayNumber(from) - 1) * 86400000).toISOString().slice(0, 10);
-  const previousFrom = new Date((dayNumber(from) - days) * 86400000).toISOString().slice(0, 10);
-  return { from, to, days, previousFrom, previousTo };
+  const shift = (value, months) => {
+    const [year, month, day] = value.split('-').map(Number);
+    const end = new Date(Date.UTC(year, month + months, 0));
+    return new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), Math.min(day, end.getUTCDate()))).toISOString().slice(0, 10);
+  };
+  const months = comparisonMode === 'year' ? -12 : comparisonMode === 'month' ? -1 : 0;
+  const previousTo = months ? shift(to, months) : new Date((dayNumber(from) - 1) * 86400000).toISOString().slice(0, 10);
+  const previousFrom = months ? shift(from, months) : new Date((dayNumber(from) - days) * 86400000).toISOString().slice(0, 10);
+  return { from, to, days, previousFrom, previousTo, comparisonMode };
 }
 
-function summarizePeriod({ from, to, orders = [], settlements = [] }) {
+function summarizePeriod({ from, to, orders = [], settlements = [], catalog = [] }) {
   const validOrders = orders.filter((order) => {
     const businessDate = getBusinessDate(order?.createdAt);
     return businessDate >= from && businessDate <= to &&
@@ -40,7 +47,6 @@ function summarizePeriod({ from, to, orders = [], settlements = [] }) {
   let receivedDebtMinor = 0;
   let advanceCreditMinor = 0;
   const byPayment = new Map(PAYMENT_METHODS.map((method) => [method, { salesMinor: 0, receivedMinor: 0, orderCount: 0, receiptCount: 0 }]));
-  const products = new Map();
   const weekdays = WEEKDAYS.map((name, index) => ({ index, name, salesMinor: 0, orderCount: 0, sampleDays: 0 }));
   const daily = new Map();
 
@@ -54,21 +60,17 @@ function summarizePeriod({ from, to, orders = [], settlements = [] }) {
     const isPaid = !isOnAccount && (!paymentStatus || ['APPROVED', 'PAID', 'PAID_CONFIRMED'].includes(paymentStatus));
 
     salesMinor += amountMinor;
-    let orderReceivedMinor = 0;
     if (order.paymentParts?.length > 1) {
       for (const part of order.paymentParts) {
         const amount = cents(part.amount);
         const row = byPayment.get(part.method) || byPayment.get('OUTROS');
         row.salesMinor += amount; row.orderCount++;
         if (part.method === 'FIADO') onAccountMinor += amount;
-        else if (part.method !== 'SALDO_CLIENTE') orderReceivedMinor += amount;
       }
-      receivedSalesMinor += orderReceivedMinor;
+      // Receipts are allocated below by their effective date.
     } else {
     if (isOnAccount) { onAccountMinor += amountMinor; }
-    const isCashReceived = isPaid && method !== 'SALDO_CLIENTE';
-    orderReceivedMinor = isCashReceived ? amountMinor : 0;
-    if (isCashReceived) { receivedSalesMinor += amountMinor; }
+    // Received cash is allocated below by payment date.
     const payment = byPayment.get(method);
     payment.salesMinor += isOnAccount || isPaid ? amountMinor : 0;
     payment.orderCount += isOnAccount || isPaid ? 1 : 0;
@@ -77,7 +79,7 @@ function summarizePeriod({ from, to, orders = [], settlements = [] }) {
 
     const dateSummary = daily.get(date) || { date, salesMinor: 0, receivedMinor: 0, orderCount: 0 };
     dateSummary.salesMinor += amountMinor;
-    dateSummary.receivedMinor += orderReceivedMinor;
+    // Sale date and receipt date are independent facts.
     dateSummary.orderCount++;
     daily.set(date, dateSummary);
 
@@ -85,19 +87,16 @@ function summarizePeriod({ from, to, orders = [], settlements = [] }) {
     weekdays[weekdayIndex].salesMinor += amountMinor;
     weekdays[weekdayIndex].orderCount++;
 
-    for (const item of Array.isArray(order.items) ? order.items : []) {
-      const productId = String(item.productId || item.id || item.name || '').trim();
-      if (!productId) { continue; }
-      const quantity = Number(item.quantity || 1);
-      if (!Number.isFinite(quantity) || quantity <= 0) { continue; }
-      const itemMinor = Number.isFinite(Number(item.subtotalMinor))
-        ? Math.round(Number(item.subtotalMinor))
-        : cents(Number(item.price ?? item.unitPrice ?? 0) * quantity);
-      const product = products.get(productId) || { id: productId, name: String(item.name || 'Produto'), quantity: 0, revenueMinor: 0 };
-      product.quantity += quantity;
-      product.revenueMinor += itemMinor;
-      products.set(productId, product);
-    }
+
+  }
+
+  for (const fact of require('./payment-facts').paymentFacts(orders)) {
+    if (fact.date < from || fact.date > to) continue;
+    receivedSalesMinor += fact.amountMinor;
+    const day = daily.get(fact.date) || { date: fact.date, salesMinor: 0, receivedMinor: 0, orderCount: 0 };
+    day.receivedMinor += fact.amountMinor; daily.set(fact.date, day);
+    const payment = byPayment.get(fact.method) || byPayment.get('OUTROS');
+    payment.receivedMinor += fact.amountMinor; payment.receiptCount++;
   }
 
   for (const settlement of validSettlements) {
@@ -115,10 +114,7 @@ function summarizePeriod({ from, to, orders = [], settlements = [] }) {
 
   const totalRevenue = reais(salesMinor);
   const orderCount = validOrders.length;
-  const topProducts = [...products.values()]
-    .map((product) => ({ id: product.id, name: product.name, quantity: product.quantity, revenue: reais(product.revenueMinor) }))
-    .sort((left, right) => right.quantity - left.quantity || right.revenue - left.revenue)
-    .slice(0, 10);
+  const productInsights = summarizeProductSales({ orders: validOrders, catalog });
   const days = [];
   for (let day = dayNumber(from); day <= dayNumber(to); day++) {
     const date = new Date(day * 86400000).toISOString().slice(0, 10);
@@ -149,14 +145,15 @@ function summarizePeriod({ from, to, orders = [], settlements = [] }) {
       averageSales: strongestWeekday.averageSales, orderCount: strongestWeekday.orderCount,
       sampleDays: strongestWeekday.sampleDays,
     } : null,
-    topProducts,
+    topProducts: productInsights.rankings.mostByQuantity,
+    ...productInsights,
     daily: days,
   };
 }
 
-function summarizeExecutivePeriod({ from, to, orders = [], settlements = [] }) {
-  const range = getPreviousPeriod({ from, to });
-  const current = summarizePeriod({ from, to, orders, settlements });
+function summarizeExecutivePeriod({ from, to, orders = [], settlements = [], catalog = [], comparisonMode }) {
+  const range = getPreviousPeriod({ from, to, comparisonMode });
+  const current = summarizePeriod({ from, to, orders, settlements, catalog });
   const previous = summarizePeriod({ from: range.previousFrom, to: range.previousTo, orders, settlements });
   const change = (now, before) => ({
     absolute: Math.round((now - before) * 100) / 100,

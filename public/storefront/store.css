@@ -476,6 +476,9 @@ input[type="radio"] {
   font-weight: 500;
 }
 .catalog-category-filter {
+  position: relative;
+  padding: 6px 8px 14px;
+  isolation: isolate;
   display: flex;
   align-items: center;
   gap: 8px;

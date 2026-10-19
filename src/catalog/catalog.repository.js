@@ -9,9 +9,15 @@ function isStoredProductImage(value) {
 }
 
 class CatalogRepository {
-  constructor({ mockData = null, firestoreRepo = null } = {}) {
+  constructor({ mockData = null, firestoreRepo = null, cacheTtlMs = 600000, now = Date.now } = {}) {
     if (mockData && process.env.NODE_ENV !== 'test') {throw new Error('Catálogo simulado permitido apenas em testes.');}
     this.items = [];
+    this.rawItems = [];
+    this.cacheTtlMs = cacheTtlMs;
+    this.now = now;
+    this.expiresAt = 0;
+    this.cacheGeneration = 0;
+    this.refreshPromise = null;
     this.productByNameMap = new Map();
     this.productByTagMap = new Map();
     this.productsByCategoryMap = new Map();
@@ -23,23 +29,29 @@ class CatalogRepository {
   }
 
   isCacheValid() {
-    return Array.isArray(this.items) && this.items.length > 0;
+    return this.expiresAt > this.now();
+  }
+
+  invalidateCache() {
+    this.expiresAt = 0;
+    this.cacheGeneration += 1;
   }
 
   async refreshCatalog() {
-    if (this.mockData) {return this.loadItems(this.mockData);}
-    try {
-      if (!this.firestoreRepo) {throw new Error('Repositório Firestore não configurado.');}
-      const products = await this.firestoreRepo.getAllProducts();
-      this.loadItems(Array.isArray(products) ? products : []);
-    } catch (error) {
-      this.loadItems([]);
-      if (error && (error.code === 7 || (error.message && (error.message.includes('PERMISSION_DENIED') || error.message.includes('insufficient permissions'))))) {
-        Logger.info('Firestore sem permissão de leitura; catálogo mantido vazio para evitar produtos fictícios.');
-        return;
-      }
-      throw error;
+    if (this.isCacheValid()) return;
+    if (this.refreshPromise) {
+      await this.refreshPromise;
+      return this.isCacheValid() ? undefined : this.refreshCatalog();
     }
+    const generation = this.cacheGeneration;
+    this.refreshPromise = (async () => {
+      if (!this.mockData && !this.firestoreRepo) throw new Error('Repositório Firestore não configurado.');
+      const products = this.mockData || await this.firestoreRepo.getAllProducts();
+      // Never publish a snapshot superseded by an edit during the read.
+      if (generation === this.cacheGeneration) this.loadItems(Array.isArray(products) ? products : []);
+    })();
+    try { await this.refreshPromise; } finally { this.refreshPromise = null; }
+    if (!this.isCacheValid()) await this.refreshCatalog();
   }
 
   loadItems(rawItems) {
@@ -48,6 +60,8 @@ class CatalogRepository {
     }
 
 
+    this.rawItems = rawItems;
+    this.expiresAt = this.now() + this.cacheTtlMs;
     this.items = rawItems
       .filter((item) => (item.status || 'ATIVO').toUpperCase() === 'ATIVO')
       .map((item) => normalizeCatalogItem(item));

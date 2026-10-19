@@ -2,12 +2,13 @@ const { test, expect } = require('@playwright/test');
 
 test('two tabs keep different logins, carts and customer fields after refresh and logout', async ({ context }) => {
   await context.route(/https:\/\/.*/, route => route.abort());
+  await context.addInitScript(() => { window.originalFetch = window.fetch; });
   const first = await context.newPage(); const second = await context.newPage();
   const login = async (page, userId, pin) => {
     await page.goto('/');
     await expect(page.locator('#products .product-card').first()).toBeVisible();
     await page.evaluate(async ({ userId, pin }) => {
-      const response = await fetch('/api/admin/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, pin }) });
+      const response = await window.ConfloraSession.apiFetch('/api/admin/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, pin }) });
       if (!response.ok) throw new Error('Login failed');
     }, { userId, pin });
     await page.reload();
@@ -17,6 +18,7 @@ test('two tabs keep different logins, carts and customer fields after refresh an
     await page.locator('#products .product-card').filter({ hasText: productId === 'test-begonia' ? 'Begônia' : 'Zamioculca' }).locator('[data-action=add]').last().click();
   };
   await login(first, 'usr-edmar', '1234');
+  expect(await first.evaluate(() => window.fetch === window.originalFetch)).toBe(true);
   await expect(first.locator('#headerAccountRole')).toHaveText('ADMIN');
   await add(first, 'test-begonia');
   await first.locator('#cartButton').click();
@@ -34,7 +36,7 @@ test('two tabs keep different logins, carts and customer fields after refresh an
   await first.locator('#cartButton').click();
   await expect(first.locator('#cartItems')).toContainText('Begônia');
   await expect(first.locator('#cartItems')).not.toContainText('Zamioculca');
-  await second.evaluate(() => fetch('/api/auth/logout', { method: 'POST' }));
+  await second.evaluate(() => window.ConfloraSession.apiFetch('/api/auth/logout', { method: 'POST' }));
   await first.reload();
   await expect(first.locator('#headerAccountRole')).toHaveText('ADMIN');
   await second.reload();

@@ -883,3 +883,17 @@ tbody tr:hover {
     min-width: 0;
   }
 }
+
+/* Shared action rhythm: one clear primary action, consistent touch targets. */
+.action-btn { min-height:40px; display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:10px 16px; border-radius:11px; font-weight:700; line-height:1.25; transition:background .15s ease,box-shadow .15s ease; }
+.action-btn:focus-visible,.header-btn:focus-visible,.nav-btn:focus-visible { outline:3px solid #7bcf98; outline-offset:3px; }
+.admin-section-heading { align-items:flex-start; gap:20px; margin-bottom:20px; }
+.admin-section-heading .stock-toolbar-actions { gap:10px; }
+#tab-cashier > div:first-child { align-items:flex-start !important; gap:20px !important; }
+#tab-cashier > div:first-child > div:last-child { display:flex; align-items:center; gap:10px !important; }
+.nav-btn { min-height:42px; font-weight:700; }
+.table-scroll .action-btn { min-height:34px; padding:7px 11px !important; }
+@media(max-width:700px) { .admin-section-heading .stock-toolbar-actions { width:100%; } #tab-cashier > div:first-child > div:last-child { width:100%; } #tab-cashier > div:first-child .action-btn { flex:1 1 140px; } .action-btn { min-height:44px; } }
+
+body .action-btn, body .header-btn, body .btn-action, body .nav-btn { border-radius:999px !important; }
+body :is(.action-btn,.header-btn,.btn-action):hover:not(:disabled) { transform:translateY(-2px); box-shadow:0 7px 16px rgb(20 44 28 / 18%); }

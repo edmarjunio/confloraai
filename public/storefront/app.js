@@ -29,7 +29,13 @@ const slug = existingStore
   ? "conflora"
   : decodeURIComponent(location.pathname.split("/")[2]);
 const basePath = existingStore ? "" : `/shop/${slug}`;
-const publicCache = createPublicCache(existingStore ? "main:conflora" : `tenant:${slug}`);
+try {
+  localStorage.removeItem("conflora:public-catalog:v1:main:conflora");
+  localStorage.removeItem("conflora:public-catalog:v1:tenant:conflora");
+  localStorage.removeItem("conflora_catalog_cache");
+  localStorage.removeItem("conflora_catalog_cache_v2");
+} catch {}
+const publicCache = createPublicCache(existingStore ? "main:conflora:v3" : `tenant:${slug}:v3`);
 
 const state = {
   existingStore,
@@ -62,7 +68,7 @@ function trackStorefrontEvent(eventName, details = {}) {
     utmCampaign: analyticsCampaign.get("utm_campaign") || "",
     ...details,
   };
-  fetch("/api/analytics/events", {
+  window.ConfloraSession.apiFetch("/api/analytics/events", {
     method: "POST",
     credentials: "same-origin",
     keepalive: true,
@@ -117,29 +123,29 @@ function updateHeaderActions() {
     Object.assign(historyState, { buffer: [], cursor: '', hasMore: false, loading: false, failed: false, loaded: false });
   }
   cart?.setOwner(state.user);
-  if (existingStore && state.user?.role === 'ENTREGADOR') { location.replace('/caixa'); return; }
   const role = String(state.user?.role || "CLIENTE").toUpperCase();
   const isLoggedIn = Boolean(state.user);
   const allowedCashierRoles = ["ADMIN", "CAIXA", "VENDEDOR", "ENTREGADOR"];
   const identity = $("#headerAccountIdentity");
 
   identity.hidden = !isLoggedIn;
-  $("#customerAccountShortcut").hidden = !isLoggedIn || !existingStore || allowedCashierRoles.includes(role);
+  $("#customerAccountShortcut").hidden = !isLoggedIn || !existingStore || (allowedCashierRoles.includes(role) && role !== 'ENTREGADOR');
   $('#customerDebtBadge').hidden = true;
-  if (isLoggedIn && existingStore && role === 'CLIENTE') {
+  if (isLoggedIn && existingStore && ['CLIENTE', 'ENTREGADOR'].includes(role)) {
     const userId = state.user.id;
     state.api('/customer/ledger').then((ledger) => {
       if (state.user?.id === userId) updateDebtBadge(ledger.balance);
     }).catch(() => {});
   }
   $("#accountButton").hidden = isLoggedIn;
-  $("#adminSettingsButton").hidden = role !== "ADMIN";
+  $("#adminSettingsButton").hidden = false;
+  if ($('#siteNavigationDrawer')?.open) window.ConfloraNavigation.open(state.user);
   cashierShortcut.hidden = !allowedCashierRoles.includes(role);
   const deliveryRole = role === 'ENTREGADOR';
   cashierShortcut.querySelector('span:first-child').replaceChildren(icon(deliveryRole ? 'truck' : 'register'));
-  cashierShortcut.querySelector('span:last-child').textContent = deliveryRole ? 'MINHAS ENTREGAS' : 'IR PARA O CAIXA';
-  cashierShortcut.setAttribute('aria-label', deliveryRole ? 'Minhas entregas' : 'Ir para o Caixa');
-  cashierShortcut.title = deliveryRole ? 'Minhas entregas' : 'Ir para o Caixa';
+  cashierShortcut.querySelector('span:last-child').textContent = deliveryRole ? 'MINHAS ENTREGAS' : 'CAIXA';
+  cashierShortcut.setAttribute('aria-label', deliveryRole ? 'Minhas entregas' : 'Caixa');
+  cashierShortcut.title = deliveryRole ? 'Minhas entregas' : 'Caixa';
 
   if (isLoggedIn) {
     $("#headerAccountName").textContent =
@@ -152,11 +158,7 @@ function updateHeaderActions() {
   }
 }
 cashierShortcut.addEventListener("click", () => location.assign("/caixa"));
-$("#adminSettingsButton").addEventListener("click", () => {
-  if (String(state.user?.role || "").toUpperCase() === "ADMIN") {
-    location.assign(existingStore ? "/admin" : `${basePath}/admin`);
-  }
-});
+$("#adminSettingsButton").addEventListener("click", () => window.ConfloraNavigation.open(state.user));
 
 let catalog;
 let cart;
@@ -287,6 +289,30 @@ state.reloadProducts = async () => {
   cart?.render();
 };
 
+function editOwnProfile() {
+  if (!state.user || !existingStore) return;
+  $('#accountTitle').textContent = 'Editar meu perfil';
+  $('#accountSubtitle').textContent = 'Atualize seus dados pessoais. O e-mail continua vinculado ao seu login.';
+  const form = element('form', { class: 'account-profile-form' });
+  for (const [name, label, type] of [['name', 'Nome completo', 'text'], ['phone', 'WhatsApp com DDD', 'tel'], ['address', 'Endereço', 'text']]) {
+    const input = element('input', { name, type, value: state.user[name] || '', ...(name === 'name' ? { required: '', maxlength: '120' } : {}) });
+    form.append(element('label', { text: label }, [input]));
+  }
+  const status = element('p', { role: 'status' });
+  const save = element('button', { type: 'submit', class: 'cf-button', text: 'Salvar meu perfil' });
+  form.append(status, save);
+  form.onsubmit = async event => {
+    event.preventDefault(); save.disabled = true; status.textContent = '';
+    try {
+      const data = await state.api('/auth/profile', { method: 'PATCH', body: Object.fromEntries(new FormData(form)) });
+      state.user = data.user; appStore.getState().setUser(data.user); updateHeaderActions();
+      status.className = ''; status.textContent = 'Perfil atualizado.';
+    } catch (error) { status.className = 'cf-error-banner'; status.textContent = error.message; }
+    finally { save.disabled = false; }
+  };
+  $('#accountContent').replaceChildren(form);
+}
+
 async function account() {
   const content = $("#accountContent");
   content.replaceChildren();
@@ -416,6 +442,10 @@ async function account() {
         route();
       } catch (error) {
         errorLabel.textContent = error.message;
+        errorLabel.className = 'cf-error-banner';
+        errorLabel.tabIndex = -1;
+        errorLabel.focus();
+        email.setAttribute('aria-invalid', String(/e-mail|email/i.test(error.message)));
       } finally {
         button.disabled = false;
       }
@@ -569,7 +599,10 @@ historyDialog.addEventListener('close', () => clearTimeout(debtPixTimer));
 function renderDebtPayment(ledger) {
   const version = accountVersion;
   const section = element('section', { class: 'ledger-payment' });
-  if (Number(ledger.balance) > 0) {
+  if (Number(ledger.balance) > 0 && state.config?.checkout?.pix?.mode !== 'SICREDI') {
+    section.append(element('p', { role: 'status', text: 'Para quitar sua dívida por Pix, fale com a loja. O caixa confere o recebimento e atualiza seu saldo.' }));
+  }
+  if (Number(ledger.balance) > 0 && state.config?.checkout?.pix?.mode === 'SICREDI') {
     const amount = element('input', { type: 'number', min: '0.01', max: String(ledger.balance), step: '0.01', value: Number(ledger.balance).toFixed(2), 'aria-label': 'Valor da dívida a pagar' });
     const status = element('p', { role: 'status', class: 'muted' });
     const result = element('div');
@@ -851,12 +884,17 @@ try {
   cart.render();
   trackStorefrontEvent("page_view", { resultCount: state.products.length });
   await route();
+  const topbarIntent = new URLSearchParams(location.search);
+  if (topbarIntent.has('q')) { $('#search').value = topbarIntent.get('q'); catalog.render(); }
+
   if (saved) refreshPublicCatalog().catch(() => {});
   // Login resolution does not block the public catalogue or its first render.
   session.then(async ({ user }) => {
     state.user = user || null;
     appStore.getState().setUser(state.user);
     updateHeaderActions();
+    if (topbarIntent.has('sacola')) cart.open();
+      if (topbarIntent.has('conta')) account().then(() => { if (topbarIntent.has('editar')) editOwnProfile(); }).catch(error => notify(error.message));
     catalog.refreshFavorites();
     if (/\/(admin|configuracoes)\/?$/.test(location.pathname)) await route();
   }).catch(() => {});

@@ -194,7 +194,7 @@ test('7. API HTTP POST /api/admin/images/compress comprime imagens sob demanda',
   }
 });
 
-test('8. Upload via POST /api/admin/products/:id/photo comprime foto e retorna estatísticas', async () => {
+test('8. Upload de produto preserva o PNG original sem compressão destrutiva', async () => {
   const repo = new FirestoreRepository({ isInMemory: true });
   await repo.saveProduct({
     id: 'prod-photo-comp-01',
@@ -237,15 +237,14 @@ test('8. Upload via POST /api/admin/products/:id/photo comprime foto e retorna e
     const uploadData = await uploadRes.json();
     assert.equal(uploadRes.status, 200);
     assert.equal(uploadData.success, true);
-    assert.equal(uploadData.photo.fileName, 'bouganville-trepadeira-rosa_prod-photo-comp-01.jpg');
-    assert.ok(uploadData.photo.compression, 'Deve retornar dados de compressão');
-    assert.ok(uploadData.photo.compression.savingsPercent > 50);
+    assert.equal(uploadData.photo.fileName, 'bouganville-trepadeira-rosa_prod-photo-comp-01.png');
+    assert.equal(uploadData.photo.compression, null, 'O upload original não deve aplicar compressão destrutiva');
 
     // Verifica que a foto gravada no repositório foi comprimida
-    const savedPhoto = await repo.getProductPhoto('img_prod-photo-comp-01');
+    const savedPhoto = await repo.getProductPhoto(uploadData.photo.id);
     assert.ok(savedPhoto);
-    assert.ok(savedPhoto.sizeBytes < originalBuffer.length);
-    assert.equal(savedPhoto.contentType, 'image/jpeg');
+    assert.ok(savedPhoto.sizeBytes === originalBuffer.length);
+    assert.equal(savedPhoto.contentType, 'image/png');
   } finally {
     server.close();
   }

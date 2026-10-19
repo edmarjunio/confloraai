@@ -186,7 +186,7 @@ test("main mobile product, bottom sheet and conversational cards follow the appr
   await expect(page.locator("#productView h1")).toHaveText("Planta Teste");
   const coachSkip = page.locator("#coachSkip");
   if (await coachSkip.isVisible()) await coachSkip.click();
-  await expect(page.locator(".search")).toBeHidden();
+  await expect(page.locator(".search")).toBeVisible();
   await page.getByRole("tab", { name: "Especificações" }).click();
   await page
     .getByRole("button", { name: "Adicionar à sacola", exact: true })
@@ -227,7 +227,7 @@ test("catalog header exposes login, account role and admin settings according to
   await expect(page.locator("#accountButton")).toBeVisible();
   await expect(page.locator("#headerAccountIdentity")).toBeHidden();
   await expect(page.locator("#cashierShortcut")).toBeHidden();
-  await expect(page.locator("#adminSettingsButton")).toBeHidden();
+  await expect(page.locator("#adminSettingsButton")).toBeVisible();
   await page.locator("#accountButton").click();
   await expect(page.locator("#accountDialog")).toBeVisible();
   await page.locator('#accountDialog [data-close]').click();
@@ -252,7 +252,7 @@ test("catalog header exposes login, account role and admin settings according to
   await expect(page.locator("#headerAccountRole")).toHaveText("CLIENTE");
   await expect(page.locator("#accountButton")).toBeHidden();
   await expect(page.locator("#cashierShortcut")).toBeHidden();
-  await expect(page.locator("#adminSettingsButton")).toBeHidden();
+  await expect(page.locator("#adminSettingsButton")).toBeVisible();
   await page.locator("#headerAccountIdentity").click();
   await expect(page.locator("#accountDialog")).toBeVisible();
   await page.locator('#accountDialog [data-close]').click();
@@ -276,7 +276,9 @@ test("catalog header exposes login, account role and admin settings according to
   await expect(page.locator("#cashierShortcut")).toBeVisible();
   await expect(page.locator("#adminSettingsButton")).toBeVisible();
   await page.locator("#adminSettingsButton").click();
-  await expect(page).toHaveURL(/\/admin$/);
+  await expect(page.locator('#siteNavigationDrawer')).toBeVisible();
+  await page.getByRole('link', { name: 'Caixa/Vendas', exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\?tab=cashier$/);
 
   await page.goto("/");
   await expect(page.locator("#cashierShortcut")).toBeVisible();
@@ -362,7 +364,6 @@ for (const role of ['ADMIN', 'CLIENTE', 'ENTREGADOR']) {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.route('**/api/auth/me', route => route.fulfill({ json: { user: { id: 'profile-user', name: 'Edmar Júnio', email: 'perfil@example.com', role } } }));
     await page.goto('/'); await selectPortuguese(page);
-    if (role === 'ENTREGADOR') { await expect(page).toHaveURL(/\/caixa$/); return; }
     await page.locator('#headerAccountIdentity').click();
     const dialog = page.locator('#accountDialog');
     await expect(dialog.locator('.account-avatar')).toHaveText('EJ');

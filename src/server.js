@@ -76,33 +76,29 @@ async function bootstrap() {
   const app = createApp({ messageService, taskQueueClient });
 
   const host = '0.0.0.0';
-  const primaryPort = 3000;
+  const primaryPort = Number(process.env.PORT) || 3000;
 
   const server = app.listen(primaryPort, host, () => {
     Logger.info(`Conflora AI rodando com sucesso na porta principal ${primaryPort} (${host})`);
   });
 
-  let secondaryServer = null;
-  const envPort = process.env.PORT ? parseInt(process.env.PORT, 10) : null;
-  if (envPort && envPort !== 3000) {
-    try {
-      secondaryServer = app.listen(envPort, host, () => {
-        Logger.info(`Conflora AI também escutando na porta secundária ${envPort} (${host})`);
-      });
-    } catch (err) {
-      Logger.warn(`Não foi possível escutar na porta ${envPort}: ${err.message}`);
-    }
-  }
+  server.on('error', error => { Logger.error('Erro no servidor HTTP', error); process.exitCode = 1; });
+  process.on('unhandledRejection', error => {
+    Logger.error('Falha assíncrona não tratada; reiniciando processo', error instanceof Error ? error : new Error(String(error)));
+    server.close(() => app.locals.errorHistory.queue.finally(() => process.exit(1)));
+    setTimeout(() => process.exit(1), 10000).unref();
+  });
+  process.on('uncaughtExceptionMonitor', error => Logger.error('Falha inesperada no processo', error));
 
   // Graceful shutdown
   const shutdown = () => {
     Logger.info('Encerrando servidor com segurança...');
+    setTimeout(() => process.exit(0), 10000).unref();
     server.close(() => {
-      if (secondaryServer) {
-        try { secondaryServer.close(); } catch {}
-      }
-      Logger.info('Servidor finalizado.');
-      process.exit(0);
+      app.locals.errorHistory.queue.finally(() => {
+        Logger.info('Servidor finalizado.');
+        process.exit(0);
+      });
     });
   };
 

@@ -9,23 +9,23 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "build": "node --check src/server.js",
+    "build": "node scripts/build-frontend.js && npm run check:full",
     "check": "node --check src/server.js",
     "check:full": "node --check src/server.js && node --check src/http/app.js && node --check src/http/pdv.routes.js && node --check src/services/message.service.js && node --check src/ai/agent.service.js && node --check src/catalog/catalog.repository.js && node --check src/catalog/image-compressor.js && node --check src/catalog/product-photo.service.js && node --check src/orders/order.service.js && node --check src/orders/pdv.service.js && node --check src/orders/pdv.repository.js && node --check src/integrations/sicredi-pix.client.js && node --check src/integrations/whatsapp.client.js && node --check src/integrations/task-queue.client.js && node --check src/router/message.router.js && node --check src/services/direct-price.service.js && node scripts/check-storefront.js --manual",
-    "test": "echo 'Testes automaticos pausados no modo Agente. Use npm run test:dev'",
+    "test": "npm run test:dev",
     "test:dev": "node --import ./scripts/test-env.js --test test/*.test.js",
-    "test:pix": "node --import ./scripts/test-env.js --test test/mercado-pago.test.js test/mercado-pago-live-mode.test.js test/order-integrity.test.js test/pdv.test.js",
+    "test:pix": "node --import ./scripts/test-env.js --test test/order-integrity.test.js test/pdv.test.js test/manual-pix.test.js",
     "test:pdv": "node --import ./scripts/test-env.js --test test/pdv.test.js",
     "test:whatsapp": "node --import ./scripts/test-env.js --test test/whatsapp-flow.test.js",
     "check:whatsapp": "node scripts/check-whatsapp-config.js",
-    "test:dev-isolation": "node --test test/dev-environment.test.js test/mercado-pago-live-mode.test.js",
+    "test:dev-isolation": "node --test test/dev-environment.test.js",
     "dev:isolated": "node --env-file=.env.dev --watch src/server.js",
     "seed:dev": "node --env-file=.env.dev scripts/seed-dev.js",
-    "check:dev-pix": "node --env-file=.env.dev scripts/check-dev-pix.js",
+    "check:dev-pix": "node --env-file=.env.dev scripts/check-sicredi-config.js",
     "check:pix": "node scripts/check-pix-config.js",
     "check:sicredi": "node scripts/check-sicredi-config.js",
     "sicredi:webhook": "node scripts/register-sicredi-webhook.js",
-    "test:all": "npm install && npm run check:full && npm run test:dev && npm run dev",
+    "test:all": "npm run check:full && npm run lint && npm run test:dev && npm run test:e2e",
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "lint": "eslint .",
@@ -33,27 +33,33 @@
     "format:check": "prettier --check .",
     "test:e2e": "playwright test",
     "store:provision": "node scripts/provision-store.js",
-    "store:deliver": "node scripts/deliver-store-orders.js"
+    "store:deliver": "node scripts/deliver-store-orders.js",
+    "build:frontend": "node scripts/build-frontend.js",
+    "pretest:e2e": "npm run build:frontend",
+    "prestart": "node scripts/check-runtime.js",
+    "gcp-build": "npm run build:frontend",
+    "deploy:firestore": "firebase deploy --only firestore:rules --project confloraai",
+    "deploy": "gcloud run deploy confloraai --source . --region us-central1"
   },
   "dependencies": {
     "@google-cloud/firestore": "9.3.1",
     "@google-cloud/tasks": "7.2.1",
     "@google/genai": "2.27.0",
-    "@tanstack/react-query": "^5.104.3",
-    "dotenv": "18.0.5",
     "express": "5.2.1",
-    "firebase-admin": "13.10.0",
-    "lucide-react": "^1.54.0",
+    "firebase-admin": "^14.5.0",
     "pdfkit": "^0.20.2",
     "qrcode": "^1.5.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "sharp": "^0.35.5",
-    "zustand": "^5.0.15"
+    "styled-components": "6.6.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",
+    "@tailwindcss/cli": "4.3.0",
+    "esbuild": "^0.28.2",
     "eslint": "10.12.0",
-    "prettier": "3.9.9"
+    "prettier": "3.9.9",
+    "tailwindcss": "4.3.0"
   }
 }

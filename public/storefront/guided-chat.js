@@ -176,6 +176,14 @@ export function createGuidedChat(state, catalog) {
     say(query, "user");
     search(query);
   });
+  $('#chatInput').maxLength = 800;
+  $('#chatInput').addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+      event.preventDefault(); event.stopPropagation(); $('#chatInput').value = '';
+    } else if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+      event.preventDefault(); $('#chatForm').requestSubmit();
+    }
+  });
   $("#aiFab").addEventListener("click", () => {
     openDialog($("#chatDialog"));
     $("#chatInput").focus();

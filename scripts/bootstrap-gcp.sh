@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_ID="${GCP_PROJECT_ID:-conflora-ai}"
+PROJECT_ID="${GCP_PROJECT_ID:-confloraai}"
 REGION="${GCP_REGION:-southamerica-east1}"
 SERVICE_ACCOUNT="conflora-api-sa@${PROJECT_ID}.iam.gserviceaccount.com"
 QUEUE_NAME="${CLOUD_TASKS_QUEUE:-conflora-jobs}"

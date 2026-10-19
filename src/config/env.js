@@ -86,13 +86,6 @@ const config = Object.freeze({
     },
   },
 
-  mercadoPago: {
-    accessToken: (process.env.MERCADO_PAGO_ACCESS_TOKEN || '').trim(),
-    webhookSecret: (process.env.MERCADO_PAGO_WEBHOOK_SECRET || '').trim(),
-    expectedLiveMode: process.env.MERCADO_PAGO_EXPECT_LIVE_MODE === 'true' ? true :
-      process.env.MERCADO_PAGO_EXPECT_LIVE_MODE === 'false' ? false : null,
-  },
-
   sicredi: {
     baseUrl: process.env.SICREDI_PIX_BASE_URL || 'https://api-pix.sicredi.com.br/api/v2',
     authUrl: process.env.SICREDI_OAUTH_URL || 'https://api-pix.sicredi.com.br/oauth/token',
@@ -100,14 +93,14 @@ const config = Object.freeze({
     clientSecret: (process.env.SICREDI_CLIENT_SECRET || '').trim(),
     certificate: process.env.SICREDI_CERT_PEM || '',
     privateKey: process.env.SICREDI_KEY_PEM || '',
-    pixKey: (process.env.SICREDI_PIX_KEY || '').trim(),
+    pixKey: (process.env.SICREDI_PIX_KEY || process.env.PIX_KEY || '').trim(),
     beneficiario: process.env.SICREDI_BENEFICIARIO || process.env.PIX_TITULAR || 'Conflora Horta e Viveiro',
     cidade: process.env.SICREDI_CIDADE || 'Mineiros',
     webhookSecret: (process.env.SICREDI_WEBHOOK_SECRET || '').trim(),
   },
 
   pix: {
-    key: process.env.SICREDI_PIX_KEY || process.env.PIX_KEY || '64999351616',
+    key: process.env.SICREDI_PIX_KEY || process.env.PIX_KEY || '',
     holder: process.env.SICREDI_BENEFICIARIO || process.env.PIX_TITULAR || 'Conflora Horta e Viveiro',
   },
 

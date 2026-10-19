@@ -86,11 +86,10 @@ function formatOrderReceipt(order) {
     `💳 *Forma de Pagamento:* ${paymentLabel}`,
     ...(order.paymentParts?.length > 1 ? order.paymentParts.map((part) => `• ${part.method}: ${money(part.amount)}${part.receivedBy?.name ? ' · Recebido por: ' + part.receivedBy.name : ''}${part.method === 'FIADO' ? ' (a prazo)' : ''}`) : []),
     `📌 *Situação:* ${order.paymentStatus === 'ON_ACCOUNT' ? 'Fiado registrado — saldo a pagar' : order.paidAt ? 'Pago e finalizado' : 'Aguardando recebimento'}`,
-    order.paymentCheckoutUrl && !order.paidAt ? `Pagamento: ${order.paymentCheckoutUrl}` : null,
     order.cashReceived ? `💵 *Valor recebido:* ${money(order.cashReceived)} · *Troco:* ${money(order.changeGiven)}` : null,
   ];
 
-  const copiaECola = order.pixCopiaECola || order.pixData?.copiaECola || order.pixCode;
+  const copiaECola = order.pixCopiaECola || order.pixData?.pixCopiaECola || order.pixData?.copiaECola || order.pixCode;
   if (rawPaymentMethod === 'PIX' && copiaECola && !order.completedAt && !order.paidAt) {
     lines.push(
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,

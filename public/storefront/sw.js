@@ -1,9 +1,10 @@
 /* Bump this version whenever the application shell changes before publishing. */
-const CACHE_NAME = 'conflora-public-shell-v10';
+const CACHE_NAME = 'conflora-public-shell-v21';
 const SHELL_URL = '/storefront/index.html';
 const CORE_FILES = [
-  SHELL_URL,
-  '/store-assets/v5/store.css', '/store-assets/site-header.css',
+  SHELL_URL, '/store-assets/site-navigation.js?v=1',
+  '/store-assets/error-monitor.js',
+  '/store-assets/v5/store.css', '/store-assets/site-header.css?v=topbar-1',
   '/store-assets/design-system.css', '/store-assets/brands/conflora-logo.png',
   '/store-assets/delivery-maps.js', '/store-assets/delivery.css',
   '/store-assets/tab-session.js', '/store-assets/order-display.js', '/store-assets/order-display.css',
@@ -16,6 +17,7 @@ const CORE_FILES = [
     'i18n/index.js', 'i18n/pt.js', 'i18n/en.js', 'i18n/es.js', 'i18n/fr.js',
   ].map(file => '/store-assets/v5/' + file),
 ];
+const CORE_URLS = new Set(CORE_FILES.map(file => new URL(file, self.location.origin).href));
 
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
@@ -62,7 +64,7 @@ self.addEventListener('fetch', event => {
       await cache.put(key, response.clone());
       const keys = await cache.keys();
       // Bound storage growth while preserving the preloaded shell.
-      const extras = keys.filter(entry => !CORE_FILES.includes(new URL(entry.url).pathname));
+      const extras = keys.filter(entry => !CORE_URLS.has(entry.url));
       for (const entry of extras.slice(0, Math.max(0, keys.length - 160))) await cache.delete(entry);
     }
     return response;

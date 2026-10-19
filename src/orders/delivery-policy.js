@@ -7,7 +7,7 @@ function isDeliverySettled(order) {
 function assertAssignedDelivery(order, actor) {
   if (!isDelivery(order) || order.status === 'CANCELLED' || order.deliveryStatus !== 'OUT_FOR_DELIVERY' ||
       (actor?.role !== 'ADMIN' && order.assignedDriver?.id !== actor?.id)) {
-    throw new Error('Aceite esta entrega antes de receber ou concluir. Apenas o responsável pode alterar a entrega.');
+    throw new Error('Aceite esta entrega e registre a saída da horta antes de receber ou concluir. Apenas o responsável pode alterar a entrega.');
   }
 }
 function canReceiveOrder(order, actor) {
@@ -15,9 +15,15 @@ function canReceiveOrder(order, actor) {
   if (actor?.role !== 'ENTREGADOR') return false;
   try { assertAssignedDelivery(order, actor); return true; } catch { return false; }
 }
+function canConfirmManualPix(order, actor) {
+  if (order?.pixMode === 'MANUAL') return ['ADMIN', 'CAIXA'].includes(actor?.role);
+  if (canReceiveOrder(order, actor)) return true;
+  if (actor?.role !== 'VENDEDOR' || !actor.id || order?.createdBy?.id !== actor.id) return false;
+  return !order.pixData?.txid || (order.paymentParts || [{ method: order.paymentMethod }]).every(part => part.method === 'PIX');
+}
 function financialReceiver(order) {
   return order?.receivedBy?.role === 'ENTREGADOR'
     ? order.createdBy || { id: 'ONLINE', name: 'Catálogo online', role: 'SYSTEM' }
     : order?.receivedBy;
 }
-module.exports = { financialReceiver, isDelivery, isDeliverySettled, assertAssignedDelivery, canReceiveOrder };
+module.exports = { canConfirmManualPix, financialReceiver, isDelivery, isDeliverySettled, assertAssignedDelivery, canReceiveOrder };

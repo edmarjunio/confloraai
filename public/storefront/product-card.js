@@ -514,7 +514,8 @@
         return;
       }
 
-      if (variant === "cashier") {
+      if (variant === "stock" && event.target.closest("input, label, button")) return;
+      if (variant === "cashier" || variant === "stock") {
         this.emit("add", event);
       }
     }
@@ -600,7 +601,7 @@
         </div>`;
     }
 
-    renderStorefront(vm, compact = false) {
+    renderStorefront(vm, compact = false, editing = false) {
       const favorite = this.getAttribute("favorite") === "true";
       const safeName = escapeHtml(vm.name);
       const variantClasses = compact
@@ -620,7 +621,7 @@
           ${!compact && vm.category ? `<render-category-tag category="${escapeHtml(vm.category)}" class="product-category-tag"></render-category-tag>` : ""}
         </button>
         ${
-          !compact
+          !compact && !editing
             ? `<div class="cf-product-actions product-card-actions">
           <button type="button" class="favorite" data-action="favorite" aria-label="Favoritar ${safeName}" aria-pressed="${favorite}">${ICONS.heart(favorite, "icon")}</button>
           <button type="button" class="cf-product-info-button product-information-button" data-action="info" aria-label="Informações de ${safeName}" title="Informações de ${safeName}">${ICONS.info}</button>
@@ -631,7 +632,7 @@
         <div class="product-content">
           <button type="button" class="product-name" title="${safeName}" data-action="open">${safeName}</button>
           <div class="cf-shared-store-price"><strong>${vm.formattedPrice}</strong><span>${escapeHtml(vm.saleUnitLabel)}</span></div>
-          <button type="button" class="cf-button" data-action="add" ${vm.isUnavailable ? "disabled" : ""}>${ICONS.cart}<span>${vm.isUnavailable ? "Indisponível" : "Adicionar"}</span></button>
+          <button type="button" class="cf-button" data-action="${editing ? "edit" : "add"}" ${editing ? 'aria-label="Editar produto"' : ""} ${!editing && vm.isUnavailable ? "disabled" : ""}>${editing ? "✎" : ICONS.cart}<span>${editing ? "Editar produto" : vm.isUnavailable ? "Indisponível" : "Adicionar"}</span></button>
         </div>`;
     }
 
@@ -650,7 +651,7 @@
         this.renderLegacyCatalog(vm);
         return;
       }
-      this.renderStorefront(vm, variant === "recommendation");
+      this.renderStorefront(vm, variant === "recommendation", ["admin", "stock"].includes(variant));
     }
   }
 

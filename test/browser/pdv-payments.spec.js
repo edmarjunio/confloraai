@@ -63,7 +63,7 @@ test('quadro permite apenas avançar etapas e abre recebimento ao arrastar para 
   const card = (region) => region.locator('cf-card').filter({ hasText: 'Arrastar Teste' });
   await expect(card(payment)).toHaveAttribute('draggable', 'true');
   const dialog = page.getByRole('dialog', { name: `Comanda #${order.ticketNumber}` });
-  await expect(card(payment)).toHaveCSS('background-color', 'rgba(125, 211, 252, 0.3)');
+  await expect(card(payment)).toHaveCSS('background-color', 'rgb(189, 221, 255)');
   await card(payment).dragTo(paid.locator('header'));
   await expect(dialog.getByRole('heading', { name: 'Receber no caixa' })).toBeVisible();
   await dialog.getByLabel('Usar mais de uma forma de pagamento').check();
@@ -71,7 +71,7 @@ test('quadro permite apenas avançar etapas e abre recebimento ao arrastar para 
   await dialog.getByRole('button', { name: 'Confirmar pagamento e finalizar', exact: true }).click();
   await expect(dialog).toContainText('Pago / finalizado');
   await dialog.getByRole('button', { name: 'Fechar', exact: true }).click();
-  await expect(card(paid)).toHaveCSS('background-color', 'rgba(110, 231, 183, 0.3)');
+  await expect(card(paid)).toHaveCSS('background-color', 'rgb(184, 235, 207)');
   await expect(card(paid)).not.toHaveAttribute('draggable', 'true');
 });
 
@@ -153,4 +153,30 @@ test('comanda recebe por botões e Pix manual exige arquivo antes de finalizar',
   await expect(dialog).toContainText('Pago / finalizado');
   await expect(dialog.getByRole('link', { name: 'Ver comprovante Pix anexado', exact: true })).toBeVisible();
   await page.screenshot({ path: 'test-results/payment-proof-finished.png' });
+});
+
+
+test('seller completes own direct Pix with mandatory proof and no cash receiving controls', async ({ page }) => {
+  expect((await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-edmar', pin: '1234' } })).ok()).toBe(true);
+  const userId = 'seller-pix-' + Date.now();
+  expect((await page.request.post('/api/admin/users', { data: { id: userId, name: 'Vendedor Pix', role: 'VENDEDOR', pin: '7788', active: true } })).ok()).toBe(true);
+  expect((await page.request.post('/api/admin/auth/login', { data: { userId, pin: '7788' } })).ok()).toBe(true);
+  const response = await page.request.post('/api/caixa/orders', { data: { requestId: require('node:crypto').randomUUID(), items: [{ productId: 'test-plant', quantity: 1 }], paymentMethod: 'DINHEIRO', deferToCashier: true, customerName: 'Pix do Vendedor' } });
+  expect(response.ok()).toBe(true);
+  const { order } = await response.json();
+  await page.goto('/pdv');
+  await expect(page.getByPlaceholder('Nome, categoria ou descrição (Ex.: plantas de sombra, plantas para jardim, flores, e etc)')).toBeVisible();
+  await page.keyboard.press('F2');
+  await page.getByRole('button', { name: 'Abrir recibo e detalhes da comanda ' + order.ticketNumber }).click();
+  const dialog = page.getByRole('dialog', { name: `Comanda #${order.ticketNumber}` });
+  await expect(dialog.getByRole('button', { name: '💵 Dinheiro', exact: true })).toHaveCount(0);
+  const finish = dialog.getByRole('button', { name: 'Confirmar Pix manualmente e finalizar', exact: true });
+  await expect(finish).toBeDisabled();
+  await dialog.getByRole('checkbox', { name: /Conferi no comprovante o valor exato de R\$\s*25,00/ }).check();
+  await dialog.getByLabel('Observação do comprovante').fill('Valor conferido na conta da loja');
+  await dialog.getByLabel('Foto ou PDF do comprovante Pix (obrigatório)').setInputFiles({ name: 'pix.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\nTeste\n%%EOF') });
+  await expect(finish).toBeEnabled();
+  await finish.click();
+  await expect(dialog).toContainText('Pago / finalizado');
+  await expect(dialog.getByRole('link', { name: 'Ver comprovante Pix anexado', exact: true })).toBeVisible();
 });

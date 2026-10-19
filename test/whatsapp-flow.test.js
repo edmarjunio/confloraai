@@ -56,3 +56,50 @@ test('WhatsApp sends the correct API payload using a simulated Meta response', a
   assert.equal(sent.body.text.body, 'Teste Conflora');
   assert.equal(result.messages[0].id, 'wamid.simulated');
 });
+
+
+test('WhatsApp rejects expired credentials instead of reporting a successful delivery', async t => {
+  t.mock.method(globalThis, 'fetch', async () => new globalThis.Response(JSON.stringify({ error: { code: 190 } }), { status: 401 }));
+  await assert.rejects(new WhatsAppClient().sendTextMessage('5564999990000', 'Recibo'), /token recusado/);
+});
+
+test('WhatsApp uploads QR image and sends its media ID; failed upload never sends a message', async t => {
+  const calls = [];
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    calls.push({ url, options });
+    return new globalThis.Response(JSON.stringify(url.endsWith('/media') ? { id: 'qr-media' } : { messages: [{ id: 'wamid.qr' }] }), { status: 200 });
+  });
+  const client = new WhatsAppClient();
+  await client.sendImageBuffer('5564999990000', Buffer.from('image'), 'Pix R$ 20,00');
+  assert.equal(calls.length, 2);
+  assert.ok(calls[0].options.body instanceof FormData);
+  const payload = JSON.parse(calls[1].options.body);
+  assert.equal(payload.image?.id || payload.template?.components[0].parameters[0].image.id, 'qr-media');
+  calls.length = 0;
+  t.mock.method(globalThis, 'fetch', async url => { calls.push(url); return new globalThis.Response('{}', { status: 503 }); });
+  await assert.rejects(client.sendImageBuffer('5564999990000', Buffer.from('image')), /HTTP 503/);
+  assert.equal(calls.length, 1);
+});
+
+
+test('cashier report uploads a PDF and sends its media ID using the approved document template', async t => {
+  const originalFetch = global.fetch;
+  const previousTemplate = process.env.WHATSAPP_CASHIER_REPORT_TEMPLATE;
+  process.env.WHATSAPP_CASHIER_REPORT_TEMPLATE = 'relatorio_caixa_pdf';
+  t.after(() => { global.fetch = originalFetch; if (previousTemplate === undefined) delete process.env.WHATSAPP_CASHIER_REPORT_TEMPLATE; else process.env.WHATSAPP_CASHIER_REPORT_TEMPLATE = previousTemplate; });
+  const calls = [];
+  global.fetch = async (url, options) => {
+    calls.push({ url, options });
+    return { ok: true, json: async () => String(url).endsWith('/media') ? { id: 'report-media' } : { messages: [{ id: 'wamid.report' }] } };
+  };
+  const client = new WhatsAppClient();
+  const result = await client.sendDocumentBuffer('5564999994321', Buffer.from('%PDF-test'), 'caixa.pdf', 'Caixa geral de hoje');
+  assert.equal(result.messages[0].id, 'wamid.report');
+  assert.equal(calls.length, 2);
+  const file = calls[0].options.body.get('file');
+  assert.equal(file.type, 'application/pdf'); assert.equal(file.name, 'caixa.pdf');
+  const message = JSON.parse(calls[1].options.body);
+  assert.equal(message.type, 'template');
+  assert.equal(message.template.components[0].parameters[0].document.id, 'report-media');
+  assert.equal(message.template.components[1].parameters[0].text, 'Caixa geral de hoje');
+});

@@ -2,7 +2,7 @@
 (() => {
   let configuration;
   let sdk;
-  const config = () => configuration ||= fetch('/api/maps-config').then(async (response) => {
+  const config = () => configuration ||= window.ConfloraSession.apiFetch('/api/maps-config').then(async (response) => {
     if (!response.ok) throw new Error('Mapa indisponível. Informe o endereço e use a navegação externa.');
     return response.json();
   }).catch(error => { configuration = null; throw error; });
@@ -152,5 +152,19 @@
   }
   customElements.define('delivery-location-picker', LocationPicker);
   customElements.define('delivery-route-map', RouteMap);
-  window.ConfloraDeliveryMaps = { navigation };
+  async function estimateRoute(location, address) {
+    const settings = await config();
+    let origin = point(settings.storeLocation);
+    if (!settings.originConfigured || !origin) origin = await new Promise((resolve, reject) => {
+      if (!navigator.geolocation) return reject(new Error('GPS indisponível.'));
+      navigator.geolocation.getCurrentPosition(({ coords }) => resolve({ lat: coords.latitude, lng: coords.longitude }), reject, { enableHighAccuracy: true, timeout: 5000, maximumAge: 30000 });
+    });
+    const googleMaps = await maps();
+    const { Route } = await googleMaps.importLibrary('routes');
+    const response = await Route.computeRoutes({ origin, destination: point(location) || address, travelMode: 'DRIVING', routingPreference: 'TRAFFIC_AWARE', fields: ['distanceMeters', 'durationMillis'] });
+    const route = response.routes?.[0];
+    if (!route || !(route.distanceMeters > 0)) throw new Error('Distância da rota indisponível.');
+    return { distanceMeters: Number(route.distanceMeters), durationSeconds: Number(route.durationMillis) / 1000 };
+  }
+  window.ConfloraDeliveryMaps = { navigation, estimateRoute };
 })();
