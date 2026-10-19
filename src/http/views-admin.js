@@ -82,7 +82,7 @@ function renderAdminHtml(storeConfig) {
 
 </head>
 <body>
-  <conflora-topbar context="admin" managed></conflora-topbar>
+  <conflora-topbar context="admin" managed local-search></conflora-topbar>
   <div class="container">
     <nav class="cf-work-actions" aria-label="Opções administrativas">
       <button type="button" class="cf-back-button" data-site-back>← Voltar</button>
@@ -423,15 +423,59 @@ function renderAdminHtml(storeConfig) {
         </div>
       </dialog>
 
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:28px; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
-        <h3 style="margin:0;">Produtos no Banco de Dados</h3>
-        <div id="productStatusFilters" role="group" aria-label="Filtrar produtos por status" style="display:flex; flex-wrap:wrap; gap:8px;">
-          <button type="button" class="action-btn btn-gray" data-status="TODOS" aria-pressed="false" onclick="setProductStatusFilter('TODOS')">TODOS</button>
-          <button type="button" class="action-btn btn-green" data-status="ATIVO" aria-pressed="true" onclick="setProductStatusFilter('ATIVO')">ATIVOS</button>
-          <button type="button" class="action-btn btn-gray" data-status="INATIVO" aria-pressed="false" onclick="setProductStatusFilter('INATIVO')">INATIVOS</button>
+      <!-- BARRA DE CONTROLE DE BUSCA, ORDENAÇÃO E FILTROS DO CATÁLOGO ADMIN -->
+      <div class="admin-catalog-controls" style="margin-top:24px; margin-bottom:16px; background:#ffffff; padding:16px 20px; border-radius:14px; border:1px solid #e2e8f0; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+        <!-- Topo: Título, Contador e Status -->
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:14px;">
+          <div>
+            <h3 style="margin:0; font-size:18px; font-weight:700; color:#1e293b;">Produtos no Banco de Dados</h3>
+            <p id="productStatusCount" role="status" style="margin:4px 0 0; font-size:13px; color:#64748b; font-weight:500;"></p>
+          </div>
+          <div id="productStatusFilters" role="group" aria-label="Filtrar produtos por status" style="display:flex; flex-wrap:wrap; gap:8px;">
+            <button type="button" class="action-btn btn-gray" data-status="TODOS" aria-pressed="false" onclick="setProductStatusFilter('TODOS')">TODOS</button>
+            <button type="button" class="action-btn btn-green" data-status="ATIVO" aria-pressed="true" onclick="setProductStatusFilter('ATIVO')">ATIVOS</button>
+            <button type="button" class="action-btn btn-gray" data-status="INATIVO" aria-pressed="false" onclick="setProductStatusFilter('INATIVO')">INATIVOS</button>
+          </div>
         </div>
-        <p id="productStatusCount" role="status" style="font-size:13px;"></p>
+
+        <!-- Meio: Campo de Busca por Nome + Dropdown Ordenar -->
+        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:14px;">
+          <div style="flex:1; min-width:260px; position:relative;">
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); width:18px; height:18px; color:#94a3b8; pointer-events:none;"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/></svg>
+            <input type="search" id="adminProductSearch" placeholder="Buscar produto por nome, código ou categoria..." 
+              style="width:100%; height:42px; padding:8px 36px 8px 38px; border:1px solid #cbd5e1; border-radius:10px; font-size:14px; outline:none; transition:border-color 0.18s ease; background:#f8fafc;"
+              onfocus="this.style.borderColor='var(--primary, #2e9348)'; this.style.background='#fff';"
+              onblur="this.style.borderColor='#cbd5e1'; if(!this.value) this.style.background='#f8fafc';"
+              oninput="handleAdminProductSearch(this.value)" />
+            <button type="button" id="adminSearchClearBtn" onclick="clearAdminProductSearch()" style="display:none; position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; color:#94a3b8; font-size:16px; cursor:pointer; padding:4px;" title="Limpar busca">✕</button>
+          </div>
+
+          <div style="display:flex; align-items:center; gap:8px;">
+            <label for="adminProductSort" style="font-size:13px; font-weight:700; color:#475569; white-space:nowrap; display:flex; align-items:center; gap:4px;">
+              <span>⇅</span> Ordenar:
+            </label>
+            <select id="adminProductSort" onchange="handleAdminProductSort(this.value)" 
+              style="height:42px; padding:0 14px; border:1px solid #cbd5e1; border-radius:10px; font-size:13px; font-weight:600; background:#ffffff; color:#1e293b; cursor:pointer;">
+              <option value="az" selected>A a Z (Padrão)</option>
+              <option value="za">Z a A</option>
+              <option value="price-asc">Menor preço</option>
+              <option value="price-desc">Maior preço</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Categorias: Chips com ícones e contadores -->
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <span style="font-size:12px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.5px;">Categorias:</span>
+            <button type="button" id="adminClearFiltersBtn" style="display:none; font-size:12px; color:#16a34a; background:none; border:none; cursor:pointer; font-weight:600;" onclick="clearAllAdminFilters()">Limpar todos os filtros</button>
+          </div>
+          <div id="adminCategoryChips" style="display:flex; flex-wrap:wrap; gap:6px; max-height:160px; overflow-y:auto; padding:2px 0;">
+            <!-- Gerado dinamicamente -->
+          </div>
+        </div>
       </div>
+
       <div id="adminProductsGrid" class="admin-products-grid" aria-label="Produtos para editar"></div>
     </div>
 
@@ -676,6 +720,12 @@ function renderAdminHtml(storeConfig) {
 
     let allProducts = [];
     window.addEventListener('products-imported', () => loadAdminProducts());
+    document.addEventListener('cf-topbar-search', e => {
+      const q = e.detail?.query || '';
+      const searchInput = document.getElementById('adminProductSearch');
+      if (searchInput) searchInput.value = q;
+      handleAdminProductSearch(q);
+    });
     let allOrders = [];
     let currentSelectedUserIdForLogin = '';
 
@@ -1714,9 +1764,14 @@ function renderAdminHtml(storeConfig) {
     }
     // 10. CADASTRO DE PRODUTOS
     let productStatusFilter = 'ATIVO';
+    let productSearchQuery = '';
+    let productSortOrder = 'az'; // Padrão: A a Z
+    let productCategoryFilter = '';
+
     function productIsInactive(product) {
       return String(product.status || product.STATUS || 'ATIVO').trim().toUpperCase() !== 'ATIVO';
     }
+
     function setProductStatusFilter(status) {
       productStatusFilter = status;
       document.querySelectorAll('#productStatusFilters button').forEach(button => {
@@ -1726,6 +1781,92 @@ function renderAdminHtml(storeConfig) {
       });
       renderAdminProducts();
     }
+
+    function handleAdminProductSearch(query) {
+      productSearchQuery = String(query || '').trim();
+      const clearBtn = document.getElementById('adminSearchClearBtn');
+      if (clearBtn) clearBtn.style.display = productSearchQuery ? 'block' : 'none';
+      updateClearFiltersBtnVisibility();
+      renderAdminProducts();
+    }
+
+    function clearAdminProductSearch() {
+      const input = document.getElementById('adminProductSearch');
+      if (input) input.value = '';
+      handleAdminProductSearch('');
+    }
+
+    function handleAdminProductSort(order) {
+      productSortOrder = order || 'az';
+      renderAdminProducts();
+    }
+
+    function setAdminCategoryFilter(cat) {
+      productCategoryFilter = (productCategoryFilter === cat) ? '' : cat;
+      updateClearFiltersBtnVisibility();
+      renderAdminCategoryChips();
+      renderAdminProducts();
+    }
+
+    function clearAllAdminFilters() {
+      productCategoryFilter = '';
+      productSearchQuery = '';
+      const input = document.getElementById('adminProductSearch');
+      if (input) input.value = '';
+      const clearBtn = document.getElementById('adminSearchClearBtn');
+      if (clearBtn) clearBtn.style.display = 'none';
+      const sortSelect = document.getElementById('adminProductSort');
+      if (sortSelect) sortSelect.value = 'az';
+      productSortOrder = 'az';
+      updateClearFiltersBtnVisibility();
+      renderAdminCategoryChips();
+      renderAdminProducts();
+    }
+
+    function updateClearFiltersBtnVisibility() {
+      const btn = document.getElementById('adminClearFiltersBtn');
+      if (btn) btn.style.display = (productCategoryFilter || productSearchQuery) ? 'inline-block' : 'none';
+    }
+
+    function renderAdminCategoryChips() {
+      const container = document.getElementById('adminCategoryChips');
+      if (!container) return;
+
+      const categoriesMap = new Map();
+      allProducts.forEach(p => {
+        const cat = String(p.category || p.categoria || p.CATEGORIA || '').trim();
+        if (cat) {
+          categoriesMap.set(cat, (categoriesMap.get(cat) || 0) + 1);
+        }
+      });
+
+      const sortedCats = Array.from(categoriesMap.entries()).sort((a, b) => a[0].localeCompare(b[0], 'pt-BR'));
+
+      container.replaceChildren();
+
+      // Botão "Todas"
+      const allBtn = document.createElement('button');
+      allBtn.type = 'button';
+      const isAllActive = !productCategoryFilter;
+      allBtn.className = 'action-btn ' + (isAllActive ? 'btn-green' : 'btn-gray');
+      allBtn.style.cssText = 'border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;';
+      allBtn.innerHTML = '<span>🌿</span><span>Todas</span> <span style="font-size: 11px; opacity: 0.85; font-weight: 500;">(' + allProducts.length + ')</span>';
+      allBtn.onclick = () => setAdminCategoryFilter('');
+      container.appendChild(allBtn);
+
+      sortedCats.forEach(([catName, count]) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        const isActive = productCategoryFilter === catName;
+        btn.className = 'action-btn ' + (isActive ? 'btn-green' : 'btn-gray');
+        btn.style.cssText = 'border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;';
+        const icon = window.ConfloraProductUi?.categoryIcon ? window.ConfloraProductUi.categoryIcon(catName) : '🌱';
+        btn.innerHTML = '<span>' + icon + '</span><span>' + catName + '</span> <span style="font-size: 11px; opacity: 0.85; font-weight: 500;">(' + count + ')</span>';
+        btn.onclick = () => setAdminCategoryFilter(catName);
+        container.appendChild(btn);
+      });
+    }
+
     async function loadAdminProducts() {
       try {
         const res = await window.ConfloraSession.apiFetch('/api/inventory');
@@ -1741,13 +1882,83 @@ function renderAdminHtml(storeConfig) {
         allProducts = [];
       }
       if (!Array.isArray(allProducts)) allProducts = [];
+      renderAdminCategoryChips();
       renderAdminProducts();
     }
+
     function renderAdminProducts() {
       const grid = document.getElementById('adminProductsGrid');
+      if (!grid) return;
       grid.replaceChildren();
-      const visible = allProducts.filter(p => productStatusFilter === 'TODOS' || productIsInactive(p) === (productStatusFilter === 'INATIVO'));
-      document.getElementById('productStatusCount').textContent = visible.length + ' produto(s) · ' + (productStatusFilter === 'TODOS' ? 'Todos os status' : productStatusFilter === 'INATIVO' ? 'Inativos' : 'Ativos');
+
+      // 1. Filtragem por Status
+      let visible = allProducts.filter(p => {
+        if (productStatusFilter === 'TODOS') return true;
+        const inactive = productIsInactive(p);
+        return productStatusFilter === 'INATIVO' ? inactive : !inactive;
+      });
+
+      // 2. Filtragem por Categoria
+      if (productCategoryFilter) {
+        visible = visible.filter(p => {
+          const cat = String(p.category || p.categoria || p.CATEGORIA || '').trim();
+          const sub = String(p.subcategory || p.subcategoria || p.SUBCATEGORIA || '').trim();
+          return cat === productCategoryFilter || sub === productCategoryFilter || (cat + ' / ' + sub) === productCategoryFilter;
+        });
+      }
+
+      // 3. Busca por Nome / SKU / Categoria
+      if (productSearchQuery) {
+        const qNorm = productSearchQuery.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        visible = visible.filter(p => {
+          const name = String(p.name || p.descricao || p.canonicalName || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+          const sku = String(p.sku || p.codigo || p.id || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+          const cat = String(p.category || p.categoria || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+          const sub = String(p.subcategory || p.subcategoria || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+          return name.includes(qNorm) || sku.includes(qNorm) || cat.includes(qNorm) || sub.includes(qNorm);
+        });
+      }
+
+      // 4. Ordenação (Padrão: A a Z)
+      visible.sort((a, b) => {
+        const nameA = String(a.name || a.descricao || a.canonicalName || '').trim();
+        const nameB = String(b.name || b.descricao || b.canonicalName || '').trim();
+        const priceA = Number(a.price ?? a.valor_num ?? a.valor ?? a.VALOR ?? 0);
+        const priceB = Number(b.price ?? b.valor_num ?? b.valor ?? b.VALOR ?? 0);
+
+        if (productSortOrder === 'za') {
+          return nameB.localeCompare(nameA, 'pt-BR', { sensitivity: 'base' });
+        } else if (productSortOrder === 'price-asc') {
+          if (priceA !== priceB) return priceA - priceB;
+          return nameA.localeCompare(nameB, 'pt-BR', { sensitivity: 'base' });
+        } else if (productSortOrder === 'price-desc') {
+          if (priceA !== priceB) return priceB - priceA;
+          return nameA.localeCompare(nameB, 'pt-BR', { sensitivity: 'base' });
+        }
+        // Padrão: 'az' (A a Z)
+        return nameA.localeCompare(nameB, 'pt-BR', { sensitivity: 'base' });
+      });
+
+      // 5. Atualização do contador de status
+      const countEl = document.getElementById('productStatusCount');
+      if (countEl) {
+        const statusLabel = productStatusFilter === 'TODOS' ? 'Todos os status' : productStatusFilter === 'INATIVO' ? 'Inativos' : 'Ativos';
+        const filterDetails = [];
+        if (productCategoryFilter) filterDetails.push('Categoria: ' + productCategoryFilter);
+        if (productSearchQuery) filterDetails.push('Busca: "' + productSearchQuery + '"');
+        const extra = filterDetails.length ? ' • ' + filterDetails.join(' • ') : '';
+        countEl.textContent = visible.length + ' produto(s) · ' + statusLabel + extra;
+      }
+
+      // 6. Mensagem de vazio se nada corresponder
+      if (visible.length === 0) {
+        const emptyDiv = document.createElement('div');
+        emptyDiv.style.cssText = 'grid-column: 1 / -1; padding: 48px 24px; text-align: center; background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 14px; color: #64748b; margin-top: 10px;';
+        emptyDiv.innerHTML = '<div style="font-size: 36px; margin-bottom: 10px;">🔍</div><div style="font-weight: 700; font-size: 16px; color: #334155;">Nenhum produto encontrado</div><div style="font-size: 13px; margin-top: 6px; color:#64748b;">Tente mudar os termos da busca, limpar os filtros ou selecionar outra categoria.</div><button type="button" class="action-btn btn-green" onclick="clearAllAdminFilters()" style="margin-top:14px;">Limpar filtros</button>';
+        grid.appendChild(emptyDiv);
+        return;
+      }
+
       const fragment = document.createDocumentFragment();
       visible.forEach(product => {
         const card = document.createElement('render-product-card');
