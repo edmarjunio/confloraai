@@ -301,7 +301,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
   app.get('/api/caixa/orders/:id', route(async (req, res) => res.json(await findOrder(req))));
   app.post('/api/caixa/payment-proofs', requireStaff, route(async (req, res) => {
     const { targetType, targetId, dataUrl } = req.body;
-    if (!['ORDER', 'DEBT'].includes(targetType) || !/^[a-zA-Z0-9_-]{1,128}$/.test(targetId || '')) throw new Error('Selecione o pagamento do comprovante.');
+    if (!['ORDER', 'DEBT', 'CLOSING'].includes(targetType) || !/^[a-zA-Z0-9_-]{1,128}$/.test(targetId || '')) throw new Error('Selecione o pagamento do comprovante.');
     if (targetType === 'ORDER') {
       const order = await store.read('orders', targetId);
       if (!order || order.completedAt || order.status === 'CANCELLED' || !canConfirmManualPix(order, req.user)) throw new Error('Pagamento não está pendente ou não pertence a você.');
@@ -310,7 +310,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     const file = await proofStorage.save(dataUrl);
     const proof = { ...file, fileName: String(req.body.fileName || 'comprovante').replace(/[^\p{L}\p{N}._ -]/gu, '').slice(0, 100), targetType, targetId, uploadedBy: req.user.id, createdAt: new Date().toISOString() };
     await store.transaction(async (tx) => tx.set('payment_proofs', proof.id, proof));
-    res.status(201).json({ id: proof.id, fileName: proof.fileName, size: proof.size });
+    res.status(201).json({ id: proof.id, fileName: proof.fileName, size: proof.size, url: '/api/caixa/payment-proofs/' + proof.id });
   }));
   app.get('/api/caixa/payment-proofs/:id', requireStaff, route(async (req, res) => {
     const proof = await store.read('payment_proofs', req.params.id);

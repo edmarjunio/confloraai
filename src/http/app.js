@@ -2079,13 +2079,16 @@ function createApp({
   // Fechamento de Caixa Diário com PDF e Notificação no WhatsApp do Patrão
   app.post('/api/admin/cashier/close-day', async (req, res) => {
     try {
-      const { date } = req.body || {};
+      const { date, counted, receiptProofUrl, notes } = req.body || {};
       const closingDate = date || getBusinessDate(new Date());
       if (!isValidReportDate(closingDate)) { return res.status(400).json({ error: 'Data inválida. Selecione uma data válida.' }); }
       const result = await messageService.firestoreRepo.closeCashierDay({
         date: closingDate,
         requestId: req.body.requestId,
         closedBy: req.user?.name || req.user?.email || 'Administrador',
+        counted,
+        receiptProofUrl,
+        notes,
         notifyOwnerWhatsapp: false,
         whatsappClient: messageService.whatsappClient,
       });
@@ -2098,6 +2101,16 @@ function createApp({
       res.status(200).json(result);
     } catch (err) {
       Logger.error('Erro no fechamento do caixa diário', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/admin/cashier/closing', async (req, res) => {
+    try {
+      const date = req.query.date || getBusinessDate(new Date());
+      const closing = await messageService.firestoreRepo.getCashierClosingByDate(date);
+      res.status(200).json({ closing: closing || null });
+    } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });

@@ -493,7 +493,267 @@ function renderAdminGerencialHtml() {
     .daily-closing > summary { cursor:pointer; font-size:16px; font-weight:800; padding:6px 0; }
     .daily-closing[open] > summary { margin-bottom:24px; }
     .period-date input { min-height:42px; border-radius:12px; border:1px solid #dbe5df; padding:8px 12px; }
-    .period-controls { align-items:end; gap:12px; }
+    /* NAVEGAÇÃO DE VISÕES: FECHAMENTO vs RESULTADOS */
+    .executive-tabs-wrap {
+      display: inline-flex;
+      background: #e7eee9;
+      padding: 4px;
+      border-radius: 12px;
+      gap: 4px;
+      margin-top: 14px;
+      max-width: 100%;
+      overflow-x: auto;
+    }
+    .view-tab-btn {
+      padding: 10px 18px;
+      border-radius: 9px;
+      font-size: 13px;
+      font-weight: 700;
+      border: none;
+      background: transparent;
+      color: #3b5042;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+      transition: all 0.15s ease;
+    }
+    .view-tab-btn.active {
+      background: #ffffff;
+      color: #0f381e;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    }
+    .view-tab-btn:hover:not(.active) {
+      background: rgba(255,255,255,0.4);
+    }
+
+    /* PAINEL DE CONFERÊNCIA DE CAIXA */
+    .closing-conference-panel {
+      padding: 24px;
+      margin-bottom: 24px;
+      background: #ffffff;
+      border-radius: 18px;
+      border: 1px solid #dce6df;
+    }
+    .closing-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .closing-badge.open {
+      background: #dcfce7;
+      color: #15803d;
+      border: 1px solid #bbf7d0;
+    }
+    .closing-badge.closed {
+      background: #e0f2fe;
+      color: #0369a1;
+      border: 1px solid #bae6fd;
+    }
+
+    .conference-box {
+      margin-top: 18px;
+      border: 1px solid #e2e8f0;
+      border-radius: 14px;
+      overflow: hidden;
+      background: #fafcfb;
+    }
+    .conference-header-row {
+      display: grid;
+      grid-template-columns: 2fr 1.2fr 1.5fr 1.2fr;
+      padding: 12px 16px;
+      background: #f1f5f2;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #526356;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .conference-row {
+      display: grid;
+      grid-template-columns: 2fr 1.2fr 1.5fr 1.2fr;
+      padding: 14px 16px;
+      align-items: center;
+      border-bottom: 1px solid #eef2ef;
+      background: #ffffff;
+    }
+    .conference-row:nth-child(even) {
+      background: #fcfdfc;
+    }
+    .conference-total-row {
+      display: grid;
+      grid-template-columns: 2fr 1.2fr 1.5fr 1.2fr;
+      padding: 16px;
+      align-items: center;
+      background: #eaf3ed;
+      border-top: 2px solid #cbdcd0;
+      font-weight: 800;
+    }
+    .col-method {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .method-icon {
+      font-size: 20px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: #f1f5f2;
+    }
+    .method-icon.cash { background: #fef3c7; }
+    .method-icon.pix { background: #dcfce7; }
+    .method-icon.card { background: #e0f2fe; }
+    .method-icon.account { background: #f3e8ff; }
+    .col-system {
+      font-weight: 700;
+      font-size: 15px;
+      color: #1e293b;
+    }
+    .input-currency-wrapper {
+      display: inline-flex;
+      align-items: center;
+      border: 1.5px solid #cbd5e1;
+      border-radius: 10px;
+      padding: 4px 10px;
+      background: #ffffff;
+      width: 100%;
+      max-width: 180px;
+      transition: border-color 0.15s ease;
+    }
+    .input-currency-wrapper:focus-within {
+      border-color: #2e9348;
+      box-shadow: 0 0 0 3px rgba(46, 147, 72, 0.15);
+    }
+    .input-currency-wrapper span {
+      font-size: 13px;
+      font-weight: 700;
+      color: #64748b;
+      margin-right: 4px;
+    }
+    .input-currency-wrapper input {
+      border: none;
+      outline: none;
+      font-size: 14px;
+      font-weight: 700;
+      color: #0f172a;
+      width: 100%;
+      background: transparent;
+    }
+    .diff-tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .diff-tag.exact { background: #dcfce7; color: #15803d; }
+    .diff-tag.surplus { background: #fef9c3; color: #854d0e; }
+    .diff-tag.shortage { background: #fee2e2; color: #b91c1c; }
+
+    /* ANEXO DE COMPROVANTE & OBSERVAÇÕES */
+    .closing-extras-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 18px;
+    }
+    .proof-upload-card, .closing-notes-card {
+      border: 1px solid #e2e8f0;
+      border-radius: 14px;
+      padding: 16px;
+      background: #ffffff;
+    }
+    .proof-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 800;
+      color: #0f381e;
+      margin-bottom: 6px;
+    }
+    .proof-dropzone {
+      border: 2px dashed #94a3b8;
+      background: #f8fafc;
+      border-radius: 12px;
+      padding: 24px 16px;
+      text-align: center;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .proof-dropzone:hover {
+      background: #f1f5f9;
+      border-color: #2e9348;
+    }
+    .proof-preview-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: #f8fafc;
+      border-radius: 12px;
+      padding: 12px;
+      border: 1px solid #e2e8f0;
+    }
+    .proof-thumb {
+      width: 80px;
+      height: 80px;
+      object-fit: cover;
+      border-radius: 8px;
+      border: 1px solid #cbd5e1;
+    }
+    .closing-notes-textarea {
+      width: 100%;
+      height: 105px;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-family: inherit;
+      font-size: 13px;
+      resize: vertical;
+      outline: none;
+    }
+    .closing-notes-textarea:focus {
+      border-color: #2e9348;
+      box-shadow: 0 0 0 3px rgba(46, 147, 72, 0.15);
+    }
+    .closing-actions-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid #e2e8f0;
+    }
+    .sales-audit-section {
+      margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px solid #e2e8f0;
+    }
+
+    @media(max-width: 850px) {
+      .conference-header-row, .conference-row, .conference-total-row {
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+      .col-method { margin-bottom: 4px; }
+      .closing-extras-grid { grid-template-columns: 1fr; }
+    }
     @media(max-width:700px) {
       .period-summary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
       .period-metric { padding:14px; }
@@ -522,197 +782,431 @@ function renderAdminGerencialHtml() {
   <!-- CONTEÚDO PRINCIPAL -->
   <div class="main-container cf-work-body">
 
-    <section class="executive-heading"><div><p>GESTÃO DA CONFLORA</p><h1>Resultados da loja</h1><span>Vendas, recebimentos e produtos. Os números que ajudam a decidir.</span></div></section>
-    <section class="panel-card period-analytics" aria-labelledby="periodAnalyticsTitle">
-      <div class="panel-header">
-        <h2 class="panel-title" id="periodAnalyticsTitle">Quanto vendemos?</h2>
-        <span class="panel-tag">Vendas do caixa e do catálogo</span>
+    <section class="executive-heading">
+      <div>
+        <p>GESTÃO DA CONFLORA</p>
+        <h1 id="executivePageTitle">Resultados da loja</h1>
+        <span>Vendas, conferência de caixa e recebimentos. Os números que ajudam a decidir.</span>
       </div>
-      <div class="period-controls">
-        <label class="period-date">Escolher mês<input type="month" id="selectedMonth" aria-label="Mês das vendas" onchange="selectReportMonth()"></label>
-        <div class="period-presets" role="group" aria-label="Períodos rápidos">
-          <button type="button" class="btn-action" onclick="setPeriodPreset('week')">7 dias</button>
-          <button type="button" class="btn-action" onclick="setPeriodPreset('month')">Este mês</button>
-          <button type="button" class="btn-action" onclick="setPeriodPreset('year')">Este ano</button>
+      <div class="executive-tabs-wrap" role="tablist">
+        <button type="button" class="view-tab-btn active" id="btnTabClosing" onclick="switchExecutiveTab('closing')">
+          <span>🔒</span> Fechamento & Conferência do Caixa
+        </button>
+        <button type="button" class="view-tab-btn" id="btnTabAnalytics" onclick="switchExecutiveTab('analytics')">
+          <span>📊</span> Resultados e Períodos
+        </button>
+      </div>
+    </section>
+
+    <!-- ABA 1: CONFERÊNCIA E FECHAMENTO DE CAIXA -->
+    <div id="viewClosing" class="executive-view">
+      <section class="panel-card closing-conference-panel" id="fechamento" aria-labelledby="closingSectionTitle">
+        <div class="panel-header" style="flex-wrap:wrap; gap:12px;">
+          <div>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <h2 class="panel-title" id="closingSectionTitle">Conferência de Caixa por Forma de Pagamento</h2>
+              <span id="closingStatusBadge" class="closing-badge open">Caixa Aberto (Em Conferência)</span>
+            </div>
+            <p class="period-empty" style="margin-top:4px;">Confira os valores apurados pelo sistema com os valores físicos/extratos antes de encerrar o dia.</p>
+          </div>
+          
+          <div class="toolbar-right">
+            <div class="date-filter" role="group" aria-label="Data do fechamento">
+              <button type="button" id="dateTodayButton" class="btn-action primary date-today" onclick="setReportDateToday()"><span id="dateButtonLabel">HOJE</span></button>
+              <button type="button" class="btn-action primary date-calendar" onclick="openReportDatePicker()" aria-label="Selecionar outra data" title="Selecionar outra data">
+                <svg class="button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>
+              </button>
+            </div>
+            <input type="date" id="reportDate" class="native-date-picker" aria-label="Selecionar data do fechamento" onchange="handleReportDateChange()" />
+            <button type="button" id="btnRefresh" class="btn-action icon-button" onclick="loadExecutiveMetrics()" aria-label="Atualizar dados" title="Atualizar dados">
+              <svg class="button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.6 9A7 7 0 0 1 18 6.5L20 12M4 12l2 5.5A7 7 0 0 0 18.4 15"/></svg>
+            </button>
+          </div>
         </div>
-        <label class="period-date">De<input type="date" id="periodFrom" aria-label="Data inicial do acompanhamento" onchange="periodComparisonMode='previous';loadPeriodMetrics()" /></label>
-        <label class="period-date">Até<input type="date" id="periodTo" aria-label="Data final do acompanhamento" onchange="periodComparisonMode='previous';loadPeriodMetrics()" /></label>
-        <button type="button" id="periodRefresh" class="btn-action primary period-refresh" onclick="loadPeriodMetrics()">Atualizar período</button>
-      </div>
-      <p id="periodStatus" class="period-empty" role="status">Selecione um período para carregar as vendas.</p>
-      <div class="period-summary-grid">
-        <article class="period-metric"><span>Vendas registradas</span><strong id="periodSales">R$ 0,00</strong><small id="periodSalesChange">—</small></article>
-        <article class="period-metric"><span>Dinheiro recebido</span><strong id="periodReceived">R$ 0,00</strong><small id="periodReceivedChange">—</small></article>
-        <article class="period-metric"><span>Vendas no fiado</span><strong id="periodOnAccount">R$ 0,00</strong><small id="periodOnAccountChange">—</small></article>
-        <article class="period-metric"><span>Crédito antecipado recebido</span><strong id="periodAdvanceCredit">R$ 0,00</strong><small id="periodAdvanceCreditChange">—</small></article>
-        <article class="period-metric"><span>Vendas</span><strong id="periodOrders">0</strong><small id="periodOrdersChange">—</small></article>
-        <article class="period-metric"><span>Ticket médio</span><strong id="periodTicket">R$ 0,00</strong><small id="periodTicketChange">—</small></article>
-      </div>
-      <div class="details-grid">
-        <section class="period-insight"><div class="panel-title">Dia da semana com maior faturamento</div><strong id="periodStrongestWeekday">—</strong><p id="periodWeekdayNote" class="period-empty">Compara os dias da semana no período selecionado.</p></section>
-        <section class="panel-card"><div class="panel-title">Vendas e recebimentos por forma</div><div id="periodPayments" class="period-list"><span class="period-empty">Aguardando dados…</span></div></section>
-      </div>
-    <section class="panel-card seasonal-panel" aria-labelledby="seasonalTitle">
-      <div class="panel-header"><div><h2 id="seasonalTitle">O que mais vende em cada mês?</h2><p class="period-empty">Histórico real do ano escolhido. Meses sem registros não indicam previsão de vendas.</p></div><label class="period-date">Ano<input id="seasonalYear" type="number" min="2000" max="2100" aria-label="Ano do histórico mensal" onchange="loadSeasonalMetrics()"></label></div>
-      <div class="year-highlight"><span>Vendas no ano</span><strong id="yearSales">—</strong><small id="yearSalesChange">—</small></div>
-      <p id="seasonalStatus" role="status" class="period-empty"></p>
-      <p class="seasonal-mobile-hint period-empty">Deslize a tabela para o lado para ver os produtos líderes.</p><div class="seasonal-scroll"><table class="seasonal-table"><thead><tr><th>Mês</th><th>Vendas</th><th>Comparação anual</th><th>Líder em quantidade</th><th>Líder em valor</th></tr></thead><tbody id="monthlyLeaders"></tbody></table></div>
-    </section>
-      <h2 class="panel-title">Produtos no período selecionado</h2>
-      <label class="period-date">Unidade do ranking<select id="rankingUnit" aria-label="Unidade do ranking" onchange="if(lastPeriodResult)renderPeriodMetrics(lastPeriodResult)"><option value="all">Todas (medidas diferentes)</option><option value="kg">Quilos</option><option value="un.">Unidades</option></select></label>
-      <p class="period-empty">Margem, perdas e cobertura de estoque: indisponíveis até registrar custos e histórico de disponibilidade. Nenhuma previsão é estimada sem esses dados.</p>
-      <div class="details-grid product-rankings">
-        <section class="panel-card"><h3>Mais vendidos · quantidade</h3><div id="periodProducts" class="period-list"></div></section>
-        <section class="panel-card"><h3>Mais vendidos · valor</h3><div id="periodProductsValue" class="period-list"></div></section>
-        <section class="panel-card"><h3>Menos vendidos · quantidade</h3><div id="periodLeastQuantity" class="period-list"></div></section>
-        <section class="panel-card"><h3>Menos vendidos · valor</h3><div id="periodLeastValue" class="period-list"></div></section>
-      </div>
-      <p id="unsoldProductsNote" class="period-empty"></p>
-      <p class="period-empty">Quantidade respeita a unidade de cada produto. Quilos e unidades não representam o mesmo volume. Valor dos produtos considera descontos e exclui entrega.</p>
-      <details class="panel-card period-evolution"><summary>Ver evolução das vendas por dia/semana</summary><div id="periodDaily" class="period-list"></div></details>
-    </section>
-    <details class="daily-closing" ontoggle="if(this.open)loadExecutiveMetrics()"><summary>Fechamento e detalhes do dia</summary>
-    <!-- DATA DO FECHAMENTO -->
-    <div class="toolbar">
-      <div class="toolbar-right">
-        <div class="date-filter" role="group" aria-label="Data do fechamento">
-          <button type="button" id="dateTodayButton" class="btn-action primary date-today" onclick="setReportDateToday()"><span id="dateButtonLabel">HOJE</span></button>
-          <button type="button" class="btn-action primary date-calendar" onclick="openReportDatePicker()" aria-label="Selecionar outra data" title="Selecionar outra data">
-            <svg class="button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>
+
+        <!-- TABELA DE CONFERÊNCIA: SISTEMA vs CONFERIDO -->
+        <div class="conference-box">
+          <div class="conference-header-row">
+            <div class="col-method">Forma de Pagamento</div>
+            <div class="col-system">Apurado Sistema</div>
+            <div class="col-counted">Valor Conferido (Em Mãos/Extrato)</div>
+            <div class="col-diff">Diferença</div>
+          </div>
+
+          <!-- DINHEIRO -->
+          <div class="conference-row">
+            <div class="col-method">
+              <span class="method-icon cash">💵</span>
+              <div>
+                <strong>Dinheiro em Caixa</strong>
+                <small id="subCashNotes">Vendas + troco do dia</small>
+              </div>
+            </div>
+            <div class="col-system" id="sysValCash">R$ 0,00</div>
+            <div class="col-counted">
+              <div class="input-currency-wrapper">
+                <span>R$</span>
+                <input type="number" step="0.01" min="0" id="inputCountedCash" placeholder="0,00" oninput="calculateDifferences()" />
+              </div>
+            </div>
+            <div class="col-diff" id="diffBadgeCash"><span class="diff-tag exact">R$ 0,00 (Exato)</span></div>
+          </div>
+
+          <!-- PIX -->
+          <div class="conference-row">
+            <div class="col-method">
+              <span class="method-icon pix">📱</span>
+              <div>
+                <strong>PIX Recebido</strong>
+                <small>Extrato bancário / Sicredi</small>
+              </div>
+            </div>
+            <div class="col-system" id="sysValPix">R$ 0,00</div>
+            <div class="col-counted">
+              <div class="input-currency-wrapper">
+                <span>R$</span>
+                <input type="number" step="0.01" min="0" id="inputCountedPix" placeholder="0,00" oninput="calculateDifferences()" />
+              </div>
+            </div>
+            <div class="col-diff" id="diffBadgePix"><span class="diff-tag exact">R$ 0,00 (Exato)</span></div>
+          </div>
+
+          <!-- CARTÃO DE CRÉDITO -->
+          <div class="conference-row">
+            <div class="col-method">
+              <span class="method-icon card">💳</span>
+              <div>
+                <strong>Cartão de Crédito</strong>
+                <small>Fechamento / Filipeta Maquininha</small>
+              </div>
+            </div>
+            <div class="col-system" id="sysValCredit">R$ 0,00</div>
+            <div class="col-counted">
+              <div class="input-currency-wrapper">
+                <span>R$</span>
+                <input type="number" step="0.01" min="0" id="inputCountedCredit" placeholder="0,00" oninput="calculateDifferences()" />
+              </div>
+            </div>
+            <div class="col-diff" id="diffBadgeCredit"><span class="diff-tag exact">R$ 0,00 (Exato)</span></div>
+          </div>
+
+          <!-- CARTÃO DE DÉBITO -->
+          <div class="conference-row">
+            <div class="col-method">
+              <span class="method-icon card">💳</span>
+              <div>
+                <strong>Cartão de Débito</strong>
+                <small>Fechamento / Filipeta Maquininha</small>
+              </div>
+            </div>
+            <div class="col-system" id="sysValDebit">R$ 0,00</div>
+            <div class="col-counted">
+              <div class="input-currency-wrapper">
+                <span>R$</span>
+                <input type="number" step="0.01" min="0" id="inputCountedDebit" placeholder="0,00" oninput="calculateDifferences()" />
+              </div>
+            </div>
+            <div class="col-diff" id="diffBadgeDebit"><span class="diff-tag exact">R$ 0,00 (Exato)</span></div>
+          </div>
+
+          <!-- FIADO -->
+          <div class="conference-row">
+            <div class="col-method">
+              <span class="method-icon account">📋</span>
+              <div>
+                <strong>Fiado (A receber)</strong>
+                <small>Caderno / Vendas a prazo</small>
+              </div>
+            </div>
+            <div class="col-system" id="sysValOnAccount">R$ 0,00</div>
+            <div class="col-counted">
+              <div class="input-currency-wrapper">
+                <span>R$</span>
+                <input type="number" step="0.01" min="0" id="inputCountedOnAccount" placeholder="0,00" oninput="calculateDifferences()" />
+              </div>
+            </div>
+            <div class="col-diff" id="diffBadgeOnAccount"><span class="diff-tag exact">R$ 0,00 (Exato)</span></div>
+          </div>
+
+          <!-- TOTAIS -->
+          <div class="conference-total-row">
+            <div class="col-method">
+              <strong>TOTAL GERAL</strong>
+            </div>
+            <div class="col-system"><strong id="sysValTotal">R$ 0,00</strong></div>
+            <div class="col-counted"><strong id="countedValTotal" style="color:#0f381e;">R$ 0,00</strong></div>
+            <div class="col-diff" id="diffBadgeTotal"><span class="diff-tag exact">R$ 0,00 (Bateu)</span></div>
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; margin-top:8px;">
+          <button type="button" class="btn-action" onclick="fillCountedWithSystem()" style="font-size:12px;">
+            ✨ Preencher conferido com os valores do sistema
           </button>
         </div>
-        <input type="date" id="reportDate" class="native-date-picker" aria-label="Selecionar data do fechamento" onchange="handleReportDateChange()" />
-        <button type="button" id="btnRefresh" class="btn-action icon-button" onclick="loadExecutiveMetrics()" aria-label="Atualizar dados" title="Atualizar dados">
-          <svg class="button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.6 9A7 7 0 0 1 18 6.5L20 12M4 12l2 5.5A7 7 0 0 0 18.4 15"/></svg>
-        </button>
-        <button type="button" id="btnCloseCash" class="btn-action primary close-day-button" onclick="registerCashClosing()" aria-keyshortcuts="Control+Shift+Enter" title="Atalho: Ctrl + Shift + Enter">
-          <span>Registrar fechamento</span><kbd class="shortcut-hint">Ctrl + Shift + Enter</kbd>
-        </button>
-      </div>
+
+        <!-- ANEXO DO COMPROVANTE DA MAQUININHA & OBSERVAÇÕES -->
+        <div class="closing-extras-grid">
+          <div class="proof-upload-card">
+            <label class="proof-label">📷 Comprovante da Maquininha (Foto da Filipeta)</label>
+            <p style="font-size:12px; color:#64748b; margin-bottom:10px;">Tire uma foto ou anexe o comprovante de fechamento emitido pela maquininha de cartão.</p>
+            
+            <input type="file" id="machineReceiptFile" accept="image/*,application/pdf" capture="environment" style="display:none;" onchange="handleMachineReceiptUpload(this)" />
+            
+            <div id="proofUploadArea" class="proof-dropzone" onclick="document.getElementById('machineReceiptFile').click()">
+              <span style="font-size:28px;">📷</span>
+              <strong id="proofUploadText">Clique para tirar foto ou anexar comprovante</strong>
+              <small style="color:#64748b;">Suporta câmera do celular, JPG, PNG e PDF</small>
+            </div>
+
+            <div id="proofPreviewArea" class="proof-preview-wrapper" hidden>
+              <img id="proofPreviewImg" src="" alt="Comprovante da Maquininha" class="proof-thumb" />
+              <div style="display:flex; flex-direction:column; gap:6px;">
+                <strong id="proofFileName" style="font-size:12px; word-break:break-all;">comprovante.jpg</strong>
+                <span style="font-size:11px; color:#15803d; font-weight:700;">✓ Comprovante anexado</span>
+                <button type="button" class="btn-action" onclick="removeMachineReceiptProof()" style="font-size:11px; color:#dc2626; border-color:#fca5a5;">Remover foto</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="closing-notes-card">
+            <label class="proof-label">📝 Observações do Caixa (Opcional)</label>
+            <textarea id="closingNotesInput" class="closing-notes-textarea" placeholder="Ex: R$ 50,00 de sangria para compra de adubo às 15h, conferido por Rose..."></textarea>
+          </div>
+        </div>
+
+        <!-- AÇÕES DO FECHAMENTO -->
+        <div class="closing-actions-bar">
+          <button type="button" id="btnCloseCash" class="btn-action primary close-day-button" onclick="registerCashClosing()" aria-keyshortcuts="Control+Shift+Enter" title="Atalho: Ctrl + Shift + Enter">
+            <span>🔒 Registrar Fechamento do Caixa</span><kbd class="shortcut-hint">Ctrl + Shift + Enter</kbd>
+          </button>
+          <button type="button" id="btnSendWhatsappClosing" class="btn-action primary" onclick="sendDailyReport()" style="background:#15803d; border-color:#15803d;">
+            📲 Enviar Resumo para Júnior (WhatsApp)
+          </button>
+          <a id="btnDownloadClosingPdf" class="btn-action" href="#" target="_blank" hidden>
+            📄 Baixar PDF do Fechamento
+          </a>
+        </div>
+
+        <!-- HISTÓRICO DE VENDAS PARA CONFERÊNCIA -->
+        <div class="sales-audit-section">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+            <div>
+              <h3 style="font-size:15px; font-weight:800; color:#0f381e;">🧾 Vendas Realizadas na Data</h3>
+              <p style="font-size:12px; color:#64748b;">Consulte cada pedido do dia para conferência item por item.</p>
+            </div>
+            <input type="search" id="salesSearchInput" placeholder="Filtrar por cliente, pedido ou pagamento..." oninput="filterTodayOrdersTable(this.value)" style="padding:8px 12px; border-radius:8px; border:1px solid #dbe5df; font-size:13px; min-width:260px;" />
+          </div>
+
+          <div class="table-scroll">
+            <table class="seasonal-table" id="tableTodaySalesAudit">
+              <thead>
+                <tr>
+                  <th>Horário</th>
+                  <th>Pedido / Comanda</th>
+                  <th>Cliente</th>
+                  <th>Forma de Pagamento</th>
+                  <th>Total</th>
+                  <th>Vendedor / Operador</th>
+                </tr>
+              </thead>
+              <tbody id="bodyTodaySalesAudit">
+                <tr><td colspan="6" style="text-align:center; color:#64748b; padding:20px;">Carregando vendas do dia...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- RESUMO DETALHADO DO DIA -->
+        <details class="daily-closing" style="margin-top:24px;"><summary>Ver todos os indicadores e métricas detalhadas do dia</summary>
+          <!-- INDICADORES DO DIA -->
+          <div class="summary-grid" style="margin-top:16px;">
+            <div class="summary-card highlight">
+              <div class="summary-label">Recebimento de dívida</div>
+              <div class="summary-val" id="cardDebtReceived">R$ 0,00</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">Crédito antecipado recebido</div>
+              <div class="summary-val" id="cardAdvanceCredit">R$ 0,00</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">Vendas a receber · Fiado</div>
+              <div class="summary-val" id="cardOnAccount">R$ 0,00</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">Quantidade de vendas</div>
+              <div class="summary-val" id="cardCount">0</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">Ticket médio</div>
+              <div class="summary-val" id="cardTicket">R$ 0,00</div>
+            </div>
+            <div class="summary-card cash">
+              <div class="summary-label">Troco + vendas em dinheiro</div>
+              <div class="summary-val" id="cardCashTendered">R$ 0,00</div>
+            </div>
+            <div class="summary-card pix">
+              <div class="summary-label">Pix recebido</div>
+              <div class="summary-val" id="cardPix">R$ 0,00</div>
+            </div>
+            <div class="summary-card card">
+              <div class="summary-label">Cartão de crédito</div>
+              <div class="summary-val" id="cardCredit">R$ 0,00</div>
+            </div>
+            <div class="summary-card card">
+              <div class="summary-label">Cartão de débito</div>
+              <div class="summary-val" id="cardDebit">R$ 0,00</div>
+            </div>
+            <div class="summary-card cash">
+              <div class="summary-label">Troco do dia</div>
+              <div class="summary-val" id="cardChange">R$ 0,00</div>
+            </div>
+            <div class="summary-card cash">
+              <div class="summary-label">Vendas em dinheiro</div>
+              <div class="summary-val" id="cardCashSales">R$ 0,00</div>
+            </div>
+            <div class="summary-card highlight">
+              <div class="summary-label">Total recebido · Vendas</div>
+              <div class="summary-val" id="cardTotalReceived">R$ 0,00</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">Caderno · Vendas + recebimentos</div>
+              <div class="summary-val" id="cardLedger">R$ 0,00</div>
+            </div>
+          </div>
+
+          <!-- COMPOSIÇÃO DOS RECEBIMENTOS E VENDAS POR COLABORADOR -->
+          <div class="details-grid" style="margin-top:16px;">
+            <div class="panel-card">
+              <div class="panel-header">
+                <div class="panel-title">Formas de pagamento</div>
+                <span class="panel-tag">Participação nas vendas</span>
+              </div>
+              <div class="payment-bar" id="paymentBar">
+                <div class="payment-bar-seg pix" data-method="PIX"></div>
+                <div class="payment-bar-seg cash" data-method="DINHEIRO"></div>
+                <div class="payment-bar-seg debit" data-method="DEBITO"></div>
+                <div class="payment-bar-seg credit" data-method="CREDITO"></div>
+                <div class="payment-bar-seg card" data-method="CARTAO"></div>
+                <div class="payment-bar-seg account" data-method="FIADO"></div>
+                <div class="payment-bar-seg account" data-method="SALDO_CLIENTE"></div>
+                <div class="payment-bar-seg account" data-method="OUTROS"></div>
+              </div>
+              <div class="payment-legend">
+                <div id="paymentBreakdown" style="display:contents;"></div>
+              </div>
+            </div>
+
+            <div class="panel-card">
+              <div class="panel-header">
+                <div class="panel-title">Vendas por colaborador</div>
+                <span class="panel-tag">Vendedor e recebedor</span>
+              </div>
+              <div class="ranking-list" id="collaboratorList"><div class="metric-empty">Carregando equipe...</div></div>
+            </div>
+          </div>
+
+          <!-- RANKINGS DE PRODUTO -->
+          <div class="details-grid" style="margin-top:16px;">
+            <div class="panel-card">
+              <div class="panel-header">
+                <div class="panel-title">Mais vendidos por quantidade</div>
+                <span class="panel-tag">5 produtos</span>
+              </div>
+              <div class="ranking-list" id="topProductsQuantity"><div class="metric-empty">Carregando produtos...</div></div>
+            </div>
+            <div class="panel-card">
+              <div class="panel-header">
+                <div class="panel-title">Mais vendidos por valor</div>
+                <span class="panel-tag">5 produtos</span>
+              </div>
+              <div class="ranking-list" id="topProductsValue"><div class="metric-empty">Carregando produtos...</div></div>
+            </div>
+          </div>
+        </details>
+      </section>
     </div>
 
-
-    <!-- INDICADORES DO DIA -->
-    <div class="summary-grid">
-      <div class="summary-card highlight">
-        <div class="summary-label">Recebimento de dívida</div>
-        <div class="summary-val" id="cardDebtReceived">R$ 0,00</div>
-      </div>
-      <div class="summary-card">
-        <div class="summary-label">Crédito antecipado recebido</div>
-        <div class="summary-val" id="cardAdvanceCredit">R$ 0,00</div>
-      </div>
-      <div class="summary-card">
-        <div class="summary-label">Vendas a receber · Fiado</div>
-        <div class="summary-val" id="cardOnAccount">R$ 0,00</div>
-      </div>
-      <div class="summary-card">
-        <div class="summary-label">Quantidade de vendas</div>
-        <div class="summary-val" id="cardCount">0</div>
-      </div>
-      <div class="summary-card">
-        <div class="summary-label">Ticket médio</div>
-        <div class="summary-val" id="cardTicket">R$ 0,00</div>
-      </div>
-      <div class="summary-card cash">
-        <div class="summary-label">Troco + vendas em dinheiro</div>
-        <div class="summary-val" id="cardCashTendered">R$ 0,00</div>
-      </div>
-      <div class="summary-card pix">
-        <div class="summary-label">Pix recebido</div>
-        <div class="summary-val" id="cardPix">R$ 0,00</div>
-      </div>
-      <div class="summary-card card">
-        <div class="summary-label">Cartão de crédito</div>
-        <div class="summary-val" id="cardCredit">R$ 0,00</div>
-      </div>
-      <div class="summary-card card">
-        <div class="summary-label">Cartão de débito</div>
-        <div class="summary-val" id="cardDebit">R$ 0,00</div>
-      </div>
-      <div class="summary-card cash">
-        <div class="summary-label">Troco do dia</div>
-        <div class="summary-val" id="cardChange">R$ 0,00</div>
-      </div>
-      <div class="summary-card cash">
-        <div class="summary-label">Vendas em dinheiro</div>
-        <div class="summary-val" id="cardCashSales">R$ 0,00</div>
-      </div>
-      <div class="summary-card highlight">
-        <div class="summary-label">Total recebido · Vendas</div>
-        <div class="summary-val" id="cardTotalReceived">R$ 0,00</div>
-      </div>
-      <div class="summary-card">
-        <div class="summary-label">Caderno · Vendas + recebimentos</div>
-        <div class="summary-val" id="cardLedger">R$ 0,00</div>
-      </div>
+    <!-- ABA 2: RESULTADOS DA LOJA & PERÍODOS -->
+    <div id="viewAnalytics" class="executive-view" style="display:none;">
+      <section class="panel-card period-analytics" aria-labelledby="periodAnalyticsTitle">
+        <div class="panel-header">
+          <h2 class="panel-title" id="periodAnalyticsTitle">Quanto vendemos?</h2>
+          <span class="panel-tag">Vendas do caixa e do catálogo</span>
+        </div>
+        <div class="period-controls">
+          <label class="period-date">Escolher mês<input type="month" id="selectedMonth" aria-label="Mês das vendas" onchange="selectReportMonth()"></label>
+          <div class="period-presets" role="group" aria-label="Períodos rápidos">
+            <button type="button" class="btn-action primary" onclick="setPeriodPreset('today')">Hoje</button>
+            <button type="button" class="btn-action" onclick="setPeriodPreset('week')">7 dias</button>
+            <button type="button" class="btn-action" onclick="setPeriodPreset('month')">Este mês</button>
+            <button type="button" class="btn-action" onclick="setPeriodPreset('year')">Este ano</button>
+          </div>
+          <label class="period-date">De<input type="date" id="periodFrom" aria-label="Data inicial do acompanhamento" onchange="periodComparisonMode='previous';loadPeriodMetrics()" /></label>
+          <label class="period-date">Até<input type="date" id="periodTo" aria-label="Data final do acompanhamento" onchange="periodComparisonMode='previous';loadPeriodMetrics()" /></label>
+          <button type="button" id="periodRefresh" class="btn-action primary period-refresh" onclick="loadPeriodMetrics()">Atualizar período</button>
+        </div>
+        <p id="periodStatus" class="period-empty" role="status">Selecione um período para carregar as vendas.</p>
+        <div class="period-summary-grid">
+          <article class="period-metric"><span>Vendas registradas</span><strong id="periodSales">R$ 0,00</strong><small id="periodSalesChange">—</small></article>
+          <article class="period-metric"><span>Dinheiro recebido</span><strong id="periodReceived">R$ 0,00</strong><small id="periodReceivedChange">—</small></article>
+          <article class="period-metric"><span>Vendas no fiado</span><strong id="periodOnAccount">R$ 0,00</strong><small id="periodOnAccountChange">—</small></article>
+          <article class="period-metric"><span>Crédito antecipado recebido</span><strong id="periodAdvanceCredit">R$ 0,00</strong><small id="periodAdvanceCreditChange">—</small></article>
+          <article class="period-metric"><span>Vendas</span><strong id="periodOrders">0</strong><small id="periodOrdersChange">—</small></article>
+          <article class="period-metric"><span>Ticket médio</span><strong id="periodTicket">R$ 0,00</strong><small id="periodTicketChange">—</small></article>
+        </div>
+        <div class="details-grid">
+          <section class="period-insight"><div class="panel-title">Dia da semana com maior faturamento</div><strong id="periodStrongestWeekday">—</strong><p id="periodWeekdayNote" class="period-empty">Compara os dias da semana no período selecionado.</p></section>
+          <section class="panel-card"><div class="panel-title">Vendas e recebimentos por forma</div><div id="periodPayments" class="period-list"><span class="period-empty">Aguardando dados…</span></div></section>
+        </div>
+      <section class="panel-card seasonal-panel" aria-labelledby="seasonalTitle">
+        <div class="panel-header"><div><h2 id="seasonalTitle">O que mais vende em cada mês?</h2><p class="period-empty">Histórico real do ano escolhido. Meses sem registros não indicam previsão de vendas.</p></div><label class="period-date">Ano<input id="seasonalYear" type="number" min="2000" max="2100" aria-label="Ano do histórico mensal" onchange="loadSeasonalMetrics()"></label></div>
+        <div class="year-highlight"><span>Vendas no ano</span><strong id="yearSales">—</strong><small id="yearSalesChange">—</small></div>
+        <p id="seasonalStatus" role="status" class="period-empty"></p>
+        <p class="seasonal-mobile-hint period-empty">Deslize a tabela para o lado para ver os produtos líderes.</p><div class="seasonal-scroll"><table class="seasonal-table"><thead><tr><th>Mês</th><th>Vendas</th><th>Comparação anual</th><th>Líder em quantidade</th><th>Líder em valor</th></tr></thead><tbody id="monthlyLeaders"></tbody></table></div>
+      </section>
+        <h2 class="panel-title">Produtos no período selecionado</h2>
+        <label class="period-date">Unidade do ranking<select id="rankingUnit" aria-label="Unidade do ranking" onchange="if(lastPeriodResult)renderPeriodMetrics(lastPeriodResult)"><option value="all">Todas (medidas diferentes)</option><option value="kg">Quilos</option><option value="un.">Unidades</option></select></label>
+        <p class="period-empty">Margem, perdas e cobertura de estoque: indisponíveis até registrar custos e histórico de disponibilidade. Nenhuma previsão é estimada sem esses dados.</p>
+        <div class="details-grid product-rankings">
+          <section class="panel-card"><h3>Mais vendidos · quantidade</h3><div id="periodProducts" class="period-list"></div></section>
+          <section class="panel-card"><h3>Mais vendidos · valor</h3><div id="periodProductsValue" class="period-list"></div></section>
+          <section class="panel-card"><h3>Menos vendidos · quantidade</h3><div id="periodLeastQuantity" class="period-list"></div></section>
+          <section class="panel-card"><h3>Menos vendidos · valor</h3><div id="periodLeastValue" class="period-list"></div></section>
+        </div>
+        <p id="unsoldProductsNote" class="period-empty"></p>
+        <p class="period-empty">Quantidade respeita a unidade de cada produto. Quilos e unidades não representam o mesmo volume. Valor dos produtos considera descontos e exclui entrega.</p>
+        <details class="panel-card period-evolution"><summary>Ver evolução das vendas por dia/semana</summary><div id="periodDaily" class="period-list"></div></details>
+      </section>
     </div>
-
-    <!-- COMPOSIÇÃO DOS RECEBIMENTOS E VENDAS POR COLABORADOR -->
-    <div class="details-grid">
-      <div class="panel-card">
-        <div class="panel-header">
-          <div class="panel-title">Formas de pagamento</div>
-          <span class="panel-tag">Participação nas vendas</span>
-        </div>
-        <div class="payment-bar" id="paymentBar">
-          <div class="payment-bar-seg pix" data-method="PIX"></div>
-          <div class="payment-bar-seg cash" data-method="DINHEIRO"></div>
-          <div class="payment-bar-seg debit" data-method="DEBITO"></div>
-          <div class="payment-bar-seg credit" data-method="CREDITO"></div>
-          <div class="payment-bar-seg card" data-method="CARTAO"></div>
-          <div class="payment-bar-seg account" data-method="FIADO"></div>
-          <div class="payment-bar-seg account" data-method="SALDO_CLIENTE"></div>
-          <div class="payment-bar-seg account" data-method="OUTROS"></div>
-        </div>
-        <div class="payment-legend">
-          <div id="paymentBreakdown" style="display:contents;"></div>
-        </div>
-      </div>
-
-      <div class="panel-card">
-        <div class="panel-header">
-          <div class="panel-title">Vendas por colaborador</div>
-          <span class="panel-tag">Vendedor e recebedor</span>
-        </div>
-        <div class="ranking-list" id="collaboratorList"><div class="metric-empty">Carregando equipe...</div></div>
-      </div>
-    </div>
-
-    <!-- RANKINGS DE PRODUTO -->
-    <div class="details-grid">
-      <div class="panel-card">
-        <div class="panel-header">
-          <div class="panel-title">Mais vendidos por quantidade</div>
-          <span class="panel-tag">5 produtos</span>
-        </div>
-        <div class="ranking-list" id="topProductsQuantity"><div class="metric-empty">Carregando produtos...</div></div>
-      </div>
-      <div class="panel-card">
-        <div class="panel-header">
-          <div class="panel-title">Mais vendidos por valor</div>
-          <span class="panel-tag">5 produtos</span>
-        </div>
-        <div class="ranking-list" id="topProductsValue"><div class="metric-empty">Carregando produtos...</div></div>
-      </div>
-    </div>
-    </details>
   </div>
 
   <div id="toast" class="toast hidden"></div>
 
   <!-- Interações do painel -->
   <script>
-    let periodComparisonMode = 'month';
+    let periodComparisonMode = 'previous';
     let periodRequestVersion = 0;
     let lastPeriodResult = null;
     let seasonalRequestVersion = 0;
+    let currentSystemTotals = { cash: 0, pix: 0, credit: 0, debit: 0, onAccount: 0, total: 0 };
+    let currentTodayOrders = [];
+    let currentUploadedProofUrl = null;
+
     document.addEventListener('DOMContentLoaded', initializeDashboard);
     document.addEventListener('keydown', handleDashboardShortcut);
 
+    function switchExecutiveTab(tab) {
+      const isClosing = tab === 'closing';
+      document.getElementById('viewClosing').style.display = isClosing ? 'block' : 'none';
+      document.getElementById('viewAnalytics').style.display = isClosing ? 'none' : 'block';
+      document.getElementById('btnTabClosing').classList.toggle('active', isClosing);
+      document.getElementById('btnTabAnalytics').classList.toggle('active', !isClosing);
+    }
+
     async function initializeDashboard() {
       document.getElementById('reportDate').value = getBusinessToday();
-      setPeriodPreset('month', false);
+      setPeriodPreset('today', false);
       document.getElementById('selectedMonth').value = getBusinessToday().slice(0,7);
       document.getElementById('seasonalYear').value = getBusinessToday().slice(0,4);
       updateDateButtonLabel();
@@ -721,7 +1215,7 @@ function renderAdminGerencialHtml() {
         const data = await response.json();
         if (response.ok && data.user && data.user.role === 'ADMIN') {
           document.getElementById('btnSendReport').hidden = false;
-          await Promise.all([loadPeriodMetrics(), loadSeasonalMetrics()]);
+          await Promise.all([loadPeriodMetrics(), loadSeasonalMetrics(), loadExecutiveMetrics(), checkClosingStatus(getBusinessToday())]);
           return;
         }
         showToast('Painel disponível somente para ADMIN.');
@@ -751,13 +1245,14 @@ function renderAdminGerencialHtml() {
     }
 
     function setPeriodPreset(period, refresh = true) {
-      periodComparisonMode = period === 'week' ? 'previous' : period;
-      document.querySelectorAll('.period-presets button').forEach(button => button.classList.toggle('primary', button.getAttribute('onclick').includes("'" + period + "'")));
+      periodComparisonMode = (period === 'today' || period === 'week') ? 'previous' : period;
+      document.querySelectorAll('.period-presets button').forEach(button => button.classList.toggle('primary', button.getAttribute('onclick')?.includes("'" + period + "'")));
       const today = getBusinessToday();
       const [year, month] = today.split('-');
-      const from = period === 'week' ? addCalendarDays(today, -6)
+      const from = period === 'today' ? today
+        : period === 'week' ? addCalendarDays(today, -6)
         : period === 'year' ? year + '-01-01'
-          : year + '-' + month + '-01';
+        : year + '-' + month + '-01';
       document.getElementById('periodFrom').value = from;
       document.getElementById('periodTo').value = today;
       if (refresh) loadPeriodMetrics();
@@ -847,7 +1342,7 @@ function renderAdminGerencialHtml() {
       }
       const maxSales = Math.max(1, ...series.map((day) => Number(day.sales || 0)));
       document.getElementById('periodDaily').innerHTML = series.length
-        ? series.map((day) => '<div class="period-row"><span class="period-row-label">' + escapeHtml(day.label) + '</span><span class="period-bar-track"><span class="period-bar-fill" style="display:block;width:' + Math.min(100, Number(day.sales || 0) / maxSales * 100) + '%"></span></span><strong>' + formatCurrency(day.sales) + '</strong></div>').join('')
+        ? series.map((day) => '<div class="period-row"><span class="period-row-label">' + escapeHtml(day.label) + '</span><span class="period-row-label"><strong>' + formatCurrency(day.sales) + '</strong></span></div>').join('')
         : '<span class="period-empty">Sem dados para exibir.</span>';
     }
 
@@ -938,11 +1433,13 @@ function renderAdminGerencialHtml() {
       document.getElementById('reportDate').value = getBusinessToday();
       updateDateButtonLabel();
       loadExecutiveMetrics();
+      checkClosingStatus(getBusinessToday());
     }
 
     function handleReportDateChange() {
       updateDateButtonLabel();
       loadExecutiveMetrics();
+      checkClosingStatus(document.getElementById('reportDate').value);
     }
 
     function openReportDatePicker() {
@@ -1017,11 +1514,195 @@ function renderAdminGerencialHtml() {
         cardTotalReceived: m.totalReceivedSales,
         cardLedger: m.ledgerVolume,
       };
-      Object.entries(values).forEach(([id, value]) => { document.getElementById(id).textContent = formatCurrency(value); });
+      Object.entries(values).forEach(([id, value]) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = formatCurrency(value);
+      });
+
+      // Atualiza valores do sistema para conferência de caixa
+      currentSystemTotals = {
+        cash: Number(m.cashTendered || m.cashSales || 0),
+        pix: Number(m.byPayment?.PIX?.total || 0),
+        credit: Number(m.byPayment?.CREDITO?.total || 0),
+        debit: Number(m.byPayment?.DEBITO?.total || 0),
+        onAccount: Number(m.onAccountSales || 0),
+        total: Number(m.totalRevenue || 0),
+      };
+
+      document.getElementById('sysValCash').textContent = formatCurrency(currentSystemTotals.cash);
+      document.getElementById('sysValPix').textContent = formatCurrency(currentSystemTotals.pix);
+      document.getElementById('sysValCredit').textContent = formatCurrency(currentSystemTotals.credit);
+      document.getElementById('sysValDebit').textContent = formatCurrency(currentSystemTotals.debit);
+      document.getElementById('sysValOnAccount').textContent = formatCurrency(currentSystemTotals.onAccount);
+      document.getElementById('sysValTotal').textContent = formatCurrency(currentSystemTotals.total);
+      calculateDifferences();
+
       renderPaymentBreakdown(m);
       renderCollaborators(m.byCollaborator || []);
       renderProducts('topProductsQuantity', m.topProductsByQuantity || []);
       renderProducts('topProductsValue', m.topProductsByValue || []);
+      renderTodayOrdersAudit(m.todayOrders || []);
+    }
+
+    function calculateDifferences() {
+      const getVal = (id) => {
+        const raw = document.getElementById(id)?.value;
+        if (!raw || isNaN(raw)) return 0;
+        return parseFloat(raw) || 0;
+      };
+
+      const counted = {
+        cash: getVal('inputCountedCash'),
+        pix: getVal('inputCountedPix'),
+        credit: getVal('inputCountedCredit'),
+        debit: getVal('inputCountedDebit'),
+        onAccount: getVal('inputCountedOnAccount'),
+      };
+
+      const countedTotal = counted.cash + counted.pix + counted.credit + counted.debit + counted.onAccount;
+      document.getElementById('countedValTotal').textContent = formatCurrency(countedTotal);
+
+      const updateBadge = (elemId, diff) => {
+        const elem = document.getElementById(elemId);
+        if (!elem) return;
+        const diffFixed = Math.round(diff * 100) / 100;
+        if (Math.abs(diffFixed) < 0.01) {
+          elem.innerHTML = '<span class="diff-tag exact">R$ 0,00 (Exato)</span>';
+        } else if (diffFixed > 0) {
+          elem.innerHTML = '<span class="diff-tag surplus">+' + formatCurrency(diffFixed) + ' (Sobra)</span>';
+        } else {
+          elem.innerHTML = '<span class="diff-tag shortage">' + formatCurrency(diffFixed) + ' (Falta)</span>';
+        }
+      };
+
+      updateBadge('diffBadgeCash', counted.cash - currentSystemTotals.cash);
+      updateBadge('diffBadgePix', counted.pix - currentSystemTotals.pix);
+      updateBadge('diffBadgeCredit', counted.credit - currentSystemTotals.credit);
+      updateBadge('diffBadgeDebit', counted.debit - currentSystemTotals.debit);
+      updateBadge('diffBadgeOnAccount', counted.onAccount - currentSystemTotals.onAccount);
+      updateBadge('diffBadgeTotal', countedTotal - currentSystemTotals.total);
+    }
+
+    function fillCountedWithSystem() {
+      document.getElementById('inputCountedCash').value = Number(currentSystemTotals.cash || 0).toFixed(2);
+      document.getElementById('inputCountedPix').value = Number(currentSystemTotals.pix || 0).toFixed(2);
+      document.getElementById('inputCountedCredit').value = Number(currentSystemTotals.credit || 0).toFixed(2);
+      document.getElementById('inputCountedDebit').value = Number(currentSystemTotals.debit || 0).toFixed(2);
+      document.getElementById('inputCountedOnAccount').value = Number(currentSystemTotals.onAccount || 0).toFixed(2);
+      calculateDifferences();
+      showToast('✓ Valores preenchidos com os dados apurados do sistema.');
+    }
+
+    async function handleMachineReceiptUpload(input) {
+      const file = input.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const dataUrl = reader.result;
+        document.getElementById('proofPreviewImg').src = dataUrl;
+        document.getElementById('proofFileName').textContent = file.name;
+        document.getElementById('proofUploadArea').hidden = true;
+        document.getElementById('proofPreviewArea').hidden = false;
+        try {
+          const res = await window.ConfloraSession.apiFetch('/api/caixa/payment-proofs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              targetType: 'CLOSING',
+              targetId: 'closing_' + document.getElementById('reportDate').value,
+              fileName: file.name,
+              dataUrl,
+            }),
+          });
+          const json = await res.json();
+          if (res.ok && json.url) {
+            currentUploadedProofUrl = json.url;
+            showToast('✓ Comprovante da maquininha anexado!');
+          }
+        } catch (e) {
+          console.warn('Falha upload comprovante:', e);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function removeMachineReceiptProof() {
+      currentUploadedProofUrl = null;
+      document.getElementById('machineReceiptFile').value = '';
+      document.getElementById('proofUploadArea').hidden = false;
+      document.getElementById('proofPreviewArea').hidden = true;
+    }
+
+    function renderTodayOrdersAudit(orders) {
+      currentTodayOrders = orders || [];
+      filterTodayOrdersTable(document.getElementById('salesSearchInput')?.value || '');
+    }
+
+    function filterTodayOrdersTable(query) {
+      const tbody = document.getElementById('bodyTodaySalesAudit');
+      if (!tbody) return;
+      const q = String(query || '').toLowerCase().trim();
+      const filtered = currentTodayOrders.filter(o => 
+        !q || 
+        String(o.customerName || '').toLowerCase().includes(q) ||
+        String(o.id || '').toLowerCase().includes(q) ||
+        String(o.paymentMethod || '').toLowerCase().includes(q) ||
+        String(o.sellerName || '').toLowerCase().includes(q)
+      );
+
+      if (!filtered.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#64748b; padding:20px;">' + (currentTodayOrders.length ? 'Nenhuma venda encontrada para esta busca.' : 'Nenhuma venda registrada nesta data.') + '</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(o => {
+        const time = o.createdAt ? new Date(o.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—';
+        const methodBadges = {
+          PIX: '<span class="diff-tag exact">📱 Pix</span>',
+          DINHEIRO: '<span class="diff-tag surplus">💵 Dinheiro</span>',
+          CREDITO: '<span class="diff-tag" style="background:#e0f2fe;color:#0369a1;">💳 Crédito</span>',
+          DEBITO: '<span class="diff-tag" style="background:#e0f2fe;color:#0369a1;">💳 Débito</span>',
+          FIADO: '<span class="diff-tag shortage">📋 Fiado</span>',
+        };
+        const badge = methodBadges[o.paymentMethod] || '<span class="diff-tag exact">' + escapeHtml(o.paymentMethod) + '</span>';
+        return '<tr>' +
+          '<td><strong>' + time + '</strong></td>' +
+          '<td><code>#' + escapeHtml(String(o.id).slice(-6).toUpperCase()) + '</code></td>' +
+          '<td>' + escapeHtml(o.customerName) + '</td>' +
+          '<td>' + badge + '</td>' +
+          '<td><strong>' + formatCurrency(o.total) + '</strong></td>' +
+          '<td>' + escapeHtml(o.sellerName) + '</td>' +
+        '</tr>';
+      }).join('');
+    }
+
+    async function checkClosingStatus(date) {
+      try {
+        const res = await window.ConfloraSession.apiFetch('/api/admin/cashier/closing?date=' + encodeURIComponent(date));
+        const json = await res.json();
+        const badge = document.getElementById('closingStatusBadge');
+        const pdfBtn = document.getElementById('btnDownloadClosingPdf');
+        if (json && json.closing) {
+          badge.className = 'closing-badge closed';
+          badge.textContent = '🏁 Fechado por ' + (json.closing.closedBy || 'Admin') + ' às ' + new Date(json.closing.closedAt).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+          if (json.closing.reportFileName) {
+            pdfBtn.href = '/reports/' + json.closing.reportFileName;
+            pdfBtn.hidden = false;
+          }
+          if (json.closing.counted) {
+            document.getElementById('inputCountedCash').value = json.closing.counted.cash ?? '';
+            document.getElementById('inputCountedPix').value = json.closing.counted.pix ?? '';
+            document.getElementById('inputCountedCredit').value = json.closing.counted.credit ?? '';
+            document.getElementById('inputCountedDebit').value = json.closing.counted.debit ?? '';
+            document.getElementById('inputCountedOnAccount').value = json.closing.counted.onAccount ?? '';
+            calculateDifferences();
+          }
+        } else {
+          badge.className = 'closing-badge open';
+          badge.textContent = 'Caixa Aberto (Em Conferência)';
+          if (pdfBtn) pdfBtn.hidden = true;
+        }
+      } catch (_) {}
     }
 
     function renderPaymentBreakdown(metrics) {
@@ -1055,6 +1736,7 @@ function renderAdminGerencialHtml() {
 
     function renderProducts(containerId, products) {
       const container = document.getElementById(containerId);
+      if (!container) return;
       if (!products.length) {
         container.innerHTML = '<div class="metric-empty">Nenhum produto vendido nesta data.</div>';
         return;
@@ -1064,9 +1746,13 @@ function renderAdminGerencialHtml() {
 
     async function sendDailyReport() {
       const button = document.getElementById('btnSendReport');
-      const originalText = button.innerHTML;
-      button.disabled = true;
-      button.innerHTML = '<span class="loading-spinner"></span> Enviando relatório...';
+      const whatsappBtn = document.getElementById('btnSendWhatsappClosing');
+      const activeBtn = button || whatsappBtn;
+      const originalText = activeBtn ? activeBtn.innerHTML : '';
+      if (activeBtn) {
+        activeBtn.disabled = true;
+        activeBtn.innerHTML = '<span class="loading-spinner"></span> Enviando relatório...';
+      }
       try {
         const response = await window.ConfloraSession.apiFetch('/api/admin/executive-metrics/send-whatsapp', {
           method: 'POST',
@@ -1075,31 +1761,62 @@ function renderAdminGerencialHtml() {
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Falha ao enviar o relatório.');
-        showToast('Relatório enviado para Júnior pelo WhatsApp.');
+        showToast('✓ Relatório enviado para Júnior pelo WhatsApp.');
       } catch (err) {
         showToast('Não foi possível enviar: ' + err.message);
       } finally {
-        button.innerHTML = originalText;
-        button.disabled = false;
+        if (activeBtn) {
+          activeBtn.innerHTML = originalText;
+          activeBtn.disabled = false;
+        }
       }
     }
 
     async function registerCashClosing() {
       const date = document.getElementById('reportDate').value;
-      if (!date || !window.confirm('Registrar o fechamento do caixa de ' + date.split('-').reverse().join('/') + '?')) return;
+      if (!date || !window.confirm('Confirmar e registrar o fechamento do caixa de ' + date.split('-').reverse().join('/') + '?')) return;
       const button = document.getElementById('btnCloseCash');
       const originalText = button.innerHTML;
       button.disabled = true;
       button.textContent = 'Registrando fechamento...';
       try {
+        const getVal = (id) => {
+          const raw = document.getElementById(id)?.value;
+          if (!raw || isNaN(raw)) return 0;
+          return parseFloat(raw) || 0;
+        };
+        const counted = {
+          cash: getVal('inputCountedCash'),
+          pix: getVal('inputCountedPix'),
+          credit: getVal('inputCountedCredit'),
+          debit: getVal('inputCountedDebit'),
+          onAccount: getVal('inputCountedOnAccount'),
+        };
+        const notes = document.getElementById('closingNotesInput')?.value.trim() || '';
+        const receiptProofUrl = currentUploadedProofUrl || null;
+
         const response = await window.ConfloraSession.apiFetch('/api/admin/cashier/close-day', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ date, requestId: sessionStorage.getItem('closing:' + date) || (() => { const id = crypto.randomUUID(); sessionStorage.setItem('closing:' + date, id); return id; })() }),
+          body: JSON.stringify({
+            date,
+            counted,
+            receiptProofUrl,
+            notes,
+            requestId: sessionStorage.getItem('closing:' + date) || (() => { const id = crypto.randomUUID(); sessionStorage.setItem('closing:' + date, id); return id; })()
+          }),
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Não foi possível registrar o fechamento.');
-        showToast('Fechamento de ' + date.split('-').reverse().join('/') + ' registrado.');
+        showToast('✓ Fechamento de ' + date.split('-').reverse().join('/') + ' registrado com sucesso!');
+        if (data.pdfUrl) {
+          const pdfBtn = document.getElementById('btnDownloadClosingPdf');
+          if (pdfBtn) {
+            pdfBtn.href = data.pdfUrl;
+            pdfBtn.hidden = false;
+          }
+        }
+        checkClosingStatus(date);
       } catch (error) {
         showToast('Não foi possível registrar: ' + error.message);
       } finally {

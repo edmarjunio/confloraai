@@ -260,6 +260,18 @@ function summarizeDailyExecutiveMetrics({ date, orders = [], settlements = [], u
     // Compatibilidade com o PDF existente enquanto outros consumidores migram.
     topProducts: topProductsByQuantity,
     hourlyDistribution: [],
+    todayOrders: dailyOrders.map((order) => ({
+      id: order.id,
+      createdAt: order.createdAt,
+      completedAt: order.completedAt,
+      customerName: order.customerName || order.customer?.name || 'Cliente Balcão',
+      customerPhone: order.customerPhone || order.customer?.phone || '',
+      total: order.total,
+      paymentMethod: normalizePaymentMethod(order),
+      paymentStatus: order.paymentStatus,
+      sellerName: order.sellerName || order.operatorName || order.createdBy?.name || 'Autoatendimento',
+      itemsCount: Array.isArray(order.items) ? order.items.reduce((s, i) => s + Number(i.quantity || 1), 0) : 0,
+    })),
   };
 }
 
