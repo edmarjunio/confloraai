@@ -1310,6 +1310,7 @@ function createApp({
     ownerPhone: process.env.OWNER_WHATSAPP_NUMBER || config.whatsapp?.ownerNumber || '',
   });
   app.use('/pdv-assets/dist', express.static(require('node:path').resolve(__dirname, '../../public/pdv/dist')));
+  app.use('/guias', express.static(require('node:path').resolve(__dirname, '../../public/guias')));
 
   // --- API DO CAIXA & PDV RÁPIDO (CELULAR & BALCÃO) ---
   app.get('/api/caixa/products', async (_req, res) => {
