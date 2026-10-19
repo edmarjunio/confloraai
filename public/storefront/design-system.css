@@ -454,12 +454,13 @@ cf-card[data-order-card]:hover {
 cf-card[data-order-card] > button:first-child {
   width: 100%; padding: 0; border: 0; background: transparent; text-align: left;
 }
-.cf-order-card-list { padding: 6px 10px 18px; }
+.cf-order-card-list { padding: 6px 4px 12px; max-height: none !important; overflow: visible !important; }
 @media (prefers-reduced-motion: reduce) {
   cf-card[data-order-card], cf-card[data-order-card]:hover { transition: none; transform: none; }
 }
 
-.cf-cashier-board > section { flex: 1 0 280px; min-width: 280px; }
+.cf-cashier-board { width: 100%; overflow: visible !important; }
+.cf-cashier-board > section { flex: 1 1 0%; min-width: 0 !important; }
 #todayOrdersTable th, #todayOrdersTable td { white-space: nowrap; width: 1%; }
 #todayOrdersTable th:nth-child(3), #todayOrdersTable td:nth-child(3) { white-space: normal; width: auto; min-width: 240px; }
 

@@ -404,12 +404,12 @@ window.PdvComponents = (() => {
       red: 'border-red-300 bg-red-50 text-red-950',
     };
     const acceptsDrop = canMove && ((dragFrom === 'confirmation' && stage === 'payment') || (dragFrom === 'payment' && stage === 'paid'));
-    return <section onDragOver={(event) => { if (acceptsDrop) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; } }} onDrop={(event) => { event.preventDefault(); if (!acceptsDrop) return; try { const payload = JSON.parse(event.dataTransfer.getData('application/x-conflora-order')); onMove(payload.id, payload.from, stage); } catch { /* Ignore unrelated drag payloads. */ } onDragEnd(); }} className={`min-w-[84vw] snap-start rounded-2xl border border-slate-200 bg-slate-100 p-3 md:min-w-0 ${acceptsDrop ? 'cf-order-column--drop' : ''}`} aria-label={title}>
+    return <section onDragOver={(event) => { if (acceptsDrop) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; } }} onDrop={(event) => { event.preventDefault(); if (!acceptsDrop) return; try { const payload = JSON.parse(event.dataTransfer.getData('application/x-conflora-order')); onMove(payload.id, payload.from, stage); } catch { /* Ignore unrelated drag payloads. */ } onDragEnd(); }} className={`min-w-0 w-full rounded-2xl border border-slate-200 bg-slate-100 p-3 ${acceptsDrop ? 'cf-order-column--drop' : ''}`} aria-label={title}>
       <header className={`mb-3 rounded-xl border px-3 py-2 ${themes[tone]}`}>
         <div className="flex items-center justify-between gap-2"><h3 className="text-xs font-black tracking-wide">{title}</h3><span className="rounded-full bg-white/80 px-2 py-0.5 text-xs font-extrabold">{orders.length}</span></div>
         <p className="mt-1 text-[10px] opacity-75">{hint}</p>
       </header>
-      <div className="cf-order-card-list max-h-[58vh] space-y-2 overflow-y-auto">
+      <div className="cf-order-card-list space-y-2">
         {orders.map((order) => <OrderCard key={order.id} order={order} tone={tone} stage={stage} canMove={canMove} onDragStart={onDragStart} onDragEnd={onDragEnd} attention={pulsedOrderIds.has(order.id)} selected={selectedOrderId === order.id && order.status === 'AWAITING_CONFIRMATION'} onDetails={onDetails} />)}
         {!orders.length && <p className="rounded-xl border border-dashed border-slate-300 bg-white/70 p-4 text-center text-xs text-slate-500">Nenhuma comanda nesta etapa.</p>}
       </div>
@@ -533,7 +533,7 @@ window.PdvComponents = (() => {
     const mostByQuantity = data ? topProducts(reportOrders, 'quantity') : [];
     const mostByValue = data ? topProducts(reportOrders, 'total') : [];
 
-    return <div className="min-h-screen bg-[#F4F6F5] font-sans text-slate-800">
+    return <div className="min-h-screen w-full bg-[#F4F6F5] font-sans text-slate-800">
       <div className="bg-white"><Topbar user={user} onCashier={onBack} />
         <div className="cf-page-toolbar">
           <div className="flex flex-col items-start gap-2"><button type="button" onClick={onBack} className="cf-back-button">← Voltar</button></div>
@@ -542,7 +542,7 @@ window.PdvComponents = (() => {
         </div>
 
       <div className="shrink-0 border-b border-slate-200 bg-white/80 px-4 py-3 sm:px-6">
-          <div className="mx-auto flex max-w-[1600px] flex-wrap items-end gap-2">
+          <div className="flex w-full max-w-none flex-wrap items-end gap-2">
             <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
               {[{ days: 0, label: 'Hoje' }, { days: 7, label: '7 dias' }, { days: 30, label: '30 dias' }].map((option) => {
                 const isActive = dateTo === today && dateFrom === (option.days === 0 ? today : dateOffset(today, -(option.days - 1)));
@@ -557,7 +557,7 @@ window.PdvComponents = (() => {
           </div>
         </div>
 
-      <main className="mx-auto min-h-[calc(100vh-130px)] w-full max-w-[1600px] overflow-y-auto p-3 sm:p-5">
+      <main className="min-h-[calc(100vh-130px)] w-full max-w-none p-3 sm:p-5">
           {error && <p role="alert" className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
           {!data && !error && <p className="rounded-xl bg-white p-6 text-center text-sm text-slate-500">Carregando comandas…</p>}
           {data && <>
@@ -567,9 +567,8 @@ window.PdvComponents = (() => {
                 <MetricCard label="Recebido por mim" value={money(data.metrics.receipts)} description="Vendas pagas no período" />
                 <MetricCard label="Fiados quitados por mim" value={money(data.metrics.debtReceipts)} description="Recebimentos no período" />
               </div>
-              <p className="mb-2 text-[11px] font-medium text-slate-500">Deslize para o lado no celular para ver as etapas do quadro.</p>
               {newOrderNotice && <div role="status" className="mb-3 rounded-xl border border-amber-300 bg-amber-100 px-4 py-3 text-sm font-extrabold text-amber-950 shadow-sm" aria-live="polite">🔔 {newOrderNotice}</div>}
-              <div className="cf-cashier-board flex snap-x gap-3 overflow-x-auto pb-3">
+              <div className="cf-cashier-board grid w-full grid-cols-1 gap-3 pb-3 sm:grid-cols-2 lg:grid-cols-6">
                 {columns.map((column) => <CashierColumn key={column.title} {...column} canMove={['ADMIN', 'CAIXA'].includes(user.role) && !busy} dragFrom={dragFrom} onMove={moveOrder} onDragStart={setDragFrom} onDragEnd={() => setDragFrom(null)} pulsedOrderIds={pulsedOrderIds} selectedOrderId={selectedOrder?.id} onDetails={setSelectedOrder} />)}
               </div>
             </>}
