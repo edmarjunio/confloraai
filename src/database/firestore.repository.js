@@ -3684,8 +3684,11 @@ class FirestoreRepository {
 
     const byPayment = {
       PIX: 0,
-      CARTAO: 0,
       DINHEIRO: 0,
+      DEBITO: 0,
+      CREDITO: 0,
+      CARTAO: 0,
+      FIADO: 0,
     };
 
     const byStatus = {
@@ -3705,12 +3708,16 @@ class FirestoreRepository {
 
       if (pay.includes('PIX')) {
         byPayment.PIX += val;
-      } else if (
-        pay.includes('CART') ||
-        pay.includes('DEBITO') ||
-        pay.includes('CREDITO')
-      ) {
+      } else if (pay.includes('DEBIT') || pay.includes('DÉBIT')) {
+        byPayment.DEBITO += val;
         byPayment.CARTAO += val;
+      } else if (pay.includes('CREDIT') || pay.includes('CRÉDIT')) {
+        byPayment.CREDITO += val;
+        byPayment.CARTAO += val;
+      } else if (pay.includes('CART') || pay.includes('CARD')) {
+        byPayment.CARTAO += val;
+      } else if (pay.includes('FIADO') || ord.paymentStatus === 'ON_ACCOUNT') {
+        byPayment.FIADO += val;
       } else {
         byPayment.DINHEIRO += val;
       }

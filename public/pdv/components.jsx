@@ -1536,26 +1536,95 @@ window.PdvComponents = (() => {
 
             {view === 'report' && <>
               {['ADMIN', 'CAIXA'].includes(user.role) && <cashier-report-actions scope-label={user.role === 'ADMIN' ? 'Caixa geral da loja · período selecionado' : 'Somente o seu caixa · período selecionado'} from={dateFrom} to={dateTo}></cashier-report-actions>}
-              <h3 className="mb-3 font-black text-[#0F381E]">Relatório · {dateFrom === dateTo ? dateFrom : `${dateFrom} a ${dateTo}`}</h3>
-              <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-                <MetricCard label="Recebido em vendas" value={money(reportSalesTotal)} description={`${reportCashOrders.length} venda(s) com recebimento no período`} />
-                <MetricCard label="Saldo de cliente utilizado" value={money(reportCreditUsedTotal)} description="Crédito pago antecipadamente" />
-                <MetricCard label="Quitações de fiado" value={money(reportDebtTotal)} description={`${reportDebtSettlements.length} recebimento(s)`} />
-                <MetricCard label="Crédito antecipado" value={money(reportAdvanceTotal)} description={`${reportAdvanceCredits.length} recebimento(s)`} />
-                <MetricCard label="Total recebido" value={money(reportSalesTotal + reportDebtTotal + reportAdvanceTotal)} description="Vendas + quitações + créditos recebidos" />
-                <MetricCard label="Fiado lançado" value={money(data.closing.confirmedDebt)} description="Não incluído no total recebido" tone="debt" />
-                <MetricCard label="Quantidade de vendas" value={String(reportOrders.length)} />
-                <MetricCard label="Ticket médio" value={money(reportOrders.length ? reportOrders.reduce((sum, order) => sum + Number(order.total || 0), 0) / reportOrders.length : 0)} />
-                {['PIX', 'DINHEIRO', 'CREDITO', 'DEBITO', 'SALDO_CLIENTE'].map((method) => <MetricCard key={method} label={paymentLabel(method)} value={money(reportPaymentTotals[method])} />)}
+              
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-black text-[#0F381E]">Fechamento & Conferência do Caixa</h3>
+                  <p className="text-xs text-slate-500">Período: {dateFrom === dateTo ? dateFrom : `${dateFrom} a ${dateTo}`}</p>
+                </div>
+                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">
+                  {user.role === 'ADMIN' ? '👑 Visão Geral da Loja' : `👤 Caixa: ${user.name || 'Operador'}`}
+                </span>
               </div>
-              <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                <h4 className="border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-700">Conferência por forma de pagamento</h4>
-                <div className="divide-y divide-slate-100">{['PIX', 'DINHEIRO', 'CREDITO', 'DEBITO', 'SALDO_CLIENTE'].map((method) => <div key={method} className="grid grid-cols-2 items-center gap-2 px-4 py-3 text-xs sm:grid-cols-[1fr_auto_auto_auto] sm:gap-3"><strong>{paymentLabel(method)}</strong><span className="text-right font-bold text-[#0F381E] sm:order-last">{money(reportPaymentTotals[method])}</span><span className="text-slate-500">Vendas confirmadas</span><span className="text-right text-slate-500 sm:text-left">Recebimentos de clientes {money(data.closing.byPayment[method]?.debt || 0)}</span></div>)}</div>
+
+              {/* CARDS PRINCIPAIS DE FORMAS DE PAGAMENTO */}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                <MetricCard label="💵 Dinheiro" value={money(reportPaymentTotals['DINHEIRO'] || 0)} description="Vendas em espécie" />
+                <MetricCard label="⚡ PIX" value={money(reportPaymentTotals['PIX'] || 0)} description="Sicredi / recebidos" />
+                <MetricCard label="💳 Cartão Crédito" value={money(reportPaymentTotals['CREDITO'] || 0)} description="Relatório maquininha" />
+                <MetricCard label="💳 Cartão Débito" value={money(reportPaymentTotals['DEBITO'] || 0)} description="Relatório maquininha" />
+                <MetricCard label="📝 Fiado (A Receber)" value={money(data.closing.confirmedDebt || 0)} description="Vendas a prazo" tone="debt" />
+                <MetricCard label="💰 Total Recebido" value={money(reportSalesTotal + reportDebtTotal + reportAdvanceTotal)} description={`${reportOrders.length} venda(s) apurada(s)`} />
+              </div>
+
+              {/* TABELA DE CONFERÊNCIA POR FORMA DE PAGAMENTO */}
+              <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 bg-slate-100 px-4 py-3">
+                  <h4 className="text-sm font-bold text-slate-700">Conferência dos Valores Apurados pelo Sistema</h4>
+                </div>
+                <div className="divide-y divide-slate-100">
+                  {[
+                    { key: 'DINHEIRO', label: '💵 Dinheiro em Caixa', hint: 'Notas e moedas na gaveta' },
+                    { key: 'PIX', label: '⚡ PIX Recebido', hint: 'Extrato Sicredi / confirmações' },
+                    { key: 'CREDITO', label: '💳 Cartão de Crédito', hint: 'Relatório impresso da maquininha' },
+                    { key: 'DEBITO', label: '💳 Cartão de Débito', hint: 'Relatório impresso da maquininha' },
+                    { key: 'FIADO', label: '📝 Fiado (A Receber)', hint: 'Vendas a prazo registradas no período', customVal: data.closing.confirmedDebt },
+                  ].map((row) => (
+                    <div key={row.key} className="grid grid-cols-2 items-center gap-3 px-4 py-3 sm:grid-cols-[1.5fr_1fr_auto]">
+                      <div>
+                        <strong className="block text-sm font-bold text-slate-800">{row.label}</strong>
+                        <span className="text-xs text-slate-400">{row.hint}</span>
+                      </div>
+                      <div className="text-right sm:text-center">
+                        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800">
+                          {money(row.customVal !== undefined ? row.customVal : (reportPaymentTotals[row.key] || 0))}
+                        </span>
+                      </div>
+                      <div className="col-span-2 text-right sm:col-span-1">
+                        <span className="text-xs font-semibold text-slate-500">
+                          {row.key === 'FIADO' ? 'Registrado a prazo' : 'Vendas confirmadas'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="grid grid-cols-2 items-center gap-3 bg-emerald-50/60 px-4 py-3.5 sm:grid-cols-[1.5fr_1fr_auto]">
+                    <div>
+                      <strong className="text-sm font-black text-[#0F381E]">TOTAL GERAL APURADO</strong>
+                    </div>
+                    <div className="text-right sm:text-center">
+                      <span className="text-base font-black text-[#0F381E]">
+                        {money(reportSalesTotal + reportDebtTotal + reportAdvanceTotal)}
+                      </span>
+                    </div>
+                    <div className="col-span-2 text-right sm:col-span-1">
+                      <span className="text-xs font-bold text-emerald-800">Ticket Médio: {money(reportOrders.length ? reportOrders.reduce((sum, order) => sum + Number(order.total || 0), 0) / reportOrders.length : 0)}</span>
+                    </div>
+                  </div>
+                </div>
               </section>
+
+              {/* PRODUTOS MAIS VENDIDOS */}
               <div className="mt-5 grid gap-4 lg:grid-cols-2">
-                {[{ title: '5 mais vendidos em quantidade', rows: mostByQuantity }, { title: '5 maiores vendas em valor', rows: mostByValue }].map((group) => <section key={group.title} className="rounded-2xl border border-slate-200 bg-white p-4"><h4 className="mb-3 font-bold text-[#0F381E]">{group.title}</h4>{group.rows.length ? <ol className="space-y-2">{group.rows.map((product, index) => <li key={product.name} className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2 text-sm"><span title={product.name}>{index + 1}. {product.name} <small className="text-slate-500">({product.quantity} un.)</small></span><strong>{money(product.total)}</strong></li>)}</ol> : <p className="text-sm text-slate-500">Sem itens vendidos no período.</p>}</section>)}
+                {[{ title: 'Top 5 Produtos mais Vendidos', rows: mostByQuantity }, { title: 'Top 5 Maiores Vendas em Valor', rows: mostByValue }].map((group) => (
+                  <section key={group.title} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <h4 className="mb-3 font-bold text-[#0F381E]">{group.title}</h4>
+                    {group.rows.length ? (
+                      <ol className="space-y-2">
+                        {group.rows.map((product, index) => (
+                          <li key={product.name} className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2 text-sm">
+                            <span title={product.name} className="truncate">{index + 1}. {product.name} <small className="text-slate-500">({product.quantity} un.)</small></span>
+                            <strong className="text-[#0F381E]">{money(product.total)}</strong>
+                          </li>
+                        ))}
+                      </ol>
+                    ) : <p className="text-sm text-slate-500">Sem itens vendidos no período.</p>}
+                  </section>
+                ))}
               </div>
-              <p className="mt-3 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-950">{user.role === 'ADMIN' ? 'Visão consolidada de todos os colaboradores.' : `Dados vinculados a ${staffLabel({ name: user.name, email: user.email })}.`}</p>
+
+              <p className="mt-4 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-950">
+                {user.role === 'ADMIN' ? '👑 Visão consolidada de todos os colaboradores.' : `👤 Dados exclusivos do caixa de ${staffLabel({ name: user.name, email: user.email })}.`}
+              </p>
             </>}
           </>}
       </main>

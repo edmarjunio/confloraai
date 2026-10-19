@@ -78,6 +78,149 @@ function renderAdminHtml(storeConfig) {
     .admin-product-dialog .product-form { box-shadow:none; }
     @media (max-width:700px) { .admin-product-dialog__surface { padding:18px 14px; } .admin-product-dialog .product-form { padding:14px; } }
     @media (max-width:700px) { .tab-content { padding:18px 14px; } .header-actions { justify-content:flex-start; } .stock-toolbar-actions { width:100%; } .stock-toolbar-actions button { flex:1; } }
+
+    /* ESTILOS DE CONFERÊNCIA E FECHAMENTO DO CAIXA */
+    .cashier-conference-box {
+      margin-top: 14px;
+      margin-bottom: 20px;
+      border: 1px solid #e2e8f0;
+      border-radius: 14px;
+      overflow: hidden;
+      background: #fafcfb;
+    }
+    .cashier-conf-header {
+      display: grid;
+      grid-template-columns: 2fr 1.2fr 1.5fr 1.2fr;
+      padding: 12px 16px;
+      background: #f1f5f2;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #526356;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .cashier-conf-row {
+      display: grid;
+      grid-template-columns: 2fr 1.2fr 1.5fr 1.2fr;
+      padding: 12px 16px;
+      align-items: center;
+      border-bottom: 1px solid #eef2ef;
+      background: #ffffff;
+      font-size: 13px;
+    }
+    .cashier-conf-row:nth-child(even) { background: #fcfdfc; }
+    .cashier-conf-total {
+      display: grid;
+      grid-template-columns: 2fr 1.2fr 1.5fr 1.2fr;
+      padding: 14px 16px;
+      align-items: center;
+      background: #eaf3ed;
+      border-top: 2px solid #cbdcd0;
+      font-weight: 800;
+      font-size: 14px;
+    }
+    .conf-col-method {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .conf-method-icon {
+      font-size: 18px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: #edf5ef;
+    }
+    .conf-input-wrapper {
+      display: flex;
+      align-items: center;
+      background: #fff;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 4px 8px;
+      width: 100%;
+      max-width: 190px;
+      transition: all 0.15s ease;
+    }
+    .conf-input-wrapper:focus-within {
+      border-color: #2e9348;
+      box-shadow: 0 0 0 2px rgba(46, 147, 72, 0.15);
+    }
+    .conf-input-wrapper span {
+      font-size: 12px;
+      font-weight: 700;
+      color: #64748b;
+      margin-right: 4px;
+    }
+    .conf-input-wrapper input {
+      border: none;
+      outline: none;
+      width: 100%;
+      font-size: 13px;
+      font-weight: 700;
+      color: #0f172a;
+      background: transparent;
+    }
+    .conf-diff-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .conf-diff-badge.exact { background: #dcfce7; color: #15803d; }
+    .conf-diff-badge.surplus { background: #fef9c3; color: #854d0e; }
+    .conf-diff-badge.shortage { background: #fee2e2; color: #991b1b; }
+    .conf-badge-open {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      background: #dcfce7;
+      color: #15803d;
+      border: 1px solid #bbf7d0;
+    }
+    .conf-badge-closed {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      background: #e0f2fe;
+      color: #0369a1;
+      border: 1px solid #bae6fd;
+    }
+    .cashier-closing-extras {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 16px;
+      padding: 16px;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      background: #ffffff;
+    }
+    @media(max-width: 800px) {
+      .cashier-conf-header, .cashier-conf-row, .cashier-conf-total {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+      .cashier-closing-extras { grid-template-columns: 1fr; }
+    }
   </style>
 
 </head>
@@ -184,26 +327,221 @@ function renderAdminHtml(storeConfig) {
       </div>
 
       <cashier-report-actions id="adminCashierReport"></cashier-report-actions>
-      <div class="stat-grid" >
+      
+      <!-- STAT CARDS DAS FORMAS DE PAGAMENTO (PADRÃO RESULTADOS DA LOJA) -->
+      <div class="stat-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px;">
         <div class="stat-card">
-          <div class="stat-label">Vendas Totais Hoje</div>
-          <div class="stat-val" id="cashierTotalToday">R$ 0,00</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">PIX Recebido</div>
-          <div class="stat-val" id="cashierPixToday" style="color:#15803d;">R$ 0,00</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Cartão (Débito/Crédito)</div>
-          <div class="stat-val" id="cashierCardToday" style="color:#0284c7;">R$ 0,00</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Dinheiro em Caixa</div>
+          <div class="stat-label">💵 Dinheiro em Caixa</div>
           <div class="stat-val" id="cashierCashToday" style="color:#d97706;">R$ 0,00</div>
+          <div style="font-size:11px; color:#64748b; margin-top:2px;">Vendas balcão</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">⚡ PIX Recebido</div>
+          <div class="stat-val" id="cashierPixToday" style="color:#15803d;">R$ 0,00</div>
+          <div style="font-size:11px; color:#64748b; margin-top:2px;">Sicredi / manual</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">💳 Cartão de Crédito</div>
+          <div class="stat-val" id="cashierCreditToday" style="color:#0284c7;">R$ 0,00</div>
+          <div style="font-size:11px; color:#64748b; margin-top:2px;">Maquininha</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">💳 Cartão de Débito</div>
+          <div class="stat-val" id="cashierDebitToday" style="color:#0369a1;">R$ 0,00</div>
+          <div style="font-size:11px; color:#64748b; margin-top:2px;">Maquininha</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">📝 Fiado (A Receber)</div>
+          <div class="stat-val" id="cashierDebtToday" style="color:#dc2626;">R$ 0,00</div>
+          <div style="font-size:11px; color:#64748b; margin-top:2px;">A prazo</div>
+        </div>
+        <div class="stat-card" style="background:#f0fdf4; border-color:#bbf7d0;">
+          <div class="stat-label" style="color:#166534; font-weight:700;">💰 Total de Vendas Hoje</div>
+          <div class="stat-val" id="cashierTotalToday" style="color:#15803d;">R$ 0,00</div>
+          <div id="cashierOrdersCountToday" style="font-size:11px; color:#15803d; margin-top:2px;">0 vendas realizadas</div>
         </div>
       </div>
 
-      <h3 style="margin-top:16px; font-size:14px;">Lista de Vendas Realizadas Hoje</h3>
+      <!-- PAINEL DE CONFERÊNCIA E FECHAMENTO DO CAIXA -->
+      <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:16px; padding:20px; margin-bottom:24px; box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:12px;">
+          <div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <h3 style="margin:0; font-size:16px; font-weight:800; color:#0f381e;">🔒 Conferência e Fechamento do Caixa</h3>
+              <span id="cashierClosingBadge" class="conf-badge-open">Caixa Aberto (Em Conferência)</span>
+            </div>
+            <p style="margin:4px 0 0; font-size:12px; color:#64748b;">Digite o valor que você conferiu em mãos ou no relatório da maquininha para fechar o caixa.</p>
+          </div>
+          <button type="button" class="action-btn btn-gray" onclick="fillCountedFromSystem()" style="font-size:12px; padding:6px 12px;">
+            ✨ Preencher conferido com valores do sistema
+          </button>
+        </div>
+
+        <div class="cashier-conference-box">
+          <div class="cashier-conf-header">
+            <div>Forma de Pagamento</div>
+            <div>Apurado Sistema</div>
+            <div>Valor Conferido</div>
+            <div>Diferença</div>
+          </div>
+
+          <!-- DINHEIRO -->
+          <div class="cashier-conf-row">
+            <div class="conf-col-method">
+              <span class="conf-method-icon">💵</span>
+              <div>
+                <strong>Dinheiro em Caixa</strong>
+                <div style="font-size:11px; color:#64748b;">Notas e moedas na gaveta</div>
+              </div>
+            </div>
+            <div id="rowSysCash" style="font-weight:700; color:#334155;">R$ 0,00</div>
+            <div>
+              <div class="conf-input-wrapper">
+                <span>R$</span>
+                <input type="number" step="0.01" min="0" id="inputCountedCash" placeholder="0,00" oninput="calculateCashierDiffs()" />
+              </div>
+            </div>
+            <div id="diffTagCash"><span class="conf-diff-badge exact">R$ 0,00 (Exato)</span></div>
+          </div>
+
+          <!-- PIX -->
+          <div class="cashier-conf-row">
+            <div class="conf-col-method">
+              <span class="conf-method-icon">⚡</span>
+              <div>
+                <strong>PIX Recebido</strong>
+                <div style="font-size:11px; color:#64748b;">Extrato bancário Sicredi</div>
+              </div>
+            </div>
+            <div id="rowSysPix" style="font-weight:700; color:#334155;">R$ 0,00</div>
+            <div>
+              <div class="conf-input-wrapper">
+                <span>R$</span>
+                <input type="number" step="0.01" min="0" id="inputCountedPix" placeholder="0,00" oninput="calculateCashierDiffs()" />
+              </div>
+            </div>
+            <div id="diffTagPix"><span class="conf-diff-badge exact">R$ 0,00 (Exato)</span></div>
+          </div>
+
+          <!-- CARTÃO CRÉDITO -->
+          <div class="cashier-conf-row">
+            <div class="conf-col-method">
+              <span class="conf-method-icon">💳</span>
+              <div>
+                <strong>Cartão de Crédito</strong>
+                <div style="font-size:11px; color:#64748b;">Relatório da maquininha</div>
+              </div>
+            </div>
+            <div id="rowSysCredit" style="font-weight:700; color:#334155;">R$ 0,00</div>
+            <div>
+              <div class="conf-input-wrapper">
+                <span>R$</span>
+                <input type="number" step="0.01" min="0" id="inputCountedCredit" placeholder="0,00" oninput="calculateCashierDiffs()" />
+              </div>
+            </div>
+            <div id="diffTagCredit"><span class="conf-diff-badge exact">R$ 0,00 (Exato)</span></div>
+          </div>
+
+          <!-- CARTÃO DÉBITO -->
+          <div class="cashier-conf-row">
+            <div class="conf-col-method">
+              <span class="conf-method-icon">💳</span>
+              <div>
+                <strong>Cartão de Débito</strong>
+                <div style="font-size:11px; color:#64748b;">Relatório da maquininha</div>
+              </div>
+            </div>
+            <div id="rowSysDebit" style="font-weight:700; color:#334155;">R$ 0,00</div>
+            <div>
+              <div class="conf-input-wrapper">
+                <span>R$</span>
+                <input type="number" step="0.01" min="0" id="inputCountedDebit" placeholder="0,00" oninput="calculateCashierDiffs()" />
+              </div>
+            </div>
+            <div id="diffTagDebit"><span class="conf-diff-badge exact">R$ 0,00 (Exato)</span></div>
+          </div>
+
+          <!-- FIADO -->
+          <div class="cashier-conf-row">
+            <div class="conf-col-method">
+              <span class="conf-method-icon">📝</span>
+              <div>
+                <strong>Fiado (A Receber)</strong>
+                <div style="font-size:11px; color:#64748b;">Vendas a prazo registradas</div>
+              </div>
+            </div>
+            <div id="rowSysDebt" style="font-weight:700; color:#334155;">R$ 0,00</div>
+            <div>
+              <div class="conf-input-wrapper">
+                <span>R$</span>
+                <input type="number" step="0.01" min="0" id="inputCountedDebt" placeholder="0,00" oninput="calculateCashierDiffs()" />
+              </div>
+            </div>
+            <div id="diffTagDebt"><span class="conf-diff-badge exact">R$ 0,00 (Exato)</span></div>
+          </div>
+
+          <!-- TOTAL GERAL -->
+          <div class="cashier-conf-total">
+            <div class="conf-col-method">
+              <span class="conf-method-icon" style="background:#dcfce7; color:#15803d;">💰</span>
+              <div>TOTAL GERAL</div>
+            </div>
+            <div id="rowSysTotal" style="color:#15803d;">R$ 0,00</div>
+            <div id="rowCountedTotal" style="color:#0f172a;">R$ 0,00</div>
+            <div id="diffTagTotal"><span class="conf-diff-badge exact">R$ 0,00 (Exato)</span></div>
+          </div>
+        </div>
+
+        <!-- EXTRAS: COMPROVANTE DA MAQUININHA + OBSERVAÇÕES -->
+        <div class="cashier-closing-extras">
+          <div>
+            <label style="display:block; font-size:12px; font-weight:700; color:#334155; margin-bottom:6px;">
+              📸 Comprovante da Maquininha (Foto do Fechamento)
+            </label>
+            <div id="receiptUploadWrapper">
+              <div style="border:2px dashed #cbd5e1; border-radius:10px; padding:16px; text-align:center; background:#f8fafc; cursor:pointer;" onclick="document.getElementById('machineReceiptInput').click()">
+                <div style="font-size:24px; margin-bottom:4px;">📷</div>
+                <div style="font-size:13px; font-weight:700; color:#0f381e;">Tirar foto ou anexar comprovante</div>
+                <div style="font-size:11px; color:#64748b; margin-top:2px;">Relatório impresso da maquininha</div>
+              </div>
+              <input type="file" id="machineReceiptInput" accept="image/*" capture="environment" style="display:none;" onchange="handleReceiptPhotoSelected(event)" />
+            </div>
+            <div id="receiptPreviewBox" style="display:none; align-items:center; gap:12px; margin-top:10px; padding:8px; border:1px solid #e2e8f0; border-radius:8px; background:#f8fafc;">
+              <img id="receiptPreviewImg" src="" alt="Comprovante" style="width:60px; height:60px; object-fit:cover; border-radius:6px; border:1px solid #cbd5e1;" />
+              <div style="flex:1; min-width:0;">
+                <div style="font-size:12px; font-weight:700; color:#15803d;">✅ Foto anexada</div>
+                <div id="receiptFileName" style="font-size:11px; color:#64748b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></div>
+              </div>
+              <button type="button" class="action-btn btn-gray" style="padding:4px 8px; font-size:11px;" onclick="removeReceiptPhoto()">Remover</button>
+            </div>
+          </div>
+
+          <div>
+            <label style="display:block; font-size:12px; font-weight:700; color:#334155; margin-bottom:6px;">
+              📝 Observações do Fechamento (Opcional)
+            </label>
+            <textarea id="cashierClosingNotes" placeholder="Ex: Faltou R$ 2,00 por troco arredondado, cliente X pagou PIX direto..." style="width:100%; height:82px; border:1px solid #cbd5e1; border-radius:8px; padding:8px 10px; font-size:12px; resize:vertical; font-family:inherit;"></textarea>
+          </div>
+        </div>
+
+        <!-- BOTÕES DE AÇÃO DO FECHAMENTO -->
+        <div style="display:flex; justify-content:flex-end; gap:10px; flex-wrap:wrap; margin-top:16px;">
+          <button type="button" class="action-btn btn-green" id="btnSubmitCloseCash" onclick="submitCashierClosing()" style="min-height:44px; padding:10px 20px; font-size:13px;">
+            🔒 Registrar Fechamento do Caixa
+          </button>
+        </div>
+      </div>
+
+      <!-- AUDITORIA DE VENDAS DO DIA COM BUSCA RÁPIDA -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+        <h3 style="margin:0; font-size:15px; font-weight:800; color:#0f381e;">Lista de Vendas Realizadas Hoje</h3>
+        <div style="position:relative; width:min(100%, 320px);">
+          <input type="search" id="cashierOrderSearch" placeholder="Filtrar por cliente, pedido, forma..." 
+            style="width:100%; height:36px; padding:6px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:12px; outline:none;" 
+            oninput="filterTodayOrdersTable(this.value)" />
+        </div>
+      </div>
+
       <div class="table-scroll" tabindex="0" role="region" aria-label="Tabela de dados"><table id="todayOrdersTable">
         <thead>
           <tr>
@@ -901,6 +1239,10 @@ function renderAdminHtml(storeConfig) {
     }
 
     // 2. CAIXA & VENDAS DO DIA
+    let currentCashierOrdersList = [];
+    let currentReceiptProofBase64 = null;
+    let systemCashierTotals = { cash: 0, pix: 0, credit: 0, debit: 0, debt: 0, total: 0 };
+
     async function loadCashierDaily() {
       try {
         const isAdmin = currentUser?.role === 'ADMIN';
@@ -910,19 +1252,44 @@ function renderAdminHtml(storeConfig) {
         const res = await window.ConfloraSession.apiFetch(url);
         const m = await res.json();
         if (!res.ok) throw new Error(m.error || 'Não foi possível carregar as vendas.');
-        document.getElementById('cashierTotalToday').innerText = 'R$ ' + Number(m.totalRevenue || 0).toFixed(2).replace('.', ',');
-        document.getElementById('cashierPixToday').innerText = 'R$ ' + Number(m.byPayment?.PIX || 0).toFixed(2).replace('.', ',');
-        document.getElementById('cashierCardToday').innerText = 'R$ ' + Number(m.byPayment?.CARTAO || 0).toFixed(2).replace('.', ',');
-        document.getElementById('cashierCashToday').innerText = 'R$ ' + Number(m.byPayment?.DINHEIRO || 0).toFixed(2).replace('.', ',');
 
-        const tbody = document.getElementById('todayOrdersBody');
-        tbody.innerHTML = '';
-        const list = m.todayOrders || [];
+        const fmt = val => 'R$ ' + Number(val || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const cashVal = Number(m.byPayment?.DINHEIRO || 0);
+        const pixVal = Number(m.byPayment?.PIX || 0);
+        const creditVal = Number(m.byPayment?.CREDITO || 0);
+        const debitVal = Number(m.byPayment?.DEBITO || 0);
+        const debtVal = Number(m.byPayment?.FIADO || 0);
+        const totalVal = Number(m.totalRevenue || 0);
+
+        systemCashierTotals = { cash: cashVal, pix: pixVal, credit: creditVal, debit: debitVal, debt: debtVal, total: totalVal };
+
+        // Atualizar Stat Cards
+        document.getElementById('cashierTotalToday').innerText = fmt(totalVal);
+        document.getElementById('cashierPixToday').innerText = fmt(pixVal);
+        document.getElementById('cashierCreditToday').innerText = fmt(creditVal);
+        document.getElementById('cashierDebitToday').innerText = fmt(debitVal);
+        document.getElementById('cashierDebtToday').innerText = fmt(debtVal);
+        document.getElementById('cashierCashToday').innerText = fmt(cashVal);
+        const orderCountEl = document.getElementById('cashierOrdersCountToday');
+        if (orderCountEl) orderCountEl.innerText = (m.todayOrdersCount || (m.todayOrders || []).length) + ' vendas realizadas';
+
+        // Atualizar Linhas da Conferência (Apurado Sistema)
+        document.getElementById('rowSysCash').innerText = fmt(cashVal);
+        document.getElementById('rowSysPix').innerText = fmt(pixVal);
+        document.getElementById('rowSysCredit').innerText = fmt(creditVal);
+        document.getElementById('rowSysDebit').innerText = fmt(debitVal);
+        document.getElementById('rowSysDebt').innerText = fmt(debtVal);
+        document.getElementById('rowSysTotal').innerText = fmt(totalVal);
+
+        calculateCashierDiffs();
+        checkAdminCashierClosingStatus();
+
+        currentCashierOrdersList = m.todayOrders || [];
         if (isAdmin && !operator) {
           const select = document.getElementById('adminSalesFilter');
           const selectedValue = select.value;
           const operators = new Map();
-          for (const order of list) {
+          for (const order of currentCashierOrdersList) {
             const id = String(order.operatorId || '');
             const name = String(order.operatorName || '').trim();
             const value = id || (name ? 'name:' + name : '');
@@ -931,31 +1298,235 @@ function renderAdminHtml(storeConfig) {
           select.replaceChildren(new Option('Todos', ''), ...[...operators].sort((a, b) => a[1].localeCompare(b[1], 'pt-BR')).map(([value, label]) => new Option(label, value)));
           select.value = selectedValue;
         }
-        if (list.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:#64748b;">Nenhuma venda realizada hoje ainda.</td></tr>';
-          return;
-        }
 
-        list.forEach(o => {
-          const tr = document.createElement('tr');
-          const itemsTxt = (o.items || []).map(i => escapeHtml(i.name) + ' (' + (i.quantity || 1) + 'x)').join(', ');
-          tr.innerHTML = \`
-            <td><strong>#\${(o.id || '').slice(-6)}</strong></td>
-            <td>\${escapeHtml(o.customerName || 'Cliente Balcão')}</td>
-            <td>\${itemsTxt}</td>
-            <td>\${escapeHtml(o.paymentMethod || 'PIX')}</td>
-            <td><strong>R$ \${Number(o.total || 0).toFixed(2).replace('.', ',')}</strong></td>
-            <td><span class="badge \${o.status === 'CONFIRMED' ? 'badge-confirmed' : 'badge-pending'}">\${escapeHtml(({ AWAITING_PAYMENT: 'AGUARDANDO PAGAMENTO', AWAITING_CASHIER: 'AGUARDANDO PAGAMENTO', AWAITING_PIX: 'AGUARDANDO PAGAMENTO PIX', CREATING_PIX: 'PREPARANDO PIX', AWAITING_CONFIRMATION: 'AGUARDANDO CONFIRMAÇÃO', CONFIRMED: 'CONFIRMADO', PAID_CONFIRMED: 'PAGO', DELIVERED: 'ENTREGUE', CANCELLED: 'CANCELADO', PENDING: 'PENDENTE' })[o.status] || 'EM ANDAMENTO')}</span></td>
-            <td>
-              <button class="action-btn btn-amber" style="padding:4px 8px;" onclick="openAlterationModal('\${o.id}')" title="Corrigir se errou no lançamento">✏️ Corrigir Venda</button>
-            </td>
-          \`;
-          tbody.appendChild(tr);
-        });
+        renderTodayOrdersTable(currentCashierOrdersList);
       } catch (err) {
         document.getElementById('todayOrdersBody').innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:#b91c1c;">' + escapeHtml(err.message || 'Erro ao carregar vendas.') + '</td></tr>';
       }
     }
+
+    function renderTodayOrdersTable(list) {
+      const tbody = document.getElementById('todayOrdersBody');
+      tbody.innerHTML = '';
+      if (!list || list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:#64748b;">Nenhuma venda realizada hoje ainda.</td></tr>';
+        return;
+      }
+
+      list.forEach(o => {
+        const tr = document.createElement('tr');
+        const itemsTxt = (o.items || []).map(i => escapeHtml(i.name) + ' (' + (i.quantity || 1) + 'x)').join(', ');
+        tr.innerHTML = \`
+          <td><strong>#\${(o.id || '').slice(-6)}</strong></td>
+          <td>\${escapeHtml(o.customerName || 'Cliente Balcão')}</td>
+          <td>\${itemsTxt}</td>
+          <td>\${escapeHtml(o.paymentMethod || 'PIX')}</td>
+          <td><strong>R$ \${Number(o.total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></td>
+          <td><span class="badge \${o.status === 'CONFIRMED' ? 'badge-confirmed' : 'badge-pending'}">\${escapeHtml(({ AWAITING_PAYMENT: 'AGUARDANDO PAGAMENTO', AWAITING_CASHIER: 'AGUARDANDO PAGAMENTO', AWAITING_PIX: 'AGUARDANDO PAGAMENTO PIX', CREATING_PIX: 'PREPARANDO PIX', AWAITING_CONFIRMATION: 'AGUARDANDO CONFIRMAÇÃO', CONFIRMED: 'CONFIRMADO', PAID_CONFIRMED: 'PAGO', DELIVERED: 'ENTREGUE', CANCELLED: 'CANCELADO', PENDING: 'PENDENTE' })[o.status] || 'EM ANDAMENTO')}</span></td>
+          <td>
+            <button class="action-btn btn-amber" style="padding:4px 8px;" onclick="openAlterationModal('\${o.id}')" title="Corrigir se errou no lançamento">✏️ Corrigir Venda</button>
+          </td>
+        \`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function filterTodayOrdersTable(query) {
+      const q = (query || '').trim().toLowerCase();
+      if (!q) {
+        renderTodayOrdersTable(currentCashierOrdersList);
+        return;
+      }
+      const filtered = currentCashierOrdersList.filter(o => {
+        const id = String(o.id || '').toLowerCase();
+        const customer = String(o.customerName || '').toLowerCase();
+        const pay = String(o.paymentMethod || '').toLowerCase();
+        const seller = String(o.operatorName || '').toLowerCase();
+        return id.includes(q) || customer.includes(q) || pay.includes(q) || seller.includes(q);
+      });
+      renderTodayOrdersTable(filtered);
+    }
+
+    function calculateCashierDiffs() {
+      const getVal = id => {
+        const v = parseFloat(document.getElementById(id)?.value);
+        return isNaN(v) ? null : v;
+      };
+
+      const countedCash = getVal('inputCountedCash');
+      const countedPix = getVal('inputCountedPix');
+      const countedCredit = getVal('inputCountedCredit');
+      const countedDebit = getVal('inputCountedDebit');
+      const countedDebt = getVal('inputCountedDebt');
+
+      const updateDiffBadge = (elemId, counted, system) => {
+        const el = document.getElementById(elemId);
+        if (!el) return;
+        if (counted === null) {
+          el.innerHTML = '<span class="conf-diff-badge exact">Aguardando contagem</span>';
+          return;
+        }
+        const diff = Math.round((counted - system) * 100) / 100;
+        const fmtDiff = 'R$ ' + Math.abs(diff).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        if (Math.abs(diff) < 0.01) {
+          el.innerHTML = '<span class="conf-diff-badge exact">✓ Bateu certinho (R$ 0,00)</span>';
+        } else if (diff > 0) {
+          el.innerHTML = '<span class="conf-diff-badge surplus">▲ Sobra de ' + fmtDiff + '</span>';
+        } else {
+          el.innerHTML = '<span class="conf-diff-badge shortage">▼ Falta de ' + fmtDiff + '</span>';
+        }
+      };
+
+      updateDiffBadge('diffTagCash', countedCash, systemCashierTotals.cash);
+      updateDiffBadge('diffTagPix', countedPix, systemCashierTotals.pix);
+      updateDiffBadge('diffTagCredit', countedCredit, systemCashierTotals.credit);
+      updateDiffBadge('diffTagDebit', countedDebit, systemCashierTotals.debit);
+      updateDiffBadge('diffTagDebt', countedDebt, systemCashierTotals.debt);
+
+      const items = [countedCash, countedPix, countedCredit, countedDebit, countedDebt];
+      const hasAnyCounted = items.some(x => x !== null);
+      if (hasAnyCounted) {
+        const totalCounted = items.reduce((s, x) => s + (x || 0), 0);
+        document.getElementById('rowCountedTotal').innerText = 'R$ ' + totalCounted.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        updateDiffBadge('diffTagTotal', totalCounted, systemCashierTotals.total);
+      } else {
+        document.getElementById('rowCountedTotal').innerText = 'R$ 0,00';
+        document.getElementById('diffTagTotal').innerHTML = '<span class="conf-diff-badge exact">Aguardando</span>';
+      }
+    }
+
+    function fillCountedFromSystem() {
+      document.getElementById('inputCountedCash').value = Number(systemCashierTotals.cash || 0).toFixed(2);
+      document.getElementById('inputCountedPix').value = Number(systemCashierTotals.pix || 0).toFixed(2);
+      document.getElementById('inputCountedCredit').value = Number(systemCashierTotals.credit || 0).toFixed(2);
+      document.getElementById('inputCountedDebit').value = Number(systemCashierTotals.debit || 0).toFixed(2);
+      document.getElementById('inputCountedDebt').value = Number(systemCashierTotals.debt || 0).toFixed(2);
+      calculateCashierDiffs();
+    }
+
+    function handleReceiptPhotoSelected(event) {
+      const file = event.target?.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = e => {
+        currentReceiptProofBase64 = e.target.result;
+        document.getElementById('receiptPreviewImg').src = currentReceiptProofBase64;
+        document.getElementById('receiptFileName').innerText = file.name || 'comprovante.jpg';
+        document.getElementById('receiptPreviewBox').style.display = 'flex';
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function removeReceiptPhoto() {
+      currentReceiptProofBase64 = null;
+      document.getElementById('receiptPreviewImg').src = '';
+      document.getElementById('receiptFileName').innerText = '';
+      document.getElementById('receiptPreviewBox').style.display = 'none';
+      const input = document.getElementById('machineReceiptInput');
+      if (input) input.value = '';
+    }
+
+    async function checkAdminCashierClosingStatus() {
+      try {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const res = await window.ConfloraSession.apiFetch('/api/admin/cashier/closing?date=' + todayStr);
+        const json = await res.json();
+        const badge = document.getElementById('cashierClosingBadge');
+        const btnSubmit = document.getElementById('btnSubmitCloseCash');
+        if (json.closing && json.closing.status === 'CLOSED') {
+          badge.className = 'conf-badge-closed';
+          badge.textContent = '🔒 Fechado por ' + (json.closing.closedBy || 'Operador') + ' às ' + new Date(json.closing.closedAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          if (btnSubmit) {
+            btnSubmit.textContent = '🔒 Caixa de Hoje Já Fechado (Atualizar)';
+            btnSubmit.className = 'action-btn btn-gray';
+          }
+          if (json.closing.notes && !document.getElementById('cashierClosingNotes').value) {
+            document.getElementById('cashierClosingNotes').value = json.closing.notes;
+          }
+        } else {
+          badge.className = 'conf-badge-open';
+          badge.textContent = 'Caixa Aberto (Em Conferência)';
+          if (btnSubmit) {
+            btnSubmit.textContent = '🔒 Registrar Fechamento do Caixa';
+            btnSubmit.className = 'action-btn btn-green';
+          }
+        }
+      } catch (_) {}
+    }
+
+    async function submitCashierClosing() {
+      const getVal = id => {
+        const v = parseFloat(document.getElementById(id)?.value);
+        return isNaN(v) ? 0 : v;
+      };
+
+      const counted = {
+        cash: getVal('inputCountedCash'),
+        pix: getVal('inputCountedPix'),
+        credit: getVal('inputCountedCredit'),
+        debit: getVal('inputCountedDebit'),
+        debt: getVal('inputCountedDebt'),
+      };
+      counted.total = Math.round((counted.cash + counted.pix + counted.credit + counted.debit + counted.debt) * 100) / 100;
+
+      const notes = document.getElementById('cashierClosingNotes')?.value || '';
+      const todayStr = new Date().toISOString().slice(0, 10);
+
+      if (!window.confirm('Confirmar e registrar o fechamento do caixa de hoje (' + todayStr.split('-').reverse().join('/') + ')?')) {
+        return;
+      }
+
+      const btn = document.getElementById('btnSubmitCloseCash');
+      if (btn) { btn.disabled = true; btn.textContent = 'Registrando fechamento...'; }
+
+      try {
+        let receiptUrl = '';
+        if (currentReceiptProofBase64) {
+          try {
+            const proofRes = await window.ConfloraSession.apiFetch('/api/caixa/payment-proofs', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                targetType: 'CLOSING',
+                targetId: 'closing_' + todayStr,
+                base64: currentReceiptProofBase64,
+                mimeType: 'image/jpeg',
+                fileName: 'fechamento_' + todayStr + '.jpg'
+              })
+            });
+            const proofData = await proofRes.json();
+            receiptUrl = proofData.url || proofData.proofUrl || '';
+          } catch (e) {
+            console.warn('Falha ao subir imagem do comprovante:', e);
+          }
+        }
+
+        const res = await window.ConfloraSession.apiFetch('/api/admin/cashier/close-day', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            date: todayStr,
+            requestId: 'close_' + Date.now(),
+            counted,
+            receiptProofUrl: receiptUrl,
+            notes
+          })
+        });
+
+        const data = await res.json();
+        if (res.ok && data.success) {
+          alert('✅ Fechamento de caixa registrado com sucesso!');
+          await loadCashierDaily();
+        } else {
+          alert('Erro ao registrar fechamento: ' + (data.error || 'Falha no servidor.'));
+        }
+      } catch (err) {
+        alert('Erro ao comunicar com servidor: ' + err.message);
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '🔒 Registrar Fechamento do Caixa'; }
+      }
+    }
+
 
     // 3. CENTRAL DE ALTERAÇÕES - GIT DIFF
     async function loadAlterations() {
