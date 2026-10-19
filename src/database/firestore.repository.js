@@ -2837,12 +2837,7 @@ class FirestoreRepository {
     if (!user.pinHash) await this.saveUser(user);
     return {
       success: true,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      },
+      user: safeUser(user),
     };
   }
 
@@ -3205,8 +3200,16 @@ class FirestoreRepository {
       reqObj.reviewedAt = now;
       reqObj.reviewedBy = reviewedBy || 'Edmar Júnio';
 
+      const proposed = reqObj.proposedOrder || {};
+      const safeProposed = {};
+      for (const key of ['customerName', 'customerPhone', 'deliveryAddress', 'paymentMethod', 'notes', 'total']) {
+        if (proposed[key] !== undefined) {
+          safeProposed[key] = proposed[key];
+        }
+      }
+
       const updatedOrderData = {
-        ...reqObj.proposedOrder,
+        ...safeProposed,
         id: reqObj.orderId,
         hasPendingAlteration: false,
         updatedAt: now,
@@ -3239,9 +3242,10 @@ class FirestoreRepository {
         }
       }
 
+      const existingMem = this.inMemoryOrders.get(String(reqObj.orderId)) || {};
       this.inMemoryOrders.set(
         String(reqObj.orderId),
-        updatedOrderData
+        { ...existingMem, ...updatedOrderData }
       );
 
       // Notificação para o Atendente.

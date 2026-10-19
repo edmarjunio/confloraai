@@ -87,6 +87,15 @@ function renderAdminHtml(storeConfig) {
     <nav class="cf-work-actions" aria-label="Opções administrativas">
       <button type="button" class="cf-back-button" data-site-back>← Voltar</button>
       <span id="adminPageLabel">Administração</span>
+      <span id="ownerProfileSwitcherWrap" style="display:none; align-items:center; gap:6px; background:#fefce8; border:1px solid #fde047; padding:3px 8px; border-radius:8px;">
+        <span style="font-size:11px; font-weight:800; color:#854d0e;">👑 Perfil Teste:</span>
+        <select id="ownerProfileSelect" onchange="switchOwnerProfile(this.value)" style="background:#fff; color:#1e293b; border:1px solid #cbd5e1; border-radius:6px; padding:3px 6px; font-size:11px; font-weight:700; cursor:pointer;">
+          <option value="ADMIN">ADMIN (Total)</option>
+          <option value="CAIXA">CAIXA (PDV)</option>
+          <option value="VENDEDOR">VENDEDOR (Comandas/Pix)</option>
+          <option value="ENTREGADOR">ENTREGADOR (Entregas)</option>
+        </select>
+      </span>
       <button class="header-btn" onclick="openLoginModal()">Trocar operador</button>
       <button class="header-btn cf-notification-button" onclick="showTab('notifs')" aria-label="Notificações" title="Notificações não lidas"><svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg><span id="notifBadge">0</span></button>
       <button class="cf-danger-button" onclick="logoutAdmin()">Sair</button>
@@ -661,7 +670,7 @@ function renderAdminHtml(storeConfig) {
     let currentUser = null;
     window.ConfloraSession.apiFetch('/api/auth/me').then(res => res.json()).then(data => {
       currentUser = data.user;
-      if (currentUser && ['ADMIN', 'CAIXA', 'VENDEDOR'].includes(currentUser.role)) closeLoginModal();
+      if (currentUser && ['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(currentUser.role)) closeLoginModal();
       applyUserRoleUI();
     }).catch(() => { currentUser = null; applyUserRoleUI(); });
 
@@ -674,14 +683,44 @@ function renderAdminHtml(storeConfig) {
       return String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
     }
 
+    async function switchOwnerProfile(targetRole) {
+      if (!targetRole) return;
+      try {
+        const res = await window.ConfloraSession.apiFetch('/api/auth/switch-profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role: targetRole }),
+        });
+        const data = await res.json();
+        if (res.ok && data.success && data.user) {
+          currentUser = data.user;
+          applyUserRoleUI();
+        } else {
+          alert(data.error || 'Erro ao alternar perfil de teste.');
+        }
+      } catch {
+        alert('Erro de conexão ao alternar perfil.');
+      }
+    }
+
     function applyUserRoleUI() {
       document.querySelector('conflora-topbar').user = currentUser;
-      if (currentUser?.role === 'ENTREGADOR') { location.replace('/caixa'); return; }
+      const switcherWrap = document.getElementById('ownerProfileSwitcherWrap');
+      const switcherSelect = document.getElementById('ownerProfileSelect');
+      if (switcherWrap && switcherSelect) {
+        if (currentUser && currentUser.canSwitchProfiles) {
+          switcherWrap.style.display = 'inline-flex';
+          switcherSelect.value = currentUser.role || 'ADMIN';
+        } else {
+          switcherWrap.style.display = 'none';
+        }
+      }
+      if (currentUser?.role === 'ENTREGADOR' && !currentUser?.canSwitchProfiles) { location.replace('/caixa'); return; }
       const photo = document.getElementById('loggedUserPhoto');
       photo.hidden = !currentUser?.picture;
       if (currentUser?.picture) photo.src = currentUser.picture;
       else photo.removeAttribute('src');
-      if (!currentUser || !['ADMIN', 'CAIXA', 'VENDEDOR'].includes(currentUser.role)) {
+      if (!currentUser || !['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(currentUser.role)) {
         document.getElementById('loggedUserName').innerText = 'Não autenticado';
         const roleEl = document.getElementById('loggedUserRole');
         roleEl.innerText = 'BLOQUEADO';
@@ -706,10 +745,13 @@ function renderAdminHtml(storeConfig) {
       document.getElementById('adminCashierReport').hidden = !['ADMIN', 'CAIXA'].includes(currentUser.role);
       document.getElementById('adminCashierReport').setAttribute('scope-label', currentUser.role === 'ADMIN' ? 'Caixa geral da loja · hoje' : 'Somente o seu caixa · hoje');
       const isAdmin = currentUser.role === 'ADMIN';
+      const isDriver = currentUser.role === 'ENTREGADOR';
 
       const visibleTabs = isAdmin
         ? ['cashier', 'orders', 'stock', 'products', 'team', 'status', 'analytics']
-        : ['cashier'];
+        : isDriver
+          ? ['orders', 'cashier']
+          : ['cashier'];
       for (const tab of ['cashier', 'orders', 'stock', 'products', 'team', 'status', 'analytics']) {
         const button = document.getElementById('tabBtn-' + tab);
         if (button) button.style.display = visibleTabs.includes(tab) ? 'block' : 'none';
@@ -717,9 +759,10 @@ function renderAdminHtml(storeConfig) {
       const salesFilter = document.getElementById('adminSalesFilterWrap');
       if (salesFilter) salesFilter.hidden = !isAdmin;
       const alterationsButton = document.getElementById('cashierAlterationsButton');
-      if (alterationsButton) alterationsButton.hidden = currentUser.role === 'VENDEDOR';
-      const requestedTab = new URLSearchParams(location.search).get('tab') || 'cashier';
-      showTab(document.getElementById('tab-' + requestedTab) && (isAdmin || ['cashier', 'diff', 'price', 'notifs'].includes(requestedTab)) ? requestedTab : 'cashier', { replace: true });
+      if (alterationsButton) alterationsButton.hidden = ['VENDEDOR', 'ENTREGADOR'].includes(currentUser.role);
+      const defaultTab = isDriver ? 'orders' : 'cashier';
+      const requestedTab = new URLSearchParams(location.search).get('tab') || defaultTab;
+      showTab(document.getElementById('tab-' + requestedTab) && (isAdmin || visibleTabs.includes(requestedTab) || ['diff', 'price', 'notifs'].includes(requestedTab)) ? requestedTab : defaultTab, { replace: true });
     }
 
     window.addEventListener('cf-admin-navigate', event => showTab(event.detail.tab));

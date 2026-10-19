@@ -51,6 +51,41 @@
     }
     const footer = document.createElement('footer');
     const status = document.createElement('p'); status.setAttribute('role', 'status'); footer.append(status);
+    if (user?.canSwitchProfiles) {
+      const switcher = document.createElement('div');
+      switcher.style.cssText = 'margin:12px 0;padding:12px;border-radius:12px;background:#fefce8;border:1px solid #fde047;';
+      const swTitle = document.createElement('div');
+      swTitle.style.cssText = 'font-size:11px;font-weight:800;color:#854d0e;text-transform:uppercase;margin-bottom:8px;';
+      swTitle.textContent = '👑 Modo Teste (Exclusivo Dono)';
+      const grid = document.createElement('div');
+      grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:6px;';
+      for (const [role, label] of [['ADMIN', '👑 Admin'], ['CAIXA', '💵 Caixa'], ['VENDEDOR', '🛍️ Vendedor'], ['ENTREGADOR', '🛵 Entregador']]) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        const active = user.role === role;
+        btn.style.cssText = `padding:7px 8px;font-size:12px;font-weight:700;border-radius:8px;cursor:pointer;border:1px solid ${active ? '#15803d' : '#cbd5e1'};background:${active ? '#15803d' : '#fff'};color:${active ? '#fff' : '#1e293b'};`;
+        btn.textContent = label;
+        btn.onclick = async () => {
+          btn.disabled = true;
+          try {
+            const res = await window.ConfloraSession.apiFetch('/api/auth/switch-profile', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ role }),
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) throw new Error(data.error || 'Erro ao alternar perfil.');
+            location.reload();
+          } catch (err) {
+            btn.disabled = false;
+            status.textContent = err.message;
+          }
+        };
+        grid.append(btn);
+      }
+      switcher.append(swTitle, grid);
+      footer.append(switcher);
+    }
     if (user?.role) {
       const exit = document.createElement('button'); exit.type = 'button'; exit.className = 'cf-danger-button'; exit.textContent = 'Sair'; exit.onclick = () => logout(exit); footer.append(exit);
     }

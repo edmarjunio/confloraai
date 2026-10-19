@@ -392,10 +392,23 @@
             <button id="teamSwitchOpBtn" class="team-switch-btn" type="button" data-i18n="team.switch_operator">Trocar</button>
           </div>
 
+          <!-- SELETOR EXCLUSIVO DO DONO (TESTE DE 4 PERFIS) -->
+          <div id="ownerQuickSwitchBox" class="team-op-selector-box hidden" style="margin-bottom: 12px; background: #fefce8; border: 1px solid #fde047;">
+            <label class="team-field-label" style="color: #854d0e; font-weight: 800;">👑 Modo Teste (Exclusivo Dono):</label>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px;">
+              <button type="button" class="owner-role-btn" data-role="ADMIN" style="padding: 8px; border-radius: 8px; border: 1px solid #ca8a04; background: #fff; font-weight: 700; font-size: 12px; cursor: pointer;">👑 ADMIN</button>
+              <button type="button" class="owner-role-btn" data-role="CAIXA" style="padding: 8px; border-radius: 8px; border: 1px solid #ca8a04; background: #fff; font-weight: 700; font-size: 12px; cursor: pointer;">💵 CAIXA</button>
+              <button type="button" class="owner-role-btn" data-role="VENDEDOR" style="padding: 8px; border-radius: 8px; border: 1px solid #ca8a04; background: #fff; font-weight: 700; font-size: 12px; cursor: pointer;">🛍️ VENDEDOR</button>
+              <button type="button" class="owner-role-btn" data-role="ENTREGADOR" style="padding: 8px; border-radius: 8px; border: 1px solid #ca8a04; background: #fff; font-weight: 700; font-size: 12px; cursor: pointer;">🛵 ENTREGADOR</button>
+            </div>
+          </div>
+
           <!-- SELETOR RÁPIDO DE OPERADOR -->
           <div id="teamOpSelectorBox" class="team-op-selector-box hidden">
             <label for="teamSelectUser" class="team-field-label" data-i18n="team.switch_operator">Selecione seu perfil:</label>
             <select id="teamSelectUser" class="team-select-input"></select>
+            <label for="teamPinInput" class="team-field-label" style="margin-top: 8px; display: block;">PIN de Segurança:</label>
+            <input id="teamPinInput" type="password" inputmode="numeric" maxlength="6" class="team-select-input" placeholder="Digite seu PIN" />
             <div class="team-selector-actions">
               <button id="teamConfirmOpBtn" class="team-btn-confirm" type="button" data-i18n="common.save">Confirmar Operador</button>
               <button id="teamCancelOpBtn" class="team-btn-cancel" type="button" data-i18n="common.cancel">Cancelar</button>

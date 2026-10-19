@@ -447,6 +447,20 @@ function createApp({
     await sessions.logout(req, res);
     res.json({ success: true });
   });
+  app.post('/api/auth/switch-profile', async (req, res, next) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, error: 'Sessão não autenticada.' });
+      }
+      const result = await sessions.setActiveRole(req, req.body?.role);
+      if (!result.success) {
+        return res.status(403).json(result);
+      }
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
   app.patch('/api/auth/profile', async (req, res, next) => {
     if (!req.user) return res.status(401).json({ error: 'Entre na sua conta.' });
     const body = req.body || {};
@@ -1681,7 +1695,7 @@ function createApp({
       await messageService.firestoreRepo.saveUser({ ...existingUser, ...user });
 
       await sessions.issue(req, res, user);
-      res.status(200).json({ success: true, user });
+      res.status(200).json({ success: true, user: safeUser(user) });
     } catch (err) {
       Logger.error('Erro na autenticação Google', err);
       res.status(500).json({ success: false, error: err.message });

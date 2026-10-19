@@ -37,7 +37,9 @@
     "build:frontend": "node scripts/build-frontend.js",
     "pretest:e2e": "npm run build:frontend",
     "prestart": "node scripts/check-runtime.js",
-    "gcp-build": "npm run build:frontend"
+    "gcp-build": "npm run build:frontend",
+    "deploy:firestore": "firebase deploy --only firestore:rules --project confloraai",
+    "deploy": "gcloud run deploy confloraai --source . --region us-central1"
   },
   "dependencies": {
     "@google-cloud/firestore": "9.3.1",
