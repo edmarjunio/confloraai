@@ -79,109 +79,251 @@ function PdvDelivery({ user, onBack }) {
   const [showSeparation, setShowSeparation] = useState(false);
 
   useEffect(() => {
-    setCheckedItems({});
     setShowSeparation(false);
   }, [selected?.id]);
 
-  const toggleItemCheck = (idx) => {
-    setCheckedItems(prev => {
-      const next = { ...prev, [idx]: !prev[idx] };
-      const items = selected?.items || [];
-      if (items.length > 0 && items.every((_, i) => next[i])) {
-        setTimeout(() => {
-          if (confirm('Todos os itens foram separados com sucesso!\n\nDeseja registrar agora que já SAIU DA HORTA para iniciar a entrega?')) {
-            act(selected, 'start');
-          }
-        }, 150);
-      }
-      return next;
-    });
-  };
-
-  const handleAcceptOrder = async (order) => {
-    await act(order, 'accept');
-    if (confirm('Pedido assumido com sucesso!\n\nDeseja abrir a conferência/separação dos itens agora?')) {
-      setShowSeparation(true);
+  const notifyArrival = async (targetOrder) => {
+    const o = targetOrder || selected;
+    if (!o?.id || busy || o.arrivingNotifiedAt) return;
+    try {
+      await request(`/api/caixa/deliveries/${encodeURIComponent(o.id)}/notify-arriving`);
+      setNotice('🛵 WhatsApp enviado: Entregador está chegando no seu endereço!');
+      await refresh();
+    } catch (err) {
+      setError('Aviso WhatsApp: ' + err.message);
     }
   };
 
-  const details = selected && <div className="my-2 space-y-2.5 rounded-2xl border border-emerald-200 bg-emerald-50/80 p-3">
-    {/* Status and core info */}
-    <div className="flex flex-wrap items-center justify-between gap-1 border-b border-emerald-200/60 pb-2">
-      <span className="text-xs font-black text-emerald-950">
-        {selected.deliveryStatus === 'DELIVERED' ? '✅ Entrega concluída' : selected.deliveryStatus === 'OUT_FOR_DELIVERY' ? '🛵 Saiu para entrega (Em rota)' : selected.deliveryStatus === 'PREPARING_DELIVERY' ? '📦 Em separação dos itens' : '⏳ Aguardando entregador'}
-      </span>
-      <span className="text-xs font-black text-emerald-900 bg-emerald-200/80 px-2.5 py-0.5 rounded-full">
-        {selected.paymentStatus === 'ON_ACCOUNT' ? '📝 Fiado (aprovado)' : settled(selected) ? '✅ Pago' : `Cobrar: ${window.PdvComponents.money ? window.PdvComponents.money(selected.total) : 'R$ ' + Number(selected.total || 0).toFixed(2)}`}
-      </span>
-    </div>
+  // Watch position when order is OUT_FOR_DELIVERY to auto-notify within ~500m
+  useEffect(() => {
+    if (!selected || selected.deliveryStatus !== 'OUT_FOR_DELIVERY' || selected.arrivingNotifiedAt) return;
+    const destLat = Number(selected.deliveryLocation?.lat);
+    const destLng = Number(selected.deliveryLocation?.lng);
+    if (!Number.isFinite(destLat) || !Number.isFinite(destLng)) return;
+    if (!('geolocation' in navigator)) return;
 
-    {/* Address and Maps */}
-    <div>
-      <p className="text-sm font-black text-slate-800 leading-snug">{selected.deliveryAddress}</p>
-      {selected.deliveryLocation?.reference && <p className="text-xs text-slate-600 mt-0.5 font-medium">Ref: {selected.deliveryLocation.reference}</p>}
-      <div className="flex items-center gap-3 mt-1.5">
-        {selected.customerPhone && <a className="text-xs font-bold text-emerald-800 underline flex items-center gap-1" href={'tel:+' + String(selected.customerPhone).replace(/\D/g, '')}>📞 Ligar ({selected.customerPhone})</a>}
-        <div className="flex gap-2 ml-auto">
-          <a className="cf-button !rounded-xl !bg-sky-600 hover:!bg-sky-700 !text-white !px-3 !py-1 text-xs font-bold inline-flex items-center gap-1" href={navigation.google} target="_blank" rel="noopener noreferrer">🗺️ Maps</a>
-          <a className="cf-button !rounded-xl !bg-indigo-600 hover:!bg-indigo-700 !text-white !px-3 !py-1 text-xs font-bold inline-flex items-center gap-1" href={navigation.waze} target="_blank" rel="noopener noreferrer">🚗 Waze</a>
-        </div>
-      </div>
-    </div>
+    let notified = false;
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        if (notified) return;
+        const currentLat = position.coords.latitude;
+        const currentLng = position.coords.longitude;
+        const R = 6371;
+        const dLat = (destLat - currentLat) * Math.PI / 180;
+        const dLon = (destLng - currentLng) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(currentLat * Math.PI / 180) * Math.cos(destLat * Math.PI / 180) *
+                  Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const distanceKm = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-    {/* Separation Checklist */}
-    {Array.isArray(selected.items) && selected.items.length > 0 && (
-      <div className="mt-2 border-t border-emerald-200/80 pt-2">
-        <button
-          type="button"
-          onClick={() => setShowSeparation(v => !v)}
-          className="w-full flex items-center justify-between text-xs font-black text-emerald-900 bg-emerald-100/70 hover:bg-emerald-200/80 px-3 py-2 rounded-xl transition cursor-pointer"
-        >
-          <span>📦 Lista de Separação ({Object.values(checkedItems).filter(Boolean).length}/{selected.items.length} conferidos)</span>
-          <span>{showSeparation ? '▲ Fechar' : '▼ Abrir conferência'}</span>
-        </button>
+        if (distanceKm <= 0.5) {
+          notified = true;
+          notifyArrival(selected);
+        }
+      },
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 }
+    );
 
-        {showSeparation && (
-          <div className="mt-2 space-y-1.5 bg-white p-3 rounded-xl border border-emerald-200 shadow-inner">
-            <p className="text-[11px] font-bold text-slate-500 mb-1">Toque em cada produto conforme for separando:</p>
-            {selected.items.map((item, idx) => {
-              const isChecked = Boolean(checkedItems[idx]);
-              const qty = Number(item.quantity || 0).toLocaleString('pt-BR', { maximumFractionDigits: item.unit === 'KG' ? 3 : 0 });
-              return (
-                <label
-                  key={idx}
-                  onClick={() => toggleItemCheck(idx)}
-                  className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer select-none transition ${isChecked ? 'bg-emerald-50 border-emerald-400 text-emerald-950 font-black' : 'bg-slate-50 border-slate-200 text-slate-700 font-medium hover:bg-slate-100'}`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isChecked}
-                    onChange={() => {}}
-                    className="w-4 h-4 rounded text-emerald-600 accent-emerald-600 cursor-pointer pointer-events-none"
-                  />
-                  <span className={`flex-1 ${isChecked ? 'line-through text-slate-500' : ''}`}>
-                    <strong className="text-emerald-900">{qty} {item.unit === 'KG' ? 'kg' : 'un'}</strong> · {item.name}
-                  </span>
-                  {isChecked && <span className="text-[11px] font-black text-emerald-700">✓ Pronto</span>}
-                </label>
-              );
-            })}
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, [selected?.id, selected?.deliveryStatus, selected?.arrivingNotifiedAt]);
+
+  const handleAcceptOrder = async (order) => {
+    await act(order, 'accept');
+    setShowSeparation(true);
+  };
+
+  const details = selected && <div className="my-2 space-y-2.5">
+    {/* Minimalist OUT_FOR_DELIVERY flow: Driver is on route/at client, only needs route & payment */}
+    {selected.deliveryStatus === 'OUT_FOR_DELIVERY' && (
+      <div className="space-y-3">
+        <div className="rounded-2xl border border-sky-200 bg-sky-50/80 p-3">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[11px] font-black uppercase tracking-wider text-sky-800 bg-sky-200/80 px-2 py-0.5 rounded-full">
+              🛵 Em Rota de Entrega
+            </span>
+            <span className="text-xs font-bold text-slate-500">
+              {since(selected.departedAt || selected.acceptedAt)} em rota
+            </span>
           </div>
+          <p className="text-sm font-black text-slate-800 leading-snug mt-1">{selected.deliveryAddress}</p>
+          {selected.deliveryLocation?.reference && (
+            <p className="text-xs text-slate-600 mt-0.5 font-medium">Ref: {selected.deliveryLocation.reference}</p>
+          )}
+          <div className="flex flex-wrap items-center gap-2 mt-2.5">
+            {selected.customerPhone && (
+              <a className="cf-button !rounded-xl !bg-white !border !border-emerald-300 !text-emerald-900 !px-3 !py-1.5 text-xs font-bold inline-flex items-center gap-1 shadow-2xs" href={'tel:+' + String(selected.customerPhone).replace(/\D/g, '')}>
+                📞 Ligar ({selected.customerPhone})
+              </a>
+            )}
+            <a className="cf-button !rounded-xl !bg-sky-600 hover:!bg-sky-700 !text-white !px-3 !py-1.5 text-xs font-bold inline-flex items-center gap-1 ml-auto shadow-2xs" href={navigation.google} target="_blank" rel="noopener noreferrer">
+              🗺️ Google Maps
+            </a>
+            <a className="cf-button !rounded-xl !bg-indigo-600 hover:!bg-indigo-700 !text-white !px-3 !py-1.5 text-xs font-bold inline-flex items-center gap-1 shadow-2xs" href={navigation.waze} target="_blank" rel="noopener noreferrer">
+              🚗 Waze
+            </a>
+          </div>
+        </div>
+
+        {/* Proximity alert status / button */}
+        {selected.arrivingNotifiedAt ? (
+          <div className="flex items-center gap-2 p-2.5 rounded-xl bg-emerald-100/90 border border-emerald-300 text-xs font-black text-emerald-900">
+            <span className="text-base">✅</span>
+            <span>WhatsApp: Cliente avisado que o entregador está chegando!</span>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => notifyArrival(selected)}
+            disabled={busy}
+            className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+          >
+            <span>📢</span>
+            <span>Avisar no WhatsApp que estou chegando (~500m)</span>
+          </button>
+        )}
+
+        {/* Optional distance entry */}
+        {ownRoute && (
+          <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+            <label className="block text-[11px] font-bold text-slate-600">
+              Km reais deste percurso (opcional):
+              <input
+                type="number"
+                min="0.01"
+                max="10000"
+                step="0.01"
+                value={actualDistanceKm}
+                onChange={event => setActualDistanceKm(event.target.value)}
+                placeholder="Ex.: 3.2"
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs font-bold"
+              />
+            </label>
+          </div>
+        )}
+
+        {/* If already settled, direct completion button */}
+        {ownRoute && settled(selected) && (
+          <button
+            type="button"
+            className="w-full py-4 px-6 text-base font-black rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-xl ring-4 ring-emerald-500/30 transition active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
+            disabled={busy}
+            onClick={() => act(selected, 'complete')}
+          >
+            {busy ? 'Concluindo…' : '✅ Confirmar que a entrega foi realizada'}
+          </button>
         )}
       </div>
     )}
 
-    {/* Action buttons */}
-    <div className="pt-1 space-y-2">
-      {selected.deliveryStatus === 'PENDING_DISPATCH' && user.role !== 'ENTREGADOR' && <button type="button" className="w-full py-3.5 px-4 text-sm font-black rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white shadow-md transition active:scale-98 cursor-pointer" disabled={busy || (selected.paymentMethod === 'PIX' && !settled(selected))} onClick={() => act(selected, 'dispatch')}>{selected.paymentMethod === 'PIX' && !settled(selected) ? 'Aguardando confirmação do Pix' : '📦 Pedido separado · Liberar entrega'}</button>}
-      {!selected.assignedDriver?.id && ['PENDING_DELIVERY', 'PENDING_DISPATCH'].includes(selected.deliveryStatus) && selected.creditApprovalStatus !== 'PENDING' && (selected.paymentMethod !== 'PIX' || settled(selected)) && <button type="button" className="w-full py-4 px-6 text-base font-black rounded-2xl bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-md transition active:scale-98 flex items-center justify-center gap-2 cursor-pointer" disabled={busy} onClick={() => handleAcceptOrder(selected)}>🛵 Assumir e separar este pedido</button>}
-      {ownPreparation && <button type="button" className="w-full py-4 px-6 text-base font-black rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg transition active:scale-98 flex items-center justify-center gap-2 cursor-pointer" disabled={busy} onClick={() => act(selected, 'start')}>{busy ? 'Registrando saída…' : '🛵 Saí da horta · Iniciar entrega (Em rota)'}</button>}
-      {ownRoute && <label className="block text-xs font-bold text-slate-700">Quilômetros percorridos (opcional)<input type="number" min="0.01" max="10000" step="0.01" value={actualDistanceKm} onChange={event => setActualDistanceKm(event.target.value)} placeholder="Km reais deste percurso" className="mt-1 w-full rounded-xl border border-emerald-200 bg-white p-2.5 font-bold" /></label>}
-      {ownRoute && settled(selected) && <button type="button" className="w-full py-4 px-6 text-base font-black rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg transition active:scale-98 flex items-center justify-center gap-2 cursor-pointer" disabled={busy} onClick={() => act(selected, 'complete')}>{busy ? 'Concluindo…' : '✅ Confirmar que a entrega foi realizada'}</button>}
-      {(ownRoute || ownPreparation) && <button type="button" className="w-full py-2 rounded-xl border border-red-200 bg-white text-xs font-bold text-red-700 hover:bg-red-50 cursor-pointer transition" disabled={busy} onClick={() => act(selected, 'release')}>Devolver à fila de entregas</button>}
-      {selected.assignedDriver?.id && !ownRoute && !ownPreparation && selected.deliveryStatus !== 'DELIVERED' && <p className="text-xs font-bold text-slate-600 text-center">Entrega sob responsabilidade de {selected.assignedDriver.name}.</p>}
-    </div>
+    {/* PREPARING_DELIVERY flow: Separation & departure */}
+    {selected.deliveryStatus === 'PREPARING_DELIVERY' && (
+      <div className="space-y-3">
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-3">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[11px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-200/80 px-2 py-0.5 rounded-full">
+              📦 Em Separação dos Itens
+            </span>
+            <span className="text-xs font-bold text-slate-500">
+              Separando há {since(selected.acceptedAt)}
+            </span>
+          </div>
+          <p className="text-sm font-black text-slate-800 leading-snug mt-1">{selected.deliveryAddress}</p>
+          {selected.deliveryLocation?.reference && (
+            <p className="text-xs text-slate-600 mt-0.5 font-medium">Ref: {selected.deliveryLocation.reference}</p>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowSeparation(true)}
+          className="w-full py-3.5 px-4 rounded-2xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-black shadow-md transition active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
+        >
+          <span>📦</span>
+          <span>Conferir e Separar Itens ({(selected.items || []).length} produtos)</span>
+        </button>
+
+        {ownPreparation && (
+          <button
+            type="button"
+            className="w-full py-4 px-6 text-base font-black rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-xl ring-4 ring-emerald-500/30 transition active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
+            disabled={busy}
+            onClick={() => {
+              act(selected, 'start');
+              if (navigation?.google) window.open(navigation.google, '_blank');
+            }}
+          >
+            {busy ? 'Registrando saída…' : '🛵 Saí da horta · Iniciar rota no Maps'}
+          </button>
+        )}
+
+        {ownPreparation && (
+          <button
+            type="button"
+            className="w-full py-2 rounded-xl border border-red-200 bg-white text-xs font-bold text-red-700 hover:bg-red-50 cursor-pointer transition"
+            disabled={busy}
+            onClick={() => act(selected, 'release')}
+          >
+            Devolver à fila de entregas
+          </button>
+        )}
+      </div>
+    )}
+
+    {/* PENDING_DELIVERY / PENDING_DISPATCH flow */}
+    {['PENDING_DELIVERY', 'PENDING_DISPATCH'].includes(selected.deliveryStatus) && (
+      <div className="space-y-3">
+        <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-3">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[11px] font-black uppercase tracking-wider text-amber-900 bg-amber-200/80 px-2 py-0.5 rounded-full">
+              ⏳ Aguardando Entregador
+            </span>
+            <span className="text-xs font-black text-emerald-800">
+              {settled(selected) ? '✅ Pago' : `Cobrar: ${window.PdvComponents.money ? window.PdvComponents.money(selected.total) : 'R$ ' + Number(selected.total || 0).toFixed(2)}`}
+            </span>
+          </div>
+          <p className="text-sm font-black text-slate-800 leading-snug mt-1">{selected.deliveryAddress}</p>
+          {selected.deliveryLocation?.reference && (
+            <p className="text-xs text-slate-600 mt-0.5 font-medium">Ref: {selected.deliveryLocation.reference}</p>
+          )}
+        </div>
+
+        {!selected.assignedDriver?.id && selected.creditApprovalStatus !== 'PENDING' && (selected.paymentMethod !== 'PIX' || settled(selected)) && (
+          <button
+            type="button"
+            className="w-full py-4 px-6 text-base font-black rounded-2xl bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-xl ring-4 ring-amber-400/30 transition active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
+            disabled={busy}
+            onClick={() => handleAcceptOrder(selected)}
+          >
+            <span>🛵</span>
+            <span>Assumir e separar este pedido</span>
+          </button>
+        )}
+
+        {selected.deliveryStatus === 'PENDING_DISPATCH' && user.role !== 'ENTREGADOR' && (
+          <button
+            type="button"
+            className="w-full py-3.5 px-4 text-sm font-black rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white shadow-md transition active:scale-98 cursor-pointer"
+            disabled={busy || (selected.paymentMethod === 'PIX' && !settled(selected))}
+            onClick={() => act(selected, 'dispatch')}
+          >
+            {selected.paymentMethod === 'PIX' && !settled(selected) ? 'Aguardando confirmação do Pix' : '📦 Pedido separado no balcão · Liberar entrega'}
+          </button>
+        )}
+      </div>
+    )}
+
+    {/* Completed */}
+    {selected.deliveryStatus === 'DELIVERED' && (
+      <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-3">
+        <p className="text-xs font-black text-emerald-950">✅ Entrega concluída por {selected.deliveredBy?.name || selected.assignedDriver?.name || 'Equipe Conflora'}</p>
+        <p className="text-xs text-slate-600 mt-1">{selected.deliveryAddress}</p>
+      </div>
+    )}
   </div>;
+
   return <main className="min-h-screen bg-[#F4F6F5] font-sans text-slate-800">
     <PdvComponents.Topbar user={user} onCashier={onBack} /><header className="cf-page-toolbar"><div className="flex w-full flex-wrap items-center justify-between gap-3"><button type="button" className="cf-back-button" onClick={() => user.role === 'ENTREGADOR' ? window.ConfloraNavigation.back() : onBack()}>← Voltar</button><h1 className="text-xl font-black text-[#0F381E]">🛵 Entregas</h1><div className="flex flex-wrap items-center gap-3"><div className="text-right"><strong className="block text-sm">{user.name}</strong><span className="text-[10px] font-bold text-emerald-700">{user.role}</span></div><button type="button" className="cf-danger-button" onClick={async () => { await window.ConfloraSession.apiFetch('/api/auth/logout', { method: 'POST' }); window.location.reload(); }}>Sair</button></div></div></header>
     <div className="cf-work-body w-full max-w-none p-4 sm:p-6">
@@ -202,6 +344,24 @@ function PdvDelivery({ user, onBack }) {
         {!data?.performance?.length && <p className="mt-3 text-sm text-slate-500">As médias aparecerão após concluir as entregas.</p>}
       </details>
     </div>
-    {selected && <PdvComponents.OrderDetails key={`${selected.id}:${selected.status}:${selected.deliveryStatus}`} order={selected} deliveryMode extraContent={details} busy={busy} error={error} canReceive={ownRoute && !settled(selected) && !selected.pixData?.txid} canConfirmManualPix={ownRoute && !settled(selected) && ['AWAITING_PIX', 'CREATING_PIX'].includes(selected.status)} onClose={() => { setSelected(null); setError(''); }} onReceive={(order, paymentMethod, receivedAmount, paymentParts, verification) => act(order, 'receive', { paymentMethod, receivedAmount, paymentParts, ...verification })} onManualPix={(order, note, proofId) => act(order, 'receive', { paymentMethod: 'PIX_MANUAL', paymentParts: order.paymentParts, manualPix: true, proofSeen: true, note, proofId })} />}
+    {selected && <PdvComponents.OrderDetails
+      key={`${selected.id}:${selected.status}:${selected.deliveryStatus}`}
+      order={selected}
+      deliveryMode
+      extraContent={details}
+      busy={busy}
+      error={error}
+      canReceive={ownRoute && !settled(selected) && !selected.pixData?.txid}
+      canConfirmManualPix={ownRoute && !settled(selected) && ['AWAITING_PIX', 'CREATING_PIX'].includes(selected.status)}
+      onClose={() => { setSelected(null); setError(''); }}
+      onReceive={(order, paymentMethod, receivedAmount, paymentParts, verification) => act(order, 'receive', { paymentMethod, receivedAmount, paymentParts, ...verification })}
+      onManualPix={(order, note, proofId) => act(order, 'receive', { paymentMethod: 'PIX_MANUAL', paymentParts: order.paymentParts, manualPix: true, proofSeen: true, note, proofId })}
+      onStartDelivery={ownPreparation ? () => act(selected, 'start') : undefined}
+      onAcceptDelivery={(!selected.assignedDriver?.id && ['PENDING_DELIVERY', 'PENDING_DISPATCH'].includes(selected.deliveryStatus)) ? () => handleAcceptOrder(selected) : undefined}
+      onCompleteDelivery={(ownRoute && settled(selected)) ? () => act(selected, 'complete') : undefined}
+      navigation={navigation}
+      showSeparationModalInitial={showSeparation}
+      onCloseSeparationModal={() => setShowSeparation(false)}
+    />}
   </main>;
 }

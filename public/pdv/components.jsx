@@ -345,7 +345,139 @@ window.PdvComponents = (() => {
     return <section className="my-3 space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4"><h3 className="font-bold">Pix manual · aguardando conferência</h3><p>O envio do comprovante não confirma o recebimento.</p>{error && <p role="alert" className="text-red-700">{error}</p>}{order.paymentProofId ? <><button type="button" className={button} onClick={viewProof}>Ver comprovante enviado pelo cliente</button><label className="block"><input type="checkbox" checked={bankReceived} onChange={event => setBankReceived(event.target.checked)} /> Conferi o recebimento na conta bancária e o valor da parcela Pix.</label><label className="block">Observação ou motivo<textarea className={field} value={note} onChange={event => setNote(event.target.value)} /></label><div className="flex gap-2"><button type="button" className={button} disabled={busy || !bankReceived || note.trim().length < 8} onClick={() => review('APPROVE')}>Confirmar recebimento Pix</button><button type="button" className="cf-danger-button" disabled={busy || note.trim().length < 8} onClick={() => review('REJECT')}>Recusar comprovante</button></div></> : <p>Aguardando envio do comprovante pelo cliente. Chave Pix: {order.manualPix?.key}</p>}</section>;
   }
 
-  function OrderDetails({ order, onClose, canReceive = false, canConfirmManualPix = false, busy = false, error = '', onReceive, onManualPix, canAdvance = false, onAdvance, deliveryMode = false, extraContent, canApproveCredit = false }) {
+  function SeparationModal({ order, isOpen, onClose, checkedItems = {}, onToggleItem, onCheckAll, onDepart, canDepart }) {
+    if (!isOpen || !order) return null;
+    const items = Array.isArray(order.items) ? order.items : [];
+    const checkedCount = Object.values(checkedItems || {}).filter(Boolean).length;
+    const allChecked = items.length > 0 && items.every((_, idx) => (checkedItems || {})[idx]);
+    const progressPercent = items.length > 0 ? Math.round((checkedCount / items.length) * 100) : 0;
+
+    return <div className="fixed inset-0 z-[85] flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-3 sm:p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <section role="dialog" aria-modal="true" aria-label="Conferência de produtos" className="bg-white rounded-3xl w-full max-w-lg max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-emerald-100">
+        <header className="p-4 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between shrink-0">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full">Conferência & Separação</span>
+              <span className="text-xs font-bold text-slate-500">#{order.ticketNumber || String(order.id).slice(-6)}</span>
+            </div>
+            <h2 className="text-base font-black text-slate-800 mt-1">{order.customerName || 'Cliente Balcão'}</h2>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Fechar" className="w-8 h-8 rounded-full border border-slate-200 text-slate-500 hover:bg-slate-100 flex items-center justify-center text-sm font-bold cursor-pointer">✕</button>
+        </header>
+
+        <div className="px-4 py-3 bg-emerald-50/60 border-b border-emerald-100 shrink-0">
+          <div className="flex items-center justify-between text-xs mb-1.5">
+            <span className="font-black text-emerald-950">
+              {allChecked ? '🎉 Todos os itens separados!' : `${checkedCount} de ${items.length} itens conferidos`}
+            </span>
+            {!allChecked && (
+              <button
+                type="button"
+                onClick={onCheckAll}
+                className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 underline cursor-pointer"
+              >
+                Marcar todos como separados
+              </button>
+            )}
+          </div>
+          <div className="h-2.5 w-full bg-slate-200 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-emerald-500 transition-all duration-300 rounded-full"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        </div>
+
+        <div className="p-4 overflow-y-auto space-y-2.5 min-h-0 flex-1">
+          <p className="text-[11px] font-semibold text-slate-500 mb-2">Toque em cada produto conforme for separando:</p>
+          {items.map((item, idx) => {
+            const isChecked = Boolean((checkedItems || {})[idx]);
+            const qty = Number(item.quantity || 0).toLocaleString('pt-BR', { maximumFractionDigits: item.unit === 'KG' ? 3 : 0 });
+            return (
+              <div
+                key={idx}
+                onClick={() => onToggleItem(idx)}
+                className={`p-3 rounded-2xl border transition-all flex items-center gap-3 cursor-pointer select-none active:scale-[0.99] ${
+                  isChecked
+                    ? 'bg-emerald-50/90 border-emerald-400 shadow-xs'
+                    : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/60'
+                }`}
+              >
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-black shrink-0 transition-transform ${
+                    isChecked
+                      ? 'bg-emerald-600 text-white shadow-md scale-105'
+                      : 'border-2 border-slate-300 text-transparent bg-slate-50'
+                  }`}
+                >
+                  ✓
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-900 shrink-0">
+                      {qty} {item.unit === 'KG' ? 'kg' : 'un'}
+                    </span>
+                    <span className={`text-sm font-bold truncate ${isChecked ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+                      {item.name}
+                    </span>
+                  </div>
+                  {item.variation && <p className="text-[11px] text-slate-500 ml-1 mt-0.5">{item.variation}</p>}
+                </div>
+
+                <div className="text-right shrink-0">
+                  <span className="text-xs font-extrabold text-slate-600 block">{money(item.total || item.price * item.quantity)}</span>
+                  {isChecked && <span className="text-[10px] font-black text-emerald-700 uppercase">✓ Pronto</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <footer className="p-4 border-t border-slate-100 bg-slate-50/90 shrink-0">
+          {allChecked && canDepart ? (
+            <button
+              type="button"
+              onClick={onDepart}
+              className="w-full py-4 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-base font-black shadow-xl ring-4 ring-emerald-500/30 transition active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <span>🛵 Marcar como Saiu para Entrega & Abrir Rota</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full py-3 px-4 rounded-xl border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+            >
+              {allChecked ? '✓ Fechar conferência' : 'Voltar ao pedido'}
+            </button>
+          )}
+        </footer>
+      </section>
+    </div>;
+  }
+
+  function OrderDetails({
+    order,
+    onClose,
+    canReceive = false,
+    canConfirmManualPix = false,
+    busy = false,
+    error = '',
+    onReceive,
+    onManualPix,
+    canAdvance = false,
+    onAdvance,
+    deliveryMode = false,
+    extraContent,
+    canApproveCredit = false,
+    onStartDelivery,
+    onAcceptDelivery,
+    onCompleteDelivery,
+    navigation,
+    showSeparationModalInitial = false,
+    onCloseSeparationModal
+  }) {
     const total = Number(order.total || 0);
     const totalCents = Math.round(total * 100);
     const initialMethod = ['CARTAO', 'CARD', 'MISTO'].includes(order.paymentMethod) ? 'CREDITO' : order.paymentMethod === 'CASH' ? 'DINHEIRO' : order.paymentMethod || 'DINHEIRO';
@@ -361,6 +493,60 @@ window.PdvComponents = (() => {
     const [manualPixNote, setManualPixNote] = useState('');
     const [manualProofSeen, setManualProofSeen] = useState(false);
     const [proofId, setProofId] = useState('');
+    const [showSeparationModal, setShowSeparationModal] = useState(Boolean(showSeparationModalInitial));
+    const [checkedItems, setCheckedItems] = useState({});
+
+    useEffect(() => {
+      if (showSeparationModalInitial) setShowSeparationModal(true);
+    }, [showSeparationModalInitial]);
+
+    const handleCloseSeparation = () => {
+      setShowSeparationModal(false);
+      onCloseSeparationModal?.();
+    };
+
+    const handleToggleItemCheck = (idx) => {
+      setCheckedItems(prev => {
+        const next = { ...prev, [idx]: !prev[idx] };
+        const items = order.items || [];
+        if (items.length > 0 && items.every((_, i) => next[i])) {
+          setTimeout(() => {
+            if (onStartDelivery) {
+              if (confirm('Todos os itens foram separados com sucesso!\n\nDESEJA MARCAR COMO SAIU PARA ENTREGA?')) {
+                onStartDelivery();
+                if (navigation?.google) window.open(navigation.google, '_blank');
+                handleCloseSeparation();
+              }
+            }
+          }, 200);
+        }
+        return next;
+      });
+    };
+
+    const handleCheckAll = () => {
+      const items = order.items || [];
+      const all = {};
+      items.forEach((_, i) => { all[i] = true; });
+      setCheckedItems(all);
+      setTimeout(() => {
+        if (onStartDelivery) {
+          if (confirm('Todos os itens foram separados com sucesso!\n\nDESEJA MARCAR COMO SAIU PARA ENTREGA?')) {
+            onStartDelivery();
+            if (navigation?.google) window.open(navigation.google, '_blank');
+            handleCloseSeparation();
+          }
+        }
+      }, 200);
+    };
+
+    const handleDepartFromModal = () => {
+      if (onStartDelivery) {
+        onStartDelivery();
+        if (navigation?.google) window.open(navigation.google, '_blank');
+      }
+      handleCloseSeparation();
+    };
 
     useEffect(() => {
       if (Array.isArray(order.paymentParts) && order.paymentParts.length > 1) {
@@ -453,7 +639,97 @@ window.PdvComponents = (() => {
       });
     };
 
-    const [showFullReceipt, setShowFullReceipt] = useState(false);
+    let fabAction = null;
+    if (canReceive) {
+      if (!canFinalize && remainingCents > 0) {
+        fabAction = {
+          label: `⚠️ Falta preencher ${money(remainingCents / 100)}`,
+          disabled: true,
+          onClick: () => {}
+        };
+      } else if (!canFinalize && remainingCents < 0) {
+        fabAction = {
+          label: `⚠️ Ajuste o valor excedente de ${money(-remainingCents / 100)}`,
+          disabled: true,
+          onClick: () => {}
+        };
+      } else if (needsManualProof && (!proofId || !manualProofSeen || manualPixNote.trim().length < 8)) {
+        fabAction = {
+          label: '⚠️ Anexe e confirme o comprovante Pix',
+          disabled: true,
+          onClick: () => {}
+        };
+      } else if (deliveryMode) {
+        fabAction = {
+          label: '🛵 Confirmar Recebimento e Concluir Entrega',
+          disabled: busy,
+          onClick: handleConfirmReceive,
+          tone: 'emerald'
+        };
+      } else if (isSingleCash && cashChange > 0) {
+        fabAction = {
+          label: `✅ Confirmar Recebimento (Troco: ${money(cashChange)})`,
+          disabled: busy,
+          onClick: handleConfirmReceive,
+          tone: 'emerald'
+        };
+      } else {
+        fabAction = {
+          label: `✅ Confirmar Pagamento de ${money(order.total)}`,
+          disabled: busy,
+          onClick: handleConfirmReceive,
+          tone: 'emerald'
+        };
+      }
+    } else if (canAdvance) {
+      fabAction = {
+        label: '✅ Confirmar comanda e aguardar pagamento',
+        disabled: busy,
+        onClick: () => onAdvance(order),
+        tone: 'emerald'
+      };
+    } else if (canApproveCredit && !(order.paymentParts?.length > 1)) {
+      fabAction = {
+        label: '📝 Aprovar fiado e liberar pedido',
+        disabled: busy,
+        onClick: () => onReceive(order, 'FIADO', null, order.paymentParts),
+        tone: 'amber'
+      };
+    } else if (deliveryMode) {
+      if (onAcceptDelivery) {
+        fabAction = {
+          label: '🛵 Assumir e separar este pedido',
+          disabled: busy,
+          onClick: onAcceptDelivery,
+          tone: 'amber'
+        };
+      } else if (onStartDelivery) {
+        const items = order.items || [];
+        const allChecked = items.length > 0 && items.every((_, i) => checkedItems[i]);
+        if (allChecked) {
+          fabAction = {
+            label: '🛵 Saí da horta · Iniciar rota no Maps',
+            disabled: busy,
+            onClick: handleDepartFromModal,
+            tone: 'emerald'
+          };
+        } else {
+          fabAction = {
+            label: `📦 Separar Itens (${Object.values(checkedItems).filter(Boolean).length}/${items.length})`,
+            disabled: busy,
+            onClick: () => setShowSeparationModal(true),
+            tone: 'sky'
+          };
+        }
+      } else if (onCompleteDelivery) {
+        fabAction = {
+          label: '✅ Confirmar que a entrega foi realizada',
+          disabled: busy,
+          onClick: onCompleteDelivery,
+          tone: 'emerald'
+        };
+      }
+    }
 
     return <Panel title={`Comanda #${order.ticketNumber || String(order.id).slice(-6).toUpperCase()}`} onClose={onClose}>{order.pixMode === 'MANUAL' && !order.completedAt && canReceive && <ManualPixReview order={order} />}
       <div className="space-y-2 text-sm">
@@ -468,22 +744,39 @@ window.PdvComponents = (() => {
           </div>
         </div>
 
-        {/* Minimalist receipt view: expandable so it doesn't force scrolling */}
-        <div className="border border-slate-200 rounded-xl bg-white overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setShowFullReceipt(v => !v)}
-            className="w-full flex items-center justify-between p-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50 transition cursor-pointer"
-          >
-            <span>🧾 {showFullReceipt ? 'Ocultar cupom detalhado' : 'Ver cupom detalhado'} ({(order.items || []).length} itens)</span>
-            <span className="text-slate-400">{showFullReceipt ? '▲' : '▼'}</span>
-          </button>
-          {showFullReceipt && (
-            <div className="p-3 border-t border-slate-100 bg-slate-50/50 max-h-64 overflow-y-auto">
-              <ReceiptView order={order} />
+        {/* Minimalist receipt view: button to open dedicated Separation / Receipt Modal */}
+        <div className="border border-slate-200 rounded-2xl bg-white p-3 shadow-2xs">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                <span>📦</span>
+                <span>Separação & Cupom Detalhado</span>
+              </span>
+              <p className="text-[11px] text-slate-500 font-medium">
+                {(order.items || []).length} produto(s) · {Object.values(checkedItems).filter(Boolean).length} conferido(s)
+              </p>
             </div>
-          )}
+            <button
+              type="button"
+              onClick={() => setShowSeparationModal(true)}
+              className="py-1.5 px-3 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-900 text-xs font-black transition cursor-pointer flex items-center gap-1"
+            >
+              <span>Ver produtos</span>
+              <span>→</span>
+            </button>
+          </div>
         </div>
+
+        <SeparationModal
+          order={order}
+          isOpen={showSeparationModal}
+          onClose={handleCloseSeparation}
+          checkedItems={checkedItems}
+          onToggleItem={handleToggleItemCheck}
+          onCheckAll={handleCheckAll}
+          onDepart={handleDepartFromModal}
+          canDepart={Boolean(onStartDelivery)}
+        />
 
         {extraContent}
         {order.requiresRefund && <p role="alert" className="rounded-lg bg-amber-50 p-3 font-bold text-amber-900">Recebimento parcial de {money(order.refundDue)} pendente de conciliação ou estorno pela loja.</p>}
@@ -694,6 +987,28 @@ window.PdvComponents = (() => {
           </div>
         </section>}
         {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-xs text-red-800">{error}</p>}
+
+        {/* Floating Action Button (FAB) pinned at the bottom for primary workflow actions */}
+        {fabAction && !canReceive && (
+          <div className="sticky bottom-0 left-0 right-0 -mx-4 -mb-4 mt-4 p-3 bg-white/95 backdrop-blur-md border-t border-slate-200 z-30 flex items-center justify-center shadow-lg">
+            <button
+              type="button"
+              disabled={fabAction.disabled}
+              onClick={fabAction.onClick}
+              className={`w-full py-4 px-6 rounded-2xl text-base font-black shadow-xl transition active:scale-98 flex items-center justify-center gap-2 cursor-pointer ${
+                fabAction.disabled
+                  ? 'bg-slate-200 text-slate-500 cursor-not-allowed shadow-none'
+                  : fabAction.tone === 'amber'
+                  ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 ring-4 ring-amber-400/30'
+                  : fabAction.tone === 'sky'
+                  ? 'bg-sky-600 hover:bg-sky-700 text-white ring-4 ring-sky-400/30'
+                  : 'bg-emerald-600 hover:bg-emerald-700 text-white ring-4 ring-emerald-500/30'
+              }`}
+            >
+              {fabAction.label}
+            </button>
+          </div>
+        )}
       </div>
     </Panel>;
   }
@@ -967,5 +1282,5 @@ window.PdvComponents = (() => {
     const amountInvalid = !Number.isFinite(Number(amount)) || Number(amount) <= 0 || (!isCreditEntry && Number(amount) > balance);
     return <Panel title="Receber pagamento do cliente" onClose={onClose}>{error && <p role="alert" className="text-red-700">{error}</p>}{result ? <div><p>Recebimento registrado: {money(result.amount)}</p><p>Saldo devedor: {money(result.newBalance)}</p><p>Crédito disponível: {money(result.newCreditBalance)}</p>{result.newBalance > 0 && <button className={button + ' mt-4'} onClick={() => { setBalance(result.newBalance); setCreditBalance(result.newCreditBalance || 0); setAmount(Number(result.newBalance).toFixed(2)); setId(crypto.randomUUID()); setResult(null); setSplitPayment(false); setProofSeen(false); setNote(''); setProofId(''); }}>Receber valor restante</button>}</div> : <><label>Buscar cliente cadastrado<input className={field} value={query} onChange={(e) => setQuery(e.target.value)} /></label><div className="max-h-36 overflow-auto">{customers.map((row) => <button className="block w-full border-b p-2 text-left" key={row.id} onClick={() => select(row)}>{row.name} · {row.phone || 'Sem telefone'}</button>)}</div>{customer && <><p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm font-bold">{customer.name}<span className="mt-1 block text-xs font-medium text-amber-800">Saldo devedor: {money(balance)}</span><span className="block text-xs font-medium text-emerald-800">Crédito disponível: {money(creditBalance)}</span></p><label>Tipo de lançamento<select className={field} value={entryType} onChange={(event) => setEntryType(event.target.value)}><option value="QUITACAO_FIADO">Receber pagamento de dívida</option><option value="CREDITO_CLIENTE">Adicionar crédito antecipado</option></select></label><label>Valor recebido<input className={field} type="number" min="0.01" max={isCreditEntry ? undefined : balance} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></label><PaymentMethodButtons value={method} onChange={setMethod} labels={{ DINHEIRO: 'Dinheiro', DEBITO: 'Cartão de débito', CREDITO: 'Cartão de crédito', PIX: 'Pix já recebido' }} /><label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={splitPayment} onChange={(event) => setSplitPayment(event.target.checked)} />Usar mais de uma forma de pagamento</label>{splitPayment && <PaymentPartsEditor parts={parts} onChange={setParts} total={Number(amount || 0)} allowedMethods={['DINHEIRO', 'DEBITO', 'CREDITO', 'PIX']} />}{hasPix && <div className="my-3 space-y-2"><PixProofUpload key={id} targetType="DEBT" targetId={id} onChange={setProofId} /><label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={proofSeen} onChange={(event) => setProofSeen(event.target.checked)} />Conferi o Pix recebido na conta da Conflora.</label><label className="block text-xs">Observação do comprovante<textarea className={field} value={note} onChange={(event) => setNote(event.target.value)} /></label></div>}{!isCreditEntry && <p className="my-3 text-sm font-bold">Saldo após recebimento: {money(Math.max(0, balance - Number(amount || 0)))}</p>}<button className={button} disabled={busy || (hasPix && (!proofId || !proofSeen || note.trim().length < 8)) || amountInvalid || (!isCreditEntry && balance <= 0)} onClick={submit}>{busy ? 'Registrando…' : isCreditEntry ? 'Registrar crédito recebido' : 'Confirmar recebimento'}</button></>}</>}</Panel>;
   }
-  return { Topbar, Loading, Login, Receipt, CashierQueue, DebtSettlement, DiscountApproval, ProductInformation, WeightPrompt, handleProductImageError, PaymentPartsEditor, PaymentMethodButtons, CustomerSearch, LocationPicker, OrderDetails, CashierColumn };
+  return { Topbar, Loading, Login, Receipt, CashierQueue, DebtSettlement, DiscountApproval, ProductInformation, WeightPrompt, handleProductImageError, PaymentPartsEditor, PaymentMethodButtons, CustomerSearch, LocationPicker, OrderDetails, CashierColumn, SeparationModal };
 })();

@@ -343,6 +343,42 @@ class PdvService {
     return { order: { ...delivered, receiptText: formatOrderReceipt(delivered) } };
   }
 
+  async notifyArriving(orderId, user) {
+    if (!user || !['ADMIN', 'CAIXA', 'ENTREGADOR'].includes(user.role)) {
+      throw new Error('Sem permissão para notificar chegada da entrega.');
+    }
+    const order = await this.repository.read('orders', orderId);
+    if (!order) throw new Error('Pedido não encontrado.');
+    assertAssignedDelivery(order, user);
+    if (order.deliveryStatus !== 'OUT_FOR_DELIVERY') {
+      throw new Error('O pedido precisa estar em rota para notificar aproximação.');
+    }
+    if (!order.customerPhone) {
+      throw new Error('Cliente sem telefone cadastrado para aviso por WhatsApp.');
+    }
+    const jobId = `${order.id}-arriving-${Date.now()}`;
+    const now = new Date().toISOString();
+    await this.repository.transaction(async tx => {
+      tx.set('pdv_outbox', jobId, {
+        id: jobId,
+        orderId: order.id,
+        kind: 'delivery-arriving',
+        recipient: order.customerPhone,
+        status: 'PENDING',
+        attempts: 0,
+        createdAt: now
+      });
+      const updated = {
+        ...order,
+        arrivingNotifiedAt: now,
+        updatedAt: now
+      };
+      tx.set('orders', order.id, updated);
+    });
+    await this.deliver(jobId);
+    return { success: true, notified: true, arrivingNotifiedAt: now };
+  }
+
   async handlePix(txid, endToEndId) {
     if (!/^[a-zA-Z0-9]{26,35}$/.test(txid) || !/^E[a-zA-Z0-9]{31}$/.test(endToEndId || '')) { throw new Error('Identificador Pix inválido.'); }
     if (await this.debtPix?.handlePix(txid, endToEndId)) return true;
@@ -387,8 +423,9 @@ class PdvService {
     try {
       const order = job.orderId ? await this.repository.read('orders', job.orderId) : null;
       const staleDeparture = job.kind === 'delivery-departure' && order?.deliveryStatus !== 'OUT_FOR_DELIVERY';
-        const staleAvailability = job.kind === 'driver-available' && (!order || order.assignedDriver?.id || ['DELIVERED', 'OUT_FOR_DELIVERY'].includes(order.deliveryStatus));
-        if (order?.status === 'CANCELLED' || staleDeparture || staleAvailability) {
+      const staleArriving = job.kind === 'delivery-arriving' && order?.deliveryStatus !== 'OUT_FOR_DELIVERY';
+      const staleAvailability = job.kind === 'driver-available' && (!order || order.assignedDriver?.id || ['DELIVERED', 'OUT_FOR_DELIVERY'].includes(order.deliveryStatus));
+      if (order?.status === 'CANCELLED' || staleDeparture || staleArriving || staleAvailability) {
         await this.repository.updateMessage(id, { status: 'SKIPPED', skipped: true, leaseUntil: 0, lastError: 'Mensagem substituída pelo estado atual do pedido.' });
         return;
       }
@@ -408,6 +445,7 @@ class PdvService {
       else if (job.kind === 'driver-available') text = 'CONFLORA — ENTREGA DISPONÍVEL\nAbra a aba Entregas para consultar e assumir o pedido.';
       else if (job.kind === 'driver-assigned') text = `CONFLORA — ENTREGA ATRIBUÍDA\nPedido #${order.ticketNumber || order.id}\nConsulte os detalhes na aba Entregas.`;
       else if (job.kind === 'delivery-departure') { text = `Seu pedido #${order.ticketNumber || order.id.slice(-6)} saiu para entrega! Responsável: ${order.assignedDriver?.name || 'Equipe Conflora'}. ${isDeliverySettled(order) ? 'Pagamento já registrado.' : 'Pagamento será recebido na entrega.'}`; }
+      else if (job.kind === 'delivery-arriving') { text = `🛵 CONFLORA — O ENTREGADOR ESTÁ CHEGANDO NO SEU ENDEREÇO!\nPedido #${order.ticketNumber || order.id.slice(-6)}\nFavor aguardar para receber seu pedido.`; }
       else if (job.kind === 'receipt' || job.kind === 'customer-paid' || job.kind === 'pix-charge') {
         text = !order.completedAt && !order.paidAt && job.kind !== 'customer-paid' ? formatCustomerOrderMessage(order) : formatOrderReceipt(order);
       }
