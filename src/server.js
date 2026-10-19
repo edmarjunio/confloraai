@@ -35,6 +35,29 @@ async function bootstrap() {
   const taskQueueClient = new TaskQueueClient();
   const learningService = new LearningService({ firestoreRepo, catalogRepo });
 
+  // 2.1 Meta Business Agent Platform Service
+  let metaAgentService = null;
+  if (firestoreRepo.firestore) {
+    const { FirestoreProductSource } = require('./agent/product-source');
+    const { ProductIndex } = require('./agent/product-search');
+    const { CartStore, HandoffStore } = require('./agent/agent-store');
+    const { ConfloraAgentService } = require('./agent/agent-service');
+
+    const productSource = new FirestoreProductSource(firestoreRepo.firestore);
+    const productIndex = new ProductIndex({ source: productSource });
+    const cartStore = new CartStore(firestoreRepo.firestore);
+    const handoffStore = new HandoffStore(firestoreRepo.firestore);
+
+    metaAgentService = new ConfloraAgentService({
+      productSource,
+      productIndex,
+      cartStore,
+      handoffStore,
+      tenantId: 'conflora',
+      assertAvailability: false,
+    });
+  }
+
   const messageService = new MessageService({
     router,
     directPriceService,
@@ -45,6 +68,9 @@ async function bootstrap() {
     whatsappClient,
     learningService,
   });
+  if (metaAgentService) {
+    messageService.metaAgentService = metaAgentService;
+  }
 
   // 3. Aplicação Express
   const app = createApp({ messageService, taskQueueClient });
