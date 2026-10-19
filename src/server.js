@@ -80,6 +80,11 @@ async function bootstrap() {
 
   const server = app.listen(primaryPort, host, () => {
     Logger.info(`Conflora AI rodando com sucesso na porta principal ${primaryPort} (${host})`);
+    console.log(`\n==================================================`);
+    console.log(`🚀 Conflora AI online com sucesso!`);
+    console.log(`👉 Catálogo / Loja : http://localhost:${primaryPort}`);
+    console.log(`👉 Painel Caixa PDV: http://localhost:${primaryPort}/pdv`);
+    console.log(`==================================================\n`);
   });
 
   server.on('error', error => { Logger.error('Erro no servidor HTTP', error); process.exitCode = 1; });
