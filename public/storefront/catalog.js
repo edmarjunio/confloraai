@@ -15,6 +15,7 @@ export function createCatalog(state, add, navigate) {
   let renderedItems = [];
   let loadingNextPage = false;
   let selectedCategory = "";
+  let selectedSubcategory = "";
   let showingFavorites = false;
   const favoriteKey = () => `store:${state.slug}:user:${state.user?.id || "guest"}:favorites`;
   const favorites = new Set();
@@ -344,15 +345,54 @@ export function createCatalog(state, add, navigate) {
   };
   const categoryIcon = (name) => {
     const value = normalizeProductText(name);
+    if (value.includes("frutifer")) return "🍋";
+    if (value.includes("horta")) return "🥬";
+    if (value.includes("hortifrut")) return "🍉";
+    if (value.includes("pet") || value.includes("animal")) return "🐾";
+    if (value.includes("planta") || value.includes("muda")) return "🪴";
+    if (value.includes("outro")) return "🌾";
     const sharedIcon = window.ConfloraProductUi?.categoryIcon(name);
-    if (["hortifrutti", "frutifera", "frutifero", "horta", "pet", "animal", "planta", "muda", "outro"].some((term) => value.includes(term))) {
-      return sharedIcon || "🌿";
-    }
     const configuredIcon = state.config?.categories?.find((category) =>
       normalizeProductText(category.name) === normalizeProductText(name),
     )?.icon;
     return configuredIcon || sharedIcon || "🌿";
   };
+
+  const productSubcategory = (product) => {
+    return String(
+      product?.subcategory ||
+      product?.subcategoria ||
+      product?.subcategoryName ||
+      product?.SUBCATEGORIA ||
+      ""
+    ).trim();
+  };
+
+  const productMatchesCategory = (product, catId) => {
+    if (!catId) return true;
+    const ids = Array.isArray(product.categories) ? product.categories : [];
+    if (ids.includes(catId)) return true;
+    const fallbackName = categoryLabel(product);
+    if (catId === `name:${normalizeProductText(fallbackName)}`) return true;
+    const configured = state.config?.categories?.find((c) => c.id === catId);
+    if (configured && normalizeProductText(configured.name) === normalizeProductText(fallbackName)) return true;
+    return false;
+  };
+
+  function getSubcategoryOptions(products, catId) {
+    if (!catId) return [];
+    const categoryProducts = products.filter((p) => productMatchesCategory(p, catId));
+    const subMap = new Map();
+    for (const p of categoryProducts) {
+      const sub = productSubcategory(p);
+      if (!sub) continue;
+      const key = normalizeProductText(sub);
+      if (!subMap.has(key)) {
+        subMap.set(key, sub);
+      }
+    }
+    return [...subMap.values()].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }
 
   function categoryOptions(products) {
     const categories = new Map();
@@ -430,7 +470,18 @@ export function createCatalog(state, add, navigate) {
     $("#categoryFilterControl").hidden = false;
     if (!categories.some((category) => category.id === selectedCategory)) {
       selectedCategory = "";
+      selectedSubcategory = "";
     }
+
+    // Garante que nenhum botão 'Voltar' apareça na vitrine / home
+    if (!$("#productView") || $("#productView").hidden) {
+      document.querySelectorAll(".cf-back-button, [data-site-back]").forEach((btn) => {
+        if (!btn.closest("#productView") && !btn.closest("#adminView")) {
+          btn.remove();
+        }
+      });
+    }
+
     $("#categoryFilterControl").replaceChildren(
       element("button", {
         type: "button",
@@ -439,6 +490,7 @@ export function createCatalog(state, add, navigate) {
         onclick: () => {
           showingFavorites = !showingFavorites;
           selectedCategory = "";
+          selectedSubcategory = "";
           pageSize = 24;
           if ($("#search") && /@/.test($("#search").value)) {
             $("#search").value = "";
@@ -446,7 +498,7 @@ export function createCatalog(state, add, navigate) {
           state.trackEvent?.("category_filter", { category: showingFavorites ? "Curtidos" : "Todas" });
           render();
         },
-      }, [icon("heart"), element("span", { text: "Curtidos" })]),
+      }, [element("span", { class: "category-chip-icon", text: "❤️", "aria-hidden": "true" }), element("span", { class: "category-chip-label", text: "Curtidos" })]),
       element("button", {
         type: "button",
         class: `category-chip${!showingFavorites && !selectedCategory ? " is-active" : ""}`,
@@ -454,6 +506,7 @@ export function createCatalog(state, add, navigate) {
         onclick: () => {
           showingFavorites = false;
           selectedCategory = "";
+          selectedSubcategory = "";
           pageSize = 24;
           if ($("#search") && /@/.test($("#search").value)) {
             $("#search").value = "";
@@ -461,7 +514,7 @@ export function createCatalog(state, add, navigate) {
           state.trackEvent?.("category_filter", { category: "Todas" });
           render();
         },
-      }, [element("span", { text: "🌿", "aria-hidden": "true" }), element("span", { text: "Todas" })]),
+      }, [element("span", { class: "category-chip-icon", text: "🌿", "aria-hidden": "true" }), element("span", { class: "category-chip-label", text: "Todas" })]),
       ...categories.map((category) =>
         element("button", {
           type: "button",
@@ -469,7 +522,14 @@ export function createCatalog(state, add, navigate) {
           "aria-pressed": String(!showingFavorites && selectedCategory === category.id),
           onclick: () => {
             showingFavorites = false;
-            selectedCategory = category.id;
+            if (selectedCategory === category.id) {
+              // Clique na mesma categoria alterna e desmarca
+              selectedCategory = "";
+              selectedSubcategory = "";
+            } else {
+              selectedCategory = category.id;
+              selectedSubcategory = "";
+            }
             pageSize = 24;
             if ($("#search") && /@/.test($("#search").value)) {
               $("#search").value = "";
@@ -477,20 +537,69 @@ export function createCatalog(state, add, navigate) {
             state.trackEvent?.("category_filter", { category: category.name });
             render();
           },
-        }, [element("span", { text: categoryIcon(category.name), "aria-hidden": "true" }), element("span", { text: category.name })]),
+        }, [element("span", { class: "category-chip-icon", text: categoryIcon(category.name), "aria-hidden": "true" }), element("span", { class: "category-chip-label", text: category.name })]),
       ),
     );
-    if (selectedCategory) {
-      baseList = baseList.filter((product) => {
-        const ids = Array.isArray(product.categories) ? product.categories : [];
-        if (ids.includes(selectedCategory)) {
-          return true;
+
+    // Listagem dinâmica de subcategorias na linha debaixo com largura total
+    const subcatContainer = $("#subcategoryFilterControl");
+    if (subcatContainer) {
+      if (selectedCategory && !showingFavorites) {
+        const availableSubs = getSubcategoryOptions(activeProducts, selectedCategory);
+        if (availableSubs.length > 0) {
+          subcatContainer.hidden = false;
+          if (selectedSubcategory && !availableSubs.some((s) => normalizeProductText(s) === normalizeProductText(selectedSubcategory))) {
+            selectedSubcategory = "";
+          }
+          const subElements = [
+            element("span", { class: "subcategory-header-badge", text: "🏷️ Subcategorias:" }),
+            element("button", {
+              type: "button",
+              class: `subcategory-chip${!selectedSubcategory ? " is-active" : ""}`,
+              "aria-pressed": String(!selectedSubcategory),
+              onclick: () => {
+                selectedSubcategory = "";
+                pageSize = 24;
+                render();
+              },
+            }, [element("span", { text: "✨ Todas" })]),
+            ...availableSubs.map((subName) =>
+              element("button", {
+                type: "button",
+                class: `subcategory-chip${normalizeProductText(selectedSubcategory) === normalizeProductText(subName) ? " is-active" : ""}`,
+                "aria-pressed": String(normalizeProductText(selectedSubcategory) === normalizeProductText(subName)),
+                onclick: () => {
+                  if (normalizeProductText(selectedSubcategory) === normalizeProductText(subName)) {
+                    selectedSubcategory = ""; // toggle
+                  } else {
+                    selectedSubcategory = subName;
+                  }
+                  pageSize = 24;
+                  render();
+                },
+              }, [element("span", { text: subName })]),
+            ),
+          ];
+          subcatContainer.replaceChildren(...subElements);
+        } else {
+          subcatContainer.hidden = true;
+          subcatContainer.replaceChildren();
         }
-        const fallbackName = categoryLabel(product);
-        return (
-          !ids.length &&
-          selectedCategory === `name:${normalizeProductText(fallbackName)}`
-        );
+      } else {
+        selectedSubcategory = "";
+        subcatContainer.hidden = true;
+        subcatContainer.replaceChildren();
+      }
+    }
+
+    if (selectedCategory) {
+      baseList = baseList.filter((product) => productMatchesCategory(product, selectedCategory));
+    }
+
+    if (selectedSubcategory) {
+      baseList = baseList.filter((product) => {
+        const sub = productSubcategory(product);
+        return normalizeProductText(sub) === normalizeProductText(selectedSubcategory);
       });
     }
 
@@ -559,6 +668,7 @@ export function createCatalog(state, add, navigate) {
   function setFavoritesView(show) {
     showingFavorites = show;
     selectedCategory = "";
+    selectedSubcategory = "";
     pageSize = 24;
     render();
   }

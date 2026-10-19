@@ -173,6 +173,12 @@ body > .container .nav-tabs, body > .container .tab-content { padding-inline:24p
 /* Navigation actions use one shape, elevation and touch target everywhere. */
 .cf-back-button,.cf-danger-button { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:42px; padding:10px 18px; border:1px solid #dbe5df; border-radius:999px !important; background:white; color:#20452f; font:700 12px Inter,system-ui,sans-serif; text-decoration:none; white-space:nowrap; cursor:pointer; box-shadow:0 2px 5px rgb(20 44 28 / 12%); transition:transform .15s ease,box-shadow .15s ease; }
 :is(.cf-back-button,.cf-danger-button):hover:not(:disabled) { transform:translateY(-2px); box-shadow:0 7px 16px rgb(20 44 28 / 18%); }
+
+/* Oculta botão Voltar na vitrine / home page onde não há navegação anterior */
+body:not(:has(#productView:not([hidden]))):not(:has(#adminView:not([hidden]))) .cf-back-button:not(.cf-pos-context *),
+body:not(:has(#productView:not([hidden]))):not(:has(#adminView:not([hidden]))) [data-site-back]:not(.cf-pos-context *) {
+  display: none !important;
+}
 :is(.cf-danger-button,.account-logout,#cartClearButton) { background:#dc2626 !important; color:white !important; border-color:#c81e1e !important; border-radius:999px !important; font-weight:800; box-shadow:0 2px 5px rgb(170 20 20 / 18%); }
 :is(.cf-danger-button,.account-logout) { margin-left:auto; }
 .cf-pos-context .cf-danger-button { order:99; }

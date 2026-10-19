@@ -201,6 +201,11 @@ async function route() {
     } else if (isProduct) {
       catalog.details(decodeURIComponent(path[4] || ""));
     } else {
+      document.querySelectorAll(".cf-back-button, [data-site-back]").forEach((btn) => {
+        if (!btn.closest("#productView") && !btn.closest("#adminView")) {
+          btn.remove();
+        }
+      });
       catalog.render();
     }
   } catch (error) {
