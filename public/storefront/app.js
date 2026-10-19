@@ -29,7 +29,13 @@ const slug = existingStore
   ? "conflora"
   : decodeURIComponent(location.pathname.split("/")[2]);
 const basePath = existingStore ? "" : `/shop/${slug}`;
-const publicCache = createPublicCache(existingStore ? "main:conflora" : `tenant:${slug}`);
+try {
+  localStorage.removeItem("conflora:public-catalog:v1:main:conflora");
+  localStorage.removeItem("conflora:public-catalog:v1:tenant:conflora");
+  localStorage.removeItem("conflora_catalog_cache");
+  localStorage.removeItem("conflora_catalog_cache_v2");
+} catch {}
+const publicCache = createPublicCache(existingStore ? "main:conflora:v3" : `tenant:${slug}:v3`);
 
 const state = {
   existingStore,

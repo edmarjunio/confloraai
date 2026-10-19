@@ -161,26 +161,11 @@ const { useState, useEffect, useRef, useMemo } = React;
 
     function readStorefrontProductImages() {
       try {
-        const raw = localStorage.getItem('conflora_catalog_cache_v2') || localStorage.getItem('conflora_catalog_cache');
-        const cachedProducts = raw ? JSON.parse(raw) : [];
-        if (!Array.isArray(cachedProducts)) return new Map();
-
-        return new Map(cachedProducts.map((product) => {
-          const productId = String(product?.id ?? product?.product_id ?? '').trim();
-          const images = [
-            ...(Array.isArray(product?.images) ? product.images : []),
-            product?.imageUrl,
-            product?.imageurl,
-          ]
-            .map((image) => typeof image === 'string' ? image : image?.url || image?.imageUrl || image?.src || image?.downloadURL || '')
-            .filter((image) => /^https:\/\/(?:firebasestorage|storage)\.googleapis\.com\//i.test(String(image).trim())
-              || /^\/api\/images\//i.test(String(image).trim())
-              || /^\/store-assets\//i.test(String(image).trim()));
-          return [productId, [...new Set(images)]];
-        }).filter(([productId, images]) => productId && images.length));
-      } catch (_) {
-        return new Map();
-      }
+        localStorage.removeItem('conflora:public-catalog:v1:main:conflora');
+        localStorage.removeItem('conflora_catalog_cache');
+        localStorage.removeItem('conflora_catalog_cache_v2');
+      } catch (_) {}
+      return new Map();
     }
 
     function App() {
