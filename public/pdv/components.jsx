@@ -9,7 +9,47 @@ window.PdvComponents = (() => {
     red: { backgroundColor: '#ffc9d0', borderColor: '#e65b70' },
   });
   const money = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  const button = 'cf-button';
+  function Button3D({
+    children,
+    variant = 'primary',
+    size = 'md',
+    shape = 'pill',
+    block = false,
+    disabled = false,
+    type = 'button',
+    className = '',
+    icon = null,
+    onClick = null,
+    style = undefined,
+    title = undefined,
+    ...rest
+  }) {
+    const fullClass = [
+      'cf-btn-3d',
+      `cf-btn-3d--${variant}`,
+      `cf-btn-3d--${size}`,
+      shape === 'rounded' ? 'cf-btn-3d--rounded' : 'cf-btn-3d--pill',
+      block ? 'cf-btn-3d--block' : '',
+      className
+    ].filter(Boolean).join(' ');
+
+    return (
+      <button
+        type={type}
+        disabled={disabled}
+        className={fullClass}
+        onClick={onClick}
+        style={style}
+        title={title}
+        {...rest}
+      >
+        {icon && <span className="cf-btn-3d__icon" aria-hidden="true">{icon}</span>}
+        <span className="cf-btn-3d__text">{children}</span>
+      </button>
+    );
+  }
+  window.Button3D = Button3D;
+  const button = 'cf-btn-3d cf-btn-3d--primary';
   const field = 'w-full p-3 border rounded-xl my-2';
   function LocationPicker({ value, address, onChange }) {
     const ref = useRef(null); const onChangeRef = useRef(onChange); onChangeRef.current = onChange;
@@ -439,7 +479,7 @@ window.PdvComponents = (() => {
             <button
               type="button"
               onClick={onDepart}
-              className="w-full py-4 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-base font-black shadow-xl ring-4 ring-emerald-500/30 transition active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
+              className="cf-btn-3d cf-btn-3d--primary cf-btn-3d--lg cf-btn-3d--block"
             >
               <span>🛵 Marcar como Saiu para Entrega & Abrir Rota</span>
             </button>
@@ -447,7 +487,7 @@ window.PdvComponents = (() => {
             <button
               type="button"
               onClick={onClose}
-              className="w-full py-3 px-4 rounded-xl border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+              className="cf-btn-3d cf-btn-3d--secondary cf-btn-3d--md cf-btn-3d--block"
             >
               {allChecked ? '✓ Fechar conferência' : 'Voltar ao pedido'}
             </button>
@@ -726,7 +766,7 @@ window.PdvComponents = (() => {
           <button
             type="button"
             onClick={printReceipt}
-            className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer border border-slate-300"
+            className="cf-btn-3d cf-btn-3d--secondary cf-btn-3d--md"
           >
             <span>🖨️</span>
             <span>Imprimir Comprovante</span>
@@ -736,7 +776,7 @@ window.PdvComponents = (() => {
             <button
               type="button"
               onClick={sendWhatsAppReceipt}
-              className="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
+              className="cf-btn-3d cf-btn-3d--primary cf-btn-3d--md"
             >
               <span>💬</span>
               <span>Enviar no WhatsApp</span>
@@ -745,7 +785,7 @@ window.PdvComponents = (() => {
             <button
               type="button"
               onClick={onOpenSeparation}
-              className="py-2.5 px-3 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+              className="cf-btn-3d cf-btn-3d--secondary cf-btn-3d--md"
             >
               <span>📦</span>
               <span>Conferência de Produtos</span>
@@ -1061,7 +1101,7 @@ window.PdvComponents = (() => {
             <button
               type="button"
               onClick={() => setShowSeparationModal(true)}
-              className="py-1.5 px-3 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-900 text-xs font-black transition cursor-pointer flex items-center gap-1"
+              className="cf-btn-3d cf-btn-3d--secondary cf-btn-3d--sm"
             >
               <span>Ver produtos</span>
               <span>→</span>
@@ -1265,10 +1305,10 @@ window.PdvComponents = (() => {
             <button
               type="button"
               disabled={busy || !canFinalize || (needsManualProof && (!proofId || !manualProofSeen || manualPixNote.trim().length < 8))}
-              className={`w-full py-4 px-6 text-base font-black rounded-2xl shadow-lg transition active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+              className={`cf-btn-3d cf-btn-3d--lg cf-btn-3d--block ${
                 canFinalize
-                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                  : 'bg-slate-300 text-slate-600'
+                  ? 'cf-btn-3d--primary'
+                  : 'cf-btn-3d--secondary'
               }`}
               onClick={handleConfirmReceive}
             >
@@ -1299,14 +1339,14 @@ window.PdvComponents = (() => {
               type="button"
               disabled={fabAction.disabled}
               onClick={fabAction.onClick}
-              className={`w-full py-4 px-6 rounded-2xl text-base font-black shadow-xl transition active:scale-98 flex items-center justify-center gap-2 cursor-pointer ${
+              className={`cf-btn-3d cf-btn-3d--lg cf-btn-3d--block ${
                 fabAction.disabled
                   ? 'bg-slate-200 text-slate-500 cursor-not-allowed shadow-none'
                   : fabAction.tone === 'amber'
-                  ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 ring-4 ring-amber-400/30'
+                  ? 'cf-btn-3d--warning'
                   : fabAction.tone === 'sky'
-                  ? 'bg-sky-600 hover:bg-sky-700 text-white ring-4 ring-sky-400/30'
-                  : 'bg-emerald-600 hover:bg-emerald-700 text-white ring-4 ring-emerald-500/30'
+                  ? 'cf-btn-3d--sky'
+                  : 'cf-btn-3d--primary'
               }`}
             >
               {fabAction.label}
@@ -1657,5 +1697,5 @@ window.PdvComponents = (() => {
     const amountInvalid = !Number.isFinite(Number(amount)) || Number(amount) <= 0 || (!isCreditEntry && Number(amount) > balance);
     return <Panel title="Receber pagamento do cliente" onClose={onClose}>{error && <p role="alert" className="text-red-700">{error}</p>}{result ? <div><p>Recebimento registrado: {money(result.amount)}</p><p>Saldo devedor: {money(result.newBalance)}</p><p>Crédito disponível: {money(result.newCreditBalance)}</p>{result.newBalance > 0 && <button className={button + ' mt-4'} onClick={() => { setBalance(result.newBalance); setCreditBalance(result.newCreditBalance || 0); setAmount(Number(result.newBalance).toFixed(2)); setId(crypto.randomUUID()); setResult(null); setSplitPayment(false); setProofSeen(false); setNote(''); setProofId(''); }}>Receber valor restante</button>}</div> : <><label>Buscar cliente cadastrado<input className={field} value={query} onChange={(e) => setQuery(e.target.value)} /></label><div className="max-h-36 overflow-auto">{customers.map((row) => <button className="block w-full border-b p-2 text-left" key={row.id} onClick={() => select(row)}>{row.name} · {row.phone || 'Sem telefone'}</button>)}</div>{customer && <><p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm font-bold">{customer.name}<span className="mt-1 block text-xs font-medium text-amber-800">Saldo devedor: {money(balance)}</span><span className="block text-xs font-medium text-emerald-800">Crédito disponível: {money(creditBalance)}</span></p><label>Tipo de lançamento<select className={field} value={entryType} onChange={(event) => setEntryType(event.target.value)}><option value="QUITACAO_FIADO">Receber pagamento de dívida</option><option value="CREDITO_CLIENTE">Adicionar crédito antecipado</option></select></label><label>Valor recebido<input className={field} type="number" min="0.01" max={isCreditEntry ? undefined : balance} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></label><PaymentMethodButtons value={method} onChange={setMethod} labels={{ DINHEIRO: 'Dinheiro', DEBITO: 'Cartão de débito', CREDITO: 'Cartão de crédito', PIX: 'Pix já recebido' }} /><label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={splitPayment} onChange={(event) => setSplitPayment(event.target.checked)} />Usar mais de uma forma de pagamento</label>{splitPayment && <PaymentPartsEditor parts={parts} onChange={setParts} total={Number(amount || 0)} allowedMethods={['DINHEIRO', 'DEBITO', 'CREDITO', 'PIX']} />}{hasPix && <div className="my-3 space-y-2"><PixProofUpload key={id} targetType="DEBT" targetId={id} onChange={setProofId} /><label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={proofSeen} onChange={(event) => setProofSeen(event.target.checked)} />Conferi o Pix recebido na conta da Conflora.</label><label className="block text-xs">Observação do comprovante<textarea className={field} value={note} onChange={(event) => setNote(event.target.value)} /></label></div>}{!isCreditEntry && <p className="my-3 text-sm font-bold">Saldo após recebimento: {money(Math.max(0, balance - Number(amount || 0)))}</p>}<button className={button} disabled={busy || (hasPix && (!proofId || !proofSeen || note.trim().length < 8)) || amountInvalid || (!isCreditEntry && balance <= 0)} onClick={submit}>{busy ? 'Registrando…' : isCreditEntry ? 'Registrar crédito recebido' : 'Confirmar recebimento'}</button></>}</>}</Panel>;
   }
-  return { Topbar, Loading, Login, Receipt, CashierQueue, DebtSettlement, DiscountApproval, ProductInformation, WeightPrompt, handleProductImageError, PaymentPartsEditor, PaymentMethodButtons, CustomerSearch, LocationPicker, OrderDetails, CashierColumn, SeparationModal };
+  return { Topbar, Loading, Login, Receipt, CashierQueue, DebtSettlement, DiscountApproval, ProductInformation, WeightPrompt, handleProductImageError, PaymentPartsEditor, PaymentMethodButtons, CustomerSearch, LocationPicker, OrderDetails, CashierColumn, SeparationModal, Button3D };
 })();

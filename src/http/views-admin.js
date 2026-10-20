@@ -42,6 +42,7 @@ function renderAdminHtml(storeConfig) {
   <script src="/store-assets/product-import.js" defer></script>
   <script src="/store-assets/error-monitor.js"></script>
   <script src="/store-assets/topbar.js?v=${productAssetsVersion}"></script>
+  <script src="/store-assets/button-3d.js?v=${productAssetsVersion}"></script>
   <link rel="stylesheet" href="/store-assets/design-system.css?v=${productAssetsVersion}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

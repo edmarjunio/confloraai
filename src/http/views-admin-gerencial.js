@@ -12,6 +12,7 @@ function renderAdminGerencialHtml() {
   <link rel="stylesheet" href="/store-assets/site-header.css?v=topbar-1">
   <script src="/store-assets/site-navigation.js?v=1"></script>
   <script src="/store-assets/topbar.js?v=1"></script>
+  <script src="/store-assets/button-3d.js?v=1"></script>
   <link rel="stylesheet" href="/store-assets/design-system.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
