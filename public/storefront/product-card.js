@@ -347,9 +347,7 @@
       isUnavailable,
       isIllustrative,
       imageAlt: isIllustrative ? `Imagem ilustrativa de ${name}` : name,
-      saleUnitLabel: p.saleUnit?.label
-        ? `por ${p.saleUnit.label}`
-        : "preço atual",
+      saleUnitLabel: p.saleUnit?.label ? `${"por".tr} ${(p.saleUnit.label).tr}` : "preço atual".tr,
       cartControlsHtml: p.cartControlsHtml || "",
       images,
       primaryImage: images[0] || fallbackImage,
@@ -556,7 +554,7 @@
       this.setAttribute("aria-label", `Adicionar ${vm.name} ao carrinho`);
 
       this.innerHTML = `
-        ${quantity > 0 ? `<span aria-label="${quantity}${vm.byKg ? " kg" : " no carrinho"}" class="cf-pdv-quantity-badge">${escapeHtml(Number(quantity).toLocaleString("pt-BR", { maximumFractionDigits: vm.byKg ? 3 : 0 }))}${vm.byKg ? " kg" : ""}</span>` : ""}
+        ${quantity > 0 ? `<span aria-label="${quantity}${vm.byKg ? " kg" : ` ${"no carrinho".tr}`}" class="cf-pdv-quantity-badge">${escapeHtml(Number(quantity).toLocaleString("pt-BR", { maximumFractionDigits: vm.byKg ? 3 : 0 }))}${vm.byKg ? " kg" : ""}</span>` : ""}
         <div class="cf-shared-pdv-content">
           <div class="cf-shared-pdv-thumbnail">${this.buildImageHtml(vm, "cf-shared-pdv-image")}</div>
           <div class="cf-shared-pdv-details">
@@ -565,8 +563,8 @@
             <div class="cf-shared-pdv-price-row"><strong>${vm.formattedPrice}</strong>${vm.byKg ? '<span class="cf-shared-unit">/ kg</span>' : ''}</div>
           </div>
           <div class="cf-pdv-card-actions">
-            <button type="button" data-action="info" class="cf-product-info-button cf-pdv-info-button" aria-label="Informações de ${safeName}" title="Informações de ${safeName}">${ICONS.info}</button>
-            <button type="button" data-action="add" class="cf-product-info-button cf-pdv-add-button" aria-label="Adicionar ${safeName} ao carrinho" title="Adicionar ao carrinho">${ICONS.cartPlus}</button>
+            <button type="button" data-action="info" class="cf-product-info-button cf-pdv-info-button" aria-label="${"Informações de".tr} ${safeName}" title="${"Informações de".tr} ${safeName}">${ICONS.info}</button>
+            <button type="button" data-action="add" class="cf-product-info-button cf-pdv-add-button" aria-label="${"Adicionar ao carrinho".tr}: ${safeName}" title="${"Adicionar ao carrinho".tr}">${ICONS.cartPlus}</button>
             <button type="button" data-action="favorite" aria-pressed="${favorite}" aria-label="${favLabel}: ${safeName}" title="${favLabel}" class="cf-shared-pdv-favorite ${favorite ? "is-favorite" : ""}">${ICONS.star(favorite)}</button>
           </div>
         </div>`;
@@ -586,15 +584,15 @@
         <div class="card-img-wrapper" data-action="open">
           ${this.buildImageHtml(vm, "prod-img", vm.name)}
           ${vm.category ? `<render-category-tag category="${escapeHtml(vm.category)}" class="category-photo-badge"></render-category-tag>` : ""}
-          ${vm.realImagesCount > 1 ? `<span class="photo-count-badge">📷 ${vm.realImagesCount} fotos</span>` : ""}
-          ${vm.byKg ? `<span class="unit-tag-badge">⚖️ POR KG</span>` : ""}
+          ${vm.realImagesCount > 1 ? `<span class="photo-count-badge">📷 ${vm.realImagesCount} ${"fotos".tr}</span>` : ""}
+          ${vm.byKg ? `<span class="unit-tag-badge">⚖️ ${"POR KG".tr}</span>` : ""}
         </div>
         <div class="card-body">
           <div class="card-title" title="${safeName}" data-action="open">${safeName}</div>
           <div class="card-footer">
             <div>
               <div class="card-price">${vm.formattedPrice} <span class="cf-shared-unit">${vm.byKg ? "/kg" : ""}</span></div>
-              <span class="card-stock">${escapeHtml(vm.stock)} ${vm.byKg ? "kg" : "un."} disp.</span>
+              <span class="card-stock">${escapeHtml(vm.stock)} ${vm.byKg ? "kg" : "un.".tr} ${"disp.".tr}</span>
             </div>
             <div class="card-btn-container" id="cardBtnContainer_${safeId}">${vm.cartControlsHtml}</div>
           </div>
@@ -616,14 +614,14 @@
 
       this.innerHTML = `
         ${vm.isUnavailable && vm.isInactive ? `<span class="badge-inactive">⚠️ INATIVO - Indisponível</span>` : ""}
-        <button type="button" class="product-photo" aria-label="Ver ${safeName}" data-action="open">
+        <button type="button" class="product-photo" aria-label="${"Ver".tr} ${safeName}" data-action="open">
           ${this.buildImageHtml(vm, "product-card-image")}
           ${!compact && vm.category ? `<render-category-tag category="${escapeHtml(vm.category)}" class="product-category-tag"></render-category-tag>` : ""}
         </button>
         ${
           !compact && !editing
             ? `<div class="cf-product-actions product-card-actions">
-          <button type="button" class="favorite" data-action="favorite" aria-label="Favoritar ${safeName}" aria-pressed="${favorite}">${ICONS.heart(favorite, "icon")}</button>
+          <button type="button" class="favorite" data-action="favorite" aria-label="${"Favoritar".tr} ${safeName}" aria-pressed="${favorite}">${ICONS.heart(favorite, "icon")}</button>
           <button type="button" class="cf-product-info-button product-information-button" data-action="info" aria-label="Informações de ${safeName}" title="Informações de ${safeName}">${ICONS.info}</button>
           <button type="button" class="cf-product-info-button product-add-quick-button" data-action="add" aria-label="Adicionar ${safeName} ao carrinho" title="Adicionar ao carrinho" ${vm.isUnavailable ? "disabled" : ""}>${ICONS.cartPlus}</button>
         </div>`
@@ -632,7 +630,7 @@
         <div class="product-content">
           <button type="button" class="product-name" title="${safeName}" data-action="open">${safeName}</button>
           <div class="cf-shared-store-price"><strong>${vm.formattedPrice}</strong><span>${escapeHtml(vm.saleUnitLabel)}</span></div>
-          <button type="button" class="cf-button" data-action="${editing ? "edit" : "add"}" ${editing ? 'aria-label="Editar produto"' : ""} ${!editing && vm.isUnavailable ? "disabled" : ""}>${editing ? "✎" : ICONS.cart}<span>${editing ? "Editar produto" : vm.isUnavailable ? "Indisponível" : "Adicionar"}</span></button>
+          <button type="button" class="cf-button" data-action="${editing ? "edit" : "add"}" ${editing ? 'aria-label="Editar produto"' : ""} ${!editing && vm.isUnavailable ? "disabled" : ""}>${editing ? "✎" : ICONS.cart}<span>${editing ? "Editar produto".tr : vm.isUnavailable ? "Indisponível".tr : "Adicionar".tr}</span></button>
         </div>`;
     }
 

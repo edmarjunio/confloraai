@@ -61,8 +61,8 @@ export function createCatalog(state, add, navigate) {
     input.addEventListener("input", () => { input.value = input.value.replace(/[^\d.,]/g, "").replace(/(.*[.,].*)[.,]/g, "$1"); });
     if (Number.isFinite(maxStock)) input.max = String(maxStock);
     const total = element("strong", { class: "product-weight-total" });
-    const cancel = element("button", { type: "button", class: "quiet", text: "Cancelar", onclick: () => dialog.close() });
-    const confirm = element("button", { type: "button", class: "cf-button", text: "Adicionar ao carrinho" });
+    const cancel = element("button", { type: "button", class: "quiet", text: "Cancelar".tr, onclick: () => dialog.close() });
+    const confirm = element("button", { type: "button", class: "cf-button", text: "Adicionar ao carrinho".tr });
     const updateTotal = () => {
       const quantity = Number(String(input.value).replace(",", "."));
       const valid = Number.isFinite(quantity)
@@ -83,9 +83,9 @@ export function createCatalog(state, add, navigate) {
     });
     dialog.append(
       element("div", { class: "product-weight-content" }, [
-        element("header", { class: "product-weight-header" }, [title, element("button", { type: "button", class: "product-info-close", "aria-label": "Fechar", text: "×", onclick: () => dialog.close() })]),
+        element("header", { class: "product-weight-header" }, [title, element("button", { type: "button", class: "product-info-close", "aria-label": "Fechar".tr, text: "×", onclick: () => dialog.close() })]),
         price,
-        element("label", { class: "product-weight-label", text: "Peso para adicionar" }, [input, element("span", { text: "kg" })]),
+        element("label", { class: "product-weight-label", text: "Peso para adicionar".tr }, [input, element("span", { text: "kg" })]),
         total,
         element("div", { class: "product-weight-actions" }, [cancel, confirm]),
       ]),
@@ -207,7 +207,7 @@ export function createCatalog(state, add, navigate) {
     const closeButton = element("button", {
       type: "button",
       class: "product-info-close",
-      "aria-label": "Fechar informações",
+      "aria-label": "Fechar".tr,
       title: "Fechar",
       onclick: () => dialog.close(),
     }, [icon("x")]);
@@ -223,14 +223,14 @@ export function createCatalog(state, add, navigate) {
           title,
           element("div", { class: "product-info-price-row" }, [
             element("strong", { class: "product-info-price", text: money(product.price.amountMinor) }),
-            element("span", { class: "product-info-unit", text: product.saleUnit?.label ? `por ${product.saleUnit.label}` : "preço atual" }),
+            element("span", { class: "product-info-unit", text: product.saleUnit?.label ? `${"por".tr} ${product.saleUnit.label.tr}` : "preço atual".tr }),
           ]),
         ]),
         closeButton,
       ]),
       element("div", { class: "product-info-body" }, [
         element("section", { class: "product-info-intro" }, [
-          element("span", { class: "product-info-eyebrow", text: "ESCOLHA COM CONFIANÇA" }),
+          element("span", { class: "product-info-eyebrow", text: "ESCOLHA COM CONFIANÇA".tr }),
           element("p", { text: info.summary }),
         ]),
         element("div", { class: "product-info-facts" }, info.facts.map(({ label, value, icon: iconName, tone }) => element("section", { class: `product-info-fact ${tone}` }, [
@@ -285,7 +285,7 @@ export function createCatalog(state, add, navigate) {
     const minimumQuantity = product.saleUnit?.minimum || 1;
     const unavailable = product.status === "INATIVO" || product.isAvailable === false
       || (product.stock?.tracked && product.stock.quantity < minimumQuantity);
-    const addButton = element("button", { type: "button", class: "cf-button product-info-add", text: unavailable ? "Indisponível" : isSoldByKg(product) ? "Escolher peso" : "Adicionar à sacola", disabled: unavailable, onclick: () => {
+    const addButton = element("button", { type: "button", class: "cf-button product-info-add", text: unavailable ? "Indisponível".tr : isSoldByKg(product) ? "Escolher peso".tr : "Adicionar".tr, disabled: unavailable, onclick: () => {
       dialog.close();
       addFromCard(product, minimumQuantity);
     } }, unavailable ? [] : [icon("cart")]);
@@ -498,7 +498,7 @@ export function createCatalog(state, add, navigate) {
           state.trackEvent?.("category_filter", { category: showingFavorites ? "Curtidos" : "Todas" });
           render();
         },
-      }, [element("span", { class: "category-chip-icon", text: "❤️", "aria-hidden": "true" }), element("span", { class: "category-chip-label", text: "Curtidos" })]),
+      }, [element("span", { class: "category-chip-icon", text: "❤️", "aria-hidden": "true" }), element("span", { class: "category-chip-label", text: "Curtidos".tr })]),
       element("button", {
         type: "button",
         class: `category-chip${!showingFavorites && !selectedCategory ? " is-active" : ""}`,
@@ -514,7 +514,7 @@ export function createCatalog(state, add, navigate) {
           state.trackEvent?.("category_filter", { category: "Todas" });
           render();
         },
-      }, [element("span", { class: "category-chip-icon", text: "🌿", "aria-hidden": "true" }), element("span", { class: "category-chip-label", text: "Todas" })]),
+      }, [element("span", { class: "category-chip-icon", text: "🌿", "aria-hidden": "true" }), element("span", { class: "category-chip-label", text: "Todas".tr })]),
       ...categories.map((category) =>
         element("button", {
           type: "button",
@@ -537,7 +537,7 @@ export function createCatalog(state, add, navigate) {
             state.trackEvent?.("category_filter", { category: category.name });
             render();
           },
-        }, [element("span", { class: "category-chip-icon", text: categoryIcon(category.name), "aria-hidden": "true" }), element("span", { class: "category-chip-label", text: category.name })]),
+        }, [element("span", { class: "category-chip-icon", text: categoryIcon(category.name), "aria-hidden": "true" }), element("span", { class: "category-chip-label", text: (category.name || "").tr })]),
       ),
     );
 
@@ -552,7 +552,7 @@ export function createCatalog(state, add, navigate) {
             selectedSubcategory = "";
           }
           const subElements = [
-            element("span", { class: "subcategory-header-badge", text: "🏷️ Subcategorias:" }),
+            element("span", { class: "subcategory-header-badge", text: "🏷️ Subcategorias:".tr }),
             element("button", {
               type: "button",
               class: `subcategory-chip${!selectedSubcategory ? " is-active" : ""}`,
@@ -562,7 +562,7 @@ export function createCatalog(state, add, navigate) {
                 pageSize = 24;
                 render();
               },
-            }, [element("span", { text: "✨ Todas" })]),
+            }, [element("span", { text: "✨ Todas".tr })]),
             ...availableSubs.map((subName) =>
               element("button", {
                 type: "button",
@@ -577,7 +577,7 @@ export function createCatalog(state, add, navigate) {
                   pageSize = 24;
                   render();
                 },
-              }, [element("span", { text: subName })]),
+              }, [element("span", { text: (subName || "").tr })]),
             ),
           ];
           subcatContainer.replaceChildren(...subElements);
@@ -632,9 +632,7 @@ export function createCatalog(state, add, navigate) {
       const emptyElements = [
         element("p", {
           class: "empty",
-          text: showingFavorites
-            ? "Você ainda não salvou produtos. Toque no coração para guardá-los aqui."
-            : "Nenhum produto encontrado. Tente outra busca.",
+          text: showingFavorites ? "Você ainda não salvou produtos. Toque no coração para guardá-los aqui.".tr : "Nenhum produto encontrado. Tente outra busca.".tr,
         }),
       ];
       if (rawQuery) {
@@ -643,7 +641,7 @@ export function createCatalog(state, add, navigate) {
             type: "button",
             class: "quiet",
             style: "margin: 0.5rem auto; display: block; text-decoration: underline; cursor: pointer;",
-            text: "Limpar busca e ver produtos",
+            text: "Limpar busca e ver produtos".tr,
             onclick: () => {
               if ($("#search")) $("#search").value = "";
               render();
@@ -653,10 +651,9 @@ export function createCatalog(state, add, navigate) {
       }
       $("#products").append(...emptyElements);
     }
-    $("#resultCount").textContent = `${list.length} produtos`;
-    $("#catalogTitle").textContent = showingFavorites
-      ? "Seus produtos salvos"
-      : "Explore o catálogo";
+    $("#resultCount").textContent = list.length === 1 ? `1 ${"produto".tr}` : `${list.length} ${"produtos".tr}`;
+    $("#catalogTitle").textContent = showingFavorites ? "Seus produtos salvos".tr : "Explore o catálogo".tr;
+    loadMoreButton.textContent = "catalog.load_more".tr;
     loadMoreButton.hidden = list.length <= pageSize;
     if (pageObserver && !loadMoreButton.hidden) {
       pageObserver.observe(loadMoreButton);
@@ -679,13 +676,13 @@ export function createCatalog(state, add, navigate) {
     view.replaceChildren(
       element("button", {
         class: "quiet",
-        text: "← Voltar ao catálogo",
+        text: "← Voltar ao catálogo".tr,
         onclick: () => navigate(state.basePath || "/"),
       }),
     );
     if (!product) {
       view.append(
-        element("h1", { text: "Produto não encontrado ou indisponível." }),
+        element("h1", { text: "Produto não encontrado ou indisponível.".tr }),
       );
       return;
     }
@@ -708,7 +705,7 @@ export function createCatalog(state, add, navigate) {
       view.append(
         element("div", {
           class: "inactive-banner",
-          text: "⚠️ AVISO: Este produto está INATIVO no sistema e não está disponível para compra.",
+          text: "⚠️ AVISO: Este produto está INATIVO no sistema e não está disponível para compra.".tr,
         }),
       );
     }
@@ -737,7 +734,7 @@ export function createCatalog(state, add, navigate) {
       value: product.saleUnit?.minimum || 1,
       min: product.saleUnit?.minimum || 1,
       step: product.saleUnit?.increment || 1,
-      "aria-label": "Quantidade",
+      "aria-label": "Quantidade".tr,
     });
     if (product.stock?.tracked) {
       quantity.max = product.stock.quantity;
@@ -754,11 +751,7 @@ export function createCatalog(state, add, navigate) {
       "button",
       {
         class: "primary",
-        text: isInactive
-          ? "Item Inativo"
-          : unavailable
-            ? "Indisponível"
-            : "Adicionar à sacola",
+        text: isInactive ? "Item Inativo".tr : unavailable ? "Indisponível".tr : "Adicionar".tr,
         onclick: () => addFromCard(product, Number(quantity.value)),
         ...(unavailable ? { disabled: "" } : {}),
       },
@@ -768,7 +761,7 @@ export function createCatalog(state, add, navigate) {
     const editDetailBtn = element("button", {
       type: "button",
       class: "quiet",
-      text: "✏️ Editar Cadastro do Produto",
+      text: "catalog.edit_product".tr,
       onclick: () => {
         if (state.productEntry) {state.productEntry.open(product);}
       },

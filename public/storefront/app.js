@@ -144,10 +144,14 @@ function updateHeaderActions() {
   cashierShortcut.hidden = !allowedCashierRoles.includes(role);
   const deliveryRole = role === 'ENTREGADOR';
   cashierShortcut.querySelector('span:first-child').replaceChildren(icon(deliveryRole ? 'truck' : 'register'));
-  cashierShortcut.querySelector('span:last-child').textContent = deliveryRole ? 'MINHAS ENTREGAS' : 'CAIXA';
-  cashierShortcut.setAttribute('aria-label', deliveryRole ? 'Minhas entregas' : 'Caixa');
-  cashierShortcut.title = deliveryRole ? 'Minhas entregas' : 'Caixa';
+  cashierShortcut.querySelector('span:last-child').textContent = (deliveryRole ? 'ENTREGAS' : 'CAIXA').tr;
+  cashierShortcut.setAttribute('aria-label', (deliveryRole ? 'Minhas entregas' : 'Caixa').tr);
+  cashierShortcut.title = (deliveryRole ? 'Minhas entregas' : 'Caixa').tr;
 
+  const guideText = guideShortcut?.querySelector('span:last-child');
+  if (guideText) guideText.textContent = 'GUIA'.tr;
+  const custAccountText = customerAccountShortcut?.querySelector('span:last-child');
+  if (custAccountText) custAccountText.textContent = 'MINHA CONTA'.tr;
   if (guideShortcut) {
     const isTeamMember = isLoggedIn && allowedCashierRoles.includes(role);
     guideShortcut.hidden = !isTeamMember;

@@ -9,8 +9,8 @@
     const shopItems = [
       {
         id: 'home',
-        label: 'Catálogo & Loja',
-        subtitle: 'Mudas, flores, hortifruti e vasos',
+        label: 'Catálogo & Loja'.tr,
+        subtitle: 'Mudas, flores, hortifruti e vasos'.tr,
         icon: '🌿',
         iconBg: '#dcfce7',
         href: '/',
@@ -21,8 +21,8 @@
     if (['ADMIN', 'CAIXA', 'VENDEDOR'].includes(role)) {
       shopItems.push({
         id: 'pos',
-        label: 'Frente de Caixa (PDV)',
-        subtitle: 'Vendas balcão, caixa rápido e troco',
+        label: 'Frente de Caixa (PDV)'.tr,
+        subtitle: 'Vendas balcão, caixa rápido e troco'.tr,
         icon: '⚡',
         iconBg: '#fef9c3',
         href: '/caixa',
@@ -30,8 +30,8 @@
       });
       shopItems.push({
         id: 'orders',
-        label: 'Comandas & Pedidos',
-        subtitle: 'Acompanhe pedidos em tempo real',
+        label: 'Comandas & Pedidos'.tr,
+        subtitle: 'Acompanhe pedidos em tempo real'.tr,
         icon: '📋',
         iconBg: '#e0f2fe',
         href: role === 'ADMIN' ? '/admin?tab=orders' : '/caixa?view=commands',
@@ -42,8 +42,8 @@
     if (['ADMIN', 'CAIXA', 'ENTREGADOR'].includes(role)) {
       shopItems.push({
         id: 'deliveries',
-        label: 'Entregas & Expedição',
-        subtitle: 'Check verde na horta, rotas e GPS',
+        label: 'Entregas & Expedição'.tr,
+        subtitle: 'Check verde na horta, rotas e GPS'.tr,
         icon: '🛵',
         iconBg: '#ccfbf1',
         href: '/caixa?view=deliveries',
@@ -52,19 +52,19 @@
     }
 
     sections.push({
-      title: 'Loja & Atendimento',
+      title: 'Loja & Atendimento'.tr,
       items: shopItems,
     });
 
     // --- SEÇÃO 2: GESTÃO DO NEGÓCIO (Exclusivo ADMIN / Gestores) ---
     if (role === 'ADMIN') {
       sections.push({
-        title: 'Gestão & Finanças',
+        title: 'Gestão & Finanças'.tr,
         items: [
           {
             id: 'executive',
-            label: 'Resultados da Loja (HOJE)',
-            subtitle: 'Faturamento, DRE e WhatsApp dos sócios',
+            label: 'Resultados da Loja (HOJE)'.tr,
+            subtitle: 'Faturamento, DRE e WhatsApp dos sócios'.tr,
             icon: '📈',
             iconBg: '#f3e8ff',
             href: '/admin-gerencial',
@@ -72,8 +72,8 @@
           },
           {
             id: 'cashier-audit',
-            label: 'Conferência de Caixas',
-            subtitle: 'Auditoria de fechamentos e comprovantes',
+            label: 'Conferência de Caixas'.tr,
+            subtitle: 'Auditoria de fechamentos e comprovantes'.tr,
             icon: '💰',
             iconBg: '#ecfdf5',
             href: '/admin?tab=cashier',
@@ -81,8 +81,8 @@
           },
           {
             id: 'stock',
-            label: 'Controle de Estoque',
-            subtitle: 'Inventário, contagem e baixas',
+            label: 'Controle de Estoque'.tr,
+            subtitle: 'Inventário, contagem e baixas'.tr,
             icon: '📦',
             iconBg: '#ffedd5',
             href: '/admin?tab=stock',
@@ -90,8 +90,8 @@
           },
           {
             id: 'products',
-            label: 'Catálogo de Produtos',
-            subtitle: 'Ordenação A-Z, preços e importação',
+            label: 'Catálogo de Produtos'.tr,
+            subtitle: 'Ordenação A-Z, preços e importação'.tr,
             icon: '🏷️',
             iconBg: '#e0e7ff',
             href: '/admin?tab=products',
@@ -99,8 +99,8 @@
           },
           {
             id: 'team',
-            label: 'Equipe & Colaboradores',
-            subtitle: 'Gestão de acessos, cargos e PINs',
+            label: 'Equipe & Colaboradores'.tr,
+            subtitle: 'Gestão de acessos, cargos e PINs'.tr,
             icon: '👥',
             iconBg: '#fef3c7',
             href: '/admin?tab=team',
@@ -108,8 +108,8 @@
           },
           {
             id: 'store-settings',
-            label: 'Personalizar Loja',
-            subtitle: 'Identidade visual, horários e banners',
+            label: 'Personalizar Loja'.tr,
+            subtitle: 'Identidade visual, horários e banners'.tr,
             icon: '🎨',
             iconBg: '#fce7f3',
             href: '/configuracoes',
@@ -117,8 +117,8 @@
           },
           {
             id: 'system-status',
-            label: 'Sistema & Diagnósticos',
-            subtitle: 'Conexões WhatsApp, Pix e logs',
+            label: 'Sistema & Diagnósticos'.tr,
+            subtitle: 'Conexões WhatsApp, Pix e logs'.tr,
             icon: '🛡️',
             iconBg: '#f1f5f9',
             href: '/admin?tab=status',
@@ -128,12 +128,12 @@
       });
     } else if (['CAIXA'].includes(role)) {
       sections.push({
-        title: 'Finanças do Caixa',
+        title: 'Finanças do Caixa'.tr,
         items: [
           {
             id: 'cashier-report',
-            label: 'Conferência do Meu Caixa',
-            subtitle: 'Fechamento do turno e comprovantes',
+            label: 'Conferência do Meu Caixa'.tr,
+            subtitle: 'Fechamento do turno e comprovantes'.tr,
             icon: '💰',
             iconBg: '#ecfdf5',
             href: '/admin?tab=cashier',
@@ -155,8 +155,8 @@
       };
       accountItems.push({
         id: 'guides',
-        label: `Guia Operacional (${role})`,
-        subtitle: 'Passo a passo didático com prints da sua função',
+        label: (`Guia Operacional (${role})`).tr,
+        subtitle: 'Passo a passo didático com prints da sua função'.tr,
         icon: '📖',
         iconBg: '#ecfdf5',
         href: guideMap[role] || '/guias/index.html',
@@ -165,8 +165,8 @@
     }
     accountItems.push({
       id: 'profile',
-      label: role ? 'Meu Perfil' : 'Entrar na Minha Conta',
-      subtitle: role ? 'Seus dados e segurança' : 'Acesse seus pedidos e histórico',
+      label: role ? 'Meu Perfil'.tr : 'Entrar na Minha Conta'.tr,
+      subtitle: role ? 'Seus dados e segurança'.tr : 'Acesse seus pedidos e histórico'.tr,
       icon: '👤',
       iconBg: '#f0fdf4',
       href: role ? '/?conta=1&editar=1' : '/?conta=1',
@@ -174,7 +174,7 @@
     });
 
     sections.push({
-      title: 'Minha Conta',
+      title: 'Minha Conta'.tr,
       items: accountItems,
     });
 
@@ -211,20 +211,20 @@
 
     const name = document.createElement('strong');
     name.className = 'cf-nav-user-name';
-    name.textContent = user?.name || 'Visitante · Conflora';
+    name.textContent = user?.name || 'Visitante · Conflora'.tr;
 
     const badge = document.createElement('span');
     const roleKey = (user?.role || 'CLIENTE').toLowerCase();
     badge.className = `cf-nav-role-badge ${roleKey}`;
     
     const roleLabels = {
-      ADMIN: 'Dono / Administrador',
-      CAIXA: 'Operador de Caixa',
-      VENDEDOR: 'Vendedor Balcão',
-      ENTREGADOR: 'Entregador',
-      CLIENTE: 'Cliente Amigo'
+      ADMIN: 'Dono / Administrador'.tr,
+      CAIXA: 'Operador de Caixa'.tr,
+      VENDEDOR: 'Vendedor Balcão'.tr,
+      ENTREGADOR: 'Entregador'.tr,
+      CLIENTE: 'Cliente Amigo'.tr
     };
-    badge.textContent = roleLabels[user?.role] || 'Cliente Amigo';
+    badge.textContent = roleLabels[user?.role] || 'Cliente Amigo'.tr;
 
     info.append(name, badge);
     card.append(avatar, info);
@@ -237,7 +237,7 @@
       dialog = document.createElement('dialog');
       dialog.id = 'siteNavigationDrawer';
       dialog.className = 'cf-navigation-drawer';
-      dialog.setAttribute('aria-label', 'Navegação da loja');
+      dialog.setAttribute('aria-label', 'Navegação da loja'.tr);
       document.body.append(dialog);
     }
     dialog.replaceChildren();
@@ -247,13 +247,13 @@
     heading.className = 'cf-navigation-heading';
 
     const title = document.createElement('h2');
-    title.textContent = 'Menu & Navegação';
+    title.textContent = 'Menu & Navegação'.tr;
 
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'cf-drawer-close';
     close.innerHTML = '<span aria-hidden="true">»</span>';
-    close.setAttribute('aria-label', 'Fechar navegação');
+    close.setAttribute('aria-label', 'Fechar navegação'.tr);
     close.onclick = () => dialog.close();
 
     heading.append(title, close);
@@ -267,7 +267,7 @@
 
     // Seções de Navegação com Cards Modernos
     const nav = document.createElement('nav');
-    nav.setAttribute('aria-label', 'Páginas da loja');
+    nav.setAttribute('aria-label', 'Páginas da loja'.tr);
 
     const sections = getNavigationSections(user);
 
@@ -355,7 +355,7 @@
 
       const swTitle = document.createElement('div');
       swTitle.className = 'cf-nav-test-title';
-      swTitle.innerHTML = '👑 <span>Modo Teste (Exclusivo Dono)</span>';
+      swTitle.innerHTML = '👑 <span>${'Modo Teste (Exclusivo Dono)'.tr}</span>';
 
       const grid = document.createElement('div');
       grid.className = 'cf-nav-test-grid';
@@ -372,7 +372,7 @@
         btn.type = 'button';
         const active = user.role === role;
         btn.className = `cf-nav-role-btn ${active ? 'active' : ''}`;
-        btn.textContent = label;
+        btn.textContent = label.tr;
         btn.style.setProperty('--role-color', color);
         btn.style.setProperty('--role-bg', bg);
 
@@ -404,7 +404,7 @@
       const exit = document.createElement('button');
       exit.type = 'button';
       exit.className = 'cf-danger-button cf-nav-logout-btn';
-      exit.innerHTML = '<span>🚪</span><span>Sair da Conta</span>';
+      exit.innerHTML = `<span>🚪</span><span>${'Sair da Conta'.tr}</span>`;
       exit.onclick = () => logout(exit);
       footer.append(exit);
     }

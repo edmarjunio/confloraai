@@ -1,6 +1,15 @@
 <!doctype html>
 <html lang="pt-BR">
   <head>
+    <script>
+      if (typeof String.prototype.tr === 'undefined') {
+        Object.defineProperty(String.prototype, 'tr', {
+          get() { return window.tr ? window.tr(this.valueOf()) : this.valueOf(); },
+          configurable: true,
+          enumerable: false,
+        });
+      }
+    </script>
     <script src="/store-assets/tab-session.js"></script>
     <script src="/store-assets/error-monitor.js"></script>
     <link rel="stylesheet" href="/store-assets/order-display.css" />
@@ -263,15 +272,15 @@
 
     <dialog id="orderConfirmDialog" class="order-confirm-dialog" aria-labelledby="orderConfirmTitle">
       <div class="dialog-header">
-        <h2 id="orderConfirmTitle">Confirme seu pedido</h2>
-        <button id="orderReviewClose" type="button" aria-label="Voltar ao pedido">×</button>
+        <h2 id="orderConfirmTitle" data-i18n="cart.review_title">Confirme seu pedido</h2>
+        <button id="orderReviewClose" type="button" aria-label="Voltar ao pedido" data-i18n-aria="common.close">×</button>
       </div>
-      <p>Confira os dados abaixo. Deseja enviar este pedido para nossa equipe?</p>
+      <p data-i18n="cart.review_desc">Confira os dados abaixo. Deseja enviar este pedido para nossa equipe?</p>
       <div id="orderReviewContent" class="order-review-content"></div>
       <p id="orderReviewError" class="error" role="alert"></p>
       <div class="order-review-actions">
-        <button id="orderReviewBack" class="quiet" type="button">Voltar e editar</button>
-        <button id="orderReviewConfirm" class="primary" type="button">Confirmar dados e enviar pedido</button>
+        <button id="orderReviewBack" class="quiet" type="button" data-i18n="cart.review_back">Voltar e editar</button>
+        <button id="orderReviewConfirm" class="primary" type="button" data-i18n="cart.review_confirm">Confirmar dados e enviar pedido</button>
       </div>
     </dialog>
 

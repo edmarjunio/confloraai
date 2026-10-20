@@ -79,7 +79,7 @@
       if (name === 'search-value') { if (this.input.value !== (this.getAttribute(name) || '')) this.input.value = this.getAttribute(name) || ''; }
       else this.updateIdentity();
     }
-    disconnectedCallback() { this.sizeObserver?.disconnect(); window.removeEventListener('resize', this.updateSize); }
+    disconnectedCallback() { if (this.onLangChange) window.removeEventListener('conflora-lang-change', this.onLangChange); this.sizeObserver?.disconnect(); window.removeEventListener('resize', this.updateSize); }
     set user(value) { this.currentUser = value; this.updateIdentity(); }
     search() { this.dispatchEvent(new CustomEvent('cf-topbar-search', { detail: { query: this.input.value }, bubbles: true })); }
     updateIdentity() {
@@ -88,9 +88,9 @@
       this.identityUser = user;
       const role = user.role || '';
       const identity = this.querySelector('.cf-topbar-identity');
-      identity.querySelector('strong').textContent = user.name || 'Entrar';
+      identity.querySelector('strong').textContent = user.name || ('Entrar').tr;
       identity.querySelector('small').textContent = role;
-      identity.title = user.name || 'Sua conta';
+      identity.title = user.name || ('Sua conta').tr;
       const photo = identity.querySelector('img'); photo.hidden = !user.picture;
       if (user.picture) photo.src = user.picture;
       const guide = this.querySelector('.cf-topbar-guide');
@@ -112,11 +112,11 @@
       const cashier = this.querySelector('.cf-topbar-cashier');
       cashier.querySelector('svg').outerHTML = icon(role === 'ENTREGADOR' ? 'truck' : 'cashier');
       cashier.hidden = this.hasAttribute('hide-cashier') || !['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(role);
-      cashier.querySelector('span').textContent = role === 'ENTREGADOR' ? 'MINHAS ENTREGAS' : 'CAIXA';
-      cashier.setAttribute('aria-label', role === 'ENTREGADOR' ? 'Minhas entregas' : 'Caixa');
+      cashier.querySelector('span').textContent = (role === 'ENTREGADOR' ? 'ENTREGAS' : 'CAIXA').tr;
+      cashier.setAttribute('aria-label', (role === 'ENTREGADOR' ? 'Minhas entregas' : 'Caixa').tr);
       const primary = this.querySelector('[data-primary]');
       primary.href = role === 'ADMIN' ? '/admin-gerencial' : '/?sacola=1';
-      primary.innerHTML = icon(role === 'ADMIN' ? 'chart' : 'cart') + '<span>' + (role === 'ADMIN' ? 'Painel Gerencial' : 'Sacola') + '</span>';
+      primary.innerHTML = icon(role === 'ADMIN' ? 'chart' : 'cart') + '<span>' + (role === 'ADMIN' ? ('Painel Gerencial').tr : ('Sacola').tr) + '</span>';
 
     }
   }

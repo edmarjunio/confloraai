@@ -304,25 +304,25 @@ export function createCart(state) {
     const total = subtotal() + fee;
     const rows = [
       element("div", { class: "order-review-section" }, [
-        element("strong", { text: "Cliente" }),
+        element("strong", { text: "Cliente".tr }),
         element("p", { text: form.elements.name.value.trim() }),
         element("p", { text: form.elements.phone.value.trim() }),
       ]),
       element("div", { class: "order-review-section" }, [
-        element("strong", { text: delivery ? "Entrega" : "Retirada / balcão" }),
+        element("strong", { text: delivery ? "Entrega".tr : "Retirada / balcão".tr }),
         ...(delivery
           ? [
               ...(serviceArea ? [element("p", { text: serviceArea })] : []),
               element("p", { text: address }),
-              ...(fee ? [element("p", { text: "Taxa de entrega: " + money(fee) })] : []),
+              ...(fee ? [element("p", { text: "Taxa de entrega: ".tr + money(fee) })] : []),
             ]
-          : [element("p", { text: state.config?.checkout?.pickup?.address || "Retirada na loja" })]),
+          : [element("p", { text: state.config?.checkout?.pickup?.address || "Retirada na loja".tr })]),
       ]),
       element("div", { class: "order-review-section" }, [
-        element("strong", { text: "Pagamento" }),
+        element("strong", { text: "Pagamento".tr }),
         element("p", { text: paymentMethod === "CASH"
-          ? "Dinheiro · troco para " + money(Math.round(Number(form.elements.cash.value || 0) * 100))
-          : ({ PIX: "Pix", CARD: "Cartão" }[paymentMethod] || paymentMethod) }),
+          ? "Dinheiro · troco para ".tr + money(Math.round(Number(form.elements.cash.value || 0) * 100))
+          : ({ PIX: "Pix".tr, CARD: "Cartão".tr }[paymentMethod] || paymentMethod) }),
       ]),
       element("div", { class: "order-review-items" }, [
         ...items.map((item) => {
@@ -333,7 +333,7 @@ export function createCart(state) {
           ]);
         }),
         element("div", { class: "order-review-total" }, [
-          element("strong", { text: "Total do pedido" }),
+          element("strong", { text: "Total do pedido".tr }),
           element("strong", { text: money(total) }),
         ]),
       ]),
@@ -356,20 +356,20 @@ export function createCart(state) {
       const payment = form.elements.payment?.value;
       const total = subtotal() + (delivery ? state.config?.checkout?.delivery?.feeMinor || 0 : 0);
       if (!form.elements.name.value.trim() || phoneDigits.length < 10 || phoneDigits.length > 11) {
-        $("#checkoutError").textContent = "Informe o nome e um número de WhatsApp válido com DDD.";
+        $("#checkoutError").textContent = "Informe o nome e um número de WhatsApp válido com DDD.".tr;
         return;
       }
       if (delivery && address.length < 8) {
-        $("#checkoutError").textContent = "Informe o endereço completo para a entrega.";
+        $("#checkoutError").textContent = "Informe o endereço completo para a entrega.".tr;
         form.elements.address?.focus();
         return;
       }
       if (payment === "FIADO" && !state.user?.email) {
-        $("#checkoutError").textContent = "Entre na sua conta antes de solicitar fiado. A compra depende da aprovação de um Admin.";
+        $("#checkoutError").textContent = "Entre na sua conta antes de solicitar fiado. A compra depende da aprovação de um Admin.".tr;
         return;
       }
       if (payment === "CASH" && cash < total) {
-        $("#checkoutError").textContent = "Informe para quanto precisa de troco. O valor deve ser igual ou maior que o total.";
+        $("#checkoutError").textContent = "Informe para quanto precisa de troco. O valor deve ser igual ou maior que o total.".tr;
         form.elements.cash?.focus();
         return;
       }
