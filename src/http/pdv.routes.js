@@ -93,7 +93,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
   app.get('/api/customer/debt-pix/:id', requireCustomer, route(async (req, res) => res.json({ success: true, charge: await debtPix.read(req.params.id, req.user) })));
   app.use('/api/caixa', requireStaff, (req, res, next) => {
     if (req.user.role !== 'ENTREGADOR') return next();
-    if (/^\/deliveries(?:\/[^/]+\/(?:accept|start|release|complete|receive))?$/.test(req.path) || req.path === '/orders/stream' || /^\/payment-proofs(?:\/[^/]+)?$/.test(req.path)) return next();
+    if (/^\/deliveries(?:\/[^/]+\/(?:accept|start|release|complete|receive|notify-arriving))?$/.test(req.path) || req.path === '/orders/stream' || /^\/payment-proofs(?:\/[^/]+)?$/.test(req.path)) return next();
     res.status(403).json({ error: 'Seu perfil permite apenas suas entregas e os recebimentos vinculados a elas.' });
   });
   require('../orders/manual-pix.routes').installManualPixRoutes(app, { store, proofStorage, service });
@@ -104,6 +104,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
   app.post('/api/caixa/deliveries/:id/start', requireDeliveryStaff, route(async (req, res) => res.json({ order: await service.startDelivery(req.params.id, req.user, req.body) })));
   app.post('/api/caixa/deliveries/:id/release', requireDeliveryStaff, route(async (req, res) => res.json({ order: await service.releaseDelivery(req.params.id, req.user) })));
   app.post('/api/caixa/deliveries/:id/complete', requireDeliveryStaff, route(async (req, res) => res.json(await service.completeDelivery(req.params.id, req.user, req.body))));
+  app.post('/api/caixa/deliveries/:id/notify-arriving', requireDeliveryStaff, route(async (req, res) => res.json(await service.notifyArriving(req.params.id, req.user))));
   app.post('/api/caixa/deliveries/:id/receive', requireDeliveryStaff, route(async (req, res) => {
     const existing = await store.read('orders', req.params.id); assertAssignedDelivery(existing, req.user);
     const isManualPix = req.body.manualPix === true || req.body.paymentMethod === 'PIX_MANUAL';
@@ -300,7 +301,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
   app.get('/api/caixa/orders/:id', route(async (req, res) => res.json(await findOrder(req))));
   app.post('/api/caixa/payment-proofs', requireStaff, route(async (req, res) => {
     const { targetType, targetId, dataUrl } = req.body;
-    if (!['ORDER', 'DEBT'].includes(targetType) || !/^[a-zA-Z0-9_-]{1,128}$/.test(targetId || '')) throw new Error('Selecione o pagamento do comprovante.');
+    if (!['ORDER', 'DEBT', 'CLOSING'].includes(targetType) || !/^[a-zA-Z0-9_-]{1,128}$/.test(targetId || '')) throw new Error('Selecione o pagamento do comprovante.');
     if (targetType === 'ORDER') {
       const order = await store.read('orders', targetId);
       if (!order || order.completedAt || order.status === 'CANCELLED' || !canConfirmManualPix(order, req.user)) throw new Error('Pagamento não está pendente ou não pertence a você.');
@@ -309,7 +310,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     const file = await proofStorage.save(dataUrl);
     const proof = { ...file, fileName: String(req.body.fileName || 'comprovante').replace(/[^\p{L}\p{N}._ -]/gu, '').slice(0, 100), targetType, targetId, uploadedBy: req.user.id, createdAt: new Date().toISOString() };
     await store.transaction(async (tx) => tx.set('payment_proofs', proof.id, proof));
-    res.status(201).json({ id: proof.id, fileName: proof.fileName, size: proof.size });
+    res.status(201).json({ id: proof.id, fileName: proof.fileName, size: proof.size, url: '/api/caixa/payment-proofs/' + proof.id });
   }));
   app.get('/api/caixa/payment-proofs/:id', requireStaff, route(async (req, res) => {
     const proof = await store.read('payment_proofs', req.params.id);

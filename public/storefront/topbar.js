@@ -8,6 +8,7 @@
     truck: '<path d="M3 6h11v11H3zM14 10h4l3 4v3h-7"/><circle cx="7" cy="19" r="2"/><circle cx="18" cy="19" r="2"/>',
     chart: '<path d="M4 20V10h4v10m2 0V4h4v16m2 0V7h4v13"/>',
     menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+    book: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
   };
   const icon = name => '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + paths[name] + '</svg>';
   class ConfloraTopbar extends HTMLElement {
@@ -21,6 +22,7 @@
         '<div class="cf-topbar-actions">' +
         '<select class="cf-topbar-language" aria-label="Idioma do catálogo"><option value="pt">BR PT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select>' +
         '<button class="cf-topbar-identity" type="button" aria-label="Abrir minha conta">' + icon('user') + '<img hidden ' + (admin ? 'id="loggedUserPhoto"' : '') + ' alt="Foto do operador" referrerpolicy="no-referrer"><span><strong ' + (admin ? 'id="loggedUserName"' : '') + '></strong><small ' + (admin ? 'id="loggedUserRole"' : '') + '></small></span></button>' +
+        '<a class="cf-topbar-pill cf-topbar-guide" href="/guias" aria-label="Guias Operacionais" title="Guias e Treinamento" hidden>' + icon('book') + '<span>GUIA</span></a>' +
         '<a class="cf-topbar-pill cf-topbar-dark" href="/" data-primary>' + icon('cart') + '<span>Sacola</span></a>' +
         '<a class="cf-topbar-pill cf-topbar-cashier" href="/caixa" aria-label="Caixa">' + icon('cashier') + '<span>CAIXA</span></a>' +
         '<button class="cf-topbar-menu" type="button" aria-label="Menu da loja">' + icon('menu') + '</button>' +
@@ -40,6 +42,22 @@
         event.preventDefault(); this.dispatchEvent(new CustomEvent('cf-topbar-cashier', { bubbles: true }));
       };
       this.querySelector('.cf-topbar-menu').onclick = () => window.ConfloraNavigation.open(this.identityUser);
+      const guideBtn = this.querySelector('.cf-topbar-guide');
+      if (guideBtn) {
+        guideBtn.onclick = event => {
+          const r = String(this.identityUser?.role || this.currentUser?.role || '').toUpperCase();
+          const guideMap = {
+            ADMIN: '/guias/admin.html',
+            CAIXA: '/guias/caixa.html',
+            VENDEDOR: '/guias/vendedor.html',
+            ENTREGADOR: '/guias/entregador.html',
+          };
+          if (guideMap[r]) {
+            event.preventDefault();
+            window.location.assign(guideMap[r]);
+          }
+        };
+      }
       this.querySelector('.cf-topbar-identity').onclick = () => window.location.assign('/?conta=1');
       const language = this.querySelector('select');
       try { language.value = window.localStorage.getItem('conflora_lang') || 'pt'; } catch { /* The catalog remains usable without storage. */ }
@@ -61,7 +79,7 @@
       if (name === 'search-value') { if (this.input.value !== (this.getAttribute(name) || '')) this.input.value = this.getAttribute(name) || ''; }
       else this.updateIdentity();
     }
-    disconnectedCallback() { this.sizeObserver?.disconnect(); window.removeEventListener('resize', this.updateSize); }
+    disconnectedCallback() { if (this.onLangChange) window.removeEventListener('conflora-lang-change', this.onLangChange); this.sizeObserver?.disconnect(); window.removeEventListener('resize', this.updateSize); }
     set user(value) { this.currentUser = value; this.updateIdentity(); }
     search() { this.dispatchEvent(new CustomEvent('cf-topbar-search', { detail: { query: this.input.value }, bubbles: true })); }
     updateIdentity() {
@@ -70,19 +88,35 @@
       this.identityUser = user;
       const role = user.role || '';
       const identity = this.querySelector('.cf-topbar-identity');
-      identity.querySelector('strong').textContent = user.name || 'Entrar';
+      identity.querySelector('strong').textContent = user.name || ('Entrar').tr;
       identity.querySelector('small').textContent = role;
-      identity.title = user.name || 'Sua conta';
+      identity.title = user.name || ('Sua conta').tr;
       const photo = identity.querySelector('img'); photo.hidden = !user.picture;
       if (user.picture) photo.src = user.picture;
+      const guide = this.querySelector('.cf-topbar-guide');
+      const isTeam = ['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(role);
+      if (guide) {
+        guide.hidden = !isTeam;
+        if (isTeam) {
+          const guideMap = {
+            ADMIN: '/guias/admin.html',
+            CAIXA: '/guias/caixa.html',
+            VENDEDOR: '/guias/vendedor.html',
+            ENTREGADOR: '/guias/entregador.html',
+          };
+          guide.href = guideMap[role] || '/guias/index.html';
+          guide.title = `Guia Operacional - ${role}`;
+          guide.setAttribute('aria-label', `Guia Operacional de ${role}`);
+        }
+      }
       const cashier = this.querySelector('.cf-topbar-cashier');
       cashier.querySelector('svg').outerHTML = icon(role === 'ENTREGADOR' ? 'truck' : 'cashier');
       cashier.hidden = this.hasAttribute('hide-cashier') || !['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(role);
-      cashier.querySelector('span').textContent = role === 'ENTREGADOR' ? 'MINHAS ENTREGAS' : 'CAIXA';
-      cashier.setAttribute('aria-label', role === 'ENTREGADOR' ? 'Minhas entregas' : 'Caixa');
+      cashier.querySelector('span').textContent = (role === 'ENTREGADOR' ? 'ENTREGAS' : 'CAIXA').tr;
+      cashier.setAttribute('aria-label', (role === 'ENTREGADOR' ? 'Minhas entregas' : 'Caixa').tr);
       const primary = this.querySelector('[data-primary]');
       primary.href = role === 'ADMIN' ? '/admin-gerencial' : '/?sacola=1';
-      primary.innerHTML = icon(role === 'ADMIN' ? 'chart' : 'cart') + '<span>' + (role === 'ADMIN' ? 'Painel Gerencial' : 'Sacola') + '</span>';
+      primary.innerHTML = icon(role === 'ADMIN' ? 'chart' : 'cart') + '<span>' + (role === 'ADMIN' ? ('Painel Gerencial').tr : ('Sacola').tr) + '</span>';
 
     }
   }

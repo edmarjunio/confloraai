@@ -1222,7 +1222,7 @@ class FirestoreRepository {
   /**
    * Finaliza o caixa do dia, gera o PDF executivo e envia resumo + PDF pro WhatsApp do patrão.
    */
-  async closeCashierDay({ date = new Date().toISOString().slice(0, 10), closedBy = 'Administrador', notes = '', notifyOwnerWhatsapp = true, whatsappClient = null, requestId = randomUUID() } = {}) {
+  async closeCashierDay({ date = new Date().toISOString().slice(0, 10), closedBy = 'Administrador', notes = '', counted = null, receiptProofUrl = null, notifyOwnerWhatsapp = true, whatsappClient = null, requestId = randomUUID() } = {}) {
     const metrics = await this.getDailyExecutiveMetrics({ date });
     const paymentTotals = metrics.byPayment || {};
     const cardPayment = ['CARTAO', 'DEBITO', 'CREDITO'].reduce((summary, method) => ({
@@ -1244,6 +1244,8 @@ class FirestoreRepository {
       closedAt: now,
       closedBy,
       notes,
+      counted: counted || null,
+      receiptProofUrl: receiptProofUrl || null,
       metrics,
       status: 'PROCESSING',
     };
@@ -1325,6 +1327,19 @@ class FirestoreRepository {
       whatsappSent,
       whatsappError,
     };
+  }
+
+  async getCashierClosingByDate(date) {
+    if (this.inMemoryCashierClosings) {
+      for (const item of this.inMemoryCashierClosings.values()) {
+        if (item.date === date && item.status === 'CLOSED') return item;
+      }
+    }
+    if (this.firestore && !this._firestoreClientDisabled && !FirestoreRepository._globalClientDisabled) {
+      const snap = await this.firestore.collection('cashier_closings').where('date', '==', date).where('status', '==', 'CLOSED').limit(1).get();
+      if (!snap.empty) return { id: snap.docs[0].id, ...snap.docs[0].data() };
+    }
+    return null;
   }
 
   async getInventorySettings() {
@@ -3669,8 +3684,11 @@ class FirestoreRepository {
 
     const byPayment = {
       PIX: 0,
-      CARTAO: 0,
       DINHEIRO: 0,
+      DEBITO: 0,
+      CREDITO: 0,
+      CARTAO: 0,
+      FIADO: 0,
     };
 
     const byStatus = {
@@ -3690,12 +3708,16 @@ class FirestoreRepository {
 
       if (pay.includes('PIX')) {
         byPayment.PIX += val;
-      } else if (
-        pay.includes('CART') ||
-        pay.includes('DEBITO') ||
-        pay.includes('CREDITO')
-      ) {
+      } else if (pay.includes('DEBIT') || pay.includes('DÉBIT')) {
+        byPayment.DEBITO += val;
         byPayment.CARTAO += val;
+      } else if (pay.includes('CREDIT') || pay.includes('CRÉDIT')) {
+        byPayment.CREDITO += val;
+        byPayment.CARTAO += val;
+      } else if (pay.includes('CART') || pay.includes('CARD')) {
+        byPayment.CARTAO += val;
+      } else if (pay.includes('FIADO') || ord.paymentStatus === 'ON_ACCOUNT') {
+        byPayment.FIADO += val;
       } else {
         byPayment.DINHEIRO += val;
       }

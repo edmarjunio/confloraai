@@ -355,66 +355,396 @@ render-product-card.cf-pdv-product-card {
   color: #8492a6;
   font-size: 11px;
 }
-.product-content > .cf-button {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-.product-content > .cf-button svg { width: 17px; height: 17px; }
-.cf-product-information-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgb(2 6 23 / 62%);
-  padding: 16px;
-}
-.cf-order-card { color: var(--cf-text); }
-.cf-order-card button:first-child { width: 100%; border: 0; background: transparent; padding: 0; text-align: left; }
-.stat-card,
-.metric-card {
-  border: 1px solid var(--cf-border);
-  border-radius: var(--cf-radius-card);
-  background: var(--cf-surface);
-  box-shadow: var(--cf-shadow-card);
+.product-content > /* ==========================================================================
+   BUTTON3D - COMPONENTE CENTRALIZADO E UNIFICADO DE BOTÕES 3D (CONFLORA)
+   Única fonte da verdade para formato, elevação, efeitos táteis e cores.
+   ========================================================================== */
+
+:root {
+  --cf-btn-3d-radius: 999px;
+  --cf-btn-3d-radius-rounded: 16px;
+  --cf-btn-3d-depth: 4px;
+  --cf-btn-3d-depth-sm: 3px;
+  --cf-btn-3d-depth-lg: 5px;
+  --cf-btn-3d-press: 3px;
+  --cf-btn-3d-hover-lift: -2px;
+  --cf-btn-3d-transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.12s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
+/* Base 3D Button - Aplicável a <button-3d>, .cf-btn-3d, .cf-button-3d e .cf-button */
+button-3d,
+.cf-btn-3d,
+.cf-button-3d,
 .cf-button {
   display: inline-flex;
-  min-height: 40px;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border: 1px solid transparent;
-  border-radius: var(--cf-radius-button);
-  padding: 9px 14px;
-  background: var(--cf-button-color, var(--cf-green));
-  color: #fff;
+  min-height: 42px;
+  padding: 8px 18px;
+  border-radius: var(--cf-btn-3d-radius);
   font: inherit;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 13.5px;
+  font-weight: 800;
   line-height: 1.2;
   text-decoration: none;
+  text-align: center;
   cursor: pointer;
-  transition: transform 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: var(--cf-btn-3d-transition);
+  box-sizing: border-box;
+
+  /* Padrão Primário (Verde Esmeralda Conflora 3D) */
+  background: #15803d;
+  color: #ffffff;
+  border: 2px solid #0f381e;
+  box-shadow: 0 4px 0 #0f381e, 0 5px 12px rgba(21, 128, 61, 0.25);
 }
 
-.cf-button:hover:not(:disabled) { background: var(--cf-green-dark); transform: translateY(-2px); box-shadow: 0 8px 20px rgb(15 56 30 / 20%); }
-.cf-button--floating {
-  min-height: 0;
-  padding: 0;
-  border-radius: 50%;
+button-3d:hover:not([disabled]),
+.cf-btn-3d:hover:not(:disabled),
+.cf-button-3d:hover:not(:disabled),
+.cf-button:hover:not(:disabled) {
+  transform: translateY(var(--cf-btn-3d-hover-lift));
+  background: #166534;
+  border-color: #0f381e;
+  box-shadow: 0 6px 0 #0f381e, 0 8px 18px rgba(21, 128, 61, 0.35);
 }
-.cf-button:focus-visible { outline: 3px solid rgb(16 158 70 / 35%); outline-offset: 2px; }
-.cf-button:disabled { opacity: .5; cursor: not-allowed; }
-.cf-button[data-variant="secondary"] { border-color: var(--cf-border); background: #fff; color: var(--cf-green-deep); }
-.cf-button[data-variant="secondary"]:hover:not(:disabled) { background: #f0fdf4; }
-.cf-button[data-variant="danger"] { background: var(--cf-danger); }
-.cf-button[data-variant="quiet"] { border-color: transparent; background: transparent; color: var(--cf-green-deep); }
+
+button-3d:active:not([disabled]),
+.cf-btn-3d:active:not(:disabled),
+.cf-button-3d:active:not(:disabled),
+.cf-button:active:not(:disabled) {
+  transform: translateY(var(--cf-btn-3d-press));
+  box-shadow: 0 1px 0 #0f381e;
+}
+
+button-3d[disabled],
+.cf-btn-3d:disabled,
+.cf-button-3d:disabled,
+.cf-button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  background: #94a3b8 !important;
+  color: #f1f5f9 !important;
+  border-color: #64748b !important;
+  box-shadow: 0 3px 0 #475569 !important;
+  transform: none !important;
+}
+
+button-3d:focus-visible,
+.cf-btn-3d:focus-visible,
+.cf-button-3d:focus-visible,
+.cf-button:focus-visible {
+  outline: 3px solid rgb(16 158 70 / 35%);
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   VARIAÇÕES DE COR DO BUTTON3D
+   -------------------------------------------------------------------------- */
+
+/* 1. Primário (Esmeralda) */
+.cf-btn-3d--primary,
+button-3d[variant="primary"],
+.cf-button[data-variant="primary"] {
+  background: #15803d;
+  color: #ffffff;
+  border: 2px solid #0f381e;
+  box-shadow: 0 4px 0 #0f381e, 0 5px 12px rgba(21, 128, 61, 0.25);
+}
+.cf-btn-3d--primary:hover:not(:disabled),
+button-3d[variant="primary"]:hover:not([disabled]),
+.cf-button[data-variant="primary"]:hover:not(:disabled) {
+  background: #166534;
+  border-color: #0f381e;
+  box-shadow: 0 6px 0 #0f381e, 0 8px 18px rgba(21, 128, 61, 0.35);
+}
+.cf-btn-3d--primary:active:not(:disabled),
+button-3d[variant="primary"]:active:not([disabled]),
+.cf-button[data-variant="primary"]:active:not(:disabled) {
+  box-shadow: 0 1px 0 #0f381e;
+}
+
+/* 2. Secundário / Contorno (Padrão Chip Categoria Desmarcado) */
+.cf-btn-3d--secondary,
+button-3d[variant="secondary"],
+.cf-button[data-variant="secondary"],
+.cf-back-button {
+  background: #ffffff;
+  color: #14532d;
+  border: 2px solid #bbf7d0;
+  box-shadow: 0 4px 0 #86efac, 0 5px 12px rgba(20, 83, 45, 0.08);
+}
+.cf-btn-3d--secondary:hover:not(:disabled),
+button-3d[variant="secondary"]:hover:not([disabled]),
+.cf-button[data-variant="secondary"]:hover:not(:disabled),
+.cf-back-button:hover:not(:disabled) {
+  transform: translateY(var(--cf-btn-3d-hover-lift));
+  background: #f0fdf4;
+  border-color: #4ade80;
+  color: #0f381e;
+  box-shadow: 0 6px 0 #4ade80, 0 8px 18px rgba(20, 83, 45, 0.15);
+}
+.cf-btn-3d--secondary:active:not(:disabled),
+button-3d[variant="secondary"]:active:not([disabled]),
+.cf-button[data-variant="secondary"]:active:not(:disabled),
+.cf-back-button:active:not(:disabled) {
+  transform: translateY(var(--cf-btn-3d-press));
+  box-shadow: 0 1px 0 #4ade80;
+}
+
+/* 3. Ativo / Selecionado (Padrão Chip Categoria Selecionado) */
+.cf-btn-3d--active,
+.cf-btn-3d--selected,
+button-3d[variant="active"],
+button-3d[variant="selected"],
+.cf-button.is-active {
+  background: #15803d;
+  color: #ffffff;
+  border: 2px solid #0f381e;
+  box-shadow: 0 4px 0 #0f381e, 0 6px 16px rgba(21, 128, 61, 0.35);
+}
+.cf-btn-3d--active:hover:not(:disabled),
+.cf-btn-3d--selected:hover:not(:disabled),
+button-3d[variant="active"]:hover:not([disabled]),
+button-3d[variant="selected"]:hover:not([disabled]) {
+  background: #166534;
+  transform: translateY(var(--cf-btn-3d-hover-lift));
+  box-shadow: 0 6px 0 #0f381e, 0 8px 20px rgba(21, 128, 61, 0.4);
+}
+.cf-btn-3d--active:active:not(:disabled),
+.cf-btn-3d--selected:active:not(:disabled),
+button-3d[variant="active"]:active:not([disabled]),
+button-3d[variant="selected"]:active:not([disabled]) {
+  transform: translateY(var(--cf-btn-3d-press));
+  box-shadow: 0 1px 0 #0f381e;
+}
+
+/* 4. Danger / Perigo (Vermelho 3D) */
+.cf-btn-3d--danger,
+button-3d[variant="danger"],
+.cf-button[data-variant="danger"],
+.cf-danger-button {
+  background: #dc2626;
+  color: #ffffff;
+  border: 2px solid #991b1b;
+  box-shadow: 0 4px 0 #7f1d1d, 0 5px 12px rgba(220, 38, 38, 0.25);
+}
+.cf-btn-3d--danger:hover:not(:disabled),
+button-3d[variant="danger"]:hover:not([disabled]),
+.cf-button[data-variant="danger"]:hover:not(:disabled),
+.cf-danger-button:hover:not(:disabled) {
+  transform: translateY(var(--cf-btn-3d-hover-lift));
+  background: #b91c1c;
+  border-color: #7f1d1d;
+  box-shadow: 0 6px 0 #7f1d1d, 0 8px 18px rgba(220, 38, 38, 0.35);
+}
+.cf-btn-3d--danger:active:not(:disabled),
+button-3d[variant="danger"]:active:not([disabled]),
+.cf-button[data-variant="danger"]:active:not(:disabled),
+.cf-danger-button:active:not(:disabled) {
+  transform: translateY(var(--cf-btn-3d-press));
+  box-shadow: 0 1px 0 #7f1d1d;
+}
+
+/* 5. Warning / Alerta (Âmbar 3D) */
+.cf-btn-3d--warning,
+button-3d[variant="warning"],
+.cf-button[data-variant="warning"] {
+  background: #f59e0b;
+  color: #0f172a;
+  border: 2px solid #b45309;
+  box-shadow: 0 4px 0 #92400e, 0 5px 12px rgba(180, 83, 9, 0.2);
+}
+.cf-btn-3d--warning:hover:not(:disabled),
+button-3d[variant="warning"]:hover:not([disabled]),
+.cf-button[data-variant="warning"]:hover:not(:disabled) {
+  transform: translateY(var(--cf-btn-3d-hover-lift));
+  background: #fbbf24;
+  border-color: #92400e;
+  box-shadow: 0 6px 0 #92400e, 0 8px 18px rgba(180, 83, 9, 0.3);
+}
+.cf-btn-3d--warning:active:not(:disabled),
+button-3d[variant="warning"]:active:not([disabled]),
+.cf-button[data-variant="warning"]:active:not(:disabled) {
+  transform: translateY(var(--cf-btn-3d-press));
+  box-shadow: 0 1px 0 #92400e;
+}
+
+/* 6. Sky / Blue (Azul 3D) */
+.cf-btn-3d--sky,
+.cf-btn-3d--blue,
+button-3d[variant="sky"],
+button-3d[variant="blue"],
+.cf-button[data-variant="sky"],
+.cf-button[data-variant="blue"] {
+  background: #0284c7;
+  color: #ffffff;
+  border: 2px solid #0369a1;
+  box-shadow: 0 4px 0 #075985, 0 5px 12px rgba(2, 132, 199, 0.25);
+}
+.cf-btn-3d--sky:hover:not(:disabled),
+.cf-btn-3d--blue:hover:not(:disabled),
+button-3d[variant="sky"]:hover:not([disabled]),
+button-3d[variant="blue"]:hover:not([disabled]) {
+  transform: translateY(var(--cf-btn-3d-hover-lift));
+  background: #0369a1;
+  border-color: #075985;
+  box-shadow: 0 6px 0 #075985, 0 8px 18px rgba(2, 132, 199, 0.35);
+}
+.cf-btn-3d--sky:active:not(:disabled),
+.cf-btn-3d--blue:active:not(:disabled),
+button-3d[variant="sky"]:active:not([disabled]),
+button-3d[variant="blue"]:active:not([disabled]) {
+  transform: translateY(var(--cf-btn-3d-press));
+  box-shadow: 0 1px 0 #075985;
+}
+
+/* 7. Dark / Black (Preto / Grafite 3D) */
+.cf-btn-3d--dark,
+.cf-btn-3d--black,
+button-3d[variant="dark"],
+button-3d[variant="black"],
+.cf-button[data-variant="dark"] {
+  background: #0f172a;
+  color: #ffffff;
+  border: 2px solid #020617;
+  box-shadow: 0 4px 0 #020617, 0 5px 12px rgba(15, 23, 42, 0.25);
+}
+.cf-btn-3d--dark:hover:not(:disabled),
+.cf-btn-3d--black:hover:not(:disabled),
+button-3d[variant="dark"]:hover:not([disabled]),
+button-3d[variant="black"]:hover:not([disabled]) {
+  transform: translateY(var(--cf-btn-3d-hover-lift));
+  background: #1e293b;
+  border-color: #020617;
+  box-shadow: 0 6px 0 #020617, 0 8px 18px rgba(15, 23, 42, 0.35);
+}
+.cf-btn-3d--dark:active:not(:disabled),
+.cf-btn-3d--black:active:not(:disabled),
+button-3d[variant="dark"]:active:not([disabled]),
+button-3d[variant="black"]:active:not([disabled]) {
+  transform: translateY(var(--cf-btn-3d-press));
+  box-shadow: 0 1px 0 #020617;
+}
+
+/* 8. Sub / Amarelo / Secundário Quente (Padrão Chip Subcategoria) */
+.cf-btn-3d--sub,
+button-3d[variant="sub"],
+.cf-button[data-variant="sub"] {
+  background: #ffffff;
+  color: #854d0e;
+  border: 2px solid #fef08a;
+  box-shadow: 0 3px 0 #fde047, 0 3px 8px rgba(133, 77, 14, 0.08);
+}
+.cf-btn-3d--sub:hover:not(:disabled),
+button-3d[variant="sub"]:hover:not([disabled]),
+.cf-button[data-variant="sub"]:hover:not(:disabled) {
+  transform: translateY(var(--cf-btn-3d-hover-lift));
+  background: #fefce8;
+  border-color: #facc15;
+  box-shadow: 0 5px 0 #eab308, 0 6px 14px rgba(133, 77, 14, 0.15);
+}
+.cf-btn-3d--sub:active:not(:disabled),
+button-3d[variant="sub"]:active:not([disabled]),
+.cf-button[data-variant="sub"]:active:not(:disabled) {
+  transform: translateY(var(--cf-btn-3d-press));
+  box-shadow: 0 1px 0 #eab308;
+}
+
+/* 9. Quiet / Discreto */
+.cf-btn-3d--quiet,
+button-3d[variant="quiet"],
+.cf-button[data-variant="quiet"] {
+  border: 2px solid transparent;
+  background: transparent;
+  color: var(--cf-green-deep);
+  box-shadow: none;
+}
+.cf-btn-3d--quiet:hover:not(:disabled),
+button-3d[variant="quiet"]:hover:not([disabled]),
+.cf-button[data-variant="quiet"]:hover:not(:disabled) {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  box-shadow: 0 3px 0 #86efac;
+  transform: translateY(var(--cf-btn-3d-hover-lift));
+}
+.cf-btn-3d--quiet:active:not(:disabled),
+button-3d[variant="quiet"]:active:not([disabled]),
+.cf-button[data-variant="quiet"]:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: 0 1px 0 #86efac;
+}
+
+/* --------------------------------------------------------------------------
+   TAMANHOS (SIZES)
+   -------------------------------------------------------------------------- */
+.cf-btn-3d--sm,
+button-3d[size="sm"],
+.cf-button--sm {
+  min-height: 32px;
+  padding: 4px 12px;
+  font-size: 11.5px;
+  gap: 6px;
+  box-shadow: 0 var(--cf-btn-3d-depth-sm) 0 currentColor;
+}
+.cf-btn-3d--sm.cf-btn-3d--primary,
+button-3d[size="sm"][variant="primary"] {
+  box-shadow: 0 var(--cf-btn-3d-depth-sm) 0 #0f381e, 0 3px 8px rgba(21, 128, 61, 0.2);
+}
+.cf-btn-3d--sm.cf-btn-3d--secondary,
+button-3d[size="sm"][variant="secondary"] {
+  box-shadow: 0 var(--cf-btn-3d-depth-sm) 0 #86efac, 0 3px 8px rgba(20, 83, 45, 0.08);
+}
+
+.cf-btn-3d--md,
+button-3d[size="md"],
+.cf-button--md {
+  min-height: 42px;
+  padding: 8px 18px;
+  font-size: 13.5px;
+}
+
+.cf-btn-3d--lg,
+button-3d[size="lg"],
+.cf-button--lg {
+  min-height: 48px;
+  padding: 12px 24px;
+  font-size: 15px;
+  gap: 10px;
+}
+
+.cf-btn-3d--xl,
+button-3d[size="xl"],
+.cf-button--xl {
+  min-height: 54px;
+  padding: 14px 28px;
+  font-size: 16px;
+  gap: 12px;
+}
+
+/* --------------------------------------------------------------------------
+   FORMATOS (SHAPES) & BLOCO (BLOCK)
+   -------------------------------------------------------------------------- */
+.cf-btn-3d--pill,
+button-3d[shape="pill"] {
+  border-radius: var(--cf-btn-3d-radius);
+}
+
+.cf-btn-3d--rounded,
+button-3d[shape="rounded"] {
+  border-radius: var(--cf-btn-3d-radius-rounded);
+}
+
+.cf-btn-3d--block,
+button-3d[block],
+button-3d[full] {
+  width: 100%;
+  display: flex;
+}
 
 cf-list {
   display: block;

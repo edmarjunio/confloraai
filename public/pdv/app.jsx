@@ -156,8 +156,8 @@ const { useState, useEffect, useRef, useMemo } = React;
       });
     };
 
-    const primaryActionButtonClass = 'cf-button cf-pdv-command-button inline-flex items-center justify-center gap-2 rounded-xl bg-[#109E46] font-bold text-white shadow-sm transition hover:bg-[#0d853a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none';
-    const shortcutButtonClass = `${primaryActionButtonClass} px-3 py-2 text-xs`;
+    const primaryActionButtonClass = 'cf-btn-3d cf-btn-3d--primary';
+    const shortcutButtonClass = 'cf-btn-3d cf-btn-3d--primary cf-btn-3d--sm !px-3 !py-2 text-xs';
 
     function readStorefrontProductImages() {
       try {
@@ -242,7 +242,40 @@ const { useState, useEffect, useRef, useMemo } = React;
       // Mobile Bottom Sheet mode: 'collapsed' | 'peek' (tempo real) | 'expanded'
       const [mobileSheetMode, setMobileSheetMode] = useState('peek');
       const [activeModal, setActiveModal] = useState(null); // 'pay' | 'discount' | 'freight' | 'receipt' | 'customer' | 'debt_settle'
-      const [cashierPage, setCashierPage] = useState(() => ({ commands: 'orders', deliveries: 'deliveries' })[new URLSearchParams(location.search).get('view')] || null);
+      const [cashierPage, setCashierPage] = useState(() => {
+        const view = new URLSearchParams(window.location.search).get('view');
+        if (view === 'commands' || view === 'orders') return 'orders';
+        if (view === 'deliveries') return 'deliveries';
+        if (view === 'report') return 'report';
+        if (view === 'history') return 'history';
+        return null;
+      });
+
+      const navigateCashierPage = (page) => {
+        setCashierPage(page);
+        try {
+          const url = new URL(window.location.href);
+          if (page === 'orders') url.searchParams.set('view', 'commands');
+          else if (page === 'deliveries') url.searchParams.set('view', 'deliveries');
+          else if (page === 'report') url.searchParams.set('view', 'report');
+          else if (page === 'history') url.searchParams.set('view', 'history');
+          else url.searchParams.delete('view');
+          window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+        } catch (_) {}
+      };
+
+      useEffect(() => {
+        const handlePopState = () => {
+          const view = new URLSearchParams(window.location.search).get('view');
+          if (view === 'commands' || view === 'orders') setCashierPage('orders');
+          else if (view === 'deliveries') setCashierPage('deliveries');
+          else if (view === 'report') setCashierPage('report');
+          else if (view === 'history') setCashierPage('history');
+          else setCashierPage(null);
+        };
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+      }, []);
       const [paymentMethod, setPaymentMethod] = useState('pix');
       const [deferToCashier, setDeferToCashier] = useState(false);
       const [splitPayment, setSplitPayment] = useState(false);
@@ -477,10 +510,10 @@ const { useState, useEffect, useRef, useMemo } = React;
             if (cart.length > 0) setActiveModal('pay');
           } else if (e.key === 'F2') {
             e.preventDefault();
-            setCashierPage('orders');
+            navigateCashierPage('orders');
           } else if (e.key === 'F3') {
             e.preventDefault();
-            setCashierPage('report');
+            navigateCashierPage('report');
           } else if (e.key === 'F4') {
             e.preventDefault();
             setActiveModal('discount');
@@ -489,7 +522,7 @@ const { useState, useEffect, useRef, useMemo } = React;
             setActiveModal('freight');
           } else if (e.key === 'F9') {
             e.preventDefault();
-            setCashierPage('history');
+            navigateCashierPage('history');
           } else if (e.key === 'Escape' && infoProduct) {
             setInfoProduct(null);
           } else if (e.key === 'Escape') {
@@ -1186,8 +1219,8 @@ const { useState, useEffect, useRef, useMemo } = React;
 
       if (!authReady) return <PdvComponents.Loading />;
       if (!currentUser) return <PdvComponents.Login onLogin={setCurrentUser} />;
-      if (currentUser.role === 'ENTREGADOR' || cashierPage === 'deliveries') return <PdvDelivery user={currentUser} onBack={() => setCashierPage(null)} />;
-      if (cashierPage) return <PdvComponents.CashierQueue user={currentUser} view={cashierPage} onBack={() => setCashierPage(null)} onDebt={() => { setCashierPage(null); setActiveModal('debt_settle'); }} />;
+      if (currentUser.role === 'ENTREGADOR' || cashierPage === 'deliveries') return <PdvDelivery user={currentUser} onBack={() => navigateCashierPage(null)} />;
+      if (cashierPage) return <PdvComponents.CashierQueue user={currentUser} view={cashierPage} onBack={() => navigateCashierPage(null)} onDebt={() => { navigateCashierPage(null); setActiveModal('debt_settle'); }} />;
       return (
         <div className="min-h-screen bg-[#F4F6F5] text-slate-800 flex flex-col font-sans select-none">
           {/* Main Responsive Wrapper (Full width or Mobile Frame simulator) */}
@@ -1200,7 +1233,7 @@ const { useState, useEffect, useRef, useMemo } = React;
             {activeModal === 'debt_settle' && <PdvComponents.DebtSettlement onClose={() => setActiveModal(null)} />}
             {/* Com Flora Standard Website Header adapted for POS */}
             <div className="sticky top-0 z-20 bg-white">
-              <PdvComponents.Topbar hideCashier user={currentUser} onCashier={() => setCashierPage(null)} onSearch={setSearchQuery} searchValue={searchQuery} searchInputRef={searchInputRef} />
+              <PdvComponents.Topbar hideCashier user={currentUser} onCashier={() => navigateCashierPage(null)} onSearch={setSearchQuery} searchValue={searchQuery} searchInputRef={searchInputRef} />
               <div className="cf-page-toolbar cf-pos-context">
                 <button type="button" className="cf-back-button" onClick={() => window.ConfloraNavigation.back()}>← Voltar</button><h1 className="font-extrabold text-emerald-950">Caixa</h1>
                 {/* Quantity multiplier remains next to the cashier actions. */}
@@ -1235,16 +1268,16 @@ const { useState, useEffect, useRef, useMemo } = React;
                     </button>
                 </div>
 
-                {['ADMIN', 'CAIXA'].includes(currentUser.role) && <button type="button" className="cf-button" onClick={() => setCashierPage('deliveries')}>🛵 Entregas</button>}
+                {['ADMIN', 'CAIXA'].includes(currentUser.role) && <button type="button" className="cf-button" onClick={() => navigateCashierPage('deliveries')}>🛵 Entregas</button>}
                 <button type="button" className="cf-danger-button" onClick={async () => { await window.ConfloraSession.apiFetch('/api/auth/logout', { method: 'POST' }); window.location.reload(); }}>Sair</button>
               </div>
               <nav className="cashier-command-nav mx-auto mt-3 mb-4 grid w-full max-w-[1600px] grid-cols-3 gap-2 border-t border-slate-100 pt-3 sm:gap-3 lg:mx-0 lg:w-2/3" aria-label="Ações do caixa por atalho">
                 <button type="button" className={shortcutButtonClass} disabled={cart.length === 0} onClick={() => setActiveModal('pay')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F1</kbd><span>Pagar</span></button>
-                <button type="button" className={shortcutButtonClass} onClick={() => setCashierPage('orders')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F2</kbd><span>Comandas</span></button>
-                <button type="button" className={shortcutButtonClass} onClick={() => setCashierPage('report')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F3</kbd><span>Relatório</span></button>
+                <button type="button" className={shortcutButtonClass} onClick={() => navigateCashierPage('orders')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F2</kbd><span>Comandas</span></button>
+                <button type="button" className={shortcutButtonClass} onClick={() => navigateCashierPage('report')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F3</kbd><span>Relatório</span></button>
                 <button type="button" className={shortcutButtonClass} onClick={() => setActiveModal('discount')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F4</kbd><span>Desconto</span></button>
                 <button type="button" className={shortcutButtonClass} onClick={() => setActiveModal('freight')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F8</kbd><span>Entrega</span></button>
-                <button type="button" className={shortcutButtonClass} onClick={() => setCashierPage('history')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F9</kbd><span>Histórico</span></button>
+                <button type="button" className={shortcutButtonClass} onClick={() => navigateCashierPage('history')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F9</kbd><span>Histórico</span></button>
               </nav>
 
               {/* Com Flora Category Pills Row */}

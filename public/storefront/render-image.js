@@ -26,7 +26,16 @@
       }
 
       connectedCallback() {
+        if (!this.onLangChange) {
+          this.onLangChange = () => this.render();
+          window.addEventListener('conflora-lang-change', this.onLangChange);
+        }
         this.render();
+      }
+      disconnectedCallback() {
+        if (this.onLangChange) {
+          window.removeEventListener('conflora-lang-change', this.onLangChange);
+        }
       }
 
       attributeChangedCallback() {
@@ -121,16 +130,17 @@
         const category = (this.getAttribute("category") || "").trim();
         const icon = this.getAttribute("icon") || categoryIcon(category);
         const fullCategory = category || "Produto";
+        const translatedCategory = (fullCategory.tr || fullCategory);
         const tag = document.createElement("span");
         tag.className = `cf-product-category-tag ${this.getAttribute("class") || ""}`.trim();
-        tag.title = fullCategory;
-        tag.setAttribute("aria-label", fullCategory);
+        tag.title = translatedCategory;
+        tag.setAttribute("aria-label", translatedCategory);
         const iconElement = document.createElement("span");
         iconElement.setAttribute("aria-hidden", "true");
         iconElement.textContent = icon;
         const label = document.createElement("span");
         label.className = "cf-product-category-tag-label";
-        label.textContent = fullCategory;
+        label.textContent = translatedCategory;
         tag.append(iconElement, label);
         this.style.display = "contents";
         this.replaceChildren(tag);

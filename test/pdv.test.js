@@ -1274,3 +1274,32 @@ test('cashier PDF and WhatsApp snapshot preserve role isolation and never close 
   s.whatsapp.sendDocumentBuffer = async () => ({ mock: true });
   assert.equal((await post('/api/caixa/report/send-whatsapp', {}, cashierCookie)).status, 502);
 });
+
+test('driver can notify arrival via WhatsApp when order is OUT_FOR_DELIVERY', async () => {
+  const s = setup();
+  const testDriver = { id: 'driver-1', name: 'Entregador Chegada', role: 'ENTREGADOR', active: true };
+  s.base.inMemoryUsers.set(testDriver.id, testDriver);
+  const order = await s.service.create({
+    ...s.input,
+    orderType: 'DELIVERY',
+    paymentMethod: 'DINHEIRO',
+    customerName: 'Cliente Chegada',
+    customerPhone: '64999991234',
+    deliveryAddress: 'Rua Central, 100, Mineiros GO',
+    deliveryLocation: { lat: -17.56, lng: -52.58 }
+  }, cashier);
+  await s.service.assignDelivery(order.id, testDriver);
+  await s.service.startDelivery(order.id, testDriver, { route: { distanceMeters: 2000, durationSeconds: 300 } });
+
+  const result = await s.service.notifyArriving(order.id, testDriver);
+  assert.equal(result.success, true);
+  assert.equal(result.notified, true);
+  assert.ok(result.arrivingNotifiedAt);
+
+  const updated = await s.repository.read('orders', order.id);
+  assert.ok(updated.arrivingNotifiedAt);
+
+  const messages = s.sent.filter(m => m.text && m.text.includes('ESTÁ CHEGANDO NO SEU ENDEREÇO'));
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].phone, '5564999991234');
+});

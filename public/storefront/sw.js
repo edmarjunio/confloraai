@@ -1,5 +1,5 @@
 /* Bump this version whenever the application shell changes before publishing. */
-const CACHE_NAME = 'conflora-public-shell-v21';
+const CACHE_NAME = 'conflora-public-shell-v28';
 const SHELL_URL = '/storefront/index.html';
 const CORE_FILES = [
   SHELL_URL, '/store-assets/site-navigation.js?v=1',
@@ -20,6 +20,7 @@ const CORE_FILES = [
 const CORE_URLS = new Set(CORE_FILES.map(file => new URL(file, self.location.origin).href));
 
 self.addEventListener('install', event => {
+  self.skipWaiting();
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
     // Install atomically: an incomplete new shell must not replace the old one.

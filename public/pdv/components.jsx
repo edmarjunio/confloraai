@@ -9,7 +9,47 @@ window.PdvComponents = (() => {
     red: { backgroundColor: '#ffc9d0', borderColor: '#e65b70' },
   });
   const money = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  const button = 'cf-button';
+  function Button3D({
+    children,
+    variant = 'primary',
+    size = 'md',
+    shape = 'pill',
+    block = false,
+    disabled = false,
+    type = 'button',
+    className = '',
+    icon = null,
+    onClick = null,
+    style = undefined,
+    title = undefined,
+    ...rest
+  }) {
+    const fullClass = [
+      'cf-btn-3d',
+      `cf-btn-3d--${variant}`,
+      `cf-btn-3d--${size}`,
+      shape === 'rounded' ? 'cf-btn-3d--rounded' : 'cf-btn-3d--pill',
+      block ? 'cf-btn-3d--block' : '',
+      className
+    ].filter(Boolean).join(' ');
+
+    return (
+      <button
+        type={type}
+        disabled={disabled}
+        className={fullClass}
+        onClick={onClick}
+        style={style}
+        title={title}
+        {...rest}
+      >
+        {icon && <span className="cf-btn-3d__icon" aria-hidden="true">{icon}</span>}
+        <span className="cf-btn-3d__text">{children}</span>
+      </button>
+    );
+  }
+  window.Button3D = Button3D;
+  const button = 'cf-btn-3d cf-btn-3d--primary';
   const field = 'w-full p-3 border rounded-xl my-2';
   function LocationPicker({ value, address, onChange }) {
     const ref = useRef(null); const onChangeRef = useRef(onChange); onChangeRef.current = onChange;
@@ -53,11 +93,75 @@ window.PdvComponents = (() => {
     return <Panel title="Buscar cliente" layer={70} onClose={onClose}><label className="text-sm font-bold">Nome do cliente<input autoFocus className={field} placeholder="Digite pelo menos 4 letras do nome" value={query} onChange={(event) => setQuery(event.target.value)} /></label><div className="mt-3 space-y-2">{loading && <p role="status">Buscando clientes…</p>}{error && <p role="alert" className="text-red-700">{error}</p>}{!loading && query.trim().length >= 4 && !rows.length && !error && <p>Nenhum cliente encontrado.</p>}{rows.map((customer) => <button key={customer.id} type="button" className="w-full rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-left transition hover:shadow-md" onClick={() => onSelect(customer)}><strong className="block">{customer.name}</strong><span className="mt-1 block text-xs text-slate-600">{customer.phone || 'Sem telefone'}{customer.address ? ' · ' + customer.address : ''}</span></button>)}</div></Panel>;
   }
   function PaymentPartsEditor({ parts, onChange, total, customerId, allowedMethods }) {
-    const labels = Object.fromEntries(Object.entries({ PIX: 'Pix', DINHEIRO: 'Dinheiro', DEBITO: 'Débito', CREDITO: 'Crédito', FIADO: 'Fiado' }).filter(([method]) => !allowedMethods || allowedMethods.includes(method)));
+    const methodOptions = [
+      { id: 'DINHEIRO', label: '💵 Dinheiro' },
+      { id: 'DEBITO', label: '💳 Débito' },
+      { id: 'CREDITO', label: '💳 Crédito' },
+      { id: 'PIX', label: '⚡ Pix' },
+      { id: 'FIADO', label: '📝 Fiado' },
+    ].filter(item => !allowedMethods || allowedMethods.includes(item.id))
+     .filter(item => item.id !== 'FIADO' || customerId);
+
     const update = (index, values) => onChange(parts.map((part, current) => current === index ? { ...part, ...values } : part));
     const sum = parts.reduce((value, part) => value + Math.round(Number(part.amount || 0) * 100), 0);
-    const remaining = (Math.round(total * 100) - sum) / 100;
-    return <section className="my-3 space-y-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3"><strong className="text-xs">Dividir pagamento</strong>{parts.map((part, index) => <div key={index} className="rounded-xl border border-emerald-100 bg-white p-2"><PaymentMethodButtons value={part.method} onChange={(method) => update(index, { method })} labels={labels} disabledMethods={Object.keys(labels).filter((value) => (value === 'FIADO' && !customerId) || parts.some((entry, current) => current !== index && entry.method === value))} suffix={` · parcela ${index + 1}`} /><input aria-label={`Valor da parcela ${index + 1}`} type="number" min="0.01" step="0.01" value={part.amount} onChange={(event) => update(index, { amount: event.target.value })} className="w-24 rounded-lg border p-2 text-xs" /><button type="button" aria-label={`Remover parcela ${index + 1}`} onClick={() => onChange(parts.filter((_, current) => current !== index))}>✕</button></div>)}<p className="text-xs font-bold">{remaining >= 0 ? 'Falta distribuir: ' : 'Excedente: '}{money(Math.abs(remaining))}</p>{parts.length < Object.keys(labels).length && <button type="button" className="text-xs underline" onClick={() => onChange([...parts, { method: Object.keys(labels).find((method) => !parts.some((part) => part.method === method)), amount: Math.max(0, remaining).toFixed(2) }])}>Adicionar forma de pagamento</button>}</section>;
+    const totalCents = Math.round(Number(total || 0) * 100);
+    const remaining = (totalCents - sum) / 100;
+
+    return <section className="my-3 space-y-2.5 rounded-2xl border-2 border-emerald-200 bg-emerald-50/90 p-3.5">
+      <div className="flex items-center justify-between">
+        <strong className="text-xs font-black text-emerald-950 uppercase tracking-wide">Formas de Pagamento</strong>
+        <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${remaining === 0 ? 'bg-emerald-200 text-emerald-900' : remaining > 0 ? 'bg-amber-200 text-amber-900' : 'bg-red-200 text-red-900'}`}>
+          {remaining === 0 ? '✓ Total preenchido' : remaining > 0 ? `Falta ${money(remaining)}` : `Excesso ${money(-remaining)}`}
+        </span>
+      </div>
+      <div className="space-y-2">
+        {parts.map((part, index) => <div key={index} className="flex flex-wrap items-center gap-2 rounded-xl border border-emerald-100 bg-white p-2.5 shadow-xs">
+          <span className="text-xs font-black text-emerald-800 bg-emerald-100 rounded px-1.5 py-0.5">#{index + 1}</span>
+          <select
+            value={part.method}
+            onChange={(event) => update(index, { method: event.target.value })}
+            className="flex-1 min-w-[130px] rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs font-bold text-slate-800"
+          >
+            {methodOptions.map(opt => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
+          </select>
+          <div className="flex items-center gap-1">
+            <span className="text-xs font-bold text-slate-400">R$</span>
+            <input
+              aria-label={`Valor da parcela ${index + 1}`}
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={part.amount}
+              onChange={(event) => update(index, { amount: event.target.value })}
+              className="w-28 rounded-lg border border-slate-300 p-2 text-xs font-bold text-emerald-950"
+              placeholder="0,00"
+            />
+          </div>
+          {parts.length > 1 && <button
+            type="button"
+            title="Remover parcela"
+            aria-label={`Remover parcela ${index + 1}`}
+            className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-red-100 text-slate-500 hover:text-red-600 flex items-center justify-center font-bold text-xs transition cursor-pointer"
+            onClick={() => onChange(parts.filter((_, current) => current !== index))}
+          >✕</button>}
+        </div>)}
+      </div>
+      <div className="pt-1 flex items-center justify-between">
+        <p className="text-xs font-bold text-slate-700">
+          {remaining === 0 ? '✓ Valor total distribuído com sucesso!' : remaining > 0 ? `⚠️ Falta distribuir: ${money(remaining)}` : `⚠️ Excedente: ${money(-remaining)}`}
+        </p>
+        {parts.length < methodOptions.length && remaining > 0 && <button
+          type="button"
+          className="text-xs font-bold text-emerald-800 hover:underline flex items-center gap-1 cursor-pointer"
+          onClick={() => {
+            const unusedMethod = methodOptions.find(opt => !parts.some(p => p.method === opt.id))?.id || methodOptions[0].id;
+            onChange([...parts, { method: unusedMethod, amount: Math.max(0, remaining).toFixed(2) }]);
+          }}
+        >
+          + Adicionar forma ({money(remaining)})
+        </button>}
+      </div>
+    </section>;
   }
   function Topbar({ user, onSearch, searchValue, searchInputRef, onCashier, hideCashier }) {
     const ref = useRef(null);
@@ -264,7 +368,7 @@ window.PdvComponents = (() => {
     if (order.completedAt) return 'Confirmado';
     return 'Em andamento';
   }
-  function ManualPixReview({ order }) {
+  function ManualPixReview({ order, onReviewed }) {
     const [note, setNote] = useState(''); const [bankReceived, setBankReceived] = useState(false);
     const [busy, setBusy] = useState(false); const [error, setError] = useState('');
     async function review(decision) {
@@ -272,7 +376,7 @@ window.PdvComponents = (() => {
       try {
         const response = await window.ConfloraSession.apiFetch('/api/caixa/orders/' + order.id + '/review-proof', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision, proofId: order.paymentProofId, bankReceived, note }) });
         const data = await response.json(); if (!response.ok) throw new Error(data.error);
-        location.reload();
+        if (onReviewed) { onReviewed(data.order); }
       } catch (failure) { setError(failure.message); } finally { setBusy(false); }
     }
     async function viewProof() {
@@ -281,50 +385,743 @@ window.PdvComponents = (() => {
     return <section className="my-3 space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4"><h3 className="font-bold">Pix manual · aguardando conferência</h3><p>O envio do comprovante não confirma o recebimento.</p>{error && <p role="alert" className="text-red-700">{error}</p>}{order.paymentProofId ? <><button type="button" className={button} onClick={viewProof}>Ver comprovante enviado pelo cliente</button><label className="block"><input type="checkbox" checked={bankReceived} onChange={event => setBankReceived(event.target.checked)} /> Conferi o recebimento na conta bancária e o valor da parcela Pix.</label><label className="block">Observação ou motivo<textarea className={field} value={note} onChange={event => setNote(event.target.value)} /></label><div className="flex gap-2"><button type="button" className={button} disabled={busy || !bankReceived || note.trim().length < 8} onClick={() => review('APPROVE')}>Confirmar recebimento Pix</button><button type="button" className="cf-danger-button" disabled={busy || note.trim().length < 8} onClick={() => review('REJECT')}>Recusar comprovante</button></div></> : <p>Aguardando envio do comprovante pelo cliente. Chave Pix: {order.manualPix?.key}</p>}</section>;
   }
 
-  function OrderDetails({ order, onClose, canReceive = false, canConfirmManualPix = false, busy = false, error = '', onReceive, onManualPix, canAdvance = false, onAdvance, deliveryMode = false, extraContent, canApproveCredit = false }) {
-    const initialMethod = ['CARTAO', 'CARD', 'MISTO'].includes(order.paymentMethod) ? '' : order.paymentMethod === 'CASH' ? 'DINHEIRO' : order.paymentMethod || 'DINHEIRO';
-    const [paymentMethod, setPaymentMethod] = useState(initialMethod);
-    const [cashAmount, setCashAmount] = useState(Number(order.total || 0).toFixed(2));
+  function SeparationModal({ order, isOpen, onClose, checkedItems = {}, onToggleItem, onCheckAll, onDepart, canDepart }) {
+    if (!isOpen || !order) return null;
+    const items = Array.isArray(order.items) ? order.items : [];
+    const checkedCount = Object.values(checkedItems || {}).filter(Boolean).length;
+    const allChecked = items.length > 0 && items.every((_, idx) => (checkedItems || {})[idx]);
+    const progressPercent = items.length > 0 ? Math.round((checkedCount / items.length) * 100) : 0;
+
+    return <div className="fixed inset-0 z-[85] flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-3 sm:p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <section role="dialog" aria-modal="true" aria-label="Conferência de produtos" className="bg-white rounded-3xl w-full max-w-lg max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-emerald-100">
+        <header className="p-4 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between shrink-0">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full">Conferência & Separação</span>
+              <span className="text-xs font-bold text-slate-500">#{order.ticketNumber || String(order.id).slice(-6)}</span>
+            </div>
+            <h2 className="text-base font-black text-slate-800 mt-1">{order.customerName || 'Cliente Balcão'}</h2>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Fechar" className="w-8 h-8 rounded-full border border-slate-200 text-slate-500 hover:bg-slate-100 flex items-center justify-center text-sm font-bold cursor-pointer">✕</button>
+        </header>
+
+        <div className="px-4 py-3 bg-emerald-50/60 border-b border-emerald-100 shrink-0">
+          <div className="flex items-center justify-between text-xs mb-1.5">
+            <span className="font-black text-emerald-950">
+              {allChecked ? '🎉 Todos os itens separados!' : `${checkedCount} de ${items.length} itens conferidos`}
+            </span>
+            {!allChecked && (
+              <button
+                type="button"
+                onClick={onCheckAll}
+                className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 underline cursor-pointer"
+              >
+                Marcar todos como separados
+              </button>
+            )}
+          </div>
+          <div className="h-2.5 w-full bg-slate-200 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-emerald-500 transition-all duration-300 rounded-full"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        </div>
+
+        <div className="p-4 overflow-y-auto space-y-2.5 min-h-0 flex-1">
+          <p className="text-[11px] font-semibold text-slate-500 mb-2">Toque em cada produto conforme for separando:</p>
+          {items.map((item, idx) => {
+            const isChecked = Boolean((checkedItems || {})[idx]);
+            const qty = Number(item.quantity || 0).toLocaleString('pt-BR', { maximumFractionDigits: item.unit === 'KG' ? 3 : 0 });
+            return (
+              <div
+                key={idx}
+                onClick={() => onToggleItem(idx)}
+                className={`p-3 rounded-2xl border transition-all flex items-center gap-3 cursor-pointer select-none active:scale-[0.99] ${
+                  isChecked
+                    ? 'bg-emerald-50/90 border-emerald-400 shadow-xs'
+                    : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/60'
+                }`}
+              >
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-black shrink-0 transition-transform ${
+                    isChecked
+                      ? 'bg-emerald-600 text-white shadow-md scale-105'
+                      : 'border-2 border-slate-300 text-transparent bg-slate-50'
+                  }`}
+                >
+                  ✓
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-900 shrink-0">
+                      {qty} {item.unit === 'KG' ? 'kg' : 'un'}
+                    </span>
+                    <span className={`text-sm font-bold truncate ${isChecked ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+                      {item.name}
+                    </span>
+                  </div>
+                  {item.variation && <p className="text-[11px] text-slate-500 ml-1 mt-0.5">{item.variation}</p>}
+                </div>
+
+                <div className="text-right shrink-0">
+                  <span className="text-xs font-extrabold text-slate-600 block">{money(item.total || item.price * item.quantity)}</span>
+                  {isChecked && <span className="text-[10px] font-black text-emerald-700 uppercase">✓ Pronto</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <footer className="p-4 border-t border-slate-100 bg-slate-50/90 shrink-0">
+          {allChecked && canDepart ? (
+            <button
+              type="button"
+              onClick={onDepart}
+              className="cf-btn-3d cf-btn-3d--primary cf-btn-3d--lg cf-btn-3d--block"
+            >
+              <span>🛵 Marcar como Saiu para Entrega & Abrir Rota</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onClose}
+              className="cf-btn-3d cf-btn-3d--secondary cf-btn-3d--md cf-btn-3d--block"
+            >
+              {allChecked ? '✓ Fechar conferência' : 'Voltar ao pedido'}
+            </button>
+          )}
+        </footer>
+      </section>
+    </div>;
+  }
+
+  function FinalizedOrderDetails({ order, onOpenSeparation }) {
+    const startMs = Date.parse(order.createdAt);
+    const endMs = Date.parse(order.completedAt || order.deliveredAt || order.paidAt || order.updatedAt);
+    const totalSeconds = (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs >= startMs)
+      ? (endMs - startMs) / 1000
+      : null;
+
+    const formatDur = (sec) => {
+      if (sec == null || !Number.isFinite(sec) || sec < 0) return 'Tempo não registrado';
+      if (sec < 60) return `${Math.round(sec)} seg`;
+      const mins = Math.floor(sec / 60);
+      const hrs = Math.floor(mins / 60);
+      const remM = mins % 60;
+      if (hrs === 0) return `${mins} min`;
+      if (remM === 0) return `${hrs} h`;
+      return `${hrs} h ${remM} min`;
+    };
+
+    const isSelfService = order.source === 'WEB_CATALOG' ||
+      !order.createdBy ||
+      ['ONLINE', 'SYSTEM', 'AUTOATENDIMENTO'].includes(order.createdBy.id) ||
+      order.createdBy.role === 'SYSTEM' ||
+      order.createdBy.name === 'Catálogo online' ||
+      order.createdBy.name === 'Autoatendimento';
+
+    const sellerTitle = isSelfService
+      ? (order.source === 'WHATSAPP' || order.channel === 'WHATSAPP'
+          ? '🤖 Autoatendimento (WhatsApp Conflora IA)'
+          : '🌐 Autoatendimento (Loja Virtual Conflora)')
+      : (order.createdBy?.name || order.sellerName || order.operatorName || 'Colaborador Conflora');
+
+    const sellerSub = isSelfService
+      ? 'Pedido realizado diretamente pelo cliente no catálogo online sem vendedor físico'
+      : (order.createdBy?.email ? `${order.createdBy.role || 'Vendedor'} · ${order.createdBy.email}` : (order.createdBy?.role || 'Vendedor Conflora'));
+
+    const isDelivery = Boolean(order.deliveryAddress || order.deliveryStatus || order.fulfillment === 'DELIVERY');
+    const driverName = order.deliveredBy?.name || order.assignedDriver?.name || 'Equipe Conflora';
+
+    const routeSeconds = order.deliveryMetrics?.durationSeconds ??
+      (order.deliveredAt && (order.departedAt || order.acceptedAt)
+        ? (Date.parse(order.deliveredAt) - Date.parse(order.departedAt || order.acceptedAt)) / 1000
+        : null);
+
+    const cleanPhone = String(order.customerPhone || '').replace(/\D/g, '');
+
+    const printReceipt = () => {
+      if (window.ConfloraOrderDisplay?.renderReceipt) {
+        const receiptWindow = window.open('', '_blank', 'width=420,height=600');
+        if (receiptWindow) {
+          receiptWindow.document.write('<html><head><title>Comprovante Conflora</title><link rel="stylesheet" href="/store-assets/order-display.css"></head><body style="padding:16px;"></body></html>');
+          receiptWindow.document.body.appendChild(window.ConfloraOrderDisplay.renderReceipt(order));
+          receiptWindow.document.close();
+          setTimeout(() => receiptWindow.print(), 300);
+        }
+      } else {
+        window.print();
+      }
+    };
+
+    const sendWhatsAppReceipt = () => {
+      if (!cleanPhone) return;
+      const itemsText = (order.items || []).map(item => `• ${item.quantity}x ${item.name} (${money(item.total || item.price * item.quantity)})`).join('%0A');
+      const msg = `*CONFLORA HORTA E VIVEIRO*%0A%0AOlá, *${order.customerName || 'Cliente'}*!%0ASua compra foi finalizada com sucesso! 🌱%0A%0A*Comanda:* %23${order.ticketNumber || String(order.id).slice(-6).toUpperCase()}%0A*Total:* ${money(order.total)}%0A*Pagamento:* ${paymentLabel(order.paymentMethod)}%0A%0A*Itens do Pedido:*%0A${itemsText}%0A%0AAgradecemos pela preferência! Ficamos à disposição.`;
+      window.open(`https://wa.me/55${cleanPhone}?text=${msg}`, '_blank');
+    };
+
+    return (
+      <div className="space-y-3 pt-2">
+        {/* 1. CARTÃO DE DESTAQUE: TEMPO DE ATENDIMENTO & STATUS */}
+        <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-green-50 border border-emerald-200 shadow-2xs">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">⏱️</span>
+              <div>
+                <span className="text-[10px] uppercase font-black tracking-wider text-emerald-800 block">Tempo do Pedido à Finalização</span>
+                <strong className="text-base font-black text-emerald-950">
+                  {totalSeconds ? formatDur(totalSeconds) : 'Venda Concluída'}
+                </strong>
+              </div>
+            </div>
+            <span className="text-xs font-black px-2.5 py-1 rounded-full bg-emerald-600 text-white shadow-2xs">
+              ✅ Finalizada
+            </span>
+          </div>
+          <div className="mt-2.5 pt-2 border-t border-emerald-200/60 flex items-center justify-between text-xs text-slate-600">
+            <span>🕒 Pedido: <strong>{dateTime(order.createdAt)}</strong></span>
+            <span>🏁 Finalizado: <strong>{dateTime(order.completedAt || order.deliveredAt || order.paidAt)}</strong></span>
+          </div>
+        </div>
+
+        {/* 2. QUEM COMPROU, QUEM VENDEU & QUEM ENTREGOU (GRID) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          {/* QUEM COMPROU */}
+          <div className="p-3 rounded-2xl bg-white border border-slate-200/90 shadow-2xs">
+            <span className="text-[10px] uppercase font-black tracking-wider text-slate-400 block mb-1">
+              👤 Quem comprou
+            </span>
+            <p className="font-black text-sm text-slate-900 leading-tight">
+              {order.customerName || 'Cliente Balcão'}
+            </p>
+            {cleanPhone && (
+              <p className="text-xs text-slate-600 mt-1 flex items-center gap-1.5 font-medium">
+                <span>📱</span>
+                <span>{order.customerPhone}</span>
+              </p>
+            )}
+            {order.customerEmail && (
+              <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+                ✉️ {order.customerEmail}
+              </p>
+            )}
+            {(order.customerDocument || order.customerCpfCnpj) && (
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                📄 Doc: {order.customerDocument || order.customerCpfCnpj}
+              </p>
+            )}
+          </div>
+
+          {/* QUEM VENDEU */}
+          <div className="p-3 rounded-2xl bg-white border border-slate-200/90 shadow-2xs">
+            <span className="text-[10px] uppercase font-black tracking-wider text-slate-400 block mb-1">
+              🏷️ Quem vendeu
+            </span>
+            <p className="font-black text-sm text-slate-900 leading-tight flex items-center gap-1.5">
+              {isSelfService ? <span>🌐</span> : <span>👨‍🌾</span>}
+              <span>{sellerTitle}</span>
+            </p>
+            <p className="text-[11px] text-slate-500 mt-1 leading-snug">
+              {sellerSub}
+            </p>
+            {isSelfService && (
+              <span className="inline-block mt-1 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-100 text-blue-800">
+                Autoatendimento
+              </span>
+            )}
+          </div>
+
+          {/* QUEM ENTREGOU / MODALIDADE */}
+          <div className="p-3 rounded-2xl bg-white border border-slate-200/90 shadow-2xs sm:col-span-2">
+            <div className="flex items-start justify-between">
+              <div>
+                <span className="text-[10px] uppercase font-black tracking-wider text-slate-400 block mb-1">
+                  {isDelivery ? '🛵 Quem entregou' : '🏬 Modalidade'}
+                </span>
+                <p className="font-black text-sm text-slate-900 leading-tight flex items-center gap-1.5">
+                  {isDelivery ? <span>🛵</span> : <span>🏬</span>}
+                  <span>{isDelivery ? driverName : 'Retirada no Balcão da Horta'}</span>
+                </p>
+                {isDelivery && order.deliveryAddress && (
+                  <p className="text-xs text-slate-700 mt-1 font-medium">
+                    📍 {order.deliveryAddress}
+                    {order.deliveryLocation?.reference && (
+                      <span className="text-slate-500 block text-[11px]">Ref: {order.deliveryLocation.reference}</span>
+                    )}
+                  </p>
+                )}
+              </div>
+              {isDelivery && routeSeconds && (
+                <div className="text-right">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Tempo em rota</span>
+                  <span className="text-xs font-black text-sky-800 bg-sky-100 px-2 py-0.5 rounded-full">
+                    {formatDur(routeSeconds)}
+                  </span>
+                </div>
+              )}
+            </div>
+            {isDelivery && (order.deliveryMetrics?.distanceKm || order.deliveryRoute?.distanceMeters) && (
+              <div className="mt-2 pt-2 border-t border-slate-100 text-xs text-slate-500 flex items-center gap-2">
+                <span>🛣️ Distância percorrida/estimada:</span>
+                <strong className="text-slate-700">
+                  {order.deliveryMetrics?.distanceKm
+                    ? `${Number(order.deliveryMetrics.distanceKm).toFixed(2)} km`
+                    : `${(order.deliveryRoute.distanceMeters / 1000).toFixed(2)} km`}
+                </strong>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 3. PAGAMENTO DETALHADO & RECEBIMENTO */}
+        <div className="p-3.5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs space-y-2">
+          <span className="text-[10px] uppercase font-black tracking-wider text-slate-400 block">
+            💳 Pagamento e Liquidação
+          </span>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-slate-600">Forma de pagamento:</span>
+            <span className="font-black text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg">
+              {paymentLabel(order.paymentMethod)}
+            </span>
+          </div>
+
+          {order.paymentParts && order.paymentParts.length > 1 && (
+            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+              <span className="text-[11px] font-bold text-slate-500 block">Divisão do pagamento:</span>
+              {order.paymentParts.map((part, idx) => (
+                <div key={idx} className="flex justify-between text-xs font-medium text-slate-700">
+                  <span>• {paymentLabel(part.method)}</span>
+                  <strong className="text-slate-900">{money(part.amount)}</strong>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {order.cashReceivedAmount && Number(order.cashReceivedAmount) > Number(order.total) && (
+            <div className="flex items-center justify-between text-xs text-slate-600 pt-1 border-t border-slate-100">
+              <span>Recebido em dinheiro: {money(order.cashReceivedAmount)}</span>
+              <span className="font-bold text-emerald-800">Troco: {money(order.cashChange || 0)}</span>
+            </div>
+          )}
+
+          {(order.financialReceiver?.name || order.receivedBy?.name) && (
+            <div className="text-[11px] text-slate-500 pt-1 border-t border-slate-100 flex items-center gap-1">
+              <span>Recebido / conferido por:</span>
+              <strong className="text-slate-700">{order.financialReceiver?.name || order.receivedBy?.name}</strong>
+            </div>
+          )}
+        </div>
+
+        {/* 4. RESUMO DOS ITENS */}
+        <div className="p-3.5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">
+              🛍️ Itens da Venda ({(order.items || []).length})
+            </span>
+            {onOpenSeparation && (
+              <button
+                type="button"
+                onClick={onOpenSeparation}
+                className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <span>Ver conferência dos itens</span>
+                <span>→</span>
+              </button>
+            )}
+          </div>
+          <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+            {(order.items || []).map((item, idx) => (
+              <div key={idx} className="flex items-center justify-between text-xs py-1 border-b border-slate-100 last:border-b-0">
+                <span className="font-medium text-slate-800 flex-1 pr-2 truncate">
+                  <strong className="text-slate-900 mr-1.5">{item.quantity} {item.unit || 'un'}</strong>
+                  {item.name}
+                </span>
+                <span className="font-bold text-slate-900 whitespace-nowrap">
+                  {money(item.total || (item.price * item.quantity))}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-2.5 pt-2 border-t border-slate-200 flex items-center justify-between text-xs">
+            <span className="text-slate-500">Subtotal:</span>
+            <span className="font-bold text-slate-800">{money(order.subtotal || order.total)}</span>
+          </div>
+          {order.discountAmount > 0 && (
+            <div className="flex items-center justify-between text-xs text-emerald-700 font-bold">
+              <span>Desconto ({order.discountPercent || 0}%):</span>
+              <span>-{money(order.discountAmount)}</span>
+            </div>
+          )}
+          <div className="flex items-center justify-between text-sm font-black text-emerald-950 pt-1">
+            <span>Total Final Pago:</span>
+            <span className="text-base text-emerald-800">{money(order.total)}</span>
+          </div>
+        </div>
+
+        {/* 5. AÇÕES RÁPIDAS (IMPRIMIR RECIBO & WHATSAPP) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+          <button
+            type="button"
+            onClick={printReceipt}
+            className="cf-btn-3d cf-btn-3d--secondary cf-btn-3d--md"
+          >
+            <span>🖨️</span>
+            <span>Imprimir Comprovante</span>
+          </button>
+
+          {cleanPhone ? (
+            <button
+              type="button"
+              onClick={sendWhatsAppReceipt}
+              className="cf-btn-3d cf-btn-3d--primary cf-btn-3d--md"
+            >
+              <span>💬</span>
+              <span>Enviar no WhatsApp</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onOpenSeparation}
+              className="cf-btn-3d cf-btn-3d--secondary cf-btn-3d--md"
+            >
+              <span>📦</span>
+              <span>Conferência de Produtos</span>
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  function OrderDetails({
+    order,
+    onClose,
+    canReceive = false,
+    canConfirmManualPix = false,
+    busy = false,
+    error = '',
+    onReceive,
+    onManualPix,
+    onReviewed,
+    canAdvance = false,
+    onAdvance,
+    deliveryMode = false,
+    extraContent,
+    canApproveCredit = false,
+    onStartDelivery,
+    onAcceptDelivery,
+    onCompleteDelivery,
+    navigation,
+    showSeparationModalInitial = false,
+    onCloseSeparationModal
+  }) {
+    const total = Number(order.total || 0);
+    const totalCents = Math.round(total * 100);
+    const initialMethod = ['CARTAO', 'CARD', 'MISTO'].includes(order.paymentMethod) ? 'CREDITO' : order.paymentMethod === 'CASH' ? 'DINHEIRO' : order.paymentMethod || 'DINHEIRO';
+
+    const [parts, setParts] = useState(() => {
+      if (Array.isArray(order.paymentParts) && order.paymentParts.length > 1) {
+        return order.paymentParts.map(p => ({ method: p.method, amount: String(p.amount) }));
+      }
+      return [{ method: initialMethod, amount: total.toFixed(2) }];
+    });
+
     const [copied, setCopied] = useState(false);
     const [manualPixNote, setManualPixNote] = useState('');
     const [manualProofSeen, setManualProofSeen] = useState(false);
     const [proofId, setProofId] = useState('');
+    const [showSeparationModal, setShowSeparationModal] = useState(Boolean(showSeparationModalInitial));
+    const [checkedItems, setCheckedItems] = useState({});
+
     useEffect(() => {
-      setPaymentMethod(initialMethod);
-      setCashAmount(Number(order.total || 0).toFixed(2));
+      if (showSeparationModalInitial) setShowSeparationModal(true);
+    }, [showSeparationModalInitial]);
+
+    const handleCloseSeparation = () => {
+      setShowSeparationModal(false);
+      onCloseSeparationModal?.();
+    };
+
+    const handleToggleItemCheck = (idx) => {
+      setCheckedItems(prev => {
+        const next = { ...prev, [idx]: !prev[idx] };
+        const items = order.items || [];
+        if (items.length > 0 && items.every((_, i) => next[i])) {
+          setTimeout(() => {
+            if (onStartDelivery) {
+              if (confirm('Todos os itens foram separados com sucesso!\n\nDESEJA MARCAR COMO SAIU PARA ENTREGA?')) {
+                onStartDelivery();
+                if (navigation?.google) window.open(navigation.google, '_blank');
+                handleCloseSeparation();
+              }
+            }
+          }, 200);
+        }
+        return next;
+      });
+    };
+
+    const handleCheckAll = () => {
+      const items = order.items || [];
+      const all = {};
+      items.forEach((_, i) => { all[i] = true; });
+      setCheckedItems(all);
+      setTimeout(() => {
+        if (onStartDelivery) {
+          if (confirm('Todos os itens foram separados com sucesso!\n\nDESEJA MARCAR COMO SAIU PARA ENTREGA?')) {
+            onStartDelivery();
+            if (navigation?.google) window.open(navigation.google, '_blank');
+            handleCloseSeparation();
+          }
+        }
+      }, 200);
+    };
+
+    const handleDepartFromModal = () => {
+      if (onStartDelivery) {
+        onStartDelivery();
+        if (navigation?.google) window.open(navigation.google, '_blank');
+      }
+      handleCloseSeparation();
+    };
+
+    useEffect(() => {
+      if (Array.isArray(order.paymentParts) && order.paymentParts.length > 1) {
+        setParts(order.paymentParts.map(p => ({ method: p.method, amount: String(p.amount) })));
+      } else {
+        setParts([{ method: initialMethod, amount: total.toFixed(2) }]);
+      }
       setCopied(false);
       setManualPixNote('');
       setManualProofSeen(false);
-    }, [order.id, order.status, order.paymentMethod]);
-    const [splitPayment, setSplitPayment] = useState(order.paymentParts?.length > 1);
-    const [paymentParts, setPaymentParts] = useState(order.paymentParts?.length > 1 ? order.paymentParts : [{ method: 'DINHEIRO', amount: '' }, { method: 'CREDITO', amount: '' }]);
-    const totalCents = Math.round(Number(order.total) * 100);
-    const enteredCents = Math.round(Number(cashAmount) * 100);
-    const remainingCents = totalCents - enteredCents;
-    const invalidAmount = splitPayment
-      ? paymentParts.some(part => !part.method || !Number.isFinite(Number(part.amount)) || Number(part.amount) <= 0) || paymentParts.reduce((sum, part) => sum + Math.round(Number(part.amount) * 100), 0) !== totalCents || new Set(paymentParts.map(part => part.method)).size !== paymentParts.length
-      : !Number.isFinite(enteredCents) || enteredCents <= 0 || remainingCents > 0 || (paymentMethod !== 'DINHEIRO' && remainingCents !== 0);
-    const enableSplitPayment = () => {
-      const firstAmount = Math.min(totalCents, Math.max(0, enteredCents || 0));
-      const method = paymentMethod || 'DINHEIRO';
-      setPaymentParts([{ method, amount: (firstAmount / 100).toFixed(2) }, { method: method === 'CREDITO' ? 'DINHEIRO' : 'CREDITO', amount: ((totalCents - firstAmount) / 100).toFixed(2) }]);
-      setSplitPayment(true);
+    }, [order.id, order.status, order.paymentMethod, order.total]);
+
+    const methodLabels = {
+      DINHEIRO: '💵 Dinheiro',
+      DEBITO: '💳 Débito',
+      CREDITO: '💳 Crédito',
+      PIX: window.CONFLORA_PIX_MODE === 'MANUAL' ? '⚡ Pix (Manual)' : '⚡ Pix (QR Code)',
+      ...(!deliveryMode ? { FIADO: '📝 Fiado (Admin)' } : {})
     };
+    const availableMethods = Object.keys(methodLabels).filter(m => (m !== 'FIADO' || order.customerId));
+
+    const sumCents = parts.reduce((sum, p) => sum + Math.round(Number(p.amount || 0) * 100), 0);
+    const remainingCents = totalCents - sumCents;
+    const isSingle = parts.length === 1;
+    const isSingleCash = isSingle && parts[0].method === 'DINHEIRO';
+    const singleCashTendered = isSingleCash ? Math.round(Number(parts[0].amount || 0) * 100) : 0;
+    const cashChange = isSingleCash && singleCashTendered >= totalCents ? (singleCashTendered - totalCents) / 100 : 0;
+
+    const allAmountsValid = parts.every(p => Number(p.amount || 0) > 0);
+    const uniqueMethods = new Set(parts.map(p => p.method)).size === parts.length;
+    const isExactMatch = sumCents === totalCents && allAmountsValid && uniqueMethods;
+    const canFinalize = isSingleCash ? (singleCashTendered >= totalCents) : isExactMatch;
+
     const [directPix, setDirectPix] = useState(order.pixMode === 'MANUAL');
-    const hasPixPart = splitPayment ? paymentParts.some((part) => part.method === 'PIX') : paymentMethod === 'PIX';
+    const hasPixPart = parts.some((p) => p.method === 'PIX');
     const needsManualProof = (directPix || window.CONFLORA_PIX_MODE === 'MANUAL') && hasPixPart;
     const pixCopyPaste = order.pixData?.pixCopiaECola || order.pixCopiaECola || '';
-    const pixAmount = order.paymentMethod !== 'PIX' ? Number(order.total || 0) : (order.paymentParts || [{ method: order.paymentMethod, amount: order.total }])
-      .filter((part) => part.method === 'PIX').reduce((sum, part) => sum + Number(part.amount || 0), 0);
+    const pixAmount = (order.paymentParts || parts).filter((p) => p.method === 'PIX').reduce((sum, p) => sum + Number(p.amount || 0), 0) || total;
+
     const copyPixCode = async () => {
       try { await navigator.clipboard.writeText(pixCopyPaste); setCopied(true); }
       catch { setCopied(false); }
     };
-    return <Panel title={`Comanda #${order.ticketNumber || String(order.id).slice(-6).toUpperCase()}`} onClose={onClose}>{order.pixMode === 'MANUAL' && !order.completedAt && canReceive && <ManualPixReview order={order} />}
+
+    const handlePart0Amount = (val) => {
+      const valNum = Number(val);
+      const valCents = Math.round(valNum * 100);
+      if (Number.isFinite(valCents) && valCents > 0 && valCents < totalCents) {
+        const remVal = ((totalCents - valCents) / 100).toFixed(2);
+        if (parts.length === 1) {
+          const nextMethod = availableMethods.find(m => m !== parts[0].method) || 'DINHEIRO';
+          setParts([
+            { method: parts[0].method, amount: val },
+            { method: nextMethod, amount: remVal }
+          ]);
+          return;
+        }
+      }
+      setParts(parts.map((p, idx) => idx === 0 ? { ...p, amount: val } : p));
+    };
+
+    const updatePart = (index, updates) => {
+      setParts(parts.map((p, idx) => idx === index ? { ...p, ...updates } : p));
+    };
+
+    const removePart = (index) => {
+      const filtered = parts.filter((_, idx) => idx !== index);
+      if (filtered.length === 1) {
+        filtered[0] = { ...filtered[0], amount: total.toFixed(2) };
+      }
+      setParts(filtered);
+    };
+
+    const addPart = () => {
+      const unusedMethod = availableMethods.find(m => !parts.some(p => p.method === m)) || availableMethods[0];
+      const autoAmount = remainingCents > 0 ? (remainingCents / 100).toFixed(2) : '0.00';
+      setParts([...parts, { method: unusedMethod, amount: autoAmount }]);
+    };
+
+    const handleConfirmReceive = () => {
+      const isSplit = parts.length > 1;
+      const finalMethod = isSplit ? 'MISTO' : needsManualProof ? 'PIX_MANUAL' : parts[0].method;
+      const finalCash = (!isSplit && parts[0].method === 'DINHEIRO') ? parts[0].amount : null;
+      const finalParts = isSplit ? parts.map(p => ({ ...p, amount: Number(p.amount) })) : undefined;
+      onReceive(order, finalMethod, finalCash, finalParts, {
+        manualPix: needsManualProof,
+        proofSeen: manualProofSeen,
+        note: manualPixNote,
+        proofId,
+      });
+    };
+
+    let fabAction = null;
+    if (canReceive) {
+      if (!canFinalize && remainingCents > 0) {
+        fabAction = {
+          label: `⚠️ Falta preencher ${money(remainingCents / 100)}`,
+          disabled: true,
+          onClick: () => {}
+        };
+      } else if (!canFinalize && remainingCents < 0) {
+        fabAction = {
+          label: `⚠️ Ajuste o valor excedente de ${money(-remainingCents / 100)}`,
+          disabled: true,
+          onClick: () => {}
+        };
+      } else if (needsManualProof && (!proofId || !manualProofSeen || manualPixNote.trim().length < 8)) {
+        fabAction = {
+          label: '⚠️ Anexe e confirme o comprovante Pix',
+          disabled: true,
+          onClick: () => {}
+        };
+      } else if (deliveryMode) {
+        fabAction = {
+          label: '🛵 Confirmar Recebimento e Concluir Entrega',
+          disabled: busy,
+          onClick: handleConfirmReceive,
+          tone: 'emerald'
+        };
+      } else if (isSingleCash && cashChange > 0) {
+        fabAction = {
+          label: `✅ Confirmar Recebimento (Troco: ${money(cashChange)})`,
+          disabled: busy,
+          onClick: handleConfirmReceive,
+          tone: 'emerald'
+        };
+      } else {
+        fabAction = {
+          label: `✅ Confirmar Pagamento de ${money(order.total)}`,
+          disabled: busy,
+          onClick: handleConfirmReceive,
+          tone: 'emerald'
+        };
+      }
+    } else if (canAdvance) {
+      fabAction = {
+        label: '✅ Confirmar comanda e aguardar pagamento',
+        disabled: busy,
+        onClick: () => onAdvance(order),
+        tone: 'emerald'
+      };
+    } else if (canApproveCredit && !(order.paymentParts?.length > 1)) {
+      fabAction = {
+        label: '📝 Aprovar fiado e liberar pedido',
+        disabled: busy,
+        onClick: () => onReceive(order, 'FIADO', null, order.paymentParts),
+        tone: 'amber'
+      };
+    } else if (deliveryMode) {
+      if (onAcceptDelivery) {
+        fabAction = {
+          label: '🛵 Assumir e separar este pedido',
+          disabled: busy,
+          onClick: onAcceptDelivery,
+          tone: 'amber'
+        };
+      } else if (onStartDelivery) {
+        const items = order.items || [];
+        const allChecked = items.length > 0 && items.every((_, i) => checkedItems[i]);
+        if (allChecked) {
+          fabAction = {
+            label: '🛵 Saí da horta · Iniciar rota no Maps',
+            disabled: busy,
+            onClick: handleDepartFromModal,
+            tone: 'emerald'
+          };
+        } else {
+          fabAction = {
+            label: `📦 Separar Itens (${Object.values(checkedItems).filter(Boolean).length}/${items.length})`,
+            disabled: busy,
+            onClick: () => setShowSeparationModal(true),
+            tone: 'sky'
+          };
+        }
+      } else if (onCompleteDelivery) {
+        fabAction = {
+          label: '✅ Confirmar que a entrega foi realizada',
+          disabled: busy,
+          onClick: onCompleteDelivery,
+          tone: 'emerald'
+        };
+      }
+    }
+
+    const isFinalized = Boolean(order.completedAt || order.deliveryStatus === 'DELIVERED' || order.status === 'COMPLETED' || (order.paymentStatus === 'APPROVED' && !canReceive && !canAdvance));
+
+    return <Panel title={`Comanda #${order.ticketNumber || String(order.id).slice(-6).toUpperCase()}`} onClose={onClose}>{order.pixMode === 'MANUAL' && !order.completedAt && canReceive && <ManualPixReview order={order} onReviewed={onReviewed} />}
       <div className="space-y-2 text-sm">
-        <p className="font-bold text-lg">{order.customerName || 'Cliente Balcão'}</p>
-        <p className="text-slate-600">{orderStatusLabel(order)} · {paymentLabel(order.paymentMethod)}</p>
-        <ReceiptView order={order} />
+        <div className="flex items-center justify-between bg-slate-50 border border-slate-200/80 p-2.5 rounded-xl">
+          <div>
+            <p className="font-black text-base text-slate-800 leading-tight">{order.customerName || 'Cliente Balcão'}</p>
+            <p className="text-xs text-slate-500 font-medium">{orderStatusLabel(order)} · {paymentLabel(order.paymentMethod)}</p>
+          </div>
+          <div className="text-right">
+            <span className="text-[10px] font-bold text-slate-400 block uppercase">Total</span>
+            <span className="text-base font-black text-emerald-800">{money(order.total)}</span>
+          </div>
+        </div>
+
+        {/* Minimalist receipt view: button to open dedicated Separation / Receipt Modal */}
+        <div className="border border-slate-200 rounded-2xl bg-white p-3 shadow-2xs">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                <span>📦</span>
+                <span>Separação & Cupom Detalhado</span>
+              </span>
+              <p className="text-[11px] text-slate-500 font-medium">
+                {(order.items || []).length} produto(s) · {Object.values(checkedItems).filter(Boolean).length} conferido(s)
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowSeparationModal(true)}
+              className="cf-btn-3d cf-btn-3d--secondary cf-btn-3d--sm"
+            >
+              <span>Ver produtos</span>
+              <span>→</span>
+            </button>
+          </div>
+        </div>
+
+        <SeparationModal
+          order={order}
+          isOpen={showSeparationModal}
+          onClose={handleCloseSeparation}
+          checkedItems={checkedItems}
+          onToggleItem={handleToggleItemCheck}
+          onCheckAll={handleCheckAll}
+          onDepart={handleDepartFromModal}
+          canDepart={Boolean(onStartDelivery)}
+        />
+
+        {isFinalized && <FinalizedOrderDetails order={order} onOpenSeparation={() => setShowSeparationModal(true)} />}
+
         {extraContent}
         {order.requiresRefund && <p role="alert" className="rounded-lg bg-amber-50 p-3 font-bold text-amber-900">Recebimento parcial de {money(order.refundDue)} pendente de conciliação ou estorno pela loja.</p>}
         {order.manualPixProofId && <a className="mt-3 inline-flex font-bold text-emerald-800 underline" href={'/api/caixa/payment-proofs/' + order.manualPixProofId} onClick={(event) => { event.preventDefault(); window.ConfloraSession.openPrivateFile('/api/caixa/payment-proofs/' + order.manualPixProofId).catch(error => alert(error.message)); }}>Ver comprovante Pix anexado</a>}
@@ -344,24 +1141,218 @@ window.PdvComponents = (() => {
           </div>}
         </section>}
         {canAdvance && <button type="button" className={button + ' mt-4 w-full'} disabled={busy} onClick={() => onAdvance(order)}>Confirmar comanda e aguardar pagamento</button>}
-        {canReceive && <section className="mt-4 space-y-2 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
-          <h3 className="font-black text-emerald-950">{deliveryMode ? 'Receber na entrega' : 'Receber no caixa'}</h3>
-          <PaymentMethodButtons value={paymentMethod} onChange={setPaymentMethod} labels={{ DINHEIRO: '💵 Dinheiro', DEBITO: '💳 Débito', CREDITO: '💳 Crédito', PIX: window.CONFLORA_PIX_MODE === 'MANUAL' ? 'Pix · conferência do caixa' : 'Pix · QR Code / Copia e Cola', ...(!deliveryMode ? { FIADO: 'Fiado · aprovação do Admin' } : {}) }} disabledMethods={order.customerId ? [] : ['FIADO', 'SALDO_CLIENTE']} />
-          <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={splitPayment} onChange={(event) => event.target.checked ? enableSplitPayment() : setSplitPayment(false)} />Usar mais de uma forma de pagamento</label>
-          {splitPayment && <PaymentPartsEditor parts={paymentParts} onChange={setPaymentParts} total={Number(order.total)} customerId={order.customerId} allowedMethods={deliveryMode ? ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO'] : ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO', 'FIADO']} />}
-          {hasPixPart && <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={directPix} onChange={(event) => setDirectPix(event.target.checked)} />Pix já recebido: confirmar manualmente</label>}
-          {needsManualProof && <div className="space-y-2"><PixProofUpload targetType="ORDER" targetId={order.id} onChange={setProofId} /><label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={manualProofSeen} onChange={(event) => setManualProofSeen(event.target.checked)} />Conferi o valor do Pix e a conta recebedora da Conflora.</label><label className="block text-xs">Observação do comprovante<textarea className={field} value={manualPixNote} onChange={(event) => setManualPixNote(event.target.value)} /></label></div>}
-          {paymentMethod && !splitPayment && <label className="block text-xs font-bold text-slate-700">Valor nesta forma de pagamento (R$)<input className={field} type="number" min="0.01" step="0.01" value={cashAmount} onChange={(event) => setCashAmount(event.target.value)} /></label>}
-          {paymentMethod === 'DINHEIRO' && !splitPayment && Number(cashAmount) >= Number(order.total || 0) && <p className="text-right text-xs font-bold text-emerald-900">Troco: {money(Number(cashAmount) - Number(order.total || 0))}</p>}
-          {!splitPayment && remainingCents > 0 && <div role="status" className="rounded-xl bg-amber-100 p-3 font-bold text-amber-950">Falta pagar {money(remainingCents / 100)}. Adicione outra forma de pagamento para concluir.<button type="button" className={button + ' mt-2 w-full'} onClick={enableSplitPayment}>Adicionar outra forma de pagamento</button></div>}
-          {!splitPayment && paymentMethod !== 'DINHEIRO' && remainingCents < 0 && <p role="alert" className="text-sm font-bold text-red-800">O valor informado excede o total em {money(-remainingCents / 100)}. Ajuste para continuar.</p>}
-          {!order.customerId && ['FIADO', 'SALDO_CLIENTE'].includes(paymentMethod) && <p className="text-xs text-amber-900">Selecione um cliente cadastrado antes de receber em fiado ou usar saldo.</p>}
+        {canReceive && <section className="mt-4 rounded-2xl border-2 border-emerald-300 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between border-b border-emerald-100 pb-2 mb-3">
+            <div>
+              <h3 className="text-base font-black text-emerald-950 flex items-center gap-1.5">
+                <span>{deliveryMode ? '🛵 Receber na Entrega' : '💵 Receber no Caixa'}</span>
+              </h3>
+              <p className="text-xs text-slate-500 font-medium">Informe a forma e confirme o valor exato</p>
+            </div>
+            <div className="text-right">
+              <span className="text-[10px] uppercase font-bold text-slate-500 block">Total do pedido</span>
+              <span className="text-base font-black text-emerald-800">{money(order.total)}</span>
+            </div>
+          </div>
 
-          <button type="button" className={button + ' w-full'} disabled={busy || invalidAmount || (!splitPayment && !paymentMethod) || (needsManualProof && (!proofId || !manualProofSeen || manualPixNote.trim().length < 8)) || (!splitPayment && paymentMethod === 'DINHEIRO' && Number(cashAmount) < Number(order.total || 0)) || (!splitPayment && ['FIADO', 'SALDO_CLIENTE'].includes(paymentMethod) && !order.customerId)} onClick={() => onReceive(order, splitPayment ? 'MISTO' : needsManualProof ? 'PIX_MANUAL' : paymentMethod, !splitPayment && paymentMethod === 'DINHEIRO' ? cashAmount : null, splitPayment ? paymentParts.map((part) => ({ ...part, amount: Number(part.amount) })) : undefined, { manualPix: needsManualProof, proofSeen: manualProofSeen, note: manualPixNote, proofId })}>
-            {busy ? 'Processando…' : hasPixPart && !needsManualProof ? 'Gerar QR Code Pix' : 'Confirmar pagamento e finalizar'}
-          </button>
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+              {parts.length > 1 ? '1ª Forma de pagamento:' : 'Forma de pagamento:'}
+            </label>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {availableMethods.map(m => (
+                <button
+                  type="button"
+                  key={m}
+                  className={`py-2.5 px-2 rounded-xl text-xs font-black transition border cursor-pointer ${
+                    parts[0].method === m
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                  onClick={() => updatePart(0, { method: m })}
+                >
+                  {methodLabels[m]}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-2.5">
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                {parts.length > 1 ? `Valor na 1ª forma (${methodLabels[parts[0].method]}):` : 'Valor recebido (R$):'}
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-2.5 text-sm font-bold text-slate-400">R$</span>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  className="w-full pl-10 pr-3 py-2 text-base font-black text-emerald-950 border border-slate-300 rounded-xl bg-white focus:border-emerald-500 focus:outline-none"
+                  value={parts[0].amount}
+                  onChange={(e) => handlePart0Amount(e.target.value)}
+                  placeholder="0,00"
+                />
+              </div>
+            </div>
+          </div>
+
+          {parts.length > 1 && (
+            <div className="mt-3 space-y-2.5 border-t border-emerald-100 pt-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-slate-700 uppercase tracking-wide">
+                  Pagamento Complementar
+                </span>
+                <span className="text-[11px] text-slate-500 font-medium">
+                  {parts.length} formas divididas
+                </span>
+              </div>
+
+              {parts.slice(1).map((part, idx) => {
+                const partIndex = idx + 1;
+                return (
+                  <div key={partIndex} className="p-2.5 rounded-xl border border-emerald-200 bg-emerald-50/70 flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-black text-emerald-800 bg-emerald-200 rounded px-1.5 py-0.5">
+                      #{partIndex + 1}
+                    </span>
+                    <select
+                      value={part.method}
+                      onChange={(e) => updatePart(partIndex, { method: e.target.value })}
+                      className="flex-1 min-w-[130px] rounded-lg border border-slate-300 bg-white p-2 text-xs font-bold text-slate-800"
+                    >
+                      {availableMethods.map(m => (
+                        <option key={m} value={m}>{methodLabels[m]}</option>
+                      ))}
+                    </select>
+                    <div className="relative w-32">
+                      <span className="absolute left-2.5 top-1.5 text-xs font-bold text-slate-400">R$</span>
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={part.amount}
+                        onChange={(e) => updatePart(partIndex, { amount: e.target.value })}
+                        className="w-full pl-8 pr-2 py-1.5 text-xs font-bold text-emerald-950 border border-slate-300 rounded-lg bg-white"
+                        placeholder="0,00"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      title="Remover esta forma"
+                      className="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs flex items-center justify-center cursor-pointer transition"
+                      onClick={() => removePart(partIndex)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                );
+              })}
+
+              {remainingCents > 0 && (
+                <button
+                  type="button"
+                  className="text-xs font-bold text-emerald-700 hover:text-emerald-900 hover:underline flex items-center gap-1 cursor-pointer py-1"
+                  onClick={addPart}
+                >
+                  + Adicionar outra forma de pagamento ({money(remainingCents / 100)})
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="mt-3">
+            {isSingleCash && cashChange > 0 && (
+              <div className="p-3 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-900 font-black text-sm flex items-center justify-between">
+                <span>💵 Troco a devolver ao cliente:</span>
+                <span className="text-base text-emerald-950">{money(cashChange)}</span>
+              </div>
+            )}
+            {remainingCents > 0 && (
+              <div className="p-3 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold flex items-center justify-between">
+                <span>⚠️ Falta receber para cobrir o total:</span>
+                <span className="text-sm font-black text-amber-950">{money(remainingCents / 100)}</span>
+              </div>
+            )}
+            {!isSingleCash && remainingCents < 0 && (
+              <div className="p-3 rounded-xl bg-red-50 border border-red-300 text-red-900 text-xs font-bold flex items-center justify-between">
+                <span>⚠️ O valor informado excede o total:</span>
+                <span className="text-sm font-black text-red-950">Excesso de {money(-remainingCents / 100)}</span>
+              </div>
+            )}
+            {isExactMatch && (
+              <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold flex items-center gap-1.5">
+                <span>✅ Valor total de {money(order.total)} preenchido com sucesso!</span>
+              </div>
+            )}
+          </div>
+
+          {needsManualProof && (
+            <div className="mt-3 space-y-2 border-t border-emerald-200 pt-3">
+              <PixProofUpload targetType="ORDER" targetId={order.id} onChange={setProofId} />
+              <label className="flex items-start gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                <input type="checkbox" checked={manualProofSeen} onChange={(e) => setManualProofSeen(e.target.checked)} className="mt-0.5" />
+                <span>Conferi o recebimento do Pix na conta bancária da Conflora.</span>
+              </label>
+              <textarea
+                className="w-full p-2 border border-slate-300 rounded-lg text-xs"
+                rows={2}
+                placeholder="Observação do comprovante (ex: comprovante conferido no ato)"
+                value={manualPixNote}
+                onChange={(e) => setManualPixNote(e.target.value)}
+              />
+            </div>
+          )}
+
+          <div className="sticky bottom-0 bg-white/95 backdrop-blur-md pt-3 pb-1 border-t border-slate-200 mt-4 z-20">
+            <button
+              type="button"
+              disabled={busy || !canFinalize || (needsManualProof && (!proofId || !manualProofSeen || manualPixNote.trim().length < 8))}
+              className={`cf-btn-3d cf-btn-3d--lg cf-btn-3d--block ${
+                canFinalize
+                  ? 'cf-btn-3d--primary'
+                  : 'cf-btn-3d--secondary'
+              }`}
+              onClick={handleConfirmReceive}
+            >
+              {busy ? (
+                'Processando…'
+              ) : !canFinalize && remainingCents > 0 ? (
+                `⚠️ Falta preencher ${money(remainingCents / 100)} para finalizar`
+              ) : !canFinalize && remainingCents < 0 ? (
+                `⚠️ Ajuste o valor excedente de ${money(-remainingCents / 100)}`
+              ) : needsManualProof && (!proofId || !manualProofSeen || manualPixNote.trim().length < 8) ? (
+                '⚠️ Anexe e confirme o comprovante Pix'
+              ) : deliveryMode ? (
+                '🛵 Confirmar Recebimento e Concluir Entrega'
+              ) : isSingleCash && cashChange > 0 ? (
+                `✅ Confirmar Recebimento (Troco: ${money(cashChange)})`
+              ) : (
+                `✅ Confirmar Pagamento de ${money(order.total)}`
+              )}
+            </button>
+          </div>
         </section>}
         {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-xs text-red-800">{error}</p>}
+
+        {/* Floating Action Button (FAB) pinned at the bottom for primary workflow actions */}
+        {fabAction && !canReceive && (
+          <div className="sticky bottom-0 left-0 right-0 -mx-4 -mb-4 mt-4 p-3 bg-white/95 backdrop-blur-md border-t border-slate-200 z-30 flex items-center justify-center shadow-lg">
+            <button
+              type="button"
+              disabled={fabAction.disabled}
+              onClick={fabAction.onClick}
+              className={`cf-btn-3d cf-btn-3d--lg cf-btn-3d--block ${
+                fabAction.disabled
+                  ? 'bg-slate-200 text-slate-500 cursor-not-allowed shadow-none'
+                  : fabAction.tone === 'amber'
+                  ? 'cf-btn-3d--warning'
+                  : fabAction.tone === 'sky'
+                  ? 'cf-btn-3d--sky'
+                  : 'cf-btn-3d--primary'
+              }`}
+            >
+              {fabAction.label}
+            </button>
+          </div>
+        )}
       </div>
     </Panel>;
   }
@@ -586,26 +1577,95 @@ window.PdvComponents = (() => {
 
             {view === 'report' && <>
               {['ADMIN', 'CAIXA'].includes(user.role) && <cashier-report-actions scope-label={user.role === 'ADMIN' ? 'Caixa geral da loja · período selecionado' : 'Somente o seu caixa · período selecionado'} from={dateFrom} to={dateTo}></cashier-report-actions>}
-              <h3 className="mb-3 font-black text-[#0F381E]">Relatório · {dateFrom === dateTo ? dateFrom : `${dateFrom} a ${dateTo}`}</h3>
-              <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-                <MetricCard label="Recebido em vendas" value={money(reportSalesTotal)} description={`${reportCashOrders.length} venda(s) com recebimento no período`} />
-                <MetricCard label="Saldo de cliente utilizado" value={money(reportCreditUsedTotal)} description="Crédito pago antecipadamente" />
-                <MetricCard label="Quitações de fiado" value={money(reportDebtTotal)} description={`${reportDebtSettlements.length} recebimento(s)`} />
-                <MetricCard label="Crédito antecipado" value={money(reportAdvanceTotal)} description={`${reportAdvanceCredits.length} recebimento(s)`} />
-                <MetricCard label="Total recebido" value={money(reportSalesTotal + reportDebtTotal + reportAdvanceTotal)} description="Vendas + quitações + créditos recebidos" />
-                <MetricCard label="Fiado lançado" value={money(data.closing.confirmedDebt)} description="Não incluído no total recebido" tone="debt" />
-                <MetricCard label="Quantidade de vendas" value={String(reportOrders.length)} />
-                <MetricCard label="Ticket médio" value={money(reportOrders.length ? reportOrders.reduce((sum, order) => sum + Number(order.total || 0), 0) / reportOrders.length : 0)} />
-                {['PIX', 'DINHEIRO', 'CREDITO', 'DEBITO', 'SALDO_CLIENTE'].map((method) => <MetricCard key={method} label={paymentLabel(method)} value={money(reportPaymentTotals[method])} />)}
+              
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-black text-[#0F381E]">Fechamento & Conferência do Caixa</h3>
+                  <p className="text-xs text-slate-500">Período: {dateFrom === dateTo ? dateFrom : `${dateFrom} a ${dateTo}`}</p>
+                </div>
+                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">
+                  {user.role === 'ADMIN' ? '👑 Visão Geral da Loja' : `👤 Caixa: ${user.name || 'Operador'}`}
+                </span>
               </div>
-              <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                <h4 className="border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-700">Conferência por forma de pagamento</h4>
-                <div className="divide-y divide-slate-100">{['PIX', 'DINHEIRO', 'CREDITO', 'DEBITO', 'SALDO_CLIENTE'].map((method) => <div key={method} className="grid grid-cols-2 items-center gap-2 px-4 py-3 text-xs sm:grid-cols-[1fr_auto_auto_auto] sm:gap-3"><strong>{paymentLabel(method)}</strong><span className="text-right font-bold text-[#0F381E] sm:order-last">{money(reportPaymentTotals[method])}</span><span className="text-slate-500">Vendas confirmadas</span><span className="text-right text-slate-500 sm:text-left">Recebimentos de clientes {money(data.closing.byPayment[method]?.debt || 0)}</span></div>)}</div>
+
+              {/* CARDS PRINCIPAIS DE FORMAS DE PAGAMENTO */}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                <MetricCard label="💵 Dinheiro" value={money(reportPaymentTotals['DINHEIRO'] || 0)} description="Vendas em espécie" />
+                <MetricCard label="⚡ PIX" value={money(reportPaymentTotals['PIX'] || 0)} description="Sicredi / recebidos" />
+                <MetricCard label="💳 Cartão Crédito" value={money(reportPaymentTotals['CREDITO'] || 0)} description="Relatório maquininha" />
+                <MetricCard label="💳 Cartão Débito" value={money(reportPaymentTotals['DEBITO'] || 0)} description="Relatório maquininha" />
+                <MetricCard label="📝 Fiado (A Receber)" value={money(data.closing.confirmedDebt || 0)} description="Vendas a prazo" tone="debt" />
+                <MetricCard label="💰 Total Recebido" value={money(reportSalesTotal + reportDebtTotal + reportAdvanceTotal)} description={`${reportOrders.length} venda(s) apurada(s)`} />
+              </div>
+
+              {/* TABELA DE CONFERÊNCIA POR FORMA DE PAGAMENTO */}
+              <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 bg-slate-100 px-4 py-3">
+                  <h4 className="text-sm font-bold text-slate-700">Conferência dos Valores Apurados pelo Sistema</h4>
+                </div>
+                <div className="divide-y divide-slate-100">
+                  {[
+                    { key: 'DINHEIRO', label: '💵 Dinheiro em Caixa', hint: 'Notas e moedas na gaveta' },
+                    { key: 'PIX', label: '⚡ PIX Recebido', hint: 'Extrato Sicredi / confirmações' },
+                    { key: 'CREDITO', label: '💳 Cartão de Crédito', hint: 'Relatório impresso da maquininha' },
+                    { key: 'DEBITO', label: '💳 Cartão de Débito', hint: 'Relatório impresso da maquininha' },
+                    { key: 'FIADO', label: '📝 Fiado (A Receber)', hint: 'Vendas a prazo registradas no período', customVal: data.closing.confirmedDebt },
+                  ].map((row) => (
+                    <div key={row.key} className="grid grid-cols-2 items-center gap-3 px-4 py-3 sm:grid-cols-[1.5fr_1fr_auto]">
+                      <div>
+                        <strong className="block text-sm font-bold text-slate-800">{row.label}</strong>
+                        <span className="text-xs text-slate-400">{row.hint}</span>
+                      </div>
+                      <div className="text-right sm:text-center">
+                        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800">
+                          {money(row.customVal !== undefined ? row.customVal : (reportPaymentTotals[row.key] || 0))}
+                        </span>
+                      </div>
+                      <div className="col-span-2 text-right sm:col-span-1">
+                        <span className="text-xs font-semibold text-slate-500">
+                          {row.key === 'FIADO' ? 'Registrado a prazo' : 'Vendas confirmadas'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="grid grid-cols-2 items-center gap-3 bg-emerald-50/60 px-4 py-3.5 sm:grid-cols-[1.5fr_1fr_auto]">
+                    <div>
+                      <strong className="text-sm font-black text-[#0F381E]">TOTAL GERAL APURADO</strong>
+                    </div>
+                    <div className="text-right sm:text-center">
+                      <span className="text-base font-black text-[#0F381E]">
+                        {money(reportSalesTotal + reportDebtTotal + reportAdvanceTotal)}
+                      </span>
+                    </div>
+                    <div className="col-span-2 text-right sm:col-span-1">
+                      <span className="text-xs font-bold text-emerald-800">Ticket Médio: {money(reportOrders.length ? reportOrders.reduce((sum, order) => sum + Number(order.total || 0), 0) / reportOrders.length : 0)}</span>
+                    </div>
+                  </div>
+                </div>
               </section>
+
+              {/* PRODUTOS MAIS VENDIDOS */}
               <div className="mt-5 grid gap-4 lg:grid-cols-2">
-                {[{ title: '5 mais vendidos em quantidade', rows: mostByQuantity }, { title: '5 maiores vendas em valor', rows: mostByValue }].map((group) => <section key={group.title} className="rounded-2xl border border-slate-200 bg-white p-4"><h4 className="mb-3 font-bold text-[#0F381E]">{group.title}</h4>{group.rows.length ? <ol className="space-y-2">{group.rows.map((product, index) => <li key={product.name} className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2 text-sm"><span title={product.name}>{index + 1}. {product.name} <small className="text-slate-500">({product.quantity} un.)</small></span><strong>{money(product.total)}</strong></li>)}</ol> : <p className="text-sm text-slate-500">Sem itens vendidos no período.</p>}</section>)}
+                {[{ title: 'Top 5 Produtos mais Vendidos', rows: mostByQuantity }, { title: 'Top 5 Maiores Vendas em Valor', rows: mostByValue }].map((group) => (
+                  <section key={group.title} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <h4 className="mb-3 font-bold text-[#0F381E]">{group.title}</h4>
+                    {group.rows.length ? (
+                      <ol className="space-y-2">
+                        {group.rows.map((product, index) => (
+                          <li key={product.name} className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2 text-sm">
+                            <span title={product.name} className="truncate">{index + 1}. {product.name} <small className="text-slate-500">({product.quantity} un.)</small></span>
+                            <strong className="text-[#0F381E]">{money(product.total)}</strong>
+                          </li>
+                        ))}
+                      </ol>
+                    ) : <p className="text-sm text-slate-500">Sem itens vendidos no período.</p>}
+                  </section>
+                ))}
               </div>
-              <p className="mt-3 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-950">{user.role === 'ADMIN' ? 'Visão consolidada de todos os colaboradores.' : `Dados vinculados a ${staffLabel({ name: user.name, email: user.email })}.`}</p>
+
+              <p className="mt-4 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-950">
+                {user.role === 'ADMIN' ? '👑 Visão consolidada de todos os colaboradores.' : `👤 Dados exclusivos do caixa de ${staffLabel({ name: user.name, email: user.email })}.`}
+              </p>
             </>}
           </>}
       </main>
@@ -616,6 +1676,8 @@ window.PdvComponents = (() => {
           setSelectedOrder(response.order || order); await refresh(true);
         } catch (err) { setError(err.message); }
         finally { setBusy(false); }
+      }} onReviewed={async (reviewedOrder) => {
+        setSelectedOrder(reviewedOrder || selectedOrder); await refresh(true);
       }} onClose={() => setSelectedOrder(null)} />}
     </div>;
   }
@@ -635,5 +1697,5 @@ window.PdvComponents = (() => {
     const amountInvalid = !Number.isFinite(Number(amount)) || Number(amount) <= 0 || (!isCreditEntry && Number(amount) > balance);
     return <Panel title="Receber pagamento do cliente" onClose={onClose}>{error && <p role="alert" className="text-red-700">{error}</p>}{result ? <div><p>Recebimento registrado: {money(result.amount)}</p><p>Saldo devedor: {money(result.newBalance)}</p><p>Crédito disponível: {money(result.newCreditBalance)}</p>{result.newBalance > 0 && <button className={button + ' mt-4'} onClick={() => { setBalance(result.newBalance); setCreditBalance(result.newCreditBalance || 0); setAmount(Number(result.newBalance).toFixed(2)); setId(crypto.randomUUID()); setResult(null); setSplitPayment(false); setProofSeen(false); setNote(''); setProofId(''); }}>Receber valor restante</button>}</div> : <><label>Buscar cliente cadastrado<input className={field} value={query} onChange={(e) => setQuery(e.target.value)} /></label><div className="max-h-36 overflow-auto">{customers.map((row) => <button className="block w-full border-b p-2 text-left" key={row.id} onClick={() => select(row)}>{row.name} · {row.phone || 'Sem telefone'}</button>)}</div>{customer && <><p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm font-bold">{customer.name}<span className="mt-1 block text-xs font-medium text-amber-800">Saldo devedor: {money(balance)}</span><span className="block text-xs font-medium text-emerald-800">Crédito disponível: {money(creditBalance)}</span></p><label>Tipo de lançamento<select className={field} value={entryType} onChange={(event) => setEntryType(event.target.value)}><option value="QUITACAO_FIADO">Receber pagamento de dívida</option><option value="CREDITO_CLIENTE">Adicionar crédito antecipado</option></select></label><label>Valor recebido<input className={field} type="number" min="0.01" max={isCreditEntry ? undefined : balance} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></label><PaymentMethodButtons value={method} onChange={setMethod} labels={{ DINHEIRO: 'Dinheiro', DEBITO: 'Cartão de débito', CREDITO: 'Cartão de crédito', PIX: 'Pix já recebido' }} /><label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={splitPayment} onChange={(event) => setSplitPayment(event.target.checked)} />Usar mais de uma forma de pagamento</label>{splitPayment && <PaymentPartsEditor parts={parts} onChange={setParts} total={Number(amount || 0)} allowedMethods={['DINHEIRO', 'DEBITO', 'CREDITO', 'PIX']} />}{hasPix && <div className="my-3 space-y-2"><PixProofUpload key={id} targetType="DEBT" targetId={id} onChange={setProofId} /><label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={proofSeen} onChange={(event) => setProofSeen(event.target.checked)} />Conferi o Pix recebido na conta da Conflora.</label><label className="block text-xs">Observação do comprovante<textarea className={field} value={note} onChange={(event) => setNote(event.target.value)} /></label></div>}{!isCreditEntry && <p className="my-3 text-sm font-bold">Saldo após recebimento: {money(Math.max(0, balance - Number(amount || 0)))}</p>}<button className={button} disabled={busy || (hasPix && (!proofId || !proofSeen || note.trim().length < 8)) || amountInvalid || (!isCreditEntry && balance <= 0)} onClick={submit}>{busy ? 'Registrando…' : isCreditEntry ? 'Registrar crédito recebido' : 'Confirmar recebimento'}</button></>}</>}</Panel>;
   }
-  return { Topbar, Loading, Login, Receipt, CashierQueue, DebtSettlement, DiscountApproval, ProductInformation, WeightPrompt, handleProductImageError, PaymentPartsEditor, PaymentMethodButtons, CustomerSearch, LocationPicker, OrderDetails, CashierColumn };
+  return { Topbar, Loading, Login, Receipt, CashierQueue, DebtSettlement, DiscountApproval, ProductInformation, WeightPrompt, handleProductImageError, PaymentPartsEditor, PaymentMethodButtons, CustomerSearch, LocationPicker, OrderDetails, CashierColumn, SeparationModal, Button3D };
 })();

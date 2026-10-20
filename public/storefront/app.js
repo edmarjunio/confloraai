@@ -112,6 +112,7 @@ if (existingStore) {
 }
 
 const cashierShortcut = $("#cashierShortcut");
+const guideShortcut = $("#guideShortcut");
 let accountVersion = 0;
 let accountOwner;
 function updateHeaderActions() {
@@ -143,9 +144,30 @@ function updateHeaderActions() {
   cashierShortcut.hidden = !allowedCashierRoles.includes(role);
   const deliveryRole = role === 'ENTREGADOR';
   cashierShortcut.querySelector('span:first-child').replaceChildren(icon(deliveryRole ? 'truck' : 'register'));
-  cashierShortcut.querySelector('span:last-child').textContent = deliveryRole ? 'MINHAS ENTREGAS' : 'CAIXA';
-  cashierShortcut.setAttribute('aria-label', deliveryRole ? 'Minhas entregas' : 'Caixa');
-  cashierShortcut.title = deliveryRole ? 'Minhas entregas' : 'Caixa';
+  cashierShortcut.querySelector('span:last-child').textContent = (deliveryRole ? 'ENTREGAS' : 'CAIXA').tr;
+  cashierShortcut.setAttribute('aria-label', (deliveryRole ? 'Minhas entregas' : 'Caixa').tr);
+  cashierShortcut.title = (deliveryRole ? 'Minhas entregas' : 'Caixa').tr;
+
+  const guideText = guideShortcut?.querySelector('span:last-child');
+  if (guideText) guideText.textContent = 'GUIA'.tr;
+  const custAccountText = customerAccountShortcut?.querySelector('span:last-child');
+  if (custAccountText) custAccountText.textContent = 'MINHA CONTA'.tr;
+  if (guideShortcut) {
+    const isTeamMember = isLoggedIn && allowedCashierRoles.includes(role);
+    guideShortcut.hidden = !isTeamMember;
+    if (isTeamMember) {
+      const guideMap = {
+        ADMIN: '/guias/admin.html',
+        CAIXA: '/guias/caixa.html',
+        VENDEDOR: '/guias/vendedor.html',
+        ENTREGADOR: '/guias/entregador.html',
+      };
+      const targetGuide = guideMap[role] || '/guias/index.html';
+      guideShortcut.href = targetGuide;
+      guideShortcut.title = `Guia Operacional - ${role}`;
+      guideShortcut.setAttribute('aria-label', `Guia Operacional de ${role}`);
+    }
+  }
 
   if (isLoggedIn) {
     $("#headerAccountName").textContent =
@@ -157,7 +179,24 @@ function updateHeaderActions() {
     );
   }
 }
+window.state = state;
+window.updateHeaderActions = updateHeaderActions;
 cashierShortcut.addEventListener("click", () => location.assign("/caixa"));
+if (guideShortcut) {
+  guideShortcut.addEventListener("click", (e) => {
+    const userRole = String(state.user?.role || "").toUpperCase();
+    const guideMap = {
+      ADMIN: '/guias/admin.html',
+      CAIXA: '/guias/caixa.html',
+      VENDEDOR: '/guias/vendedor.html',
+      ENTREGADOR: '/guias/entregador.html',
+    };
+    if (guideMap[userRole]) {
+      e.preventDefault();
+      location.assign(guideMap[userRole]);
+    }
+  });
+}
 $("#adminSettingsButton").addEventListener("click", () => window.ConfloraNavigation.open(state.user));
 
 let catalog;
@@ -201,6 +240,11 @@ async function route() {
     } else if (isProduct) {
       catalog.details(decodeURIComponent(path[4] || ""));
     } else {
+      document.querySelectorAll(".cf-back-button, [data-site-back]").forEach((btn) => {
+        if (!btn.closest("#productView") && !btn.closest("#adminView")) {
+          btn.remove();
+        }
+      });
       catalog.render();
     }
   } catch (error) {
@@ -885,7 +929,16 @@ try {
   trackStorefrontEvent("page_view", { resultCount: state.products.length });
   await route();
   const topbarIntent = new URLSearchParams(location.search);
-  if (topbarIntent.has('q')) { $('#search').value = topbarIntent.get('q'); catalog.render(); }
+  if (topbarIntent.has('q')) {
+    const query = topbarIntent.get('q');
+    if (!/@/.test(query)) {
+      $('#search').value = query;
+      catalog.render();
+    }
+  } else if ($('#search') && /@/.test($('#search').value)) {
+    $('#search').value = '';
+    catalog.render();
+  }
 
   if (saved) refreshPublicCatalog().catch(() => {});
   // Login resolution does not block the public catalogue or its first render.
@@ -917,11 +970,19 @@ try {
   $("#logo").alt = "Conflora Horta e Viveiro";
   $("#logo").hidden = false;
   $("#brand").classList.add("has-logo");
+  const isNetwork = error.message?.includes("fetch") || error.name === "TypeError";
+  const errorMessage = isNetwork
+    ? "Conectando ao catálogo... Se não carregar em instantes, clique para tentar novamente."
+    : error.message;
   $("#products").replaceChildren(
-    element("p", { text: error.message, class: "error" }),
+    element("p", { text: errorMessage, class: "error" }),
     element("button", {
       text: "common.retry".tr,
       onclick: () => location.reload(),
     }),
   );
+  if (isNetwork) {
+    setTimeout(() => location.reload(), 3500);
+    window.addEventListener("online", () => location.reload(), { once: true });
+  }
 }

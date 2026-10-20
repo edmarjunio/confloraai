@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <script>
+    (async () => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('portal')) return;
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const data = await res.json();
+          const role = String(data?.user?.role || '').toUpperCase();
+          const map = {
+            ADMIN: '/guias/admin.html',
+            CAIXA: '/guias/caixa.html',
+            VENDEDOR: '/guias/vendedor.html',
+            ENTREGADOR: '/guias/entregador.html'
+          };
+          if (map[role]) {
+            window.location.replace(map[role]);
+          }
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <title>Guias Operacionais Didáticos · Conflora AI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #f1f5f9;
+      color: #0f172a;
+      margin: 0;
+      padding: 32px 16px;
+    }
+    .portal-wrap {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    .portal-header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    .portal-title {
+      font-size: 32px;
+      font-weight: 900;
+      color: #14532d;
+      margin: 0 0 10px 0;
+    }
+    .portal-subtitle {
+      font-size: 16px;
+      color: #475569;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 20px;
+    }
+    .role-card {
+      background: #ffffff;
+      border-radius: 20px;
+      padding: 26px 22px;
+      text-decoration: none;
+      color: inherit;
+      border: 2px solid #e2e8f0;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.05);
+      transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+      display: flex;
+      flex-direction: column;
+    }
+    .role-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 24px rgba(0,0,0,0.1);
+      border-color: #16a34a;
+    }
+    .role-icon {
+      font-size: 42px;
+      margin-bottom: 14px;
+    }
+    .role-name {
+      font-size: 20px;
+      font-weight: 800;
+      margin: 0 0 8px 0;
+    }
+    .role-desc {
+      font-size: 13.5px;
+      color: #64748b;
+      line-height: 1.5;
+      margin-bottom: 20px;
+      flex-grow: 1;
+    }
+    .role-links {
+      display: flex;
+      gap: 8px;
+    }
+    .role-btn {
+      flex: 1;
+      text-align: center;
+      padding: 10px;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 13px;
+      text-decoration: none;
+    }
+    .btn-web {
+      background: #16a34a;
+      color: #ffffff;
+    }
+    .btn-pdf {
+      background: #f1f5f9;
+      color: #334155;
+      border: 1px solid #cbd5e1;
+    }
+  </style>
+</head>
+<body>
+  <div class="portal-wrap">
+    <div class="portal-header">
+      <div style="font-size: 48px; margin-bottom: 8px;">🌿</div>
+      <h1 class="portal-title">Guias Operacionais da Conflora</h1>
+      <p class="portal-subtitle">Instruções didáticas passo a passo com capturas reais de telas para treinamento e operação da equipe.</p>
+    </div>
+
+    <div class="cards-grid">
+      <!-- VENDEDOR -->
+      <div class="role-card">
+        <div class="role-icon">🛍️</div>
+        <h2 class="role-name" style="color: #15803d;">Vendedor &amp; Balcão</h2>
+        <p class="role-desc">Como abrir o catálogo de A a Z, buscar itens, colocar no carrinho, alternar balcão/entrega e finalizar ou mandar pro caixa.</p>
+        <div class="role-links">
+          <a class="role-btn btn-web" href="/guias/vendedor.html">Abrir Guia Web</a>
+          <a class="role-btn btn-pdf" href="/guias/guia-vendedor.pdf" target="_blank">Baixar PDF</a>
+        </div>
+      </div>
+
+      <!-- CAIXA -->
+      <div class="role-card">
+        <div class="role-icon">💵</div>
+        <h2 class="role-name" style="color: #1d4ed8;">Operador de Caixa</h2>
+        <p class="role-desc">Como receber comandas dos vendedores, conferir pagamentos em Dinheiro, PIX e Cartão, e realizar o fechamento diário com comprovante.</p>
+        <div class="role-links">
+          <a class="role-btn btn-web" href="/guias/caixa.html" style="background:#2563eb;">Abrir Guia Web</a>
+          <a class="role-btn btn-pdf" href="/guias/guia-caixa.pdf" target="_blank">Baixar PDF</a>
+        </div>
+      </div>
+
+      <!-- ENTREGADOR -->
+      <div class="role-card">
+        <div class="role-icon">🛵</div>
+        <h2 class="role-name" style="color: #0f766e;">Entregador &amp; Despacho</h2>
+        <p class="role-desc">Como assumir pedidos no celular, marcar os checks verdes na separação, iniciar rota no Maps e usar o floating button de entrega.</p>
+        <div class="role-links">
+          <a class="role-btn btn-web" href="/guias/entregador.html" style="background:#0d9488;">Abrir Guia Web</a>
+          <a class="role-btn btn-pdf" href="/guias/guia-entregador.pdf" target="_blank">Baixar PDF</a>
+        </div>
+      </div>
+
+      <!-- ADMIN -->
+      <div class="role-card">
+        <div class="role-icon">👑</div>
+        <h2 class="role-name" style="color: #b45309;">Dono &amp; Administrador</h2>
+        <p class="role-desc">Como visualizar os Resultados da Loja com filtro padrão Hoje, auditar fechamentos de caixa de todos os colaboradores e gerenciar o estoque.</p>
+        <div class="role-links">
+          <a class="role-btn btn-web" href="/guias/admin.html" style="background:#b45309;">Abrir Guia Web</a>
+          <a class="role-btn btn-pdf" href="/guias/guia-admin.pdf" target="_blank">Baixar PDF</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

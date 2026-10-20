@@ -66,3 +66,36 @@ test('JSON usa validação e IDs do CSV, rejeita campos inválidos e mantém ide
   assert.throws(() => prepareImport([{ ...products[0], price: { unsafe: true } }]), /inválidos/);
   assert.ok(prepareImport([{ ...products[0], price: -2 }]).errors.length);
 });
+
+test('importa formato exato da planilha operacional com R$, milhar US, SKU com espaço e enriquecimento automático', () => {
+  const sheetCsv = [
+    'Product ID,DESCRIÇÃO,STATUS,VALOR,CATEGORIA,SUBCATEGORIA,UNIDADE DE MEDIDA,EM ESTOQUE',
+    'b99bcb59,CAJA MANGA,ATIVO,R$ 95.00,Frutífera,Mangas,UN,',
+    'palmeira-1,PALMEIRA AZUL,ATIVO,"R$ 1,000.00",Plantas / Mudas,Palmeiras,UN,25',
+    'Tuia stritica,TUIA STRITICA,ATIVO,149.0,Plantas / Mudas,Coníferas,,',
+  ].join('\r\n');
+
+  const plan = prepareImport(sheetCsv);
+  assert.deepEqual(plan.errors, []);
+  assert.equal(plan.products.length, 3);
+
+  const caja = plan.products[0];
+  assert.equal(caja.sku, 'b99bcb59');
+  assert.equal(caja.price, 95);
+  assert.equal(caja.stockQuantity, 50); // padrão quando vazio
+  assert.ok(caja.imageUrl.startsWith('https://images.unsplash.com/'));
+  assert.ok(caja.cuidados_basicos.length > 0);
+  assert.ok(caja.descriptionAi.length > 0);
+
+  const palmeira = plan.products[1];
+  assert.equal(palmeira.sku, 'palmeira-1');
+  assert.equal(palmeira.price, 1000);
+  assert.equal(palmeira.stockQuantity, 25);
+  assert.ok(palmeira.imageUrl.length > 0);
+
+  const tuia = plan.products[2];
+  assert.equal(tuia.sku, 'Tuia stritica');
+  assert.equal(tuia.price, 149);
+  assert.equal(tuia.unit, 'UN');
+});
+
