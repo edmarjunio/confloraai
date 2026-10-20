@@ -157,7 +157,7 @@ const { useState, useEffect, useRef, useMemo } = React;
     };
 
     const primaryActionButtonClass = 'cf-btn-3d cf-btn-3d--primary';
-    const shortcutButtonClass = 'cf-btn-3d cf-btn-3d--primary cf-btn-3d--sm !px-3 !py-2 text-xs';
+    const shortcutButtonClass = 'cf-btn-3d cf-btn-3d--secondary cf-btn-3d--sm !px-3 !py-2 text-xs flex items-center justify-center gap-1.5';
 
     function readStorefrontProductImages() {
       try {
@@ -197,7 +197,31 @@ const { useState, useEffect, useRef, useMemo } = React;
       const imagePreloadRef = useRef({ queue: [], started: new Set(), inFlight: new Set(), active: 0 });
       // Aba inicial deve ser 'todas', enquanto a primeira aba visual é FAVORITOS.
       const [selectedCategory, setSelectedCategory] = useState('todas');
+      const [selectedSubcategory, setSelectedSubcategory] = useState('');
       const [searchQuery, setSearchQuery] = useState('');
+      const handleSelectCategory = (catId) => {
+        if (selectedCategory === catId) {
+          setSelectedCategory('todas');
+          setSelectedSubcategory('');
+        } else {
+          setSelectedCategory(catId);
+          setSelectedSubcategory('');
+        }
+      };
+      const availableSubcategories = useMemo(() => {
+        if (!selectedCategory.startsWith('categoria:')) return [];
+        const catName = selectedCategory.slice('categoria:'.length).trim().toLowerCase();
+        const subs = new Set();
+        products.forEach((p) => {
+          if (String(p.status || p.STATUS || 'ATIVO').trim().toUpperCase() === 'ATIVO') {
+            const pCat = String(p.category || '').trim().toLowerCase();
+            if (pCat === catName && (p.subcategory || p.subcategoria)) {
+              subs.add(String(p.subcategory || p.subcategoria).trim());
+            }
+          }
+        });
+        return [...subs].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+      }, [selectedCategory, products]);
       useEffect(() => {
         if (selectedCategory.startsWith('categoria:') && !categoryTabs.some((category) => category.id === selectedCategory)) {
           setSelectedCategory('todas');
@@ -356,6 +380,7 @@ const { useState, useEffect, useRef, useMemo } = React;
               variation: String(item.variation || item.variacao || '').trim(),
               category: String(item.category || '').trim(),
               categoryName: String(item.category || 'Geral').trim(),
+              subcategory: String(item.subcategory || item.subcategoria || '').trim(),
               imageFileId: String(item.imageFileId || item.image_file_id || '').trim(),
               imageFallbackUrl: item.imageFallbackUrl || '',
               description: item.descriptionAi || item.descricao_ia || '',
@@ -544,6 +569,10 @@ const { useState, useEffect, useRef, useMemo } = React;
               ? product.isShortcut
               : product.category === categoryValue;
 
+          const matchesSubcategory = !selectedSubcategory
+            ? true
+            : String(product.subcategory || product.subcategoria || '').trim().toLowerCase() === selectedSubcategory.toLowerCase();
+
           const normalizedQuery = searchQuery.trim().toLowerCase();
           const searchText = [product.name, product.sku, product.categoryName, product.description, product.searchTags]
             .filter(Boolean)
@@ -551,7 +580,7 @@ const { useState, useEffect, useRef, useMemo } = React;
             .toLowerCase();
           const matchesSearch = !normalizedQuery || searchText.includes(normalizedQuery);
 
-          return matchesCategory && matchesSearch;
+          return matchesCategory && matchesSubcategory && matchesSearch;
         });
       }, [products, selectedCategory, searchQuery]);
 
@@ -1015,25 +1044,23 @@ const { useState, useEffect, useRef, useMemo } = React;
             </div>
 
             {/* Segmented Control: Balcão vs Entrega */}
-            <div className="flex items-center gap-2 bg-slate-100 p-2 rounded-xl text-xs font-bold">
+            <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-full text-xs font-bold">
               <button
+                type="button"
                 onClick={() => setOrderType('PICKUP')}
                 aria-pressed={orderType === 'PICKUP'}
-                className={"flex-1 py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition border " + (orderType === 'PICKUP'
-                  ? 'bg-[#109E46] border-[#109E46] text-white shadow-md ring-2 ring-emerald-600 ring-offset-1'
-                  : 'border-slate-200 bg-white text-slate-600 hover:bg-emerald-50')}
+                className={"flex-1 cf-btn-3d cf-btn-3d--sm " + (orderType === 'PICKUP' ? 'cf-btn-3d--primary' : 'cf-btn-3d--secondary')}
               >
                 <span>🏪 Balcão</span>
               </button>
               <button
+                type="button"
                 onClick={() => {
                   setOrderType('DELIVERY');
                   openCustomerModal();
                 }}
                 aria-pressed={orderType === 'DELIVERY'}
-                className={"flex-1 py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition border " + (orderType === 'DELIVERY'
-                  ? 'bg-[#109E46] border-[#109E46] text-white shadow-md ring-2 ring-emerald-600 ring-offset-1'
-                  : 'border-slate-200 bg-white text-slate-600 hover:bg-emerald-50')}
+                className={"flex-1 cf-btn-3d cf-btn-3d--sm " + (orderType === 'DELIVERY' ? 'cf-btn-3d--primary' : 'cf-btn-3d--secondary')}
               >
                 <span>🛵 Entrega</span>
               </button>
@@ -1055,10 +1082,11 @@ const { useState, useEffect, useRef, useMemo } = React;
               </div>
 
               <button
+                type="button"
                 onClick={openCustomerModal}
-                className="cf-button !px-4 !py-2 !rounded-xl text-xs font-extrabold flex items-center gap-2 shrink-0 shadow-md hover:-translate-y-0.5 transition"
+                className="cf-btn-3d cf-btn-3d--secondary cf-btn-3d--sm flex items-center gap-1.5 shrink-0"
               >
-                <UserPlus className="w-3 h-3" />
+                <UserPlus className="w-3.5 h-3.5" />
                 <span>{customerId ? 'Selecionar cliente' : 'Adicionar cliente'}</span>
               </button>
             </div>
@@ -1195,11 +1223,12 @@ const { useState, useEffect, useRef, useMemo } = React;
           {/* Bottom Action Bar: PAGAR - F1 + Total */}
           <div className="p-4 bg-white border-t border-slate-200 flex items-center justify-between gap-3">
             <button
+              type="button"
               disabled={cart.length === 0}
               onClick={() => setActiveModal('pay')}
-              className={"px-6 py-3.5 rounded-2xl font-bold text-sm flex items-center gap-2 transition-all shadow-sm " + (cart.length > 0
-                ? 'bg-[#109E46] hover:bg-[#0d853a] text-white shadow-emerald-600/20 active:scale-[0.98]'
-                : 'bg-slate-100 text-slate-400 cursor-not-allowed')}
+              className={"cf-btn-3d cf-btn-3d--lg px-6 flex items-center gap-2 " + (cart.length > 0
+                ? 'cf-btn-3d--primary'
+                : 'cf-btn-3d--secondary opacity-50 cursor-not-allowed')}
             >
               <span>PAGAR - F1</span>
               <ArrowRight className="w-4 h-4" />
@@ -1235,18 +1264,28 @@ const { useState, useEffect, useRef, useMemo } = React;
             <div className="sticky top-0 z-20 bg-white">
               <PdvComponents.Topbar hideCashier user={currentUser} onCashier={() => navigateCashierPage(null)} onSearch={setSearchQuery} searchValue={searchQuery} searchInputRef={searchInputRef} />
               <div className="cf-page-toolbar cf-pos-context">
-                <button type="button" className="cf-back-button" onClick={() => window.ConfloraNavigation.back()}>← Voltar</button><h1 className="font-extrabold text-emerald-950">Caixa</h1>
-                {/* Quantity multiplier remains next to the cashier actions. */}
-                <div
-                    className="order-2 flex shrink-0 items-center bg-white border border-slate-300 rounded-full px-2.5 py-1.5 shadow-xs sm:order-3"
+                {/* Left group: Navigation & Title badge */}
+                <div className="cf-pos-group-left flex items-center gap-3">
+                  <button type="button" className="cf-back-button" onClick={() => window.ConfloraNavigation.back()}>← Voltar</button>
+                  <div className="flex items-center gap-2">
+                    <span className="w-8 h-8 rounded-full bg-emerald-100 border-2 border-emerald-600 flex items-center justify-center text-sm shadow-[0_2px_0_#15803d]">🏬</span>
+                    <h1 className="text-base sm:text-lg font-black text-emerald-950 tracking-tight m-0">Caixa</h1>
+                  </div>
+                </div>
+
+                {/* Center group: Operational actions (Multiplier + Entregas) */}
+                <div className="cf-pos-group-center flex items-center gap-2.5 sm:gap-3 flex-wrap">
+                  <div
+                    className="cf-pos-qty-stepper"
                     title="Multiplicador de quantidade para o próximo item clicado"
                   >
-                    <span className="text-xs font-semibold text-slate-500 mr-1">
+                    <span className="text-xs font-black text-slate-600 uppercase tracking-wide mr-0.5">
                       Quant:
                     </span>
                     <button
+                      type="button"
                       onClick={() => setDefaultMultiplier((q) => Math.max(1, q - 1))}
-                      className="w-5 h-5 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-600"
+                      aria-label="Diminuir multiplicador"
                     >
                       <Minus className="w-3 h-3" />
                     </button>
@@ -1258,21 +1297,36 @@ const { useState, useEffect, useRef, useMemo } = React;
                       onChange={(e) =>
                         setDefaultMultiplier(Math.max(1, parseInt(e.target.value, 10) || 1))
                       }
-                      className="w-7 text-center font-bold text-xs sm:text-sm text-emerald-800 bg-transparent focus:outline-none"
+                      aria-label="Valor do multiplicador"
                     />
                     <button
+                      type="button"
                       onClick={() => setDefaultMultiplier((q) => q + 1)}
-                      className="w-5 h-5 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-600"
+                      aria-label="Aumentar multiplicador"
                     >
                       <Plus className="w-3 h-3" />
                     </button>
+                  </div>
+
+                  {['ADMIN', 'CAIXA'].includes(currentUser.role) && (
+                    <button type="button" className="cf-button cf-btn-3d cf-btn-3d--sky cf-btn-3d--sm flex items-center gap-1.5 font-bold" onClick={() => navigateCashierPage('deliveries')}>
+                      <span>🛵</span>
+                      <span>Entregas</span>
+                    </button>
+                  )}
                 </div>
 
-                {['ADMIN', 'CAIXA'].includes(currentUser.role) && <button type="button" className="cf-button" onClick={() => navigateCashierPage('deliveries')}>🛵 Entregas</button>}
-                <button type="button" className="cf-danger-button" onClick={async () => { await window.ConfloraSession.apiFetch('/api/auth/logout', { method: 'POST' }); window.location.reload(); }}>Sair</button>
+                {/* Right group: Operator profile & Sair */}
+                <div className="cf-pos-group-right flex items-center gap-3">
+                  <div className="hidden md:block text-right">
+                    <strong className="block text-xs font-black text-slate-800 leading-tight">{currentUser.name || 'Operador'}</strong>
+                    <span className="text-[10px] font-bold text-emerald-700 tracking-wider uppercase">{currentUser.role}</span>
+                  </div>
+                  <button type="button" className="cf-danger-button" onClick={async () => { await window.ConfloraSession.apiFetch('/api/auth/logout', { method: 'POST' }); window.location.reload(); }}>Sair</button>
+                </div>
               </div>
               <nav className="cashier-command-nav mx-auto mt-3 mb-4 grid w-full max-w-[1600px] grid-cols-3 gap-2 border-t border-slate-100 pt-3 sm:gap-3 lg:mx-0 lg:w-2/3" aria-label="Ações do caixa por atalho">
-                <button type="button" className={shortcutButtonClass} disabled={cart.length === 0} onClick={() => setActiveModal('pay')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F1</kbd><span>Pagar</span></button>
+                <button type="button" className={cart.length > 0 ? 'cf-btn-3d cf-btn-3d--primary cf-btn-3d--sm !px-3 !py-2 text-xs flex items-center justify-center gap-1.5' : shortcutButtonClass} disabled={cart.length === 0} onClick={() => setActiveModal('pay')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F1</kbd><span>Pagar</span></button>
                 <button type="button" className={shortcutButtonClass} onClick={() => navigateCashierPage('orders')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F2</kbd><span>Comandas</span></button>
                 <button type="button" className={shortcutButtonClass} onClick={() => navigateCashierPage('report')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F3</kbd><span>Relatório</span></button>
                 <button type="button" className={shortcutButtonClass} onClick={() => setActiveModal('discount')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F4</kbd><span>Desconto</span></button>
@@ -1281,24 +1335,51 @@ const { useState, useEffect, useRef, useMemo } = React;
               </nav>
 
               {/* Com Flora Category Pills Row */}
-              <div className="cf-pos-categories mx-auto flex min-w-0 w-full max-w-[1600px] items-center justify-between gap-3 lg:mx-0 lg:w-2/3">
-                <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+              <div className="cf-pos-categories mx-auto flex min-w-0 w-full max-w-[1600px] flex-col gap-2 lg:mx-0 lg:w-2/3">
+                <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
                   {categoryTabs.map((cat) => {
                     const isActive = selectedCategory === cat.id;
                     return (
                       <button
                         key={cat.id}
-                        onClick={() => setSelectedCategory(cat.id)}
-                        className={"px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 transition whitespace-nowrap border " + (isActive
-                          ? 'bg-[#109E46] text-white border-[#109E46] shadow-xs'
-                          : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-600/40 hover:bg-emerald-50/40')}
+                        type="button"
+                        onClick={() => handleSelectCategory(cat.id)}
+                        className={"cf-btn-3d cf-btn-3d--sm shrink-0 " + (isActive ? 'cf-btn-3d--primary' : 'cf-btn-3d--secondary')}
                       >
-                        <span>{cat.icon}</span>
-                        <span>{cat.label}</span>
+                        <span className="cf-btn-3d__icon text-sm">{cat.icon}</span>
+                        <span className="cf-btn-3d__text">{cat.label}</span>
                       </button>
                     );
                   })}
                 </div>
+
+                {availableSubcategories.length > 0 && (
+                  <div className="flex min-w-0 w-full items-center gap-1.5 overflow-x-auto py-1 px-1 bg-emerald-50/70 rounded-full border border-emerald-200 no-scrollbar">
+                    <span className="text-[11px] font-black text-emerald-800 uppercase tracking-wide px-2 shrink-0">
+                      🏷️ Sub:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSubcategory('')}
+                      className={"cf-btn-3d cf-btn-3d--sm !text-xs !py-1 !px-3 shrink-0 " + (!selectedSubcategory ? 'cf-btn-3d--primary' : 'cf-btn-3d--secondary')}
+                    >
+                      Todas
+                    </button>
+                    {availableSubcategories.map((sub) => {
+                      const isSubActive = selectedSubcategory.toLowerCase() === sub.toLowerCase();
+                      return (
+                        <button
+                          key={sub}
+                          type="button"
+                          onClick={() => setSelectedSubcategory(isSubActive ? '' : sub)}
+                          className={"cf-btn-3d cf-btn-3d--sm !text-xs !py-1 !px-3 shrink-0 " + (isSubActive ? 'cf-btn-3d--primary' : 'cf-btn-3d--secondary')}
+                        >
+                          {sub}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1598,10 +1679,10 @@ const { useState, useEffect, useRef, useMemo } = React;
                       type="button"
                       disabled={isSavingCustomer || !tempCustomerName.trim()}
                       onClick={handleAddCustomer}
-                      className={"w-full py-2.5 px-4 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-2 transition shadow-sm " + (
+                      className={"cf-btn-3d cf-btn-3d--lg cf-btn-3d--block flex items-center justify-center gap-2 " + (
                         tempCustomerName.trim()
-                          ? 'bg-[#109E46] hover:bg-[#0d853a] shadow-emerald-600/20 active:scale-98 cursor-pointer'
-                          : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                          ? 'cf-btn-3d--primary'
+                          : 'cf-btn-3d--secondary opacity-50 cursor-not-allowed'
                       )}
                       title="Adiciona o cliente ao pedido"
                     >
@@ -1815,10 +1896,9 @@ const { useState, useEffect, useRef, useMemo } = React;
                     {[0, 5, 10, 15].map((pct) => (
                       <button
                         key={pct}
+                        type="button"
                         onClick={() => setDiscountPercent(pct)}
-                        className={"py-2.5 rounded-xl font-bold text-xs border transition " + (discountPercent === pct
-                          ? 'bg-[#109E46] text-white border-[#109E46]'
-                          : 'border-slate-200 text-slate-700 hover:bg-slate-50')}
+                        className={"cf-btn-3d cf-btn-3d--sm " + (discountPercent === pct ? 'cf-btn-3d--primary' : 'cf-btn-3d--secondary')}
                       >
                         {pct}%
                       </button>
@@ -1867,12 +1947,11 @@ const { useState, useEffect, useRef, useMemo } = React;
                     {[0, 5, 10, 15].map((val) => (
                       <button
                         key={val}
+                        type="button"
                         onClick={() => setFreightValue(val)}
-                        className={"py-2.5 rounded-xl font-bold text-xs border transition " + (Number(freightValue) === val
-                          ? 'bg-[#109E46] text-white border-[#109E46]'
-                          : 'border-slate-200 text-slate-700 hover:bg-slate-50')}
+                        className={"cf-btn-3d cf-btn-3d--sm " + (Number(freightValue) === val ? 'cf-btn-3d--primary' : 'cf-btn-3d--secondary')}
                       >
-                        {val === 0 ? 'Sem entrega' : ('R$ ' + val)}
+                        {val === 0 ? 'Sem taxa' : ('R$ ' + val)}
                       </button>
                     ))}
                   </div>

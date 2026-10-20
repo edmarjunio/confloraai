@@ -1,5 +1,18 @@
 /* Each tab owns its session. Credentials never enter URLs or shared storage. */
 (() => {
+  if (typeof String !== 'undefined' && typeof String.prototype.tr === 'undefined') {
+    Object.defineProperty(String.prototype, 'tr', {
+      get() {
+        try {
+          return (typeof window.tr === 'function' ? window.tr(this.valueOf()) : this.valueOf()) || this.valueOf();
+        } catch (_) {
+          return this.valueOf();
+        }
+      },
+      configurable: true,
+      enumerable: false,
+    });
+  }
   if (window.ConfloraSession) return;
   const nativeFetch = window.fetch.bind(window);
   const tenant = /^\/shop\/([^/]+)/.exec(location.pathname)?.[1];

@@ -10,6 +10,7 @@
     menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
     book: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
   };
+  const trSafe = s => { try { const t = typeof window.tr === 'function' ? window.tr(s) : (s && s.tr ? s.tr : s); return (typeof t === 'string' && t) ? t : s; } catch (_) { return s; } };
   const icon = name => '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + paths[name] + '</svg>';
   class ConfloraTopbar extends HTMLElement {
     static get observedAttributes() { return ['user-name', 'user-role', 'user-photo', 'search-value']; }
@@ -88,9 +89,9 @@
       this.identityUser = user;
       const role = user.role || '';
       const identity = this.querySelector('.cf-topbar-identity');
-      identity.querySelector('strong').textContent = user.name || ('Entrar').tr;
+      identity.querySelector('strong').textContent = user.name || trSafe('Entrar');
       identity.querySelector('small').textContent = role;
-      identity.title = user.name || ('Sua conta').tr;
+      identity.title = user.name || trSafe('Sua conta');
       const photo = identity.querySelector('img'); photo.hidden = !user.picture;
       if (user.picture) photo.src = user.picture;
       const guide = this.querySelector('.cf-topbar-guide');
@@ -112,11 +113,11 @@
       const cashier = this.querySelector('.cf-topbar-cashier');
       cashier.querySelector('svg').outerHTML = icon(role === 'ENTREGADOR' ? 'truck' : 'cashier');
       cashier.hidden = this.hasAttribute('hide-cashier') || !['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(role);
-      cashier.querySelector('span').textContent = (role === 'ENTREGADOR' ? 'ENTREGAS' : 'CAIXA').tr;
-      cashier.setAttribute('aria-label', (role === 'ENTREGADOR' ? 'Minhas entregas' : 'Caixa').tr);
+      cashier.querySelector('span').textContent = trSafe(role === 'ENTREGADOR' ? 'ENTREGAS' : 'CAIXA');
+      cashier.setAttribute('aria-label', trSafe(role === 'ENTREGADOR' ? 'Minhas entregas' : 'Caixa'));
       const primary = this.querySelector('[data-primary]');
       primary.href = role === 'ADMIN' ? '/admin-gerencial' : '/?sacola=1';
-      primary.innerHTML = icon(role === 'ADMIN' ? 'chart' : 'cart') + '<span>' + (role === 'ADMIN' ? ('Painel Gerencial').tr : ('Sacola').tr) + '</span>';
+      primary.innerHTML = icon(role === 'ADMIN' ? 'chart' : 'cart') + '<span>' + (role === 'ADMIN' ? trSafe('Painel Gerencial') : trSafe('Sacola')) + '</span>';
 
     }
   }
