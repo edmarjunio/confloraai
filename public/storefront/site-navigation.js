@@ -144,26 +144,34 @@
     }
 
     // --- SEÇÃO 3: CONTA & ACESSO ---
-    const accountItems = [
-      {
+    const accountItems = [];
+    const teamRoles = ['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'];
+    if (teamRoles.includes(role)) {
+      const guideMap = {
+        ADMIN: '/guias/admin.html',
+        CAIXA: '/guias/caixa.html',
+        VENDEDOR: '/guias/vendedor.html',
+        ENTREGADOR: '/guias/entregador.html',
+      };
+      accountItems.push({
         id: 'guides',
-        label: 'Guias & Treinamento',
-        subtitle: 'Passo a passo didático com prints para cada função',
+        label: `Guia Operacional (${role})`,
+        subtitle: 'Passo a passo didático com prints da sua função',
         icon: '📖',
         iconBg: '#ecfdf5',
-        href: '/guias',
-        roles: ['ALL'],
-      },
-      {
-        id: 'profile',
-        label: role ? 'Meu Perfil' : 'Entrar na Minha Conta',
-        subtitle: role ? 'Seus dados e segurança' : 'Acesse seus pedidos e histórico',
-        icon: '👤',
-        iconBg: '#f0fdf4',
-        href: role ? '/?conta=1&editar=1' : '/?conta=1',
-        roles: ['ALL'],
-      },
-    ];
+        href: guideMap[role] || '/guias/index.html',
+        roles: teamRoles,
+      });
+    }
+    accountItems.push({
+      id: 'profile',
+      label: role ? 'Meu Perfil' : 'Entrar na Minha Conta',
+      subtitle: role ? 'Seus dados e segurança' : 'Acesse seus pedidos e histórico',
+      icon: '👤',
+      iconBg: '#f0fdf4',
+      href: role ? '/?conta=1&editar=1' : '/?conta=1',
+      roles: ['ALL'],
+    });
 
     sections.push({
       title: 'Minha Conta',
@@ -441,5 +449,5 @@
     }
   });
 
-  window.ConfloraNavigation = { open, back };
+  window.ConfloraNavigation = { open, back, getNavigationSections };
 })();

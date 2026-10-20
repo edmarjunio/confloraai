@@ -112,6 +112,7 @@ if (existingStore) {
 }
 
 const cashierShortcut = $("#cashierShortcut");
+const guideShortcut = $("#guideShortcut");
 let accountVersion = 0;
 let accountOwner;
 function updateHeaderActions() {
@@ -147,6 +148,23 @@ function updateHeaderActions() {
   cashierShortcut.setAttribute('aria-label', deliveryRole ? 'Minhas entregas' : 'Caixa');
   cashierShortcut.title = deliveryRole ? 'Minhas entregas' : 'Caixa';
 
+  if (guideShortcut) {
+    const isTeamMember = isLoggedIn && allowedCashierRoles.includes(role);
+    guideShortcut.hidden = !isTeamMember;
+    if (isTeamMember) {
+      const guideMap = {
+        ADMIN: '/guias/admin.html',
+        CAIXA: '/guias/caixa.html',
+        VENDEDOR: '/guias/vendedor.html',
+        ENTREGADOR: '/guias/entregador.html',
+      };
+      const targetGuide = guideMap[role] || '/guias/index.html';
+      guideShortcut.href = targetGuide;
+      guideShortcut.title = `Guia Operacional - ${role}`;
+      guideShortcut.setAttribute('aria-label', `Guia Operacional de ${role}`);
+    }
+  }
+
   if (isLoggedIn) {
     $("#headerAccountName").textContent =
       state.user.name || state.user.email || "Usuário";
@@ -157,7 +175,24 @@ function updateHeaderActions() {
     );
   }
 }
+window.state = state;
+window.updateHeaderActions = updateHeaderActions;
 cashierShortcut.addEventListener("click", () => location.assign("/caixa"));
+if (guideShortcut) {
+  guideShortcut.addEventListener("click", (e) => {
+    const userRole = String(state.user?.role || "").toUpperCase();
+    const guideMap = {
+      ADMIN: '/guias/admin.html',
+      CAIXA: '/guias/caixa.html',
+      VENDEDOR: '/guias/vendedor.html',
+      ENTREGADOR: '/guias/entregador.html',
+    };
+    if (guideMap[userRole]) {
+      e.preventDefault();
+      location.assign(guideMap[userRole]);
+    }
+  });
+}
 $("#adminSettingsButton").addEventListener("click", () => window.ConfloraNavigation.open(state.user));
 
 let catalog;

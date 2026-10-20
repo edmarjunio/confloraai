@@ -22,7 +22,7 @@
         '<div class="cf-topbar-actions">' +
         '<select class="cf-topbar-language" aria-label="Idioma do catálogo"><option value="pt">BR PT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select>' +
         '<button class="cf-topbar-identity" type="button" aria-label="Abrir minha conta">' + icon('user') + '<img hidden ' + (admin ? 'id="loggedUserPhoto"' : '') + ' alt="Foto do operador" referrerpolicy="no-referrer"><span><strong ' + (admin ? 'id="loggedUserName"' : '') + '></strong><small ' + (admin ? 'id="loggedUserRole"' : '') + '></small></span></button>' +
-        '<a class="cf-topbar-pill cf-topbar-guide" href="/guias" aria-label="Guias Operacionais" title="Guias e Treinamento">' + icon('book') + '<span>GUIA</span></a>' +
+        '<a class="cf-topbar-pill cf-topbar-guide" href="/guias" aria-label="Guias Operacionais" title="Guias e Treinamento" hidden>' + icon('book') + '<span>GUIA</span></a>' +
         '<a class="cf-topbar-pill cf-topbar-dark" href="/" data-primary>' + icon('cart') + '<span>Sacola</span></a>' +
         '<a class="cf-topbar-pill cf-topbar-cashier" href="/caixa" aria-label="Caixa">' + icon('cashier') + '<span>CAIXA</span></a>' +
         '<button class="cf-topbar-menu" type="button" aria-label="Menu da loja">' + icon('menu') + '</button>' +
@@ -42,6 +42,22 @@
         event.preventDefault(); this.dispatchEvent(new CustomEvent('cf-topbar-cashier', { bubbles: true }));
       };
       this.querySelector('.cf-topbar-menu').onclick = () => window.ConfloraNavigation.open(this.identityUser);
+      const guideBtn = this.querySelector('.cf-topbar-guide');
+      if (guideBtn) {
+        guideBtn.onclick = event => {
+          const r = String(this.identityUser?.role || this.currentUser?.role || '').toUpperCase();
+          const guideMap = {
+            ADMIN: '/guias/admin.html',
+            CAIXA: '/guias/caixa.html',
+            VENDEDOR: '/guias/vendedor.html',
+            ENTREGADOR: '/guias/entregador.html',
+          };
+          if (guideMap[r]) {
+            event.preventDefault();
+            window.location.assign(guideMap[r]);
+          }
+        };
+      }
       this.querySelector('.cf-topbar-identity').onclick = () => window.location.assign('/?conta=1');
       const language = this.querySelector('select');
       try { language.value = window.localStorage.getItem('conflora_lang') || 'pt'; } catch { /* The catalog remains usable without storage. */ }
@@ -77,6 +93,22 @@
       identity.title = user.name || 'Sua conta';
       const photo = identity.querySelector('img'); photo.hidden = !user.picture;
       if (user.picture) photo.src = user.picture;
+      const guide = this.querySelector('.cf-topbar-guide');
+      const isTeam = ['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(role);
+      if (guide) {
+        guide.hidden = !isTeam;
+        if (isTeam) {
+          const guideMap = {
+            ADMIN: '/guias/admin.html',
+            CAIXA: '/guias/caixa.html',
+            VENDEDOR: '/guias/vendedor.html',
+            ENTREGADOR: '/guias/entregador.html',
+          };
+          guide.href = guideMap[role] || '/guias/index.html';
+          guide.title = `Guia Operacional - ${role}`;
+          guide.setAttribute('aria-label', `Guia Operacional de ${role}`);
+        }
+      }
       const cashier = this.querySelector('.cf-topbar-cashier');
       cashier.querySelector('svg').outerHTML = icon(role === 'ENTREGADOR' ? 'truck' : 'cashier');
       cashier.hidden = this.hasAttribute('hide-cashier') || !['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(role);
