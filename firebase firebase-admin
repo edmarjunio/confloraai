@@ -1,0 +1,32 @@
+[35mscripts/migrate-user-security.js[m[36m:[m[32m10[m[36m:[m  if (!db) throw new Error('[1;31mFirestore indisponível[m.');
+[35mscripts/reset-product-catalog.js[m[36m:[m[32m7[m[36m:[m  if (!db || db.projectId !== 'confloraai' || process.env.[1;31mFIRESTORE_EMULATOR_HOST[m) throw new Error('Destino inesperado; operação bloqueada.');
+[35mscripts/seed-dev.js[m[36m:[m[32m5[m[36m:[m      config.firebase.projectId !== 'confloraai-dev' || process.env.[1;31mFIRESTORE_EMULATOR_HOST[m) {
+[35msrc/catalog/product-image-storage.js[m[36m:[m[32m17[m[36m:[m  const { [1;31mapplicationDefault[m, cert, getApps, [1;31minitializeApp[m } = require('firebase-admin/app');
+[35msrc/catalog/product-image-storage.js[m[36m:[m[32m20[m[36m:[m  const app = getApps().find((entry) => entry.name === appName) || [1;31minitializeApp[m({
+[35msrc/catalog/product-image-storage.js[m[36m:[m[32m23[m[36m:[m    credential: config.gcp.keyFilename ? cert(config.gcp.keyFilename) : [1;31mapplicationDefault[m(),
+[35msrc/config/env.js[m[36m:[m[32m129[m[36m:[m  if (process.env.[1;31mGOOGLE_APPLICATION_CREDENTIALS[m) {
+[35msrc/config/env.js[m[36m:[m[32m130[m[36m:[m    const credential = JSON.parse(fs.readFileSync(process.env.[1;31mGOOGLE_APPLICATION_CREDENTIALS[m, 'utf8'));
+[35msrc/database/firestore.repository.js[m[36m:[m[32m316[m[36m:[m    if (!this.firestore) {throw new Error('[1;31mFirestore indisponível[m.');}
+[35msrc/database/firestore.repository.js[m[36m:[m[32m334[m[36m:[m    if (!this.firestore) {throw new Error('[1;31mFirestore indisponível[m.');}
+[35msrc/database/firestore.repository.js[m[36m:[m[32m951[m[36m:[m      throw new Error('[1;31mFirestore indisponível[m; pagamento não foi confirmado no pedido.');
+[35msrc/database/firestore.repository.js[m[36m:[m[32m1033[m[36m:[m      if (!this.isInMemory || this.firestore) {throw new Error('[1;31mFirestore indisponível[m para alterar pedido.');}
+[35msrc/database/firestore.repository.js[m[36m:[m[32m1198[m[36m:[m    if (this.firestore) { throw new Error('[1;31mFirestore indisponível[m; o painel não exibirá dados parciais.'); }
+[35msrc/database/firestore.repository.js[m[36m:[m[32m1586[m[36m:[m      throw new Error('[1;31mFirestore indisponível[m para registrar a baixa de estoque do pedido.');
+[35msrc/database/firestore.repository.js[m[36m:[m[32m2317[m[36m:[m        throw new Error('[1;31mFirestore indisponível[m para validar o vínculo do cliente.');
+[35msrc/database/firestore.repository.js[m[36m:[m[32m2478[m[36m:[m        throw new Error('[1;31mFirestore indisponível[m; extrato financeiro indisponível.');
+[35msrc/http/firebase-client.js[m[36m:[m[32m12[m[36m:[m      const [{ [1;31minitializeApp[m }, { getAuth, GoogleAuthProvider, signInWithPopup, signOut, setPersistence, browserSessionPersistence }] = await Promise.all([
+[35msrc/http/firebase-client.js[m[36m:[m[32m16[m[36m:[m      const auth = getAuth([1;31minitializeApp[m(firebaseConfig));
+[35msrc/orders/payment-proof.js[m[36m:[m[32m19[m[36m:[m  const { [1;31mapplicationDefault[m, cert, getApps, [1;31minitializeApp[m } = require('firebase-admin/app');
+[35msrc/orders/payment-proof.js[m[36m:[m[32m22[m[36m:[m  const app = getApps().find((entry) => entry.name === name) || [1;31minitializeApp[m({
+[35msrc/orders/payment-proof.js[m[36m:[m[32m24[m[36m:[m    credential: config.gcp.keyFilename ? cert(config.gcp.keyFilename) : [1;31mapplicationDefault[m(),
+[35msrc/orders/pdv.repository.js[m[36m:[m[32m30[m[36m:[m    if (!repo.isInMemory || repo.firestore) { throw new Error('[1;31mFirestore indisponível[m. Operação não registrada.'); }
+[35msrc/orders/pdv.repository.js[m[36m:[m[32m77[m[36m:[m    if (!repo.isInMemory || repo.firestore) throw new Error('[1;31mFirestore indisponível[m.');
+[35msrc/orders/pdv.repository.js[m[36m:[m[32m87[m[36m:[m    if (!repo.isInMemory || repo.firestore) { throw new Error('[1;31mFirestore indisponível[m.'); }
+[35msrc/orders/pdv.repository.js[m[36m:[m[32m107[m[36m:[m      onError(new Error('[1;31mFirestore indisponível[m para acompanhar comandas em tempo real.'));
+[35msrc/security/firebase-auth.js[m[36m:[m[32m1[m[36m:[mconst { [1;31minitializeApp[m, getApps, cert, [1;31mapplicationDefault[m } = require('firebase-admin/app');
+[35msrc/security/firebase-auth.js[m[36m:[m[32m7[m[36m:[m  const app = getApps().find((entry) => entry.name === 'conflora-auth') || [1;31minitializeApp[m({
+[35msrc/security/firebase-auth.js[m[36m:[m[32m9[m[36m:[m    credential: config.gcp.keyFilename ? cert(config.gcp.keyFilename) : [1;31mapplicationDefault[m(),
+[35msrc/services/system-status.service.js[m[36m:[m[32m78[m[36m:[m      badge: isConnected ? 'Firestore Conectado' : this.firestoreRepo?.isInMemory ? 'Memória isolada de testes' : '[1;31mFirestore indisponível[m',
+[35mtest/dev-environment.test.js[m[36m:[m[32m69[m[36m:[m    [1;31mGOOGLE_APPLICATION_CREDENTIALS[m: credentials };
+[35mtest/firestore-concurrency.test.js[m[36m:[m[32m5[m[36m:[mtest('emulador: instâncias concorrentes reivindicam mensagem uma única vez', { skip: !process.env.[1;31mFIRESTORE_EMULATOR_HOST[m }, async t => {
+[35mtest/firestore-concurrency.test.js[m[36m:[m[32m6[m[36m:[m  const host = process.env.[1;31mFIRESTORE_EMULATOR_HOST[m;
