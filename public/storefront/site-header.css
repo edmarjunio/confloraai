@@ -91,34 +91,35 @@ conflora-topbar { display:block; width:100%; }
 .cf-topbar-layout .cf-topbar-brand { display:flex; align-items:center; flex:none; min-width:0; grid-column:1 !important; grid-row:1 !important; }
 .cf-topbar-layout .cf-topbar-brand img { width:128px !important; max-width:100% !important; height:42px !important; max-height:42px; object-fit:contain; }
 .cf-topbar-layout .cf-topbar-brand > span { display:none !important; }
-.cf-topbar-layout .cf-topbar-search { display:flex !important; grid-column:2 !important; grid-row:1 !important; align-items:center; flex:1; width:100% !important; max-width:none !important; min-width:0 !important; margin:0 !important; padding:4px 4px 4px 14px !important; gap:8px; min-height:46px; border:1px solid #dfe5e9; border-radius:var(--topbar-radius) !important; background:white; }
+.cf-topbar-layout .cf-topbar-search { display:flex !important; grid-column:2 !important; grid-row:1 !important; align-items:center; flex:1; width:100% !important; max-width:none !important; min-width:0 !important; margin:0 !important; padding:2px 2px 2px 14px !important; gap:8px; min-height:42px; border:2px solid #dfe5e9; border-radius:var(--topbar-radius) !important; background:white; }
 .cf-topbar-layout .cf-topbar-search:focus-within { border-color:#109e46; box-shadow:0 0 0 3px rgb(16 158 70 / 12%); }
 .cf-topbar-layout svg { width:18px; height:18px; flex:none; }
 .cf-topbar-layout .cf-topbar-search > svg { color:#8d9cab; }
 .cf-topbar-layout .cf-topbar-search input { flex:1; min-width:0; width:100%; padding:5px 0; border:0 !important; outline:none; border-radius:0; background:transparent; color:#20392d; font:inherit; font-size:14px; }
 .cf-topbar-layout .cf-topbar-search button {
   flex: none;
-  min-height: 38px;
+  min-height: 32px !important;
+  height: 32px !important;
   border: 2px solid #0f381e !important;
-  border-radius: 999px !important;
-  padding: 7px 18px !important;
+  border-radius: 0 999px 999px 0 !important;
+  padding: 0 16px !important;
   background: #15803d !important;
   color: white !important;
-  font-size: 13px !important;
+  font-size: 12px !important;
   font-weight: 800 !important;
   cursor: pointer;
-  box-shadow: 0 4px 0 #0f381e, 0 4px 10px rgba(15, 56, 30, 0.2) !important;
+  box-shadow: 0 3px 0 #0f381e, 0 3px 6px rgba(15, 56, 30, 0.2) !important;
   transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.12s ease, background-color 0.15s ease, border-color 0.15s ease !important;
   user-select: none;
   -webkit-user-select: none;
 }
 .cf-topbar-layout .cf-topbar-search button:hover:not(:disabled) {
-  transform: translateY(-2px) !important;
+  transform: translateY(-1px) !important;
   background: #166534 !important;
-  box-shadow: 0 6px 0 #0f381e, 0 8px 18px rgba(15, 56, 30, 0.3) !important;
+  box-shadow: 0 4px 0 #0f381e, 0 6px 12px rgba(15, 56, 30, 0.25) !important;
 }
 .cf-topbar-layout .cf-topbar-search button:active {
-  transform: translateY(3px) !important;
+  transform: translateY(2px) !important;
   box-shadow: 0 1px 0 #0f381e !important;
 }
 .cf-topbar-layout .cf-topbar-actions { display:flex; align-items:center; justify-content:flex-end; gap:12px !important; width:auto !important; margin:0 !important; flex-wrap:nowrap !important; grid-column:3 !important; grid-row:1 !important; }
@@ -296,7 +297,7 @@ conflora-topbar { display:block; width:100%; }
 .cf-topbar-layout :is(a,button,select,input):focus-visible { outline:3px solid #8bd1a3; outline-offset:3px; }
 .cf-work-actions,.cf-page-toolbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:16px 24px; width:100%; background:white; border-bottom:1px solid #e4eae6; box-sizing:border-box; }
 .cf-work-actions { justify-content:flex-end; }
-.cf-work-actions :is(a,button),.cf-page-toolbar :is(a,button) {
+.cf-work-actions > :is(a,button),.cf-page-toolbar > :is(a,button),.cf-page-toolbar .cf-pos-group-left > :is(a,button),.cf-page-toolbar .cf-pos-group-center > button.cf-button,.cf-page-toolbar .cf-pos-group-right > :is(a,button) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -312,13 +313,13 @@ conflora-topbar { display:block; width:100%; }
   cursor: pointer;
   transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.12s ease, background-color 0.15s ease, border-color 0.15s ease !important;
 }
-.cf-work-actions :is(a,button):hover:not(:disabled),.cf-page-toolbar :is(a,button):hover:not(:disabled) {
+.cf-work-actions > :is(a,button):hover:not(:disabled),.cf-page-toolbar > :is(a,button):hover:not(:disabled),.cf-page-toolbar .cf-pos-group-left > :is(a,button):hover:not(:disabled),.cf-page-toolbar .cf-pos-group-center > button.cf-button:hover:not(:disabled),.cf-page-toolbar .cf-pos-group-right > :is(a,button):hover:not(:disabled) {
   transform: translateY(-2px) !important;
   background: #f8fafc;
   border-color: #94a3b8;
   box-shadow: 0 6px 0 #64748b, 0 6px 14px rgba(15, 23, 42, 0.12) !important;
 }
-.cf-work-actions :is(a,button):active,.cf-page-toolbar :is(a,button):active {
+.cf-work-actions > :is(a,button):active,.cf-page-toolbar > :is(a,button):active,.cf-page-toolbar .cf-pos-group-left > :is(a,button):active,.cf-page-toolbar .cf-pos-group-center > button.cf-button:active,.cf-page-toolbar .cf-pos-group-right > :is(a,button):active {
   transform: translateY(3px) !important;
   box-shadow: 0 1px 0 #64748b !important;
 }
@@ -389,7 +390,7 @@ body:not(:has(#productView:not([hidden]))):not(:has(#adminView:not([hidden]))) [
 }
 :is(.cf-danger-button,.account-logout,#cartClearButton) { background:#dc2626 !important; color:white !important; border-color:#c81e1e !important; border-radius:999px !important; font-weight:800; box-shadow:0 2px 5px rgb(170 20 20 / 18%); }
 :is(.cf-danger-button,.account-logout) { margin-left:auto; }
-.cf-pos-context .cf-danger-button { order:99; }
+/* .cf-pos-context .cf-danger-button handled in flex group */
 #cartClearButton { min-height:34px; height:34px; padding:6px 14px; font-size:12px; }
 
 /* Botão de Fechar / Minimizar PADRONIZADO para todas as abas que abrem à direita */
@@ -742,3 +743,12 @@ body:not(:has(#productView:not([hidden]))):not(:has(#adminView:not([hidden]))) [
   .cf-pos-context { width:calc(100% - var(--cf-pos-aside-width) - 24px); padding-inline:24px !important; }
   .cashier-command-nav,.cf-pos-categories { max-width:none !important; width:calc(100% - var(--cf-pos-aside-width) - 68px) !important; margin-left:24px !important; margin-right:auto !important; }
 }
+
+/* PDV / Caixa Executive Toolbar Groups */
+.cf-pos-context { display:flex !important; align-items:center !important; justify-content:space-between !important; flex-wrap:wrap !important; gap:12px !important; padding:10px 24px !important; }
+.cf-pos-group-left, .cf-pos-group-center, .cf-pos-group-right { display:flex; align-items:center; gap:12px; }
+.cf-pos-qty-stepper { display:inline-flex; align-items:center; gap:6px; background:#f8fafc; border:2px solid #cbd5e1; border-radius:999px; padding:3px 10px; box-shadow:0 3px 0 #94a3b8; }
+.cf-pos-qty-stepper button { display:inline-flex !important; align-items:center !important; justify-content:center !important; width:26px !important; height:26px !important; min-height:26px !important; border:2px solid #cbd5e1 !important; border-radius:999px !important; background:#ffffff !important; color:#1e293b !important; box-shadow:0 2px 0 #94a3b8 !important; padding:0 !important; cursor:pointer !important; transition:transform 0.1s ease, box-shadow 0.1s ease !important; font-size:12px !important; }
+.cf-pos-qty-stepper button:hover { background:#f1f5f9 !important; transform:translateY(-1px) !important; box-shadow:0 3px 0 #64748b !important; }
+.cf-pos-qty-stepper button:active { transform:translateY(2px) !important; box-shadow:0 0 0 transparent !important; }
+.cf-pos-qty-stepper input { width:32px; text-align:center; font-weight:900; font-size:13px; color:#0f381e; background:transparent; border:none; outline:none; padding:0; }
