@@ -146,6 +146,15 @@
     // --- SEÇÃO 3: CONTA & ACESSO ---
     const accountItems = [
       {
+        id: 'guides',
+        label: 'Guias & Treinamento',
+        subtitle: 'Passo a passo didático com prints para cada função',
+        icon: '📖',
+        iconBg: '#ecfdf5',
+        href: '/guias',
+        roles: ['ALL'],
+      },
+      {
         id: 'profile',
         label: role ? 'Meu Perfil' : 'Entrar na Minha Conta',
         subtitle: role ? 'Seus dados e segurança' : 'Acesse seus pedidos e histórico',

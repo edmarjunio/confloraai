@@ -8,6 +8,7 @@
     truck: '<path d="M3 6h11v11H3zM14 10h4l3 4v3h-7"/><circle cx="7" cy="19" r="2"/><circle cx="18" cy="19" r="2"/>',
     chart: '<path d="M4 20V10h4v10m2 0V4h4v16m2 0V7h4v13"/>',
     menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+    book: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
   };
   const icon = name => '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + paths[name] + '</svg>';
   class ConfloraTopbar extends HTMLElement {
@@ -21,6 +22,7 @@
         '<div class="cf-topbar-actions">' +
         '<select class="cf-topbar-language" aria-label="Idioma do catálogo"><option value="pt">BR PT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select>' +
         '<button class="cf-topbar-identity" type="button" aria-label="Abrir minha conta">' + icon('user') + '<img hidden ' + (admin ? 'id="loggedUserPhoto"' : '') + ' alt="Foto do operador" referrerpolicy="no-referrer"><span><strong ' + (admin ? 'id="loggedUserName"' : '') + '></strong><small ' + (admin ? 'id="loggedUserRole"' : '') + '></small></span></button>' +
+        '<a class="cf-topbar-pill cf-topbar-guide" href="/guias" aria-label="Guias Operacionais" title="Guias e Treinamento">' + icon('book') + '<span>GUIA</span></a>' +
         '<a class="cf-topbar-pill cf-topbar-dark" href="/" data-primary>' + icon('cart') + '<span>Sacola</span></a>' +
         '<a class="cf-topbar-pill cf-topbar-cashier" href="/caixa" aria-label="Caixa">' + icon('cashier') + '<span>CAIXA</span></a>' +
         '<button class="cf-topbar-menu" type="button" aria-label="Menu da loja">' + icon('menu') + '</button>' +
