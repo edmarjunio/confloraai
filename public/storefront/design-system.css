@@ -385,36 +385,128 @@ render-product-card.cf-pdv-product-card {
 
 .cf-button {
   display: inline-flex;
-  min-height: 40px;
+  min-height: 42px;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border: 1px solid transparent;
-  border-radius: var(--cf-radius-button);
-  padding: 9px 14px;
-  background: var(--cf-button-color, var(--cf-green));
+  border: 2px solid #0f381e;
+  border-radius: 999px;
+  padding: 8px 18px;
+  background: #15803d;
   color: #fff;
   font: inherit;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 13.5px;
+  font-weight: 800;
   line-height: 1.2;
   text-decoration: none;
   cursor: pointer;
-  transition: transform 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+  box-shadow: 0 4px 0 #0f381e, 0 4px 10px rgba(21, 128, 61, 0.25);
+  transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.12s ease, background-color 0.15s ease, border-color 0.15s ease;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
-.cf-button:hover:not(:disabled) { background: var(--cf-green-dark); transform: translateY(-2px); box-shadow: 0 8px 20px rgb(15 56 30 / 20%); }
+.cf-button:hover:not(:disabled) {
+  background: #166534;
+  border-color: #0f381e;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 0 #0f381e, 0 8px 18px rgba(21, 128, 61, 0.35);
+}
+
+.cf-button:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #0f381e;
+}
+
 .cf-button--floating {
   min-height: 0;
   padding: 0;
-  border-radius: 50%;
+  border: 2px solid #0f381e;
+  border-radius: 999px;
+  box-shadow: 0 4px 0 #0f381e, 0 6px 16px rgba(21, 128, 61, 0.35);
 }
+.cf-button--floating:hover:not(:disabled) {
+  transform: translateY(-2px);
+  background: #166534;
+  box-shadow: 0 6px 0 #0f381e, 0 8px 20px rgba(21, 128, 61, 0.4);
+}
+.cf-button--floating:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #0f381e;
+}
+
 .cf-button:focus-visible { outline: 3px solid rgb(16 158 70 / 35%); outline-offset: 2px; }
-.cf-button:disabled { opacity: .5; cursor: not-allowed; }
-.cf-button[data-variant="secondary"] { border-color: var(--cf-border); background: #fff; color: var(--cf-green-deep); }
-.cf-button[data-variant="secondary"]:hover:not(:disabled) { background: #f0fdf4; }
-.cf-button[data-variant="danger"] { background: var(--cf-danger); }
-.cf-button[data-variant="quiet"] { border-color: transparent; background: transparent; color: var(--cf-green-deep); }
+.cf-button:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+  background: #94a3b8;
+  border-color: #64748b;
+  box-shadow: 0 3px 0 #475569;
+  transform: none;
+}
+
+.cf-button[data-variant="secondary"] {
+  border: 2px solid #cbd5e1;
+  background: #fff;
+  color: #1e293b;
+  box-shadow: 0 4px 0 #94a3b8, 0 4px 10px rgba(15, 23, 42, 0.08);
+}
+.cf-button[data-variant="secondary"]:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 0 #64748b, 0 6px 14px rgba(15, 23, 42, 0.12);
+}
+.cf-button[data-variant="secondary"]:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #64748b;
+}
+
+.cf-button[data-variant="danger"] {
+  background: #dc2626;
+  border: 2px solid #991b1b;
+  color: #fff;
+  box-shadow: 0 4px 0 #7f1d1d, 0 4px 10px rgba(220, 38, 38, 0.25);
+}
+.cf-button[data-variant="danger"]:hover:not(:disabled) {
+  background: #b91c1c;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 0 #7f1d1d, 0 6px 14px rgba(220, 38, 38, 0.3);
+}
+.cf-button[data-variant="danger"]:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #7f1d1d;
+}
+
+.cf-button[data-variant="warning"] {
+  background: #f59e0b;
+  border: 2px solid #b45309;
+  color: #172016;
+  box-shadow: 0 4px 0 #92400e, 0 4px 10px rgba(180, 83, 9, 0.2);
+}
+.cf-button[data-variant="warning"]:hover:not(:disabled) {
+  background: #fbbf24;
+  border-color: #92400e;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 0 #92400e, 0 6px 14px rgba(180, 83, 9, 0.25);
+}
+.cf-button[data-variant="warning"]:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #92400e;
+}
+
+.cf-button[data-variant="quiet"] {
+  border: 2px solid transparent;
+  background: transparent;
+  color: var(--cf-green-deep);
+  box-shadow: none;
+}
+.cf-button[data-variant="quiet"]:hover:not(:disabled) {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  transform: translateY(-1px);
+}
 
 cf-list {
   display: block;
