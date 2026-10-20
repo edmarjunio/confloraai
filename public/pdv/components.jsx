@@ -328,7 +328,7 @@ window.PdvComponents = (() => {
     if (order.completedAt) return 'Confirmado';
     return 'Em andamento';
   }
-  function ManualPixReview({ order }) {
+  function ManualPixReview({ order, onReviewed }) {
     const [note, setNote] = useState(''); const [bankReceived, setBankReceived] = useState(false);
     const [busy, setBusy] = useState(false); const [error, setError] = useState('');
     async function review(decision) {
@@ -336,7 +336,7 @@ window.PdvComponents = (() => {
       try {
         const response = await window.ConfloraSession.apiFetch('/api/caixa/orders/' + order.id + '/review-proof', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision, proofId: order.paymentProofId, bankReceived, note }) });
         const data = await response.json(); if (!response.ok) throw new Error(data.error);
-        location.reload();
+        if (onReviewed) { onReviewed(data.order); }
       } catch (failure) { setError(failure.message); } finally { setBusy(false); }
     }
     async function viewProof() {
@@ -765,6 +765,7 @@ window.PdvComponents = (() => {
     error = '',
     onReceive,
     onManualPix,
+    onReviewed,
     canAdvance = false,
     onAdvance,
     deliveryMode = false,
@@ -1032,7 +1033,7 @@ window.PdvComponents = (() => {
 
     const isFinalized = Boolean(order.completedAt || order.deliveryStatus === 'DELIVERED' || order.status === 'COMPLETED' || (order.paymentStatus === 'APPROVED' && !canReceive && !canAdvance));
 
-    return <Panel title={`Comanda #${order.ticketNumber || String(order.id).slice(-6).toUpperCase()}`} onClose={onClose}>{order.pixMode === 'MANUAL' && !order.completedAt && canReceive && <ManualPixReview order={order} />}
+    return <Panel title={`Comanda #${order.ticketNumber || String(order.id).slice(-6).toUpperCase()}`} onClose={onClose}>{order.pixMode === 'MANUAL' && !order.completedAt && canReceive && <ManualPixReview order={order} onReviewed={onReviewed} />}
       <div className="space-y-2 text-sm">
         <div className="flex items-center justify-between bg-slate-50 border border-slate-200/80 p-2.5 rounded-xl">
           <div>
@@ -1635,6 +1636,8 @@ window.PdvComponents = (() => {
           setSelectedOrder(response.order || order); await refresh(true);
         } catch (err) { setError(err.message); }
         finally { setBusy(false); }
+      }} onReviewed={async (reviewedOrder) => {
+        setSelectedOrder(reviewedOrder || selectedOrder); await refresh(true);
       }} onClose={() => setSelectedOrder(null)} />}
     </div>;
   }

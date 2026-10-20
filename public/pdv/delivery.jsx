@@ -348,6 +348,7 @@ function PdvDelivery({ user, onBack }) {
       onClose={() => { setSelected(null); setError(''); }}
       onReceive={(order, paymentMethod, receivedAmount, paymentParts, verification) => act(order, 'receive', { paymentMethod, receivedAmount, paymentParts, ...verification })}
       onManualPix={(order, note, proofId) => act(order, 'receive', { paymentMethod: 'PIX_MANUAL', paymentParts: order.paymentParts, manualPix: true, proofSeen: true, note, proofId })}
+      onReviewed={async (reviewedOrder) => { setSelected(reviewedOrder || selected); await refresh(); }}
       onStartDelivery={ownPreparation ? () => act(selected, 'start') : undefined}
       onAcceptDelivery={(!selected.assignedDriver?.id && ['PENDING_DELIVERY', 'PENDING_DISPATCH'].includes(selected.deliveryStatus)) ? () => handleAcceptOrder(selected) : undefined}
       onCompleteDelivery={(ownRoute && settled(selected)) ? () => act(selected, 'complete') : undefined}

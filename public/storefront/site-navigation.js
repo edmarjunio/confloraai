@@ -355,7 +355,7 @@
 
       const swTitle = document.createElement('div');
       swTitle.className = 'cf-nav-test-title';
-      swTitle.innerHTML = '👑 <span>${'Modo Teste (Exclusivo Dono)'.tr}</span>';
+      swTitle.innerHTML = '👑 <span>' + 'Modo Teste (Exclusivo Dono)'.tr + '</span>';
 
       const grid = document.createElement('div');
       grid.className = 'cf-nav-test-grid';
