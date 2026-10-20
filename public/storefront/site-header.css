@@ -304,7 +304,7 @@ conflora-topbar { display:block; width:100%; }
   min-height: 42px;
   gap: 8px;
   border: 2px solid #cbd5e1;
-  border-radius: 999px !important;
+  border-radius: 14px !important;
   padding: 8px 18px !important;
   background: #ffffff;
   color: #1e293b;
@@ -376,11 +376,11 @@ body > .container .nav-tabs, body > .container .tab-content { padding-inline:24p
 
 @media(min-width:1024px) { .cf-pos-context { width:66.6667%; padding-inline:24px; } }
 
-:is(button.action-btn,a.action-btn,button.btn-action,a.btn-action,button.header-btn,a.header-btn,button.nav-btn,.cashier-command-nav > button,.cf-button) { border-radius:999px !important; transition:transform .15s ease,box-shadow .15s ease,background-color .15s ease; }
+:is(button.action-btn,a.action-btn,button.btn-action,a.btn-action,button.header-btn,a.header-btn,button.nav-btn,.cashier-command-nav > button,.cf-button) { border-radius:14px !important; transition:transform .15s ease,box-shadow .15s ease,background-color .15s ease; }
 :is(button.action-btn,a.action-btn,button.btn-action,a.btn-action,button.header-btn,a.header-btn,.cashier-command-nav > button):hover:not(:disabled) { transform:translateY(-2px); box-shadow:0 7px 16px rgb(20 44 28 / 18%); }
 
 /* Navigation actions use one shape, elevation and touch target everywhere. */
-.cf-back-button,.cf-danger-button { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:42px; padding:10px 18px; border:1px solid #dbe5df; border-radius:999px !important; background:white; color:#20452f; font:700 12px Inter,system-ui,sans-serif; text-decoration:none; white-space:nowrap; cursor:pointer; box-shadow:0 2px 5px rgb(20 44 28 / 12%); transition:transform .15s ease,box-shadow .15s ease; }
+.cf-back-button,.cf-danger-button { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:42px; padding:10px 18px; border:1px solid #dbe5df; border-radius:14px !important; background:white; color:#20452f; font:700 12px Inter,system-ui,sans-serif; text-decoration:none; white-space:nowrap; cursor:pointer; box-shadow:0 2px 5px rgb(20 44 28 / 12%); transition:transform .15s ease,box-shadow .15s ease; }
 :is(.cf-back-button,.cf-danger-button):hover:not(:disabled) { transform:translateY(-2px); box-shadow:0 7px 16px rgb(20 44 28 / 18%); }
 
 /* Oculta botão Voltar na vitrine / home page onde não há navegação anterior */

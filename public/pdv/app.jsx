@@ -157,7 +157,7 @@ const { useState, useEffect, useRef, useMemo } = React;
     };
 
     const primaryActionButtonClass = 'cf-btn-3d cf-btn-3d--primary';
-    const shortcutButtonClass = 'cf-btn-3d cf-btn-3d--secondary cf-btn-3d--sm !px-3 !py-2 text-xs flex items-center justify-center gap-1.5';
+    const shortcutButtonClass = 'cf-btn-3d cf-btn-3d--secondary cf-btn-3d--sm !rounded-xl !px-3 !py-2.5 text-xs flex items-center justify-center gap-2';
 
     function readStorefrontProductImages() {
       try {
@@ -228,7 +228,7 @@ const { useState, useEffect, useRef, useMemo } = React;
         }
       }, [categoryTabs, selectedCategory]);
       useEffect(() => setVisibleCount(60), [selectedCategory, searchQuery]);
-      const [defaultMultiplier, setDefaultMultiplier] = useState(1);
+      const defaultMultiplier = 1;
 
       const [cart, setCart] = useState([]);
 
@@ -1049,7 +1049,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                 type="button"
                 onClick={() => setOrderType('PICKUP')}
                 aria-pressed={orderType === 'PICKUP'}
-                className={"flex-1 cf-btn-3d cf-btn-3d--sm " + (orderType === 'PICKUP' ? 'cf-btn-3d--primary' : 'cf-btn-3d--secondary')}
+                className={"flex-1 cf-btn-3d cf-btn-3d--sm !rounded-xl " + (orderType === 'PICKUP' ? 'cf-btn-3d--primary' : 'cf-btn-3d--secondary')}
               >
                 <span>🏪 Balcão</span>
               </button>
@@ -1060,7 +1060,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                   openCustomerModal();
                 }}
                 aria-pressed={orderType === 'DELIVERY'}
-                className={"flex-1 cf-btn-3d cf-btn-3d--sm " + (orderType === 'DELIVERY' ? 'cf-btn-3d--primary' : 'cf-btn-3d--secondary')}
+                className={"flex-1 cf-btn-3d cf-btn-3d--sm !rounded-xl " + (orderType === 'DELIVERY' ? 'cf-btn-3d--primary' : 'cf-btn-3d--secondary')}
               >
                 <span>🛵 Entrega</span>
               </button>
@@ -1084,7 +1084,7 @@ const { useState, useEffect, useRef, useMemo } = React;
               <button
                 type="button"
                 onClick={openCustomerModal}
-                className="cf-btn-3d cf-btn-3d--secondary cf-btn-3d--sm flex items-center gap-1.5 shrink-0"
+                className="cf-btn-3d cf-btn-3d--secondary cf-btn-3d--sm !rounded-xl flex items-center gap-1.5 shrink-0"
               >
                 <UserPlus className="w-3.5 h-3.5" />
                 <span>{customerId ? 'Selecionar cliente' : 'Adicionar cliente'}</span>
@@ -1226,7 +1226,7 @@ const { useState, useEffect, useRef, useMemo } = React;
               type="button"
               disabled={cart.length === 0}
               onClick={() => setActiveModal('pay')}
-              className={"cf-btn-3d cf-btn-3d--lg px-6 flex items-center gap-2 " + (cart.length > 0
+              className={"cf-btn-3d cf-btn-3d--lg !rounded-xl px-6 flex items-center gap-2 " + (cart.length > 0
                 ? 'cf-btn-3d--primary'
                 : 'cf-btn-3d--secondary opacity-50 cursor-not-allowed')}
             >
@@ -1273,44 +1273,11 @@ const { useState, useEffect, useRef, useMemo } = React;
                   </div>
                 </div>
 
-                {/* Center group: Operational actions (Multiplier + Entregas) */}
-                <div className="cf-pos-group-center flex items-center gap-2.5 sm:gap-3 flex-wrap">
-                  <div
-                    className="cf-pos-qty-stepper"
-                    title="Multiplicador de quantidade para o próximo item clicado"
-                  >
-                    <span className="text-xs font-black text-slate-600 uppercase tracking-wide mr-0.5">
-                      Quant:
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setDefaultMultiplier((q) => Math.max(1, q - 1))}
-                      aria-label="Diminuir multiplicador"
-                    >
-                      <Minus className="w-3 h-3" />
-                    </button>
-                    <input
-                      type="number"
-                      min="1"
-                      max="999"
-                      value={defaultMultiplier}
-                      onChange={(e) =>
-                        setDefaultMultiplier(Math.max(1, parseInt(e.target.value, 10) || 1))
-                      }
-                      aria-label="Valor do multiplicador"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setDefaultMultiplier((q) => q + 1)}
-                      aria-label="Aumentar multiplicador"
-                    >
-                      <Plus className="w-3 h-3" />
-                    </button>
-                  </div>
-
+                {/* Center group: Operational actions */}
+                <div className="cf-pos-group-center flex items-center gap-3">
                   {['ADMIN', 'CAIXA'].includes(currentUser.role) && (
-                    <button type="button" className="cf-button cf-btn-3d cf-btn-3d--sky cf-btn-3d--sm flex items-center gap-1.5 font-bold" onClick={() => navigateCashierPage('deliveries')}>
-                      <span>🛵</span>
+                    <button type="button" className="cf-button cf-btn-3d cf-btn-3d--sky cf-btn-3d--sm flex items-center gap-2 font-bold" onClick={() => navigateCashierPage('deliveries')}>
+                      <span className="text-sm">🛵</span>
                       <span>Entregas</span>
                     </button>
                   )}
@@ -1325,13 +1292,13 @@ const { useState, useEffect, useRef, useMemo } = React;
                   <button type="button" className="cf-danger-button" onClick={async () => { await window.ConfloraSession.apiFetch('/api/auth/logout', { method: 'POST' }); window.location.reload(); }}>Sair</button>
                 </div>
               </div>
-              <nav className="cashier-command-nav mx-auto mt-3 mb-4 grid w-full max-w-[1600px] grid-cols-3 gap-2 border-t border-slate-100 pt-3 sm:gap-3 lg:mx-0 lg:w-2/3" aria-label="Ações do caixa por atalho">
-                <button type="button" className={cart.length > 0 ? 'cf-btn-3d cf-btn-3d--primary cf-btn-3d--sm !px-3 !py-2 text-xs flex items-center justify-center gap-1.5' : shortcutButtonClass} disabled={cart.length === 0} onClick={() => setActiveModal('pay')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F1</kbd><span>Pagar</span></button>
-                <button type="button" className={shortcutButtonClass} onClick={() => navigateCashierPage('orders')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F2</kbd><span>Comandas</span></button>
-                <button type="button" className={shortcutButtonClass} onClick={() => navigateCashierPage('report')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F3</kbd><span>Relatório</span></button>
-                <button type="button" className={shortcutButtonClass} onClick={() => setActiveModal('discount')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F4</kbd><span>Desconto</span></button>
-                <button type="button" className={shortcutButtonClass} onClick={() => setActiveModal('freight')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F8</kbd><span>Entrega</span></button>
-                <button type="button" className={shortcutButtonClass} onClick={() => navigateCashierPage('history')}><kbd className="rounded bg-white/15 px-1.5 py-0.5">F9</kbd><span>Histórico</span></button>
+              <nav className="cashier-command-nav mx-auto mt-3 mb-4 grid w-full max-w-[1600px] grid-cols-3 sm:grid-cols-6 gap-2.5 border-t border-slate-100 pt-3 lg:mx-0 lg:w-2/3" aria-label="Ações do caixa por atalho">
+                <button type="button" className={`cf-btn-3d cf-btn-3d--sm !rounded-xl !px-3 !py-2.5 text-xs flex items-center justify-center gap-2 ${cart.length > 0 ? 'cf-btn-3d--primary' : 'cf-btn-3d--secondary'}`} disabled={cart.length === 0} onClick={() => setActiveModal('pay')}><kbd className="rounded-lg bg-black/10 px-1.5 py-0.5 font-black text-[11px]">F1</kbd><span>Pagar</span></button>
+                <button type="button" className={shortcutButtonClass} onClick={() => navigateCashierPage('orders')}><kbd className="rounded-lg bg-black/10 px-1.5 py-0.5 font-black text-[11px]">F2</kbd><span>Comandas</span></button>
+                <button type="button" className={shortcutButtonClass} onClick={() => navigateCashierPage('report')}><kbd className="rounded-lg bg-black/10 px-1.5 py-0.5 font-black text-[11px]">F3</kbd><span>Relatório</span></button>
+                <button type="button" className={shortcutButtonClass} onClick={() => setActiveModal('discount')}><kbd className="rounded-lg bg-black/10 px-1.5 py-0.5 font-black text-[11px]">F4</kbd><span>Desconto</span></button>
+                <button type="button" className={shortcutButtonClass} onClick={() => setActiveModal('freight')}><kbd className="rounded-lg bg-black/10 px-1.5 py-0.5 font-black text-[11px]">F8</kbd><span>Entrega</span></button>
+                <button type="button" className={shortcutButtonClass} onClick={() => navigateCashierPage('history')}><kbd className="rounded-lg bg-black/10 px-1.5 py-0.5 font-black text-[11px]">F9</kbd><span>Histórico</span></button>
               </nav>
 
               {/* Com Flora Category Pills Row */}
@@ -1344,7 +1311,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                         key={cat.id}
                         type="button"
                         onClick={() => handleSelectCategory(cat.id)}
-                        className={"cf-btn-3d cf-btn-3d--sm shrink-0 " + (isActive ? 'cf-btn-3d--primary' : 'cf-btn-3d--secondary')}
+                        className={"cf-btn-3d cf-btn-3d--sm !rounded-xl shrink-0 " + (isActive ? 'cf-btn-3d--primary' : 'cf-btn-3d--secondary')}
                       >
                         <span className="cf-btn-3d__icon text-sm">{cat.icon}</span>
                         <span className="cf-btn-3d__text">{cat.label}</span>
@@ -1361,7 +1328,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                     <button
                       type="button"
                       onClick={() => setSelectedSubcategory('')}
-                      className={"cf-btn-3d cf-btn-3d--sm !text-xs !py-1 !px-3 shrink-0 " + (!selectedSubcategory ? 'cf-btn-3d--primary' : 'cf-btn-3d--secondary')}
+                      className={"cf-btn-3d cf-btn-3d--sm !rounded-xl !text-xs !py-1 !px-3 shrink-0 " + (!selectedSubcategory ? 'cf-btn-3d--primary' : 'cf-btn-3d--secondary')}
                     >
                       Todas
                     </button>
@@ -1372,7 +1339,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                           key={sub}
                           type="button"
                           onClick={() => setSelectedSubcategory(isSubActive ? '' : sub)}
-                          className={"cf-btn-3d cf-btn-3d--sm !text-xs !py-1 !px-3 shrink-0 " + (isSubActive ? 'cf-btn-3d--primary' : 'cf-btn-3d--secondary')}
+                          className={"cf-btn-3d cf-btn-3d--sm !rounded-xl !text-xs !py-1 !px-3 shrink-0 " + (isSubActive ? 'cf-btn-3d--primary' : 'cf-btn-3d--secondary')}
                         >
                           {sub}
                         </button>
@@ -1406,11 +1373,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                         <span>Catálogo de Produtos</span>
                       )}
                     </h2>
-                    {defaultMultiplier > 1 && (
-                      <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 animate-pulse">
-                        Multiplicador {defaultMultiplier}x ativo
-                      </span>
-                    )}
+
                   </div>
 
                   <span className="text-xs text-slate-400 font-medium">

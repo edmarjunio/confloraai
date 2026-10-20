@@ -10,7 +10,16 @@
     menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
     book: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
   };
-  const trSafe = s => { try { const t = typeof window.tr === 'function' ? window.tr(s) : (s && s.tr ? s.tr : s); return (typeof t === 'string' && t) ? t : s; } catch (_) { return s; } };
+  const trSafe = s => {
+    try {
+      if (!s) return '';
+      let t = typeof window.tr === 'function' ? window.tr(s) : (typeof s.tr === 'string' ? s.tr : s);
+      if (typeof t !== 'string' || !t || t === 'undefined') t = s;
+      return t;
+    } catch (_) {
+      return s;
+    }
+  };
   const icon = name => '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + paths[name] + '</svg>';
   class ConfloraTopbar extends HTMLElement {
     static get observedAttributes() { return ['user-name', 'user-role', 'user-photo', 'search-value']; }
@@ -117,7 +126,8 @@
       cashier.setAttribute('aria-label', trSafe(role === 'ENTREGADOR' ? 'Minhas entregas' : 'Caixa'));
       const primary = this.querySelector('[data-primary]');
       primary.href = role === 'ADMIN' ? '/admin-gerencial' : '/?sacola=1';
-      primary.innerHTML = icon(role === 'ADMIN' ? 'chart' : 'cart') + '<span>' + (role === 'ADMIN' ? trSafe('Painel Gerencial') : trSafe('Sacola')) + '</span>';
+      const label = role === 'ADMIN' ? (trSafe('Painel Gerencial') || 'Painel Gerencial') : (trSafe('Sacola') || 'Sacola');
+      primary.innerHTML = icon(role === 'ADMIN' ? 'chart' : 'cart') + '<span>' + (label && label !== 'undefined' ? label : (role === 'ADMIN' ? 'Painel Gerencial' : 'Sacola')) + '</span>';
 
     }
   }

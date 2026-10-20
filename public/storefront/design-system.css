@@ -361,8 +361,8 @@ render-product-card.cf-pdv-product-card {
    ========================================================================== */
 
 :root {
-  --cf-btn-3d-radius: 999px;
-  --cf-btn-3d-radius-rounded: 16px;
+  --cf-btn-3d-radius: 14px;
+  --cf-btn-3d-radius-rounded: 14px;
   --cf-btn-3d-depth: 4px;
   --cf-btn-3d-depth-sm: 3px;
   --cf-btn-3d-depth-lg: 5px;
