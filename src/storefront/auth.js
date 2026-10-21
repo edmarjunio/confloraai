@@ -100,11 +100,13 @@ function createStoreAuth(repo) {
       const previous = tokenFrom(req);
       if (previous) {
         await repo.put(req.tenantId, "sessions", digest(previous), {
-          expiresAt: 0,
+          kind: "LOGIN",
+          expiresAt: new Date(0),
         });
       }
       const token = randomBytes(32).toString("hex");
       await repo.put(req.tenantId, "sessions", digest(token), {
+        kind: "LOGIN",
         userId: user.id,
         expiresAt: new Date(Date.now() + 43200000),
       });
@@ -115,7 +117,8 @@ function createStoreAuth(repo) {
       const token = tokenFrom(req);
       if (token) {
         await repo.put(req.tenantId, "sessions", digest(token), {
-          expiresAt: 0,
+          kind: "LOGIN",
+          expiresAt: new Date(0),
         });
       }
       res.setHeader("Set-Cookie", cookie(req, "", 0));

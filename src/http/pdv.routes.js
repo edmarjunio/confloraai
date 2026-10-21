@@ -77,10 +77,11 @@ function paymentTotals(orders, settlements) {
   return totals;
 }
 
-function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueueClient }) {
+function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueueClient, catalogAgent }) {
   const store = new PdvRepository(repository);
   const proofStorage = new PaymentProofStorage({ inMemory: repository.isInMemory && !repository.firestore });
   const service = new PdvService({ repository: store, pix, whatsapp, ownerPhone, taskQueueClient });
+  service.catalogAgent = catalogAgent;
   const { CustomerDebtPixService } = require('../orders/customer-debt-pix.service');
   const debtPix = new CustomerDebtPixService({ store, pix, pdv: service });
   service.debtPix = debtPix;

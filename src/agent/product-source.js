@@ -12,6 +12,7 @@ class FirestoreProductSource {
     this.productsCollection = names.productsCollection || 'products';
     this.synonymsCollection = names.synonymsCollection || 'agent_synonyms';
     this.settingsCollection = names.settingsCollection || 'store_settings';
+    this.metrics = { indexLoads: 0, identityDocuments: 0, productDocuments: 0, settingsReads: 0 };
   }
 
   /** Projeção só com campos de identificação (nome, categoria, status). Nenhum preço/estoque entra no índice. */
@@ -20,8 +21,11 @@ class FirestoreProductSource {
       'name', 'descricao', 'DESCRIÇÃO', 'canonicalName',
       'category', 'categoria', 'CATEGORIA', 'subcategory', 'subcategoria', 'SUBCATEGORIA',
       'status', 'STATUS',
+      'variation', 'variacao', 'botanical',
     ];
     const snapshot = await this.db.collection(this.productsCollection).select(...fields).get();
+    this.metrics.indexLoads++;
+    this.metrics.identityDocuments += snapshot.docs.length;
     return snapshot.docs.map((doc) => ({ id: doc.id, data: doc.data() }));
   }
 
@@ -30,6 +34,7 @@ class FirestoreProductSource {
     if (!ids.length) return [];
     const refs = ids.map((id) => this.db.collection(this.productsCollection).doc(id));
     const snaps = await this.db.getAll(...refs);
+    this.metrics.productDocuments += snaps.length;
     return snaps.map((snap) => ({
       id: snap.id,
       exists: snap.exists,
@@ -41,6 +46,7 @@ class FirestoreProductSource {
 
   /** `store_settings/inventory.stockControlEnabled`; qualquer valor não booleano => desconhecido (null). */
   async getStockControl() {
+    this.metrics.settingsReads++;
     const snap = await this.db.collection(this.settingsCollection).doc('inventory').get();
     const value = snap.exists ? snap.data().stockControlEnabled : undefined;
     return { value: typeof value === 'boolean' ? value : null, readTime: snap.readTime };

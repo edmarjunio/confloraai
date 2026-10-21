@@ -1,12 +1,7 @@
 'use strict';
 
-/**
- * Definições oficiais de ferramentas para o conector Meta Business Agent.
- * Em conformidade com a especificação BizAIOmniChannelConnectorToolRequest
- * da Meta Business Agent Platform (X-API-Version: 2.0.0).
- */
-
-function buildConnectorTools({ baseUrl = 'https://conflora.com.br/api/meta-agent' } = {}) {
+/** Internal adapter draft. Account support and provider schema are not homologated. */
+function buildConnectorTools() {
   return [
     {
       name: 'consultar_produto',

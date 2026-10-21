@@ -106,17 +106,34 @@ class HandoffStore {
 
   /** Grava o encaminhamento e pausa a automação no mesmo lote atômico. */
   async open(record) {
-    const iso = this.now().toISOString();
-    const id = `hf_${record.requestId}`;
-    const handoff = { ...record, id, status: 'open', createdAt: iso, cartPreserved: true };
-    const batch = this.db.batch();
-    batch.set(this.db.collection(this.handoffs).doc(id), handoff);
-    batch.set(this.conversationRef(record.tenantId, record.customerKey), {
-      tenantId: record.tenantId, customerKey: record.customerKey, automation: 'paused',
-      pausedAt: iso, reason: record.reason, handoffId: id, updatedAt: iso,
+    const conversationRef = this.conversationRef(record.tenantId, record.customerKey);
+    return this.db.runTransaction(async tx => {
+      const conversation = await tx.get(conversationRef);
+      const state = conversation.exists ? conversation.data() : {};
+      if (state.tenantId && (state.tenantId !== record.tenantId || state.customerKey !== record.customerKey)) throw new Error('CONVERSATION_ISOLATION');
+      if (state.automation === 'paused' && state.handoffId) return { id: state.handoffId, status: 'open' };
+      const iso = this.now().toISOString();
+      const id = `hf_${record.requestId}`;
+      const handoff = { ...JSON.parse(JSON.stringify(record)), id, status: 'open', createdAt: iso, cartPreserved: true };
+      tx.set(this.db.collection(this.handoffs).doc(id), handoff);
+      tx.set(conversationRef, {
+        ...state, tenantId: record.tenantId, customerKey: record.customerKey, automation: 'paused',
+        pausedAt: iso, reason: record.reason, handoffId: id, updatedAt: iso,
+      });
+      return handoff;
     });
-    await batch.commit();
-    return handoff;
+  }
+
+  async rememberProducts(tenantId, customerKey, products) {
+    const ref = this.conversationRef(tenantId, customerKey);
+    return this.db.runTransaction(async tx => {
+      const snap = await tx.get(ref);
+      const state = snap.exists ? snap.data() : { tenantId, customerKey, automation: 'active' };
+      if (state.tenantId !== tenantId || state.customerKey !== customerKey) throw new Error('CONVERSATION_ISOLATION');
+      if (state.automation === 'paused') return false;
+      tx.set(ref, { ...state, presentedProductIds: products.map(p => p.id).slice(0, 3), presentedAt: this.now().toISOString() });
+      return true;
+    });
   }
 
   async listOpen(tenantId, limit = 100) {
@@ -139,6 +156,9 @@ class HandoffStore {
       const handoff = snap.data();
       if (handoff.tenantId !== tenantId) return { ok: false, code: 'not_found' };
       if (handoff.status !== 'open') return { ok: false, code: 'already_resolved' };
+      const conversationRef = this.conversationRef(tenantId, handoff.customerKey);
+      const conversation = await tx.get(conversationRef);
+      if (conversation.data()?.handoffId !== handoffId) return { ok: false, code: 'superseded_handoff' };
       const iso = this.now().toISOString();
       tx.update(ref, { status: 'resumed', resumedAt: iso, resumedBy: { id: actor.id, role: actor.role } });
       tx.set(this.conversationRef(tenantId, handoff.customerKey), {

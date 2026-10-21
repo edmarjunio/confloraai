@@ -17,8 +17,9 @@ const { safeEqualText } = require('../agent/util');
 function createMetaAgentRoutes({
   agentService,
   handoffStore,
-  apiKey = process.env.META_AGENT_API_KEY || process.env.ADMIN_SECRET || 'conflora-agent-secret-key',
+  apiKey = process.env.META_AGENT_API_KEY || '',
   tenantId = 'conflora',
+  connectorEnabled = process.env.WHATSAPP_AGENT_OWNER === 'meta_connector' && process.env.META_AGENT_CONNECTOR_VERIFIED === 'true',
 }) {
   const express = require('express');
   const router = express.Router();
@@ -28,7 +29,7 @@ function createMetaAgentRoutes({
     const authHeader = req.headers['x-conflora-agent-key'] || req.headers.authorization;
     let token = '';
 
-    if (authHeader) {
+    if (typeof authHeader === 'string') {
       if (authHeader.startsWith('Bearer ')) {
         token = authHeader.slice(7).trim();
       } else {
@@ -36,7 +37,9 @@ function createMetaAgentRoutes({
       }
     }
 
-    if (!token || !apiKey || !safeEqualText(token, apiKey)) {
+    const unsafeKey = ['conflora-agent-secret-key', 'conflora-agent-secret-key-prod'].includes(apiKey)
+      || (process.env.NODE_ENV === 'production' && apiKey.length < 32);
+    if (!token || !apiKey || unsafeKey || !safeEqualText(token, apiKey)) {
       Logger.warn('Tentativa de acesso ao Meta Connector com chave inválida ou ausente');
       return res.status(401).json({
         error: 'Unauthorized',
@@ -61,6 +64,14 @@ function createMetaAgentRoutes({
 
   for (const op of operations) {
     router.post([`/${op}`, `/tools/${op}`], authenticateConnector, async (req, res) => {
+      if (!connectorEnabled) return res.status(409).json({
+        status: 'error', data: {}, validation: { checks: [] }, provenance: { reason: 'connector_not_authorized_owner' },
+        next_action: { send_customer_message: false, handoff_to_human: false },
+      });
+      if (['adicionar_item', 'alterar_quantidade', 'remover_item', 'preparar_finalizacao'].includes(op)
+        && process.env.META_AGENT_PILOT_CART_ENABLED !== 'true') return res.status(409).json({
+        status: 'error', data: {}, next_action: { send_customer_message: false, handoff_to_human: true },
+      });
       try {
         const envelope = await agentService.execute(op, req.body);
         // Retorna sempre 200 com o envelope estruturado do contrato
@@ -71,7 +82,8 @@ function createMetaAgentRoutes({
           request_id: req.body?.message_id || 'unknown',
           status: 'error',
           error: { code: 'server_error', message: 'Erro interno no processamento da ferramenta.' },
-          nextAction: { send_customer_message: false, handoff_to_human: true },
+          data: {}, validation: { checks: [] }, provenance: {},
+          next_action: { send_customer_message: false, handoff_to_human: true },
         });
       }
     });
@@ -80,7 +92,7 @@ function createMetaAgentRoutes({
   // 1.1 Especificações das Ferramentas para o Conector Meta
   const { buildConnectorTools } = require('../agent/meta-connector-tools');
   router.get('/tools-spec', authenticateConnector, (_req, res) => {
-    return res.json({ tools: buildConnectorTools() });
+    return res.json({ provider_homologated: false, tools: buildConnectorTools() });
   });
 
   // 2. Fila de Atendimento Humano (Rotas para o Painel Administrativo)

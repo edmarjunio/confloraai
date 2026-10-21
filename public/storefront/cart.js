@@ -379,6 +379,7 @@ export function createCart(state) {
     }
     confirmationAccepted = false;
     const payload = {
+      analyticsClientId: state.analyticsClientId,
       customer: {
         name: form.elements.name.value,
         phone: form.elements.phone.value,
@@ -415,7 +416,7 @@ export function createCart(state) {
       // Execute order via TanStack Query mutation
       const order = await storeQueries.submitOrder(payload, state.api, pending.key);
       if (owner !== submittingOwner) return;
-      state.trackEvent?.("purchase", {
+      state.trackEvent?.("order_created", {
         orderId: order.id,
         value: Number(order.totalMinor || subtotal()) / 100,
         resultCount: payload.items.length,

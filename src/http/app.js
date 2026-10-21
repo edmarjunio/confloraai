@@ -1,6 +1,7 @@
 const { createHash, randomUUID } = require('node:crypto');
 const { createWebSessions, safeUser } = require('../security/web-session');
 const { rankProductSales } = require('../catalog/product-sales');
+const { StorefrontAnalyticsService, campaignLabel } = require('../services/storefront-analytics.service');
 const { resolveHdProductImage } = require('../catalog/image-resolver');
 const { getCashierProductDetails } = require('../catalog/cashier-product-details');
 const { normalizeDeliveryLocation } = require('../orders/pdv.service');
@@ -412,6 +413,7 @@ function createApp({
   app.use('/api', sessions.resolve);
   app.use('/api/customer', (req, res, next) => req.user?.role === 'ENTREGADOR' ? res.status(403).json({ error: 'Seu acesso é exclusivo às entregas.' }) : next());
 
+  require('../security/request-protection').installRequestProtection(app, messageService.firestoreRepo);
   // Meta Business Agent Platform - Tools HTTP Connector & Fila Humana
   if (messageService && messageService.metaAgentService) {
     const { createMetaAgentRoutes } = require('./meta-agent.routes');
@@ -426,12 +428,14 @@ function createApp({
     if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && !req.path.endsWith('/preview') && /\/(?:products|import-products|stock)(?:\/|$)/.test(req.path)) {
       res.once('finish', () => {
         // A failed import may already have committed earlier batches.
-        if (req.user?.role === 'ADMIN') messageService.catalogRepo?.invalidateCache?.();
+        if (req.user?.role === 'ADMIN') {
+          messageService.catalogRepo?.invalidateCache?.();
+          messageService.metaAgentService?.productIndex.invalidate();
+        }
       });
     }
     next();
   });
-  require('../security/request-protection').installRequestProtection(app, messageService.firestoreRepo);
   const { installExistingStore, normalizeExistingCheckout } = require('../storefront/existing-store');
   installExistingStore(app, {
     catalog: messageService.catalogRepo,
@@ -965,6 +969,7 @@ function createApp({
         status: resolvedPaymentMethod === 'PIX' && !manualPix ? 'CREATING_PIX' : resolvedPaymentMethod === 'FIADO' ? 'AWAITING_CONFIRMATION' : 'AWAITING_PAYMENT',
         ...(resolvedPaymentMethod === 'FIADO' ? { creditApprovalStatus: 'PENDING' } : {}),
         source: 'WEB_CATALOG',
+        ...(/^[a-f0-9-]{36}$/.test(req.body.analyticsClientId || '') ? { analyticsClientId: req.body.analyticsClientId } : {}),
         paymentStatus: 'PENDING',
         ...(resolvedPaymentMethod === 'PIX' ? { pixMode: manualPix ? 'MANUAL' : 'SICREDI' } : {}),
         ...(manualPix ? { manualPix, paymentReviewStatus: 'AWAITING_PAYMENT' } : {}),
@@ -1125,8 +1130,9 @@ function createApp({
   });
 
   // Eventos anônimos e sem dados pessoais para leitura de tráfego e conversão do catálogo.
+  const storefrontAnalytics = new StorefrontAnalyticsService(messageService.firestoreRepo);
   app.post('/api/analytics/events', async (req, res) => {
-    const acceptedEvents = new Set(['page_view', 'view_item', 'add_to_cart', 'begin_checkout', 'purchase', 'search', 'category_filter']);
+    const acceptedEvents = new Set(['page_view', 'view_item', 'add_to_cart', 'begin_checkout', 'order_created', 'purchase', 'search', 'category_filter']);
     const body = req.body || {};
     const eventName = String(body.eventName || '').trim();
     const visitorId = String(body.visitorId || '').trim();
@@ -1136,7 +1142,8 @@ function createApp({
     const shortText = (value, max) => String(value || '').trim().slice(0, max);
     const numericValue = Number(body.value);
     try {
-      await messageService.firestoreRepo.recordStorefrontEvent({
+      await storefrontAnalytics.record({
+        id: /^[a-f0-9-]{36}$/.test(body.id || '') ? body.id : randomUUID(),
         eventName,
         visitorId,
         productId: shortText(body.productId, 160),
@@ -1153,9 +1160,9 @@ function createApp({
         value: Number.isFinite(numericValue) && numericValue >= 0 ? Math.min(numericValue, 1000000) : 0,
         searchLength: Math.max(0, Math.min(100, Number.parseInt(body.searchLength, 10) || 0)),
         resultCount: Math.max(0, Math.min(100000, Number.parseInt(body.resultCount, 10) || 0)),
-        utmSource: shortText(body.utmSource, 100),
-        utmMedium: shortText(body.utmMedium, 100),
-        utmCampaign: shortText(body.utmCampaign, 120),
+        utmSource: campaignLabel(body.utmSource),
+        utmMedium: campaignLabel(body.utmMedium),
+        utmCampaign: campaignLabel(body.utmCampaign),
       });
       res.status(202).json({ success: true });
     } catch (error) {
@@ -1166,7 +1173,7 @@ function createApp({
 
   app.get('/api/admin/analytics/events', async (_req, res) => {
     try {
-      const summary = await messageService.firestoreRepo.getStorefrontAnalyticsSummary({ days: _req.query.days });
+      const summary = await storefrontAnalytics.summary({ days: _req.query.days });
       res.status(200).json(summary);
     } catch (error) {
       Logger.error('Erro ao consultar eventos do catálogo', error);
@@ -1305,6 +1312,7 @@ function createApp({
   const { installPdvRoutes } = require('./pdv.routes');
   installPdvRoutes(app, {
     repository: messageService.firestoreRepo, pix: sicrediPixClient,
+    catalogAgent: messageService.metaAgentService,
     whatsapp: messageService.whatsappClient,
     taskQueueClient,
     ownerPhone: process.env.OWNER_WHATSAPP_NUMBER || config.whatsapp?.ownerNumber || '',
@@ -1466,6 +1474,9 @@ function createApp({
   app.post('/api/admin/products', async (req, res) => {
     try {
       const product = req.body;
+      if (Object.hasOwn(product, 'botanical')) {
+        product.botanical = require('../agent/plant-search').reviewedBotanical(product.botanical, req.user);
+      }
       await messageService.firestoreRepo.saveProduct(product);
       if (messageService.catalogRepo) {
         messageService.catalogRepo.invalidateCache?.();

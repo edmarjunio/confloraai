@@ -1,13 +1,16 @@
 'use strict';
 
-const { newRequestId, toIso, TimeoutError, isTransient, retryTransient } = require('./util');
+const { newRequestId, TimeoutError } = require('./util');
 const { parseInput, assertEnvelope } = require('./schema');
 const { evaluateProduct } = require('./product-contract');
 const { parseQuantity, checkQuantityRules, lineSubtotalCents } = require('./units');
 const { buildChecks, passed } = require('./validation');
-const { priceBlock, priceCards, productList, added, quantityChanged, removed, cartSummary, priceChanges, checkoutSummary } = require('./templates');
+const { priceCards, productList, added, quantityChanged, removed, cartSummary, priceChanges, checkoutSummary } = require('./templates');
 const { verifyCustomerMessage } = require('./message-guard');
 const { customerKeyFor } = require('./agent-store');
+const { interpretTraits, satisfiesTraits } = require('./plant-search');
+const { normalizeName } = require('./util');
+const { verifiedProductImage } = require('./product-image');
 
 class ConfloraAgentService {
   /**
@@ -28,6 +31,7 @@ class ConfloraAgentService {
     tenantId = 'conflora',
     assertAvailability = false,
     timeoutMs = 5000,
+    imageResolver = verifiedProductImage,
   }) {
     if (!productSource || !productIndex || !cartStore || !handoffStore) {
       throw new Error('ConfloraAgentService requer productSource, productIndex, cartStore e handoffStore.');
@@ -39,6 +43,8 @@ class ConfloraAgentService {
     this.tenantId = tenantId;
     this.assertAvailability = assertAvailability;
     this.timeoutMs = timeoutMs;
+    this.imageResolver = imageResolver;
+    this.metrics = { requests: 0, found: 0, handoffs: 0, errors: 0, latencyMs: 0 };
   }
 
   /**
@@ -47,7 +53,21 @@ class ConfloraAgentService {
    * @param {Object} rawInput
    * @returns {Promise<Object>} Envelope validado
    */
-  async execute(operation, rawInput) {
+  async execute(operation, rawInput, options = {}) {
+    const result = await this._execute(operation, rawInput, options);
+    this.metrics.requests++;
+    this.metrics.latencyMs += result.latency_ms;
+    if (result.status === 'found') this.metrics.found++;
+    else if (result.status === 'handoff') this.metrics.handoffs++;
+    else this.metrics.errors++;
+    require('../shared/logger').info('catalog_agent_result', {
+      requestId: result.request_id, operation, status: result.status, latencyMs: result.latency_ms,
+      reason: result.status === 'handoff' ? result.provenance.reason : undefined,
+    });
+    return result;
+  }
+
+  async _execute(operation, rawInput, options) {
     const requestId = newRequestId();
     const startMs = Date.now();
 
@@ -65,7 +85,7 @@ class ConfloraAgentService {
     }
 
     const customerKey = customerKeyFor(this.tenantId, parsed.customerPhone);
-    const scope = { requestId, customerKey, parsed, startMs };
+    const scope = { requestId, customerKey, parsed, startMs, rememberProducts: options.rememberProducts !== false };
 
     try {
       return await this._runWithTimeout(async () => {
@@ -78,6 +98,8 @@ class ConfloraAgentService {
         }
 
         switch (operation) {
+          case 'atender_mensagem':
+            return await this._atenderMensagem(scope, conv);
           case 'consultar_produto':
             return await this._consultarProduto(scope);
           case 'buscar_produtos':
@@ -173,11 +195,16 @@ class ConfloraAgentService {
     const sourceRecords = [];
     const allowedCents = [];
 
+    if (rawDocs.length !== ids.length) return this._triggerSilentHandoff(scope, 'incomplete_product_read', {});
     for (const raw of rawDocs) {
       if (!raw.exists) {
         return await this._triggerSilentHandoff(scope, 'product_not_found_on_read', { id: raw.id });
       }
       const evalRes = evaluateProduct(raw, ctx);
+      const criteria = interpretTraits(parsed.criteriaQuery || '');
+      if (criteria.constraints.length && !satisfiesTraits(raw.data, criteria.constraints)) return this._triggerSilentHandoff(scope, 'traits_changed', {});
+      const indexed = resolutions.find(r => r.entry.id === raw.id)?.entry;
+      if (evalRes.ok && indexed && normalizeName(evalRes.product.name) !== indexed.norm) return this._triggerSilentHandoff(scope, 'identity_changed', {});
       sourceRecords.push(evalRes.source);
 
       if (!evalRes.ok) {
@@ -199,7 +226,7 @@ class ConfloraAgentService {
       record_active: evaluatedProducts.every((p) => p),
       required_field_present: evaluatedProducts.every((p) => p.priceCents && p.unit),
       price_currency_unit_coherent: true,
-      availability_assertable: parsed.intent === 'disponibilidade' ? (ctx.assertAvailability && ctx.stockControlEnabled) : undefined,
+      availability_assertable: parsed.intent === 'disponibilidade' ? evaluatedProducts.every(p => p.stock.verified) : undefined,
       no_source_conflict: true,
       freshness_policy: true,
       message_only_confirmed_facts: true,
@@ -217,6 +244,8 @@ class ConfloraAgentService {
     }));
 
     const customerMessage = priceCards(cards);
+    const productCards = await this._productCards(evaluatedProducts, rawDocs);
+    if (parsed.intent === 'foto' && !productCards[0]?.image_url) return this._triggerSilentHandoff(scope, 'photo_unavailable', {});
 
     // 5. Guarda final da mensagem
     const guard = verifyCustomerMessage(customerMessage, { allowedCents });
@@ -229,6 +258,7 @@ class ConfloraAgentService {
       status: 'found',
       data: {
         customer_message: customerMessage,
+        cards: productCards,
         products: evaluatedProducts.map((p) => ({
           id: p.id,
           name: p.name,
@@ -260,19 +290,24 @@ class ConfloraAgentService {
       });
     }
 
-    const limited = matchedEntries.slice(0, parsed.limit);
-    const truncated = matchedEntries.length > parsed.limit;
+    const limit = Math.min(parsed.limit, 3);
+    const limited = matchedEntries.slice(0, limit);
+    const truncated = matchedEntries.length > limit;
 
     const ids = limited.map((e) => e.id);
     const rawDocs = await this.productSource.getProducts(ids);
+    if (rawDocs.length !== ids.length) return this._triggerSilentHandoff(scope, 'incomplete_product_read', {});
 
     const validProducts = [];
     const sourceRecords = [];
     const allowedCents = [];
 
     for (const raw of rawDocs) {
-      if (!raw.exists) continue;
+      if (!raw.exists) return this._triggerSilentHandoff(scope, 'product_not_found_on_read', {});
+      const traits = interpretTraits(parsed.query);
+      if (traits.constraints.length && !satisfiesTraits(raw.data, traits.constraints)) return this._triggerSilentHandoff(scope, 'traits_changed', {});
       const evalRes = evaluateProduct(raw, { assertAvailability: false });
+      if (!evalRes.ok) return this._triggerSilentHandoff(scope, 'invalid_or_conflicted_product', { id: raw.id, issues: evalRes.issues });
       if (evalRes.ok) {
         validProducts.push(evalRes.product);
         sourceRecords.push(evalRes.source);
@@ -284,8 +319,9 @@ class ConfloraAgentService {
       return await this._triggerSilentHandoff(scope, 'all_matching_products_invalid', {});
     }
 
-    const heading = parsed.category ? `Opções em ${parsed.category}` : 'Produtos disponíveis';
+    const heading = 'Opções cadastradas';
     const customerMessage = productList({ items: validProducts, truncated, heading });
+    const productCards = await this._productCards(validProducts, rawDocs);
 
     const checks = buildChecks({
       request_understood: true,
@@ -309,6 +345,7 @@ class ConfloraAgentService {
       status: 'found',
       data: {
         customer_message: customerMessage,
+        cards: productCards,
         products: validProducts.map((p) => ({ id: p.id, name: p.name, price_cents: p.priceCents, unit: p.unit })),
         total_found: matchedEntries.length,
         displayed: validProducts.length,
@@ -319,6 +356,56 @@ class ConfloraAgentService {
       nextAction: { send_customer_message: true, handoff_to_human: false },
       latencyMs: Date.now() - scope.startMs,
     }));
+  }
+
+  async _productCards(products, rawDocs) {
+    return Promise.all(products.map(async p => ({
+      id: p.id, name: p.name, presentation: p.presentation, price_cents: p.priceCents, unit: p.unit,
+      image_url: products.length === 1 ? await this.imageResolver(rawDocs.find(doc => doc.id === p.id)?.data || {}) : null,
+    })));
+  }
+
+  async _atenderMensagem(scope, conversation) {
+    const text = normalizeName(scope.parsed.message);
+    let result;
+    if (/\b(atendente|humano|falar com alguem|falar com pessoa)\b/.test(text)) {
+      return this._triggerSilentHandoff(scope, 'customer_requested_human', {});
+    }
+    // Purchasing/payment language is handled by the team; this read-only path cannot mutate carts.
+    if (/\b(comprar|quero levar|reserva|reservar|pix|paguei|comprovante|pedido|carrinho)\b/.test(text)) {
+      return this._triggerSilentHandoff(scope, 'outside_catalog_capabilities', {});
+    }
+    const photo = /\b(foto|fotos|imagem)\b/.test(text);
+    const ordinal = text.match(/\b(primeira|primeiro|segunda|segundo|terceira|terceiro)\b/);
+    const referring = ordinal || /\b(dela|dele|essa|esse)\b/.test(text);
+    if (referring) {
+      const ids = conversation.presentedProductIds || [];
+      const index = ordinal ? ({ primeira: 0, primeiro: 0, segunda: 1, segundo: 1, terceira: 2, terceiro: 2 })[ordinal[1]] : ids.length === 1 ? 0 : -1;
+      if (!ids[index] || Date.now() - Date.parse(conversation.presentedAt || '') > 86400000
+        || /\b(menor|maior|cor|grande|pequena)\b/.test(text)) return this._triggerSilentHandoff(scope, 'ambiguous_reference', {});
+      result = await this._consultarProduto({ ...scope, parsed: { ...scope.parsed, refs: [{ productId: ids[index] }], intent: photo ? 'foto' : 'preco' } });
+    } else {
+      const traits = interpretTraits(text);
+      if (traits.constraints.length) {
+        if (traits.unsupported) return this._triggerSilentHandoff(scope, 'unsupported_characteristics', {});
+        result = await this._buscarProdutos({ ...scope, parsed: { ...scope.parsed, query: text, limit: 3 } });
+      } else {
+        let query = scope.parsed.message.trim().replace(/[?!.,]+$/g, '');
+        // Anchored, small grammar; exact names remain available without any model call.
+        query = query.replace(/^(?:quanto (?:custa|tá|ta|está|esta)|qual (?:o )?(?:preço|preco)(?: d[ao])?|vocês têm|voces tem|tem|manda (?:uma )?foto d[ao]|foto d[ao])\s+/i, '');
+        query = query.replace(/^(?:a|o|da|do)\s+/i, '');
+        result = await this._consultarProduto({ ...scope, parsed: { ...scope.parsed, refs: [{ query }], intent: photo ? 'foto' : 'preco' } });
+      }
+    }
+    if (result.next_action.send_customer_message) {
+      result.data.photo_requested = photo;
+      result.data.criteria_query = interpretTraits(text).constraints.length ? scope.parsed.message : '';
+      // Recheck pause after reads, before authorizing any outgoing response.
+      const remembered = referring || !scope.rememberProducts ? (await this.handoffStore.getConversation(this.tenantId, scope.customerKey)).automation !== 'paused'
+        : await this.handoffStore.rememberProducts(this.tenantId, scope.customerKey, result.data.products);
+      if (!remembered) return this._buildHandoffEnvelope(scope, 'conversation_already_paused', {});
+    }
+    return result;
   }
 
   async _consultarCarrinho(scope) {
@@ -703,7 +790,7 @@ class ConfloraAgentService {
 
     // Atualiza carrinho com os preços vigentes confirmados
     const opKey = `checkout_${parsed.messageId}`;
-    const mutationResult = await this.cartStore.mutate(this.tenantId, customerKey, opKey, (c) => ({
+    const mutationResult = await this.cartStore.mutate(this.tenantId, customerKey, opKey, (_c) => ({
       write: true,
       lines: refreshedLines,
       preparedAt: new Date().toISOString(),
@@ -751,14 +838,16 @@ class ConfloraAgentService {
       tenantId: this.tenantId,
       customerKey: scope.customerKey,
       customerPhone: scope.parsed?.customerPhone || '',
+      request: { message: scope.parsed?.message || null, query: scope.parsed?.query || null, refs: scope.parsed?.refs || null },
       reason,
       metadata,
     };
 
     try {
       await this.handoffStore.open(handoffRecord);
-    } catch (err) {
+    } catch {
       // Falha ao abrir handoff não impede o silêncio para o cliente
+      require('../shared/logger').error('catalog_handoff_persistence_failed', null, { requestId: scope.requestId, reason });
     }
 
     return this._buildHandoffEnvelope(scope, reason, metadata);

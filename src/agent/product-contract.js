@@ -120,7 +120,8 @@ function evaluateProduct(raw, ctx = {}) {
   fieldsUsed.push('name');
 
   // Preço
-  const prices = presentValues(data, FIELD_MAP.price, 'number');
+  const prices = FIELD_MAP.price.map(path => ({ path, value: pick(data, path) }))
+    .filter(({ value }) => value !== undefined && value !== null && value !== '');
   let priceCents = null;
   if (!prices.length) issues.push({ code: 'price_missing' });
   else {

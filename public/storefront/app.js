@@ -60,12 +60,16 @@ try {
 const analyticsCampaign = new URLSearchParams(location.search);
 function trackStorefrontEvent(eventName, details = {}) {
   if (!existingStore) return;
+  // Checkout success creates an order; only the backend can establish payment.
+  if (eventName === "purchase") eventName = "order_created";
+  const label = value => /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(value || "") && !/\d{7}/.test(value) ? value : "";
   const event = {
+    id: crypto.randomUUID(),
     eventName,
     visitorId: analyticsVisitorId,
-    utmSource: analyticsCampaign.get("utm_source") || "",
-    utmMedium: analyticsCampaign.get("utm_medium") || "",
-    utmCampaign: analyticsCampaign.get("utm_campaign") || "",
+    utmSource: label(analyticsCampaign.get("utm_source")),
+    utmMedium: label(analyticsCampaign.get("utm_medium")),
+    utmCampaign: label(analyticsCampaign.get("utm_campaign")),
     ...details,
   };
   window.ConfloraSession.apiFetch("/api/analytics/events", {
@@ -78,17 +82,14 @@ function trackStorefrontEvent(eventName, details = {}) {
   if (typeof window.gtag === "function") {
     const item = Array.isArray(event.items) && event.items.length ? event.items.map((entry) => ({
       item_id: entry.productId,
-      item_name: entry.productName,
-      item_category: entry.category,
       price: entry.value,
       quantity: entry.quantity,
     })) : event.productId ? [{
       item_id: event.productId,
-      item_name: event.productName,
-      item_category: event.category,
       price: event.value,
     }] : undefined;
     window.gtag("event", eventName, {
+      event_id: event.id,
       currency: "BRL",
       ...(event.value !== undefined ? { value: event.value } : {}),
       ...(item ? { items: item } : {}),
@@ -99,12 +100,24 @@ function trackStorefrontEvent(eventName, details = {}) {
   }
 }
 state.trackEvent = trackStorefrontEvent;
+state.analyticsClientId = analyticsVisitorId;
 
 if (existingStore) {
   window.dataLayer = window.dataLayer || [];
   window.gtag = window.gtag || function gtag() { window.dataLayer.push(arguments); };
   window.gtag("js", new Date());
-  window.gtag("config", "G-TX7SZBP9J8");
+  window.gtag("config", "G-TX7SZBP9J8", {
+    send_page_view: false,
+    client_id: analyticsVisitorId,
+    page_location: location.origin + "/",
+    page_referrer: "",
+    page_title: "Catálogo Conflora",
+    campaign_source: /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(analyticsCampaign.get("utm_source") || "") && !/\d{7}/.test(analyticsCampaign.get("utm_source")) ? analyticsCampaign.get("utm_source") : "",
+    campaign_medium: /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(analyticsCampaign.get("utm_medium") || "") && !/\d{7}/.test(analyticsCampaign.get("utm_medium")) ? analyticsCampaign.get("utm_medium") : "",
+    campaign_name: /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(analyticsCampaign.get("utm_campaign") || "") && !/\d{7}/.test(analyticsCampaign.get("utm_campaign")) ? analyticsCampaign.get("utm_campaign") : "",
+    allow_google_signals: false,
+    allow_ad_personalization_signals: false,
+  });
   const analyticsScript = document.createElement("script");
   analyticsScript.async = true;
   analyticsScript.src = "https://www.googletagmanager.com/gtag/js?id=G-TX7SZBP9J8";
@@ -150,7 +163,7 @@ function updateHeaderActions() {
 
   const guideText = guideShortcut?.querySelector('span:last-child');
   if (guideText) guideText.textContent = 'GUIA'.tr;
-  const custAccountText = customerAccountShortcut?.querySelector('span:last-child');
+  const custAccountText = $("#customerAccountShortcut")?.querySelector('span:last-child');
   if (custAccountText) custAccountText.textContent = 'MINHA CONTA'.tr;
   if (guideShortcut) {
     const isTeamMember = isLoggedIn && allowedCashierRoles.includes(role);

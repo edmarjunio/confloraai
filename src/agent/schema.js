@@ -3,7 +3,7 @@
 const STATUSES = Object.freeze(['found', 'not_found', 'ambiguous', 'unavailable', 'invalid_input', 'handoff', 'error']);
 const OPERATIONS = Object.freeze([
   'buscar_produtos', 'consultar_produto', 'consultar_carrinho', 'adicionar_item', 'alterar_quantidade',
-  'remover_item', 'preparar_finalizacao', 'encaminhar_atendente',
+  'remover_item', 'preparar_finalizacao', 'encaminhar_atendente', 'atender_mensagem',
 ]);
 const MUTATING = new Set(['adicionar_item', 'alterar_quantidade', 'remover_item', 'preparar_finalizacao', 'encaminhar_atendente']);
 
@@ -47,6 +47,7 @@ function quantityValue(raw, field = 'quantity') {
 function itemRef(raw, prefix = '') {
   const query = text(raw.query, `${prefix}query`);
   const productId = text(raw.product_id, `${prefix}product_id`, { max: 200 });
+  if (productId?.includes('/')) throw new InputError('invalid_product_id', `${prefix}product_id`);
   if (!query && !productId) throw new InputError('query_or_product_id_required', `${prefix}query`);
   if (query && productId) throw new InputError('query_and_product_id_are_exclusive', `${prefix}query`);
   return productId ? { productId } : { query };
@@ -78,25 +79,27 @@ function parseInput(operation, raw) {
   if (MUTATING.has(operation) && !common.messageId) throw new InputError('required', 'message_id');
 
   switch (operation) {
+    case 'atender_mensagem':
+      return { ...common, message: text(body.message, 'message', { required: true, max: 2000 }) };
     case 'consultar_produto': {
       const batch = parseJsonArray(body.queries_json, 'queries_json', 10);
       const intent = text(body.intent, 'intent') ?? 'preco';
-      if (!['preco', 'disponibilidade'].includes(intent)) throw new InputError('invalid_intent', 'intent');
+      if (!['preco', 'disponibilidade', 'foto'].includes(intent)) throw new InputError('invalid_intent', 'intent');
       if (batch) {
         if (body.query || body.product_id) throw new InputError('query_and_queries_json_are_exclusive', 'queries_json');
         const refs = batch.map((q, i) => {
           if (typeof q !== 'string') throw new InputError('must_be_string', `queries_json[${i}]`);
           return itemRef({ query: q }, `queries_json[${i}].`);
         });
-        return { ...common, intent, refs };
+        return { ...common, intent, criteriaQuery: text(body.criteria_query, 'criteria_query'), refs };
       }
-      return { ...common, intent, refs: [itemRef(body)] };
+      return { ...common, intent, criteriaQuery: text(body.criteria_query, 'criteria_query'), refs: [itemRef(body)] };
     }
     case 'buscar_produtos': {
       const query = text(body.query, 'query');
       const category = text(body.category, 'category', { max: 80 });
       if (!query && !category) throw new InputError('query_or_category_required', 'query');
-      let limit = 5;
+      let limit = 3;
       if (body.limit !== undefined && body.limit !== null && body.limit !== '') {
         limit = Number(body.limit);
         if (!Number.isInteger(limit) || limit < 1 || limit > 10) throw new InputError('invalid_limit', 'limit');

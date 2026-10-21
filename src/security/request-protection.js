@@ -11,10 +11,10 @@ function installRequestProtection(app, repository) {
     next();
   });
   app.use('/api', async (req, res, next) => {
-    const action = /\/auth\/(login|register|google)$/.test(req.path) ? 'auth' : /\/ai\/|\/assistant$|^\/chat$/.test(req.path) ? 'ai' : null;
+    const action = /\/auth\/(login|register|google)$/.test(req.path) ? 'auth' : /^\/meta-agent\//.test(req.path) ? 'connector' : /\/ai\/|\/assistant$|^\/chat$/.test(req.path) ? 'ai' : null;
     if (!action || req.method !== 'POST') return next();
     const minute = Math.floor(Date.now() / 60000);
-    const maximum = action === 'auth' ? Math.max(1, Number(process.env.REQUEST_AUTH_LIMIT) || 15) : 8;
+    const maximum = action === 'auth' ? Math.max(1, Number(process.env.REQUEST_AUTH_LIMIT) || 15) : action === 'connector' ? 60 : 8;
     // Never trust caller-supplied forwarding headers without an explicitly configured proxy.
     const account = String(req.body?.email || req.body?.userId || '').toLowerCase().trim().slice(0, 200);
     const identity = account ? action + ':account:' + account : action + ':' + req.ip;

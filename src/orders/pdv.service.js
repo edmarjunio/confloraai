@@ -96,7 +96,7 @@ class PdvService {
     if (paymentMethod !== 'PIX' && paymentMethod !== 'MISTO' && !ORDER_PAYMENT_METHODS.has(paymentMethod)) { throw new Error('Forma de pagamento inválida.'); }
     if (paymentMethod === 'SALDO_CLIENTE' && !['ADMIN', 'CAIXA'].includes(user.role)) { throw new Error('Somente o caixa pode usar o crédito disponível do cliente.'); }
     if (!Array.isArray(input.items) || !input.items.length || input.items.length > 150) { throw new Error('Adicione os produtos à comanda.'); }
-    const products = new Map((await this.repository.repository.getAllProducts()).map((product) => [String(product.id), product]));
+    const products = new Map((await this.repository.repository.getProductsByIds(input.items.map(item => item.productId))).map((product) => [String(product.id), product]));
     const items = input.items.map((item) => {
       const product = products.get(String(item.productId));
       const quantity = Number(item.quantity);
@@ -420,13 +420,51 @@ class PdvService {
   async deliver(id) {
     const job = await this.repository.claimMessage(id);
     if (!job) { return; }
+    const update = updates => this.repository.updateMessage(id, updates, job.leaseOwner);
+    let uncertainSend = false;
+    const sendOnce = async (stage, send, checkpoint) => {
+      await update({ status: 'SENDING', sendingStage: stage, sendingAt: new Date().toISOString() });
+      uncertainSend = true;
+      let result;
+      try { result = await send(); }
+      catch (error) {
+        // Only the trusted transport can establish that no customer message was submitted.
+        if (error.definitelyNotSent === true) uncertainSend = false;
+        throw error;
+      }
+      if (result?.mock) { uncertainSend = false; throw new Error('PROVIDER_NOT_CONFIGURED'); }
+      if (!result?.messages?.[0]?.id) throw new Error('PROVIDER_NOT_ACKNOWLEDGED');
+      await update({ ...checkpoint, status: 'PENDING', sendingStage: '', leaseUntil: Date.now() + 120000,
+        [stage === 'document' ? 'providerDocumentId' : 'providerMessageId']: result.messages[0].id });
+      uncertainSend = false;
+      return result;
+    };
     try {
+      if (job.kind === 'ga4-purchase') {
+        const order = await this.repository.read('orders', job.orderId);
+        const client = new (require('../integrations/ga4-purchase.client').Ga4PurchaseClient)();
+        await update({ status: 'SENDING', sendingStage: 'ga4', sendingAt: new Date().toISOString() });
+        uncertainSend = true;
+        try { await client.send(order); }
+        catch (error) { if (error.definitelyNotSent === true) uncertainSend = false; throw error; }
+        await update({ status: 'SENT', leaseUntil: 0, sentAt: new Date().toISOString(), lastError: '' });
+        return;
+      }
+      if (job.kind === 'conversation-catalog') {
+        await this.deliverCatalog(job);
+        return;
+      }
+      if (job.kind === 'conversation-text' && this.catalogAgent) {
+        // Old queued free-form replies are never sent after switching to the controlled agent.
+        await update({ status: 'SKIPPED', leaseUntil: 0, lastError: 'SUPERSEDED_BY_VERIFIED_AGENT' });
+        return;
+      }
       const order = job.orderId ? await this.repository.read('orders', job.orderId) : null;
       const staleDeparture = job.kind === 'delivery-departure' && order?.deliveryStatus !== 'OUT_FOR_DELIVERY';
       const staleArriving = job.kind === 'delivery-arriving' && order?.deliveryStatus !== 'OUT_FOR_DELIVERY';
       const staleAvailability = job.kind === 'driver-available' && (!order || order.assignedDriver?.id || ['DELIVERED', 'OUT_FOR_DELIVERY'].includes(order.deliveryStatus));
       if (order?.status === 'CANCELLED' || staleDeparture || staleArriving || staleAvailability) {
-        await this.repository.updateMessage(id, { status: 'SKIPPED', skipped: true, leaseUntil: 0, lastError: 'Mensagem substituída pelo estado atual do pedido.' });
+        await update({ status: 'SKIPPED', skipped: true, leaseUntil: 0, lastError: 'Mensagem substituída pelo estado atual do pedido.' });
         return;
       }
       const settlement = job.settlementId ? await this.repository.read('debt_settlements', job.settlementId) : null;
@@ -436,7 +474,7 @@ class PdvService {
       const recipient = job.kind === 'closing' ? process.env.OWNER_WHATSAPP_NUMBER : ['owner-new', 'proof-review', 'owner-paid'].includes(job.kind) ? process.env.STORE_NOTIFICATION_PHONE || this.ownerPhone : this.ownerPhone;
       const phone = normalizePhone(job.recipient || (isOwner ? recipient : (order?.customerPhone || settlement?.customerPhone)));
       if (!phone && isOwner) { throw new Error('WhatsApp da horta não configurado.'); }
-      if (!phone) { await this.repository.updateMessage(id, { status: 'SENT', skipped: true, leaseUntil: 0 }); return; }
+      if (!phone) { await update({ status: 'SENT', skipped: true, leaseUntil: 0 }); return; }
       let text;
       if (job.kind === 'closing' || job.kind === 'conversation-text') text = job.text;
       else if (job.kind === 'owner-new') text = `CONFLORA — NOVO PEDIDO #${order.ticketNumber || order.id}\nCliente: ${order.customerName}\nValor: ${money(order.total)}\nPagamento: ${order.completedAt ? 'confirmado' : 'ainda não confirmado'}`;
@@ -459,26 +497,21 @@ class PdvService {
       const chunks = messageChunks(text, this.whatsapp.sendPdvText ? 900 : 3500);
       for (let index = job.textChunksSent || 0; index < chunks.length; index++) {
         const send = this.whatsapp.sendPdvText || this.whatsapp.sendTextMessage;
-        const result = await send.call(this.whatsapp, phone, chunks[index]);
-        if (result?.mock || !result?.messages?.[0]?.id) { throw new Error('WhatsApp não confirmou o envio.'); }
-        await this.repository.updateMessage(id, { textChunksSent: index + 1, providerMessageId: result.messages[0].id, deliveryStatus: 'ACCEPTED', leaseUntil: Date.now() + 120000 });
+        await sendOnce('text', () => send.call(this.whatsapp, phone, chunks[index]), { textChunksSent: index + 1, deliveryStatus: 'ACCEPTED' });
       }
       if (['receipt', 'pix-charge'].includes(job.kind) && order.pixData && !order.completedAt && !order.paidAt && !job.qrSent) {
       const image = Buffer.from(order.pixData.qrCodeBase64.split(',')[1], 'base64');
-        const result = await this.whatsapp.sendImageBuffer(phone, image, `Pix pedido #${order.ticketNumber} — ${money(order.pixData.amount || order.total)}\n\nPIX COPIA E COLA:\n${order.pixData.pixCopiaECola}`);
-        if (!result?.messages?.[0]?.id) { throw new Error('WhatsApp não confirmou o QR Code.'); }
-        await this.repository.updateMessage(id, { qrSent: true });
+        await sendOnce('qr', () => this.whatsapp.sendImageBuffer(phone, image, `Pix pedido #${order.ticketNumber} - ${money(order.pixData.amount || order.total)}\n\nPIX COPIA E COLA:\n${order.pixData.pixCopiaECola}`), { qrSent: true });
       }
       if (job.reportFileName && !job.documentSent) {
         const storage = new (require('../reports/private-report-storage').PrivateReportStorage)(this.repository.repository);
-        const result = await this.whatsapp.sendDocumentBuffer(phone, await storage.read(job.reportFileName), 'fechamento-conflora.pdf', 'Fechamento de caixa Conflora');
-        if (!result?.messages?.[0]?.id) throw new Error('A API não confirmou o relatório.');
-        await this.repository.updateMessage(id, { documentSent: true, providerDocumentId: result.messages[0].id });
+        const document = await storage.read(job.reportFileName);
+        await sendOnce('document', () => this.whatsapp.sendDocumentBuffer(phone, document, 'fechamento-conflora.pdf', 'Fechamento de caixa Conflora'), { documentSent: true });
       }
-      await this.repository.updateMessage(id, { status: 'SENT', leaseUntil: 0, sentAt: new Date().toISOString(), lastError: '' });
+      await update({ status: 'SENT', leaseUntil: 0, sentAt: new Date().toISOString(), lastError: '' });
     } catch (error) {
       require('../shared/logger').error('Falha no envio de notificação operacional', error, { source: 'WHATSAPP', jobId: id, kind: job.kind });
-      await this.repository.updateMessage(id, { leaseUntil: 0, nextAttemptAt: Date.now() + Math.min(3600000, 30000 * 2 ** Math.min(job.attempts, 7)), lastError: error.message });
+      await update({ status: uncertainSend ? 'NEEDS_RECONCILIATION' : 'PENDING', leaseUntil: 0, nextAttemptAt: Date.now() + Math.min(3600000, 30000 * 2 ** Math.min(job.attempts, 7)), lastError: uncertainSend ? 'PROVIDER_OUTCOME_UNCERTAIN' : error.message });
     }
   }
 
@@ -488,8 +521,69 @@ class PdvService {
     return this.retryMessagesPromise;
   }
 
+  async deliverCatalog(job) {
+    const update = updates => this.repository.updateMessage(job.id, updates, job.leaseOwner);
+    const { customerKeyFor } = require('../agent/agent-store');
+    const { priceBlock, productList } = require('../agent/templates');
+    const { verifyCustomerMessage } = require('../agent/message-guard');
+    const agent = this.catalogAgent;
+    const skip = reason => update({ status: 'SKIPPED', leaseUntil: 0, lastError: reason });
+    if (!agent || !require('../config/env').whatsapp.assistantEnabled || require('../config/env').whatsapp.agentOwner !== 'cloud_api') return skip('AUTOMATION_DISABLED');
+    const customerKey = customerKeyFor(agent.tenantId, job.recipient);
+    const handoff = async reason => {
+      await agent.handoffStore.open({ requestId: job.id, tenantId: agent.tenantId, customerKey, customerPhone: job.recipient, reason, metadata: { jobId: job.id } });
+      return skip(reason);
+    };
+    try {
+      if (Date.now() - Date.parse(job.createdAt) > 10 * 60_000) return handoff('outgoing_expired');
+      if ((await agent.handoffStore.getConversation(agent.tenantId, customerKey)).automation === 'paused') return skip('HUMAN_HANDOFF');
+      const envelope = await agent.execute('consultar_produto', {
+        customer_phone: job.recipient, queries_json: JSON.stringify(job.productIds),
+        intent: job.photoRequested ? 'foto' : 'preco', criteria_query: job.criteriaQuery || undefined,
+      });
+      if (!envelope.next_action.send_customer_message) return skip('REVALIDATION_FAILED');
+      const cards = envelope.data.cards;
+      if (!cards.length || cards.length > 3) return handoff('invalid_outgoing_products');
+      const products = cards.map(c => ({ ...c, priceCents: c.price_cents }));
+      const text = products.length === 1 ? priceBlock(products[0]) : productList({ items: products, heading: 'Opções cadastradas' });
+      if (!verifyCustomerMessage(text, { allowedCents: cards.map(c => c.price_cents) }).ok) return handoff('outgoing_guard_violation');
+      if ((await agent.handoffStore.getConversation(agent.tenantId, customerKey)).automation === 'paused') return skip('HUMAN_HANDOFF');
+      // Do not retry an uncertain network outcome: Meta has no client idempotency key for sends.
+      await update({ status: 'SENDING', sendingAt: new Date().toISOString(), leaseUntil: 0, lastError: '' });
+      const result = cards.length === 1 && cards[0].image_url
+        ? await this.whatsapp.sendImageMessage(job.recipient, cards[0].image_url, text)
+        : await this.whatsapp.sendTextMessage(job.recipient, text);
+      if (result?.mock || !result?.messages?.[0]?.id) throw new Error('PROVIDER_NOT_ACKNOWLEDGED');
+      await update({ status: 'SENT', providerMessageId: result.messages[0].id, sentAt: new Date().toISOString(), leaseUntil: 0, lastError: '' });
+      if (!job.photoRequested) await agent.handoffStore.rememberProducts(agent.tenantId, customerKey, cards);
+      await this.repository.repository.appendMessage(job.recipient, 'assistant', text, { requirePersistence: true, messageId: job.id });
+    } catch {
+      // Includes timeout and persistence failure after acceptance; require human reconciliation.
+      return handoff('catalog_delivery_unconfirmed');
+    }
+  }
+
   async retryPendingMessages() {
-    const events = await this.repository.list('pdv_pix_events', 'status', 'PENDING');
+    const inFlight = await this.repository.scanPage('pdv_outbox', 'status', 'SENDING');
+    for (const job of inFlight.filter(row => row.kind !== 'conversation-catalog' && !(row.leaseUntil > Date.now()) && Date.now() - Date.parse(row.sendingAt || '') > 120000)) {
+      await this.repository.transaction(async tx => {
+        const current = await tx.get('pdv_outbox', job.id);
+        if (current?.status === 'SENDING' && !(current.leaseUntil > Date.now())) tx.set('pdv_outbox', job.id,
+          { ...current, status: 'NEEDS_RECONCILIATION', lastError: 'PROVIDER_OUTCOME_UNCERTAIN', leaseUntil: 0 });
+      });
+    }
+    // Reconcile crashed sends, but never send them twice after an uncertain provider outcome.
+    if (this.catalogAgent) {
+      const sending = inFlight;
+      for (const job of sending.filter(j => j.kind === 'conversation-catalog' && Date.now() - Date.parse(j.sendingAt || j.createdAt) > 120000).slice(0, 100)) {
+        const { customerKeyFor } = require('../agent/agent-store');
+        await this.catalogAgent.handoffStore.open({ requestId: job.id, tenantId: this.catalogAgent.tenantId,
+          customerKey: customerKeyFor(this.catalogAgent.tenantId, job.recipient), customerPhone: job.recipient,
+          reason: 'catalog_delivery_unconfirmed', metadata: { jobId: job.id } });
+        await this.repository.updateMessage(job.id, { status: 'SKIPPED', leaseUntil: 0, lastError: 'DELIVERY_REQUIRES_RECONCILIATION' });
+      }
+    }
+    const events = await this.repository.scanPage('pdv_pix_events', 'status', 'PENDING');
     for (const event of events.slice(0, 100)) {
       try { await this.processPixEvent(event.txid, event.endToEndId); }
       catch (error) {
@@ -499,7 +593,7 @@ class PdvService {
         });
       }
     }
-    const pending = await this.repository.list('pdv_outbox', 'status', 'PENDING');
+    const pending = await this.repository.scanPage('pdv_outbox', 'status', 'PENDING');
     const eligible = pending.filter((job) => !(job.nextAttemptAt > Date.now()) && !(job.leaseUntil > Date.now()));
     for (const job of eligible.slice(0, 100)) { await this.deliver(job.id); }
   }

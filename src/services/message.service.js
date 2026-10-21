@@ -71,6 +71,33 @@ class MessageService {
     verifyOnly = false,
   }) {
     const startTime = performance.now();
+    if (this.metaAgentService) {
+      const owner = require('../config/env').whatsapp.agentOwner;
+      await this.firestoreRepo.appendMessage(phone, 'user', message, { requirePersistence: true, messageId });
+      if (verifyOnly || !require('../config/env').whatsapp.assistantEnabled || owner !== 'cloud_api') return { reply: '', intent: 'AUTOMATION_DISABLED', imagesSent: 0, latencyMs: 0 };
+      const envelope = await this.metaAgentService.execute('atender_mensagem', {
+        customer_phone: phone, message_id: messageId, message,
+      }, { rememberProducts: false });
+      if (!envelope.next_action.send_customer_message) return { reply: '', intent: 'HUMAN_HANDOFF', imagesSent: 0, latencyMs: envelope.latency_ms };
+      if (!messageId) return { reply: '', intent: 'MESSAGE_ID_REQUIRED', imagesSent: 0, latencyMs: 0 };
+      // Persist references, never prices or rendered commercial messages. Delivery revalidates them.
+      const { PdvRepository } = require('../orders/pdv.repository');
+      const { sha256 } = require('../agent/util');
+      const store = new PdvRepository(this.firestoreRepo);
+      const id = 'catalog-' + sha256(`${phone}:${messageId}`);
+      await store.transaction(async tx => {
+        if (await tx.get('pdv_outbox', id)) return;
+        tx.set('pdv_outbox', id, {
+          id, recipient: phone, kind: 'conversation-catalog', status: 'PENDING', attempts: 0,
+          productIds: envelope.data.products.map(p => p.id).slice(0, 3),
+          photoRequested: Boolean(envelope.data.photo_requested), criteriaQuery: envelope.data.criteria_query || '',
+          createdAt: new Date().toISOString(),
+        });
+      });
+      return { reply: '', intent: 'CATALOG_QUEUED', imagesSent: 0, latencyMs: envelope.latency_ms };
+    }
+    // A production worker without the verified service must never fall back to free-form AI.
+    if (process.env.NODE_ENV !== 'test') return { reply: '', intent: 'CATALOG_UNAVAILABLE', imagesSent: 0, latencyMs: 0 };
 
     // 1. Prevenção de duplicidade (Idempotência da Meta)
     // The public entry point owns the durable claim and marks completion only on success.

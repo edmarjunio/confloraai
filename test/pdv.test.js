@@ -318,7 +318,7 @@ test('order retries reuse ID; insufficient stock leaves debt and inventory uncha
 
 test('WhatsApp failure is retried independently from the sale and resumes after sent text', async () => {
   const s = setup();
-  s.whatsapp.sendImageBuffer = async () => { throw new Error('offline'); };
+  s.whatsapp.sendImageBuffer = async () => { throw Object.assign(new Error('upload failed before message submission'), { definitelyNotSent: true }); };
   const order = await s.service.create({ ...s.input, paymentMethod: 'PIX', customerId: 'customer' }, seller);
   assert.equal(order.receiptDelivery.sent, false);
   assert.equal(s.sent.length, 1);
@@ -1204,7 +1204,7 @@ test('paid bank response cannot finalize unavailable reserved stock; retry compl
 
 test('pending WhatsApp charge is skipped after expiration instead of sending a cancelled QR', async () => {
   const s = setup();
-  s.whatsapp.sendImageBuffer = async () => { throw new Error('offline'); };
+  s.whatsapp.sendImageBuffer = async () => { throw Object.assign(new Error('upload failed before message submission'), { definitelyNotSent: true }); };
   const order = await s.service.create({ ...s.input, paymentMethod: 'PIX', customerId: 'customer' }, seller);
   await s.repository.transaction(async tx => tx.set('orders', order.id, { ...await tx.get('orders', order.id), pixExpiresAt: new Date(Date.now() - 1000).toISOString() }));
   await s.service.expirePixOrder(order.id);

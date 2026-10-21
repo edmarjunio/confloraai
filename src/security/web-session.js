@@ -88,11 +88,12 @@ function createWebSessions(repo) {
       const session = repo.firestore
         ? (await repo.firestore.collection("web_sessions").doc(key).get()).data()
         : memory.get(key);
-      if (!session) {
+      const expiry = session?.expiresAt?.toMillis?.() ?? new Date(session?.expiresAt).getTime();
+      if (!session || !(expiry > Date.now())) {
         return { success: false, error: "Sessão expirada." };
       }
       const user = await repo.getUserById(session.userId);
-      if (!user || !isOwnerAccount(user)) {
+      if (!user || user.active === false || !isOwnerAccount(user)) {
         return {
           success: false,
           error: "Apenas o proprietário (Edmar Júnio) pode alternar entre múltiplos perfis de teste.",

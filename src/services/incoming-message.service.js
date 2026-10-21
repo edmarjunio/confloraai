@@ -17,7 +17,7 @@ class IncomingMessageService {
       const current = await tx.get('incoming_messages', id);
       if (current?.status === 'COMPLETED') return { completed: true };
       if (current?.leaseUntil > Date.now()) throw Object.assign(new Error('Mensagem em processamento. Tente novamente.'), { status: 503 });
-      tx.set('incoming_messages', id, { ...current, id, status: 'PROCESSING', owner, attempts: Number(current?.attempts || 0) + 1, leaseUntil: Date.now() + 120000 });
+      tx.set('incoming_messages', id, { ...current, id, status: 'PROCESSING', owner, attempts: Number(current?.attempts || 0) + 1, leaseUntil: Date.now() + 120000, expiresAt: null });
       return { id, owner };
     });
   }
@@ -25,12 +25,12 @@ class IncomingMessageService {
     await this.store.transaction(async tx => {
       const current = await tx.get('incoming_messages', claim.id);
       if (current?.owner !== claim.owner) throw new Error('A posse do processamento mudou.');
-      tx.set('incoming_messages', claim.id, { ...current, status: error ? 'PENDING' : 'COMPLETED', leaseUntil: 0, lastError: error ? 'PROCESSING_FAILED' : '', expiresAt: new Date(Date.now() + 30 * 86400000) });
+      tx.set('incoming_messages', claim.id, { ...current, status: error ? 'PENDING' : 'COMPLETED', leaseUntil: 0, lastError: error ? 'PROCESSING_FAILED' : '', expiresAt: error ? null : new Date(Date.now() + 30 * 86400000) });
     });
   }
   async retry(processMessage) {
-    const pending = await this.store.list('incoming_messages', 'status', 'PENDING');
-    const interrupted = await this.store.list('incoming_messages', 'status', 'PROCESSING');
+    const pending = await this.store.scanPage('incoming_messages', 'status', 'PENDING', 25);
+    const interrupted = await this.store.scanPage('incoming_messages', 'status', 'PROCESSING', 25);
     for (const event of [...pending, ...interrupted].filter(row => row.payload && !(row.leaseUntil > Date.now())).slice(0, 50)) {
       try { await processMessage(event.payload); }
       catch (error) { require('../shared/logger').error('Falha ao processar mensagem recebida', error, { source: 'WHATSAPP', eventId: event.id }); }

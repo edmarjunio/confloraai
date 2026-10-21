@@ -2,7 +2,7 @@ const { recordDeliveryEvent, completionMetrics, mergeDriverPerformance } = requi
 const { formatOrderReceipt } = require('./receipt.util');
 const { isDelivery, isDeliverySettled, assertAssignedDelivery, canReceiveOrder, canConfirmManualPix } = require('./delivery-policy');
 const { requireManualProof } = require('./payment-proof');
-const { createHash } = require('node:crypto');
+const { createHash, randomUUID } = require('node:crypto');
 const { remainingStock, validateStockQuantity } = require('./order-integrity');
 const { normalizePaymentParts, partAmount } = require('./payment-parts');
 const { prepareStockReservation, applyStockReservation } = require('./stock-reservation');
@@ -14,6 +14,7 @@ class PdvRepository {
     this.repository = repository;
     this.memory = repository.pdvMemory ||= new Map();
     this.queue = Promise.resolve();
+    this.scanCursors = new Map();
   }
 
   async transaction(work) {
@@ -60,7 +61,35 @@ class PdvRepository {
     return operation;
   }
 
-  async read(collection, id) { return this.transaction((tx) => tx.get(collection, id)); }
+  async read(collection, id) {
+    const repo = this.repository;
+    if (repo.firestore && !repo._firestoreClientDisabled) {
+      const doc = await repo.firestore.collection(collection).doc(id).get();
+      return doc.exists ? { ...doc.data(), id: doc.id } : null;
+    }
+    return this.transaction((tx) => tx.get(collection, id));
+  }
+
+  // Cursor rotation prevents delayed/leased jobs at the beginning from starving later jobs.
+  // Equality + document ID ordering uses the existing automatic single-field index.
+  async scanPage(collection, field, value, limit = 100) {
+    const size = Math.max(1, Math.min(500, Math.floor(Number(limit) || 100)));
+    const key = JSON.stringify([collection, field, value]);
+    const cursor = this.scanCursors.get(key);
+    const repo = this.repository;
+    let rows;
+    if (repo.firestore && !repo._firestoreClientDisabled) {
+      let query = repo.firestore.collection(collection).where(field, '==', value).orderBy('__name__').limit(size);
+      if (cursor) query = query.startAfter(cursor);
+      rows = (await query.get()).docs.map(doc => ({ ...doc.data(), id: doc.id }));
+    } else {
+      rows = (await this.list(collection, field, value)).sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+        .filter(row => !cursor || row.id > cursor).slice(0, size);
+    }
+    if (rows.length === size) this.scanCursors.set(key, rows[rows.length - 1].id);
+    else this.scanCursors.delete(key);
+    return rows;
+  }
 
   async expiredPixOrders() {
     const repo = this.repository;
@@ -329,7 +358,6 @@ class PdvRepository {
 
   /** Stock, debt, attribution, payment and notification intent commit together. */
   async receive(orderId, receiver, verification = null, cashReceived = null, paymentMethodOverride = null, { sendFinalReceipt = false, requestedParts, finishDelivery = false, actualDistanceKm } = {}) {
-    const inventory = await this.repository.getInventorySettings();
     return this.transaction(async (tx) => {
       const order = await tx.get('orders', orderId);
       if (!order || !['PDV', 'WEB_CATALOG'].includes(order.source)) { throw new Error('Comanda não encontrada.'); }
@@ -338,6 +366,7 @@ class PdvRepository {
       if (finishDelivery) assertAssignedDelivery(order, receiver);
       if (receiver?.role === 'ENTREGADOR' && !canReceiveOrder(order, receiver)) throw new Error('Sem permissão para receber esta entrega.');
       if (order.completedAt) { return { ...order, alreadyConfirmed: true }; }
+      const inventory = { stockControlEnabled: (await tx.get('store_settings', 'inventory'))?.stockControlEnabled ?? process.env.STORE_STOCK_CONTROL_ENABLED !== 'false' };
       if (order.pixMode === 'MANUAL' && order.paymentProofId && verification?.manualPixProofId !== order.paymentProofId) throw new Error('O comprovante mudou. Atualize a comanda.');
       if (Date.parse(order.pixExpiresAt || order.paymentExpiresAt || '') <= Date.now()) {
         throw new Error('O prazo de pagamento venceu. Aguarde o cancelamento e a liberação do estoque.');
@@ -445,6 +474,10 @@ class PdvRepository {
         tx.set('delivery_driver_metrics', deliveryDriver.id, mergeDriverPerformance(previousDeliveryStats, completed, now));
       }
       tx.set('orders', order.id, completed);
+      if (!onAccount && completed.source === 'WEB_CATALOG' && /^[a-f0-9-]{36}$/.test(completed.analyticsClientId || '') && require('../integrations/ga4-purchase.client').ga4PurchaseEnabled()) {
+        const id = `${order.id}-ga4-purchase`;
+        tx.set('pdv_outbox', id, { id, kind: 'ga4-purchase', orderId, status: 'PENDING', attempts: 0, createdAt: now });
+      }
       if (verification) {
         for (const kind of ['customer-paid', 'owner-paid']) {
           const id = `${order.id}-${kind}`;
@@ -498,16 +531,27 @@ class PdvRepository {
     return this.transaction(async (tx) => {
       const job = await tx.get('pdv_outbox', id);
       if (!job || job.status !== 'PENDING' || job.nextAttemptAt > Date.now() || job.leaseUntil > Date.now()) { return null; }
-      const claimed = { ...job, leaseUntil: Date.now() + 120000, attempts: job.attempts + 1 };
+      const maxAttempts = Math.max(1, Number(process.env.PDV_OUTBOX_MAX_ATTEMPTS) || 12);
+      if (Number(job.attempts || 0) >= maxAttempts) {
+        tx.set('pdv_outbox', id, { ...job, status: 'NEEDS_RECONCILIATION', lastError: 'MAX_ATTEMPTS', leaseUntil: 0 });
+        return null;
+      }
+      const claimed = { ...job, leaseOwner: randomUUID(), leaseUntil: Date.now() + 120000, attempts: Number(job.attempts || 0) + 1 };
       tx.set('pdv_outbox', id, claimed);
       return claimed;
     });
   }
 
-  async updateMessage(id, updates) {
+  async updateMessage(id, updates, owner = null) {
     return this.transaction(async (tx) => {
       const job = await tx.get('pdv_outbox', id);
-      tx.set('pdv_outbox', id, { ...job, ...updates });
+      if (!job) throw new Error('Mensagem não encontrada.');
+      if (owner && job.leaseOwner !== owner) throw new Error('A posse do envio mudou.');
+      if (owner && updates.status === 'SENDING' && !(job.leaseUntil > Date.now())) throw new Error('A posse do envio expirou.');
+      const updated = { ...job, ...updates };
+      if (['SENT', 'SKIPPED'].includes(updated.status) && !updated.completedAt) updated.completedAt = new Date().toISOString();
+      if (Object.keys(updated).every(key => Object.is(updated[key], job[key]))) return;
+      tx.set('pdv_outbox', id, updated);
     });
   }
 }

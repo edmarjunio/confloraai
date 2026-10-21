@@ -618,6 +618,7 @@ async function normalizeExistingCheckout(req, repository) {
     }
   }
   req.body = {
+    ...(/^[a-f0-9-]{36}$/.test(input.analyticsClientId || '') ? { analyticsClientId: input.analyticsClientId } : {}),
     customerName: String(input.customer?.name || "").trim(),
     customerPhone: String(input.customer?.phone || "").replace(/\D/g, ""),
     orderType: input.fulfillment === "delivery" ? "DELIVERY" : "PICKUP",

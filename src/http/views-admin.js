@@ -1221,10 +1221,10 @@ function renderAdminHtml(storeConfig) {
         campaignEl.replaceChildren(...(campaigns.length ? campaigns.map(campaign => {
           const row = document.createElement('div');
           row.style.marginBottom = '8px';
-          row.textContent = campaign.name + ' · ' + number(campaign.visits) + ' visitas · ' + number(campaign.purchases) + ' pedidos · ' + currency(campaign.revenue);
+          row.textContent = campaign.name + ' · ' + number(campaign.visits) + ' visitas' + (metrics.attributedFinancialsUnavailable ? ' · atribuição financeira não disponível' : ' · ' + number(campaign.purchases) + ' pedidos · ' + currency(campaign.revenue));
           return row;
         }) : [Object.assign(document.createElement('p'), { textContent: 'Nenhuma campanha UTM registrada ainda. Use utm_source, utm_medium e utm_campaign nos links de anúncios.' })]));
-        status.textContent = number(metrics.collectedEvents) + ' eventos coletados nos últimos ' + days + ' dias. Métricas começam a acumular após a publicação desta versão.';
+        status.textContent = number(metrics.collectedEvents) + ' eventos nos últimos ' + days + ' dias (' + (metrics.navigationSource || 'Firestore') + '). Faturamento: recebimentos confirmados no Firestore. Conversão: pedidos pagos por visitante. Tráfego pode levar até 60 segundos para atualizar.';
       } catch (err) {
         status.textContent = err.message || 'Erro ao carregar eventos do catálogo.';
       }

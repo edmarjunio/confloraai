@@ -56,16 +56,11 @@ class WhatsAppClient {
   }
 
   async sendImageBuffer(to, buffer, caption = '') {
-    if (!this.token || !config.whatsapp.phoneNumberId) { throw new Error('WhatsApp não configurado.'); }
+    if (!this.token || !config.whatsapp.phoneNumberId) { throw Object.assign(new Error('WhatsApp não configurado.'), { definitelyNotSent: true }); }
     const form = new FormData();
     form.set('messaging_product', 'whatsapp');
     form.set('file', new Blob([buffer], { type: 'image/png' }), 'pix.png');
-    const response = await fetch(`${this.baseUrl}/media`, {
-      method: 'POST', headers: { Authorization: `Bearer ${this.token}` }, body: form, signal: AbortSignal.timeout(15000),
-    });
-    if (!response.ok) { throw new Error(`Falha ao enviar QR Code ao WhatsApp (HTTP ${response.status}).`); }
-    const media = await response.json();
-    if (!media.id) { throw new Error('WhatsApp não retornou a imagem.'); }
+    const media = await this.uploadMedia(form);
     if (process.env.WHATSAPP_PDV_QR_TEMPLATE) {
       return this.sendTemplate(to, process.env.WHATSAPP_PDV_QR_TEMPLATE, config.whatsapp.templates.language || 'pt_BR', [
         { type: 'header', parameters: [{ type: 'image', image: { id: media.id } }] },
@@ -76,22 +71,33 @@ class WhatsAppClient {
   }
 
   async sendDocumentBuffer(to, buffer, filename, caption = '') {
-    if (!this.token || !config.whatsapp.phoneNumberId) throw new Error('WhatsApp não configurado. Baixe o PDF e configure a integração para enviar.');
+    if (!this.token || !config.whatsapp.phoneNumberId) throw Object.assign(new Error('WhatsApp não configurado. Baixe o PDF e configure a integração para enviar.'), { definitelyNotSent: true });
     const form = new FormData();
     form.set('messaging_product', 'whatsapp');
     form.set('file', new Blob([buffer], { type: 'application/pdf' }), filename);
-    const response = await fetch(this.baseUrl + '/media', {
-      method: 'POST', headers: { Authorization: 'Bearer ' + this.token }, body: form, signal: AbortSignal.timeout(15000),
-    });
-    if (!response.ok) throw new Error('Não foi possível anexar o PDF ao WhatsApp (HTTP ' + response.status + ').');
-    const media = await response.json();
-    if (!media.id) throw new Error('O WhatsApp não retornou o documento.');
+    const media = await this.uploadMedia(form);
     const template = process.env.WHATSAPP_CASHIER_REPORT_TEMPLATE;
     if (template) return this.sendTemplate(to, template, config.whatsapp.templates.language || 'pt_BR', [
       { type: 'header', parameters: [{ type: 'document', document: { id: media.id, filename } }] },
       { type: 'body', parameters: [{ type: 'text', text: caption }] },
     ]);
     return this.postRequest('/messages', { messaging_product: 'whatsapp', to, type: 'document', document: { id: media.id, filename, caption } });
+  }
+
+  async uploadMedia(form) {
+    try {
+      const response = await fetch(this.baseUrl + '/media', {
+        method: 'POST', headers: { Authorization: 'Bearer ' + this.token }, body: form, signal: AbortSignal.timeout(15000),
+      });
+      if (!response.ok) throw new Error('Falha ao anexar mídia ao WhatsApp (HTTP ' + response.status + ').');
+      const media = await response.json();
+      if (!media.id) throw new Error('O WhatsApp não retornou a mídia.');
+      return media;
+    } catch (error) {
+      // Media upload cannot deliver a customer message; retrying it is safe.
+      error.definitelyNotSent = true;
+      throw error;
+    }
   }
 
   async sendPdvText(to, text) {
@@ -172,7 +178,8 @@ class WhatsAppClient {
         const message = authenticationFailed
           ? 'WhatsApp: token recusado pela Meta. Atualize WHATSAPP_TOKEN com um token válido e reinicie o servidor.'
           : `WhatsApp: solicitação recusada pela Meta (HTTP ${response.status}${code ? `, código ${code}` : ''}).`;
-        const error = Object.assign(new Error(message), { status: response.status, code });
+        const error = Object.assign(new Error(message), { status: response.status, code,
+          definitelyNotSent: response.status >= 400 && response.status < 500 });
         Logger.error(message, null, { status: response.status, code });
         throw error;
       }

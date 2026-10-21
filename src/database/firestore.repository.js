@@ -344,6 +344,23 @@ class FirestoreRepository {
     }
   }
 
+  // Checkout loads only requested products, never a cached or complete catalog.
+  async getProductsByIds(productIds) {
+    const ids = [...new Set(productIds.map(id => String(id).trim()))];
+    if (!ids.length) return [];
+    if (ids.length > 150 || ids.some(id => !id || id.includes('/') || id === '.' || id === '..')) throw new Error('Identificador de produto inválido.');
+    if (this.firestore && !this._firestoreClientDisabled) {
+      const products = [];
+      for (let offset = 0; offset < ids.length; offset += 100) {
+        const docs = await this.firestore.getAll(...ids.slice(offset, offset + 100).map(id => this.firestore.collection('products').doc(id)));
+        products.push(...docs.filter(doc => doc.exists).map(doc => ({ ...doc.data(), id: doc.id })));
+      }
+      return products;
+    }
+    if (this.firestore || !this.isInMemory) throw new Error('Firestore indisponível para validar produtos.');
+    return ids.map(id => this.inMemoryProducts.get(id)).filter(Boolean);
+  }
+
   async saveProductPhoto(photoDoc) {
     if (!photoDoc || !photoDoc.id) {
       return null;
@@ -1350,13 +1367,14 @@ class FirestoreRepository {
         stored = snap.data();
       } catch (err) {
         if (/PERMISSION_DENIED/i.test(err.message) || err.code === 7) {
-          Logger.warn('Aviso: Permissão negada para store_settings no Firestore, usando fallback local.');
+          Logger.warn('Permissão negada para store_settings; operação de estoque interrompida.');
         } else {
           Logger.warn('Erro ao buscar store_settings no Firestore', err);
         }
-        stored = this.inMemoryInventorySettings;
+        throw new Error('Não foi possível validar a configuração atual de estoque.', { cause: err });
       }
     } else {
+      if (this.firestore || !this.isInMemory) throw new Error('Firestore indisponível para validar estoque.');
       stored = this.inMemoryInventorySettings;
     }
     return {
@@ -2133,7 +2151,7 @@ class FirestoreRepository {
     return session.slice(-limit);
   }
 
-  async appendMessage(phone, role, text) {
+  async appendMessage(phone, role, text, { requirePersistence = false, messageId = '' } = {}) {
     if (!phone || !text) {
       return;
     }
@@ -2146,21 +2164,24 @@ class FirestoreRepository {
 
     if (this.firestore) {
       try {
-        await this.firestore
+        const messages = this.firestore
           .collection('sessions')
           .doc(phone)
-          .collection('messages')
-          .add(messageData);
+          .collection('messages');
+        if (messageId) await messages.doc(createHash('sha256').update(`${role}:${messageId}`).digest('hex')).set(messageData);
+        else await messages.add(messageData);
 
         return;
       } catch (err) {
-        Logger.warn(
-          'Erro ao salvar mensagem no Firestore; usando fallback',
+        if (requirePersistence) throw err;
+          Logger.warn(
+            'Erro ao salvar mensagem no Firestore; usando fallback',
           { error: err.message }
         );
       }
     }
 
+    if (requirePersistence && !this.isInMemory) throw new Error('Firestore unavailable for conversation history.');
     if (!this.inMemorySessions.has(phone)) {
       this.inMemorySessions.set(phone, []);
     }
@@ -2726,7 +2747,7 @@ class FirestoreRepository {
 
     const users = await this.getAllUsers();
 
-    let user = users.find(
+    const user = users.find(
       (u) =>
         u.email &&
         u.email.toLowerCase().trim() === normalizedEmail
@@ -3748,14 +3769,15 @@ class FirestoreRepository {
     const record = { ...event, id: eventId, createdAt: new Date().toISOString() };
     if (this.firestore && !this._firestoreClientDisabled) {
       try {
-        await this.firestore.collection('storefront_events').doc(eventId).set(record);
+        await this.firestore.collection('storefront_events').doc(eventId).create(record);
         return { success: true };
       } catch (error) {
+        if (error.code === 6 || error.code === 'already-exists') return { success: true, duplicate: true };
         Logger.warn('Não foi possível gravar evento do catálogo', { error: error.message });
         throw error;
       }
     }
-    this.inMemoryStorefrontEvents.push(record);
+    if (!this.inMemoryStorefrontEvents.some(row => row.id === eventId)) this.inMemoryStorefrontEvents.push(record);
     if (this.inMemoryStorefrontEvents.length > 10000) this.inMemoryStorefrontEvents.splice(0, this.inMemoryStorefrontEvents.length - 10000);
     return { success: true };
   }
@@ -3774,6 +3796,7 @@ class FirestoreRepository {
         events = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       } catch (error) {
         Logger.warn('Não foi possível consultar eventos do catálogo', { error: error.message });
+        throw error;
       }
     }
 

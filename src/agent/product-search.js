@@ -1,10 +1,12 @@
 'use strict';
 const { normalizeName, nameTokens, tokenKey, singularToken } = require('./util');
 const { firstText, FIELD_MAP } = require('./product-contract');
+const { interpretTraits, satisfiesTraits } = require('./plant-search');
 
 function rawStatus(data) {
   const value = firstText(data, FIELD_MAP.status);
-  return value ? value.toUpperCase() : 'ATIVO';
+  const status = value ? value.toUpperCase() : 'ATIVO';
+  return status === 'ACTIVE' ? 'ATIVO' : status === 'INACTIVE' ? 'INATIVO' : status;
 }
 
 function editDistanceAtMostOne(a, b) {
@@ -46,6 +48,12 @@ class ProductIndex {
     this.synonyms = new Map();
     this.ignoredSynonyms = [];
     this.pending = null;
+    this.generation = 0;
+  }
+
+  invalidate() {
+    this.loadedAt = 0;
+    this.generation++;
   }
 
   isFresh() {
@@ -54,7 +62,7 @@ class ProductIndex {
 
   async ensureFresh() {
     if (this.isFresh()) return;
-    await this.refresh();
+    await this.refresh({ force: true });
   }
 
   /** Atualização única compartilhada; erros propagam (sem servir índice vencido). */
@@ -67,6 +75,7 @@ class ProductIndex {
   }
 
   async load() {
+    const generation = this.generation;
     const [docs, synonymDocs] = await Promise.all([this.source.listIdentity(), this.source.listApprovedSynonyms()]);
     if (docs.length > this.maxEntries) throw new Error('Catálogo acima do limite do índice.');
     const entries = [];
@@ -79,6 +88,7 @@ class ProductIndex {
         norm: normalizeName(name),
         key: tokenKey(name),
         tokens: [...new Set(nameTokens(name))],
+        botanical: doc.data.botanical || null,
         status: rawStatus(doc.data),
         category: categoryKey(firstText(doc.data, FIELD_MAP.category)),
         subcategory: categoryKey(firstText(doc.data, FIELD_MAP.subcategory)),
@@ -101,6 +111,7 @@ class ProductIndex {
       if (syn.approved !== true || !term || ids.length === 0) { ignored.push(syn.id ?? syn.term); continue; }
       synonyms.set(term, new Set([...(synonyms.get(term) ?? []), ...ids]));
     }
+    if (generation !== this.generation) throw new Error('Catalog changed during index refresh.');
     Object.assign(this, { entries, byId, byNorm, byKey, synonyms, ignoredSynonyms: ignored, loadedAt: this.now() });
   }
 
@@ -145,6 +156,14 @@ class ProductIndex {
   /** Lista explícita (cliente pediu categoria/opções): filtros respeitados, ordem fixa por nome e ID. */
   match({ category = '', query = '' } = {}) {
     const cat = categoryKey(category);
+    const interpreted = interpretTraits(query);
+    if (interpreted.constraints.length) {
+      if (interpreted.unsupported || !interpreted.constraints.length) return [];
+      return this.entries.filter(e => e.status !== 'INATIVO' && e.status !== 'INACTIVE')
+        .filter(e => !cat || e.category === cat || e.subcategory === cat)
+        .filter(e => satisfiesTraits(e, interpreted.constraints))
+        .sort((a, b) => a.id.localeCompare(b.id));
+    }
     const tokens = [...new Set(nameTokens(query))];
     if (!cat && tokens.length === 0) return [];
     return this.entries

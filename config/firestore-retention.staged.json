@@ -1,0 +1,7 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    { "collectionGroup": "web_sessions", "fieldPath": "expiresAt", "ttl": true, "indexes": [] },
+    { "collectionGroup": "request_limits", "fieldPath": "expiresAt", "ttl": true, "indexes": [] }
+  ]
+}

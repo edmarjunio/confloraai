@@ -15,21 +15,19 @@ function priceText(product) {
 /** Bloco de preço. `availability` só é passada quando a disponibilidade foi verificada. */
 function priceBlock(product, { availability } = {}) {
   const lines = [`🌿 *${product.name}*`];
-  if (product.presentation) lines.push(`• Apresentação: ${product.presentation}`);
-  lines.push(`• Valor: *${priceText(product)}*`);
-  if (availability) lines.push(`• Disponibilidade: ${availability}`);
+  if (product.presentation) lines.push(product.presentation);
+  lines.push(`💰 *${priceText(product)}*`);
+  if (availability) lines.push(availability);
   return lines.join('\n');
 }
 
 function priceCards(entries) {
-  return `${entries.map(({ product, availability }) => priceBlock(product, { availability })).join('\n\n')}\n\n${ASK_MORE}`;
+  return entries.map(({ product, availability }) => priceBlock(product, { availability })).join('\n\n');
 }
 
-function productList({ items, truncated, heading }) {
-  const body = items.map((item) => `• ${item.name}${item.presentation ? ` (${item.presentation})` : ''}: *${priceText(item)}*`);
-  const lines = [`🌿 *${safeDisplayText(heading, 60) || 'Algumas opções'}*`, ...body];
-  if (truncated) lines.push('', 'Há outras opções além destas.');
-  return `${lines.join('\n')}\n\n${ASK_MORE}`;
+function productList({ items, heading }) {
+  const body = items.map((item, index) => `${index + 1}. *${title(item)}* — ${priceText(item)}`);
+  return [safeDisplayText(heading, 60) || 'Opções cadastradas', ...body].join('\n');
 }
 
 function lineBlock(line) {
