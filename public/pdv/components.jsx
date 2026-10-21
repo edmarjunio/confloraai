@@ -102,10 +102,11 @@ window.PdvComponents = (() => {
     ].filter(item => !allowedMethods || allowedMethods.includes(item.id))
      .filter(item => item.id !== 'FIADO' || customerId);
 
+    const totalCents = Math.round(Number(total || 0) * 100);
     const update = (index, values) => onChange(parts.map((part, current) => current === index ? { ...part, ...values } : part));
     const sum = parts.reduce((value, part) => value + Math.round(Number(part.amount || 0) * 100), 0);
-    const totalCents = Math.round(Number(total || 0) * 100);
     const remaining = (totalCents - sum) / 100;
+    const isExceeded = (val) => Math.round(Number(val || 0) * 100) > totalCents;
 
     return <section className="my-3 space-y-2.5 rounded-2xl border-2 border-emerald-200 bg-emerald-50/90 p-3.5">
       <div className="flex items-center justify-between">
@@ -115,36 +116,50 @@ window.PdvComponents = (() => {
         </span>
       </div>
       <div className="space-y-2">
-        {parts.map((part, index) => <div key={index} className="flex flex-wrap items-center gap-2 rounded-xl border border-emerald-100 bg-white p-2.5 shadow-xs">
-          <span className="text-xs font-black text-emerald-800 bg-emerald-100 rounded px-1.5 py-0.5">#{index + 1}</span>
-          <select
-            value={part.method}
-            onChange={(event) => update(index, { method: event.target.value })}
-            className="flex-1 min-w-[130px] rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs font-bold text-slate-800"
-          >
-            {methodOptions.map(opt => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
-          </select>
-          <div className="flex items-center gap-1">
-            <span className="text-xs font-bold text-slate-400">R$</span>
-            <input
-              aria-label={`Valor da parcela ${index + 1}`}
-              type="number"
-              min="0.01"
-              step="0.01"
-              value={part.amount}
-              onChange={(event) => update(index, { amount: event.target.value })}
-              className="w-28 rounded-lg border border-slate-300 p-2 text-xs font-bold text-emerald-950"
-              placeholder="0,00"
-            />
-          </div>
-          {parts.length > 1 && <button
-            type="button"
-            title="Remover parcela"
-            aria-label={`Remover parcela ${index + 1}`}
-            className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-red-100 text-slate-500 hover:text-red-600 flex items-center justify-center font-bold text-xs transition cursor-pointer"
-            onClick={() => onChange(parts.filter((_, current) => current !== index))}
-          >✕</button>}
-        </div>)}
+        {parts.map((part, index) => {
+          const exceeded = isExceeded(part.amount);
+          return (
+            <div key={index} className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-emerald-100 bg-white p-2.5 shadow-xs">
+                <span className="text-xs font-black text-emerald-800 bg-emerald-100 rounded px-1.5 py-0.5">#{index + 1}</span>
+                <select
+                  value={part.method}
+                  onChange={(event) => update(index, { method: event.target.value })}
+                  className="flex-1 min-w-[130px] rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs font-bold text-slate-800"
+                >
+                  {methodOptions.map(opt => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
+                </select>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs font-bold text-slate-400">R$</span>
+                  <input
+                    aria-label={`Valor da parcela ${index + 1}`}
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={part.amount}
+                    onChange={(event) => update(index, { amount: event.target.value })}
+                    className={`w-28 rounded-lg p-2 text-xs font-bold ${
+                      exceeded ? 'border-2 border-red-500 bg-red-50 text-red-950 ring-2 ring-red-400/30' : 'border border-slate-300 text-emerald-950'
+                    }`}
+                    placeholder="0,00"
+                  />
+                </div>
+                {parts.length > 1 && <button
+                  type="button"
+                  title="Remover parcela"
+                  aria-label={`Remover parcela ${index + 1}`}
+                  className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-red-100 text-slate-500 hover:text-red-600 flex items-center justify-center font-bold text-xs transition cursor-pointer"
+                  onClick={() => onChange(parts.filter((_, current) => current !== index))}
+                >✕</button>}
+              </div>
+              {exceeded && (
+                <p className="text-[11px] font-bold text-red-700 pl-1" role="alert">
+                  ⚠️ Valor acima do saldo da venda. O máximo permitido é {money(total)}.
+                </p>
+              )}
+            </div>
+          );
+        })}
       </div>
       <div className="pt-1 flex items-center justify-between">
         <p className="text-xs font-bold text-slate-700">
@@ -829,6 +844,9 @@ window.PdvComponents = (() => {
       return [{ method: initialMethod, amount: total.toFixed(2) }];
     });
 
+    // Calculadora de troco visual exclusiva para Dinheiro (100% independente do financeiro e temporária)
+    const [cashReceivedVisual, setCashReceivedVisual] = useState('');
+
     const [copied, setCopied] = useState(false);
     const [manualPixNote, setManualPixNote] = useState('');
     const [manualProofSeen, setManualProofSeen] = useState(false);
@@ -894,6 +912,7 @@ window.PdvComponents = (() => {
       } else {
         setParts([{ method: initialMethod, amount: total.toFixed(2) }]);
       }
+      setCashReceivedVisual('');
       setCopied(false);
       setManualPixNote('');
       setManualProofSeen(false);
@@ -910,15 +929,33 @@ window.PdvComponents = (() => {
 
     const sumCents = parts.reduce((sum, p) => sum + Math.round(Number(p.amount || 0) * 100), 0);
     const remainingCents = totalCents - sumCents;
-    const isSingle = parts.length === 1;
-    const isSingleCash = isSingle && parts[0].method === 'DINHEIRO';
-    const singleCashTendered = isSingleCash ? Math.round(Number(parts[0].amount || 0) * 100) : 0;
-    const cashChange = isSingleCash && singleCashTendered >= totalCents ? (singleCashTendered - totalCents) / 100 : 0;
 
-    const allAmountsValid = parts.every(p => Number(p.amount || 0) > 0);
+    // Identifica se há parcela em Dinheiro
+    const cashPart = parts.find(p => p.method === 'DINHEIRO');
+    const hasCash = Boolean(cashPart);
+    const cashSaleAmount = cashPart ? Number(cashPart.amount || 0) : 0;
+
+    // Cálculo do troco visual (100% informativo)
+    const parseMoneyInput = (str) => {
+      if (!str) return 0;
+      const cleaned = String(str).trim().replace(/^R\$\s*/i, '').replace(/\./g, '').replace(',', '.');
+      const num = Number(cleaned);
+      return Number.isFinite(num) && num > 0 ? num : 0;
+    };
+    const parsedVisualReceived = parseMoneyInput(cashReceivedVisual);
+    const visualTroco = parsedVisualReceived >= cashSaleAmount ? Math.round((parsedVisualReceived - cashSaleAmount) * 100) / 100 : 0;
+    const visualHasDeficit = Boolean(cashReceivedVisual.trim()) && parsedVisualReceived > 0 && parsedVisualReceived < cashSaleAmount;
+
+    // Validação estrita: cada parcela <= totalCents, inclusive dinheiro. Sem exceções!
+    const isPartExceeded = (amt) => Math.round(Number(amt || 0) * 100) > totalCents;
+    const hasAnyExceeded = parts.some(p => isPartExceeded(p.amount));
+    const allAmountsValid = parts.every(p => {
+      const c = Math.round(Number(p.amount || 0) * 100);
+      return c > 0 && c <= totalCents;
+    });
     const uniqueMethods = new Set(parts.map(p => p.method)).size === parts.length;
     const isExactMatch = sumCents === totalCents && allAmountsValid && uniqueMethods;
-    const canFinalize = isSingleCash ? (singleCashTendered >= totalCents) : isExactMatch;
+    const canFinalize = isExactMatch;
 
     const [directPix, setDirectPix] = useState(order.pixMode === 'MANUAL');
     const hasPixPart = parts.some((p) => p.method === 'PIX');
@@ -932,19 +969,6 @@ window.PdvComponents = (() => {
     };
 
     const handlePart0Amount = (val) => {
-      const valNum = Number(val);
-      const valCents = Math.round(valNum * 100);
-      if (Number.isFinite(valCents) && valCents > 0 && valCents < totalCents) {
-        const remVal = ((totalCents - valCents) / 100).toFixed(2);
-        if (parts.length === 1) {
-          const nextMethod = availableMethods.find(m => m !== parts[0].method) || 'DINHEIRO';
-          setParts([
-            { method: parts[0].method, amount: val },
-            { method: nextMethod, amount: remVal }
-          ]);
-          return;
-        }
-      }
       setParts(parts.map((p, idx) => idx === 0 ? { ...p, amount: val } : p));
     };
 
@@ -967,21 +991,28 @@ window.PdvComponents = (() => {
     };
 
     const handleConfirmReceive = () => {
+      if (!canFinalize) return;
       const isSplit = parts.length > 1;
       const finalMethod = isSplit ? 'MISTO' : needsManualProof ? 'PIX_MANUAL' : parts[0].method;
-      const finalCash = (!isSplit && parts[0].method === 'DINHEIRO') ? parts[0].amount : null;
-      const finalParts = isSplit ? parts.map(p => ({ ...p, amount: Number(p.amount) })) : undefined;
-      onReceive(order, finalMethod, finalCash, finalParts, {
+      const finalParts = isSplit ? parts.map(p => ({ method: p.method, amount: Math.round(Number(p.amount) * 100) / 100 })) : undefined;
+      onReceive(order, finalMethod, null, finalParts, {
         manualPix: needsManualProof,
         proofSeen: manualProofSeen,
         note: manualPixNote,
         proofId,
       });
+      setCashReceivedVisual('');
     };
 
     let fabAction = null;
     if (canReceive) {
-      if (!canFinalize && remainingCents > 0) {
+      if (hasAnyExceeded) {
+        fabAction = {
+          label: `⚠️ Valor acima do saldo da venda (${money(total)})`,
+          disabled: true,
+          onClick: () => {}
+        };
+      } else if (!canFinalize && remainingCents > 0) {
         fabAction = {
           label: `⚠️ Falta preencher ${money(remainingCents / 100)}`,
           disabled: true,
@@ -1002,13 +1033,6 @@ window.PdvComponents = (() => {
       } else if (deliveryMode) {
         fabAction = {
           label: '🛵 Confirmar Recebimento e Concluir Entrega',
-          disabled: busy,
-          onClick: handleConfirmReceive,
-          tone: 'emerald'
-        };
-      } else if (isSingleCash && cashChange > 0) {
-        fabAction = {
-          label: `✅ Confirmar Recebimento (Troco: ${money(cashChange)})`,
           disabled: busy,
           onClick: handleConfirmReceive,
           tone: 'emerald'
@@ -1145,13 +1169,13 @@ window.PdvComponents = (() => {
           <div className="flex items-center justify-between border-b border-emerald-100 pb-2 mb-3">
             <div>
               <h3 className="text-base font-black text-emerald-950 flex items-center gap-1.5">
-                <span>{deliveryMode ? '🛵 Receber na Entrega' : '💵 Receber no Caixa'}</span>
+                <span>{deliveryMode ? '🛵 Receber na Entrega' : '💵 Recebimento da Comanda'}</span>
               </h3>
               <p className="text-xs text-slate-500 font-medium">Informe a forma e confirme o valor exato</p>
             </div>
             <div className="text-right">
               <span className="text-[10px] uppercase font-bold text-slate-500 block">Total do pedido</span>
-              <span className="text-base font-black text-emerald-800">{money(order.total)}</span>
+              <span className="text-lg font-black text-emerald-800">{money(order.total)}</span>
             </div>
           </div>
 
@@ -1178,7 +1202,7 @@ window.PdvComponents = (() => {
 
             <div className="mt-2.5">
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                {parts.length > 1 ? `Valor na 1ª forma (${methodLabels[parts[0].method]}):` : 'Valor recebido (R$):'}
+                {parts.length > 1 ? `Valor na 1ª forma (${methodLabels[parts[0].method]}):` : 'Valor registrado (R$):'}
               </label>
               <div className="relative">
                 <span className="absolute left-3 top-2.5 text-sm font-bold text-slate-400">R$</span>
@@ -1186,12 +1210,35 @@ window.PdvComponents = (() => {
                   type="number"
                   min="0.01"
                   step="0.01"
-                  className="w-full pl-10 pr-3 py-2 text-base font-black text-emerald-950 border border-slate-300 rounded-xl bg-white focus:border-emerald-500 focus:outline-none"
+                  className={`w-full pl-10 pr-3 py-2 text-base font-black rounded-xl bg-white focus:outline-none ${
+                    isPartExceeded(parts[0].amount)
+                      ? 'border-2 border-red-500 text-red-950 bg-red-50/50 ring-2 ring-red-400/30'
+                      : 'border border-slate-300 text-emerald-950 focus:border-emerald-500'
+                  }`}
                   value={parts[0].amount}
                   onChange={(e) => handlePart0Amount(e.target.value)}
                   placeholder="0,00"
                 />
               </div>
+              {isPartExceeded(parts[0].amount) && (
+                <p className="mt-1 text-xs font-bold text-red-700" role="alert">
+                  ⚠️ Valor acima do saldo da venda. O máximo permitido é {money(total)}.
+                </p>
+              )}
+              {parts.length === 1 && remainingCents > 0 && !isPartExceeded(parts[0].amount) && (
+                <div className="mt-2 flex items-center justify-between rounded-xl bg-amber-50 p-2.5 border border-amber-200">
+                  <span className="text-xs font-bold text-amber-900">
+                    Restante a quitar: <strong>{money(remainingCents / 100)}</strong>
+                  </span>
+                  <button
+                    type="button"
+                    className="text-xs font-black text-emerald-800 hover:underline flex items-center gap-1 cursor-pointer"
+                    onClick={addPart}
+                  >
+                    + Adicionar outra forma ({money(remainingCents / 100)})
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1199,49 +1246,59 @@ window.PdvComponents = (() => {
             <div className="mt-3 space-y-2.5 border-t border-emerald-100 pt-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-black text-slate-700 uppercase tracking-wide">
-                  Pagamento Complementar
+                  Pagamento Complementar ({parts.length} formas divididas)
                 </span>
-                <span className="text-[11px] text-slate-500 font-medium">
-                  {parts.length} formas divididas
+                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${remainingCents === 0 ? 'bg-emerald-100 text-emerald-800' : remainingCents > 0 ? 'bg-amber-100 text-amber-900' : 'bg-red-100 text-red-900'}`}>
+                  {remainingCents === 0 ? '✓ Soma exata' : remainingCents > 0 ? `Falta ${money(remainingCents / 100)}` : `Excesso ${money(-remainingCents / 100)}`}
                 </span>
               </div>
 
               {parts.slice(1).map((part, idx) => {
                 const partIndex = idx + 1;
+                const exceeded = isPartExceeded(part.amount);
                 return (
-                  <div key={partIndex} className="p-2.5 rounded-xl border border-emerald-200 bg-emerald-50/70 flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-black text-emerald-800 bg-emerald-200 rounded px-1.5 py-0.5">
-                      #{partIndex + 1}
-                    </span>
-                    <select
-                      value={part.method}
-                      onChange={(e) => updatePart(partIndex, { method: e.target.value })}
-                      className="flex-1 min-w-[130px] rounded-lg border border-slate-300 bg-white p-2 text-xs font-bold text-slate-800"
-                    >
-                      {availableMethods.map(m => (
-                        <option key={m} value={m}>{methodLabels[m]}</option>
-                      ))}
-                    </select>
-                    <div className="relative w-32">
-                      <span className="absolute left-2.5 top-1.5 text-xs font-bold text-slate-400">R$</span>
-                      <input
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        value={part.amount}
-                        onChange={(e) => updatePart(partIndex, { amount: e.target.value })}
-                        className="w-full pl-8 pr-2 py-1.5 text-xs font-bold text-emerald-950 border border-slate-300 rounded-lg bg-white"
-                        placeholder="0,00"
-                      />
+                  <div key={partIndex} className="p-2.5 rounded-xl border border-emerald-200 bg-emerald-50/70 space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-black text-emerald-800 bg-emerald-200 rounded px-1.5 py-0.5">
+                        #{partIndex + 1}
+                      </span>
+                      <select
+                        value={part.method}
+                        onChange={(e) => updatePart(partIndex, { method: e.target.value })}
+                        className="flex-1 min-w-[130px] rounded-lg border border-slate-300 bg-white p-2 text-xs font-bold text-slate-800"
+                      >
+                        {availableMethods.map(m => (
+                          <option key={m} value={m}>{methodLabels[m]}</option>
+                        ))}
+                      </select>
+                      <div className="relative w-32">
+                        <span className="absolute left-2.5 top-1.5 text-xs font-bold text-slate-400">R$</span>
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={part.amount}
+                          onChange={(e) => updatePart(partIndex, { amount: e.target.value })}
+                          className={`w-full pl-8 pr-2 py-1.5 text-xs font-bold rounded-lg bg-white ${
+                            exceeded ? 'border-2 border-red-500 text-red-950 bg-red-50 ring-2 ring-red-400/30' : 'border border-slate-300 text-emerald-950'
+                          }`}
+                          placeholder="0,00"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        title="Remover esta forma"
+                        className="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs flex items-center justify-center cursor-pointer transition"
+                        onClick={() => removePart(partIndex)}
+                      >
+                        ✕
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      title="Remover esta forma"
-                      className="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs flex items-center justify-center cursor-pointer transition"
-                      onClick={() => removePart(partIndex)}
-                    >
-                      ✕
-                    </button>
+                    {exceeded && (
+                      <p className="text-[11px] font-bold text-red-700 pl-1">
+                        ⚠️ Valor acima do saldo da venda. O máximo permitido é {money(total)}.
+                      </p>
+                    )}
                   </div>
                 );
               })}
@@ -1259,19 +1316,13 @@ window.PdvComponents = (() => {
           )}
 
           <div className="mt-3">
-            {isSingleCash && cashChange > 0 && (
-              <div className="p-3 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-900 font-black text-sm flex items-center justify-between">
-                <span>💵 Troco a devolver ao cliente:</span>
-                <span className="text-base text-emerald-950">{money(cashChange)}</span>
-              </div>
-            )}
             {remainingCents > 0 && (
               <div className="p-3 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold flex items-center justify-between">
                 <span>⚠️ Falta receber para cobrir o total:</span>
                 <span className="text-sm font-black text-amber-950">{money(remainingCents / 100)}</span>
               </div>
             )}
-            {!isSingleCash && remainingCents < 0 && (
+            {remainingCents < 0 && (
               <div className="p-3 rounded-xl bg-red-50 border border-red-300 text-red-900 text-xs font-bold flex items-center justify-between">
                 <span>⚠️ O valor informado excede o total:</span>
                 <span className="text-sm font-black text-red-950">Excesso de {money(-remainingCents / 100)}</span>
@@ -1279,10 +1330,86 @@ window.PdvComponents = (() => {
             )}
             {isExactMatch && (
               <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold flex items-center gap-1.5">
-                <span>✅ Valor total de {money(order.total)} preenchido com sucesso!</span>
+                <span>✅ Valor total de {money(order.total)} distribuído com sucesso!</span>
               </div>
             )}
           </div>
+
+          {/* CALCULADORA DE TROCO VISUAL: Exclusiva para DINHEIRO (100% independente do financeiro) */}
+          {hasCash && (
+            <div className="mt-3.5 p-3.5 rounded-2xl border-2 border-emerald-300 bg-emerald-50/80 shadow-xs">
+              <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-emerald-200">
+                <span className="text-xs font-black text-emerald-950 flex items-center gap-1.5 uppercase tracking-wide">
+                  <span>🧮</span>
+                  <span>Calculadora de Troco</span>
+                </span>
+                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-200/80 px-2 py-0.5 rounded-full">
+                  Visual · Não altera a venda
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div>
+                  <label className="block text-[11px] font-extrabold text-slate-700 uppercase mb-1">
+                    1. RECEBI:
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-2.5 top-2 text-xs font-bold text-slate-400">R$</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="0,00"
+                      value={cashReceivedVisual}
+                      onChange={(e) => {
+                        const v = e.target.value.replace(/[^\d.,]/g, '').replace(/(.*[.,].*)[.,]/g, '$1');
+                        setCashReceivedVisual(v);
+                      }}
+                      className="w-full pl-8 pr-2.5 py-1.5 text-sm font-black text-slate-900 border-2 border-emerald-300 rounded-xl bg-white focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-400/30"
+                      aria-label="Valor recebido em dinheiro físico"
+                    />
+                  </div>
+                  <span className="text-[10px] text-slate-500 font-medium mt-0.5 block">Valor entregue pelo cliente</span>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-extrabold text-slate-700 uppercase mb-1">
+                    2. VALOR DA VENDA:
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      readOnly
+                      tabIndex={-1}
+                      value={money(cashSaleAmount)}
+                      className="w-full px-2.5 py-1.5 text-sm font-black text-emerald-950 border border-slate-200 rounded-xl bg-slate-100 cursor-default select-none"
+                      aria-label="Valor da parcela em dinheiro"
+                    />
+                  </div>
+                  <span className="text-[10px] text-slate-500 font-medium mt-0.5 block">{parts.length > 1 ? 'Parcela em dinheiro' : 'Total em dinheiro'}</span>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-extrabold text-slate-700 uppercase mb-1">
+                    3. TROCO:
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      readOnly
+                      tabIndex={-1}
+                      value={money(visualTroco)}
+                      className={`w-full px-2.5 py-1.5 text-sm font-black border rounded-xl cursor-default select-none ${
+                        visualTroco > 0
+                          ? 'border-emerald-500 bg-emerald-100 text-emerald-950'
+                          : 'border-slate-200 bg-slate-100 text-slate-600'
+                      }`}
+                      aria-label="Troco calculado"
+                    />
+                  </div>
+                  <span className="text-[10px] text-slate-500 font-medium mt-0.5 block">
+                    {visualHasDeficit ? '⚠️ Valor menor que a parcela' : visualTroco > 0 ? 'Devolver ao cliente' : 'Sem troco'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {needsManualProof && (
             <div className="mt-3 space-y-2 border-t border-emerald-200 pt-3">
@@ -1314,6 +1441,8 @@ window.PdvComponents = (() => {
             >
               {busy ? (
                 'Processando…'
+              ) : hasAnyExceeded ? (
+                `⚠️ Valor acima do saldo da venda (${money(total)})`
               ) : !canFinalize && remainingCents > 0 ? (
                 `⚠️ Falta preencher ${money(remainingCents / 100)} para finalizar`
               ) : !canFinalize && remainingCents < 0 ? (
@@ -1322,8 +1451,6 @@ window.PdvComponents = (() => {
                 '⚠️ Anexe e confirme o comprovante Pix'
               ) : deliveryMode ? (
                 '🛵 Confirmar Recebimento e Concluir Entrega'
-              ) : isSingleCash && cashChange > 0 ? (
-                `✅ Confirmar Recebimento (Troco: ${money(cashChange)})`
               ) : (
                 `✅ Confirmar Pagamento de ${money(order.total)}`
               )}
@@ -1356,6 +1483,7 @@ window.PdvComponents = (() => {
       </div>
     </Panel>;
   }
+
   function OrderCard({ order, tone, selected, attention, onDetails, stage, canMove, onDragStart, onDragEnd }) {
     const items = (order.items || []).slice(0, 2);
     const extraItems = Math.max(0, (order.items || []).length - items.length);
@@ -1465,7 +1593,7 @@ window.PdvComponents = (() => {
           paymentMethod,
           paymentParts,
           ...verification,
-          receivedAmount: receivedAmount === null || receivedAmount === undefined || receivedAmount === '' ? null : Number(String(receivedAmount).replace(',', '.')),
+          ...(receivedAmount !== null && receivedAmount !== undefined && receivedAmount !== '' ? { receivedAmount: Number(String(receivedAmount).replace(',', '.')) } : {})
         });
         setSelectedOrder(response.order || order);
         await refresh(true);

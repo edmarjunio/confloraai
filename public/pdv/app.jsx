@@ -1799,31 +1799,72 @@ const { useState, useEffect, useRef, useMemo } = React;
                   )}
 
                   {paymentMethod === 'dinheiro' && currentUser.role !== 'VENDEDOR' && (
-                    <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 mb-4 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs font-semibold text-slate-600">
-                          Valor recebido (R$):
-                        </label>
-                        <input
-                          type="number"
-                          placeholder={finalTotal.toFixed(2)}
-                          value={cashReceived}
-                          onChange={(e) => setCashReceived(e.target.value)}
-                          className="w-32 px-3 py-1.5 rounded-xl border border-slate-300 text-right font-bold text-sm focus:outline-none focus:border-emerald-600 bg-white"
-                        />
-                      </div>
-                      <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-200">
-                        <span className="font-semibold text-slate-500">Troco a devolver:</span>
-                        <span className="text-base font-extrabold text-emerald-700">
-                          {formatBRL(changeAmount)}
+                    <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 mb-4 space-y-2.5">
+                      <div className="flex items-center justify-between pb-1 border-b border-slate-200/80">
+                        <strong className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                          <span>🧮</span>
+                          <span>Calculadora de Troco</span>
+                        </strong>
+                        <span className="text-[10px] font-bold text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-full">
+                          Visual & Informativa
                         </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div>
+                          <label className="block text-[11px] font-extrabold text-slate-700 uppercase mb-1">
+                            1. RECEBI:
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-2.5 top-1.5 text-xs font-bold text-slate-400">R$</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              placeholder={finalTotal.toFixed(2)}
+                              value={cashReceived}
+                              onChange={(e) => setCashReceived(e.target.value)}
+                              className="w-full pl-8 pr-2 py-1.5 text-sm font-black text-slate-900 border-2 border-emerald-300 rounded-xl bg-white focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-400/30"
+                              aria-label="Valor recebido em dinheiro físico"
+                            />
+                          </div>
+                          <span className="text-[10px] text-slate-500 font-medium mt-0.5 block">Valor entregue</span>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-extrabold text-slate-700 uppercase mb-1">
+                            2. VALOR DA VENDA:
+                          </label>
+                          <input
+                            type="text"
+                            readOnly
+                            tabIndex={-1}
+                            value={formatBRL(finalTotal)}
+                            className="w-full px-2.5 py-1.5 text-sm font-black text-emerald-950 border border-slate-200 rounded-xl bg-slate-100 cursor-default select-none"
+                            aria-label="Valor da venda"
+                          />
+                          <span className="text-[10px] text-slate-500 font-medium mt-0.5 block">Total a pagar</span>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-extrabold text-slate-700 uppercase mb-1">
+                            3. TROCO:
+                          </label>
+                          <input
+                            type="text"
+                            readOnly
+                            tabIndex={-1}
+                            value={formatBRL(changeAmount)}
+                            className={`w-full px-2.5 py-1.5 text-sm font-black border rounded-xl cursor-default select-none ${changeAmount > 0 ? "border-emerald-500 bg-emerald-100 text-emerald-950" : "border-slate-200 bg-slate-100 text-slate-600"}`}
+                            aria-label="Troco calculado"
+                          />
+                          <span className="text-[10px] text-slate-500 font-medium mt-0.5 block">
+                            {changeAmount > 0 ? "Devolver ao cliente" : "Sem troco"}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   )}
 
                   <div className="flex items-center gap-2 pt-2">
                     <button
-                      onClick={() => setActiveModal(null)}
+                      onClick={() => { setActiveModal(null); setCashReceived(""); }}
                       className="w-1/3 py-3 rounded-xl border border-slate-200 font-bold text-xs text-slate-600 hover:bg-slate-50"
                     >
                       Voltar
