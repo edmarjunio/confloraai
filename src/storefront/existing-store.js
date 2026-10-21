@@ -213,7 +213,7 @@ function installExistingStore(app, { repository, assistant, catalog }) {
       admin(req);
       const saved = await readSettings();
       res.json({
-        config: existingConfig(await products(), saved),
+        config: existingConfig(await products({ saved }), saved),
         assistant: saved?.assistant || {},
         integrations: {},
       });
@@ -275,7 +275,7 @@ function installExistingStore(app, { repository, assistant, catalog }) {
       .type("application/javascript")
       .send(script);
   });
-  async function products({ advisory = false } = {}) {
+  async function products({ advisory = false, settings, saved } = {}) {
     if (advisory && catalog) await catalog.refreshCatalog();
     let records = advisory && Array.isArray(catalog?.rawItems) ? catalog.rawItems : await repository.getAllProducts();
     if (!advisory && repository.getSalesOrders) {
@@ -285,15 +285,15 @@ function installExistingStore(app, { repository, assistant, catalog }) {
         // preserve unranked records
       }
     }
-    let settings = { stockControlEnabled: true };
-    if (repository.getInventorySettings) {
+    if (!settings && repository.getInventorySettings) {
       try {
         settings = await repository.getInventorySettings();
       } catch {
         settings = { stockControlEnabled: true };
       }
     }
-    const saved = await readSettings();
+    settings ||= { stockControlEnabled: true };
+    if (saved === undefined) saved = await readSettings();
     return records
       .map((item) => {
         const product = toProduct(item, settings);
@@ -325,8 +325,9 @@ function installExistingStore(app, { repository, assistant, catalog }) {
           settings = { stockControlEnabled: true };
         }
       }
-      const items = await products();
-      const config = existingConfig(items, await readSettings());
+      const saved = await readSettings();
+      const items = await products({ settings, saved });
+      const config = existingConfig(items, saved, settings);
       const visibleCategories = new Set(items.flatMap((item) => item.categories));
       config.categories = config.categories.filter(
         (category) => category.isActive && visibleCategories.has(category.id),
@@ -334,7 +335,7 @@ function installExistingStore(app, { repository, assistant, catalog }) {
       res
         .set("Cache-Control", "no-store")
         .json({
-          config: existingConfig(items, await readSettings(), settings),
+          config,
           products: items,
         });
     } catch (error) {
@@ -539,8 +540,12 @@ async function normalizeExistingCheckout(req, repository) {
     "Informe um endereço na região atendida pela loja.",
   );
   const settings = await repository.getInventorySettings();
+  const productIds = [...new Set(input.items.map(item => String(item?.productId || '')))];
+  const currentProducts = repository.getProductsByIds
+    ? await repository.getProductsByIds(productIds)
+    : await repository.getAllProducts();
   const catalog = new Map(
-    (await repository.getAllProducts()).map((item) => [
+    currentProducts.map((item) => [
       String(item.id),
       toProduct(item, settings),
     ]),

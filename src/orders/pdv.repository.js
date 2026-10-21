@@ -138,6 +138,35 @@ class PdvRepository {
   }
 
   watchOpenOrders(onChange, onError = () => {}) {
+    if (!this.openOrdersFeed) {
+      const feed = { subscribers: new Set(), last: null, stop: null };
+      this.openOrdersFeed = feed;
+      feed.start = () => this._watchOpenOrders(rows => {
+        feed.last = rows;
+        for (const subscriber of feed.subscribers) {
+          try { subscriber.change(structuredClone(rows)); } catch { /* One disconnected SSE cannot stop the other clients. */ }
+        }
+      }, error => {
+        for (const subscriber of feed.subscribers) {
+          try { subscriber.error(error); } catch { /* Per-client error isolation. */ }
+        }
+      });
+    }
+    const feed = this.openOrdersFeed;
+    const subscriber = { change: onChange, error: onError };
+    feed.subscribers.add(subscriber);
+    if (!feed.stop) feed.stop = feed.start();
+    else if (feed.last) onChange(structuredClone(feed.last));
+    return () => {
+      feed.subscribers.delete(subscriber);
+      if (!feed.subscribers.size) {
+        feed.stop?.();
+        if (this.openOrdersFeed === feed) this.openOrdersFeed = null;
+      }
+    };
+  }
+
+  _watchOpenOrders(onChange, onError = () => {}) {
     const repo = this.repository;
     if (repo.firestore && !repo._firestoreClientDisabled) {
       const snapshots = new Map();

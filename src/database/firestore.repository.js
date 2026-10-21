@@ -2161,6 +2161,8 @@ class FirestoreRepository {
       text,
       timestamp: new Date().toISOString(),
     };
+    const historyExpiresAt = require('./retention').conversationExpiry();
+    if (historyExpiresAt) messageData.historyExpiresAt = historyExpiresAt;
 
     if (this.firestore) {
       try {
