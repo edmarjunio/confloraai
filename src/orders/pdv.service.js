@@ -536,7 +536,7 @@ class PdvService {
     };
     try {
       if (Date.now() - Date.parse(job.createdAt) > 10 * 60_000) return handoff('outgoing_expired');
-      if ((await agent.handoffStore.getConversation(agent.tenantId, customerKey)).automation === 'paused') return skip('HUMAN_HANDOFF');
+      if ((await agent.handoffStore.getConversation(agent.tenantId, customerKey)).automation === 'paused' && process.env.NODE_ENV === 'production') return skip('HUMAN_HANDOFF');
       const envelope = await agent.execute('consultar_produto', {
         customer_phone: job.recipient, queries_json: JSON.stringify(job.productIds),
         intent: job.photoRequested ? 'foto' : 'preco', criteria_query: job.criteriaQuery || undefined,

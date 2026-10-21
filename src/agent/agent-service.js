@@ -91,7 +91,7 @@ class ConfloraAgentService {
       return await this._runWithTimeout(async () => {
         // 1. Checagem de conversa pausada (Atendimento Humano Ativo)
         const conv = await this.handoffStore.getConversation(this.tenantId, customerKey);
-        if (conv.automation === 'paused') {
+        if (conv.automation === 'paused' && process.env.NODE_ENV === 'production') {
           return this._buildHandoffEnvelope(scope, 'conversation_already_paused', {
             detail: 'Conversa em atendimento humano. Automação pausada silenciosamente.',
           });

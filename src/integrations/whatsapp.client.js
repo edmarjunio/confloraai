@@ -165,7 +165,7 @@ class WhatsAppClient {
     if (digits.startsWith('55') && digits.length === 12) {
       const ddd = Number(digits.slice(2, 4));
       if (ddd >= 11 && ddd <= 99) {
-        return 559;
+        return '55' + digits.slice(2, 4) + '9' + digits.slice(4);
       }
     }
     return digits;
