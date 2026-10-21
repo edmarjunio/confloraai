@@ -233,14 +233,8 @@ export function createCart(state) {
     choices(
       $("#paymentOptions"),
       "payment",
-      checkout.enabledPayments.map((value) => ({
-        value,
-        label: {
-          PIX: "cart.pix_option".tr,
-          CARD: "cart.card_option".tr,
-          CREDITO: "Cartão de crédito", DEBITO: "Cartão de débito", FIADO: "Fiado · aprovação do Admin",
-          CASH: "cart.cash_option".tr,
-        }[value] || value,
+      window.ConfloraOrderDisplay.customerPaymentMethods(checkout.enabledPayments).map(value => ({
+        value, label: window.ConfloraOrderDisplay.payment(value).tr,
       })),
     );
     const area = form.elements.serviceArea;
@@ -309,20 +303,20 @@ export function createCart(state) {
         element("p", { text: form.elements.phone.value.trim() }),
       ]),
       element("div", { class: "order-review-section" }, [
-        element("strong", { text: delivery ? "Entrega".tr : "Retirada / balcão".tr }),
+        element("strong", { text: delivery ? "Entrega".tr : "Retirada".tr }),
         ...(delivery
           ? [
               ...(serviceArea ? [element("p", { text: serviceArea })] : []),
               element("p", { text: address }),
               ...(fee ? [element("p", { text: "Taxa de entrega: ".tr + money(fee) })] : []),
             ]
-          : [element("p", { text: state.config?.checkout?.pickup?.address || "Retirada na loja".tr })]),
+          : [element("p", { text: state.config?.checkout?.pickup?.address || "Retirada".tr })]),
       ]),
       element("div", { class: "order-review-section" }, [
         element("strong", { text: "Pagamento".tr }),
         element("p", { text: paymentMethod === "CASH"
           ? "Dinheiro · troco para ".tr + money(Math.round(Number(form.elements.cash.value || 0) * 100))
-          : ({ PIX: "Pix".tr, CARD: "Cartão".tr }[paymentMethod] || paymentMethod) }),
+          : window.ConfloraOrderDisplay.payment(paymentMethod).tr }),
       ]),
       element("div", { class: "order-review-items" }, [
         ...items.map((item) => {
@@ -364,8 +358,8 @@ export function createCart(state) {
         form.elements.address?.focus();
         return;
       }
-      if (payment === "FIADO" && !state.user?.email) {
-        $("#checkoutError").textContent = "Entre na sua conta antes de solicitar fiado. A compra depende da aprovação de um Admin.".tr;
+      if (payment === "FIADO") {
+        $("#checkoutError").textContent = "Fiado disponível somente no caixa.".tr;
         return;
       }
       if (payment === "CASH" && cash < total) {

@@ -1,5 +1,5 @@
 /* Bump this version whenever the application shell changes before publishing. */
-const CACHE_NAME = 'conflora-public-shell-v31';
+const CACHE_NAME = 'conflora-public-shell-v32';
 const SHELL_URL = '/storefront/index.html';
 const CORE_FILES = [
   SHELL_URL, '/store-assets/site-navigation.js?v=1',
@@ -8,7 +8,7 @@ const CORE_FILES = [
   '/store-assets/design-system.css', '/store-assets/brands/conflora-logo.png',
   '/store-assets/delivery-maps.js', '/store-assets/delivery.css',
   '/store-assets/tab-session.js', '/store-assets/order-display.js', '/store-assets/order-display.css',
-  '/store-assets/render-image.js', '/store-assets/product-card.js',
+  '/store-assets/category-ui.js', '/store-assets/render-image.js', '/store-assets/product-card.js',
   ...['app.js', 'ui.js', 'catalog.js', 'cart.js', 'cart-storage.mjs',
     'public-cache.mjs', 'chat.js', 'admin.js', 'existing-api.js',
     'product-entry.js', 'icons.js', 'receipt.js', 'guided-search.mjs',

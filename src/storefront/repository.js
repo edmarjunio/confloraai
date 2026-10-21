@@ -91,6 +91,7 @@ class StoreRepository {
     }
   }
   async createOrder(tenantId, input, customerId, key) {
+    ensure(String(input.paymentMethod || '').trim().toUpperCase() !== 'FIADO', 'Fiado disponível somente no caixa.', 403);
     const fingerprint = digest(JSON.stringify({ input, customerId }));
     const orderId = digest(`${customerId || "guest"}:${key}`);
     return this.atomic(tenantId, async (transaction) => {
@@ -106,7 +107,8 @@ class StoreRepository {
       const config = await transaction.get("publicConfig", "current");
       ensure(config, "Loja não encontrada.", 404);
       ensure(
-        config.checkout.enabledPayments.includes(input.paymentMethod),
+        config.checkout.enabledPayments.includes(input.paymentMethod) ||
+          (config.checkout.enabledPayments.includes('CARD') && ['CREDITO', 'DEBITO'].includes(input.paymentMethod)),
         "Pagamento indisponível.",
       );
       ensure(

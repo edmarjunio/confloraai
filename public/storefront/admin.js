@@ -519,6 +519,7 @@ export function createAdmin(state) {
         `cat-${category.id}`,
         product?.categories.includes(category.id),
       );
+      label.lastChild.replaceWith(element("render-category-tag", { category: category.name }));
       categories.append(label);
     }
     form.append(

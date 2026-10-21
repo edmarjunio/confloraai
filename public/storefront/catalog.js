@@ -14,8 +14,8 @@ export function createCatalog(state, add, navigate) {
   let pageSize = 24;
   let renderedItems = [];
   let loadingNextPage = false;
-  let selectedCategory = "";
-  let selectedSubcategory = "";
+  let selectedCategories = [];
+  let selectedSubcategories = [];
   let showingFavorites = false;
   const favoriteKey = () => `store:${state.slug}:user:${state.user?.id || "guest"}:favorites`;
   const favorites = new Set();
@@ -314,7 +314,6 @@ export function createCatalog(state, add, navigate) {
   function categoryTag(category, className = "") {
     return element("render-category-tag", {
       category,
-      icon: categoryIcon(category),
       class: className,
     });
   }
@@ -343,46 +342,6 @@ export function createCatalog(state, add, navigate) {
 
     return names.map(isCanonical).find(Boolean) || "";
   };
-  const categoryIcon = (name) => {
-    const value = normalizeProductText(name);
-    if (value.includes("frutifer")) return "🍋";
-    if (value.includes("horta")) return "🥬";
-    if (value.includes("hortifrut")) return "🍉";
-    if (value.includes("pet") || value.includes("animal")) return "🐾";
-    if (value.includes("planta") || value.includes("muda")) return "🪴";
-    if (value.includes("outro")) return "🌾";
-    const sharedIcon = window.ConfloraProductUi?.categoryIcon(name);
-    const configuredIcon = state.config?.categories?.find((category) =>
-      normalizeProductText(category.name) === normalizeProductText(name),
-    )?.icon;
-    return configuredIcon || sharedIcon || "🌿";
-  };
-
-  // Keep category identity stable when filters are reordered or translated.
-  const categoryTagIcon = (name, kind) => {
-    const value = normalizeProductText(name);
-    let symbol;
-    let tone;
-    if (kind === "favorites") [symbol, tone] = ["heart", "rose"];
-    else if (kind === "all") [symbol, tone] = ["grid", "slate"];
-    else if (value.includes("frutifer")) [symbol, tone] = ["fruit", "yellow"];
-    else if (value.includes("hortifrut")) [symbol, tone] = ["fruit", "orange"];
-    else if (value.includes("horta")) [symbol, tone] = ["sprout", "green"];
-    else if (value.includes("pet") || value.includes("animal")) [symbol, tone] = ["paw", "blue"];
-    else if (value.includes("planta") || value.includes("muda")) [symbol, tone] = ["leaf", "deep-green"];
-    else if (value.includes("outro")) [symbol, tone] = ["box", "slate"];
-    else {
-      const tones = ["green", "yellow", "orange", "blue", "rose", "deep-green"];
-      const hash = Array.from(value).reduce((sum, char) => (sum * 31 + char.codePointAt(0)) >>> 0, 0);
-      [symbol, tone] = ["box", tones[hash % tones.length]];
-    }
-    return element("span", {
-      class: "category-chip-icon",
-      "data-tone": tone,
-      "aria-hidden": "true",
-    }, [icon(symbol)]);
-  };
-
   const productSubcategory = (product) => {
     return String(
       product?.subcategory ||
@@ -493,10 +452,7 @@ export function createCatalog(state, add, navigate) {
     }
     const categories = categoryOptions(activeProducts);
     $("#categoryFilterControl").hidden = false;
-    if (!categories.some((category) => category.id === selectedCategory)) {
-      selectedCategory = "";
-      selectedSubcategory = "";
-    }
+    selectedCategories = selectedCategories.filter(id => categories.some(category => category.id === id));
 
     // Garante que nenhum botão 'Voltar' apareça na vitrine / home
     if (!$("#productView") || $("#productView").hidden) {
@@ -507,126 +463,66 @@ export function createCatalog(state, add, navigate) {
       });
     }
 
+    const categoryFilter = (name, selected, onclick, kind = "", colorCategory = "") => element("render-category-tag", {
+      category: name, variant: "filter", selected: String(selected), kind, "color-category": colorCategory, onclick,
+    });
+    const updateFilters = () => {
+      selectedSubcategories = [];
+      pageSize = 24;
+      render();
+    };
     $("#categoryFilterControl").replaceChildren(
-      element("button", {
-        type: "button",
-        class: `category-chip${showingFavorites ? " is-active" : ""}`,
-        "aria-pressed": String(showingFavorites),
-        onclick: () => {
-          showingFavorites = !showingFavorites;
-          selectedCategory = "";
-          selectedSubcategory = "";
-          pageSize = 24;
-          if ($("#search") && /@/.test($("#search").value)) {
-            $("#search").value = "";
-          }
-          state.trackEvent?.("category_filter", { category: showingFavorites ? "Curtidos" : "Todas" });
-          render();
+      categoryFilter("Curtidos", showingFavorites, () => {
+        showingFavorites = !showingFavorites;
+        updateFilters();
+      }, "favorites"),
+      categoryFilter("Todas", !showingFavorites && selectedCategories.length === 0, () => {
+        showingFavorites = false;
+        selectedCategories = [];
+        updateFilters();
+      }, "all"),
+      ...categories.map(category => categoryFilter(category.name, selectedCategories.includes(category.id), () => {
+        selectedCategories = window.ConfloraCategoryUi.toggleSelection(selectedCategories, category.id);
+        state.trackEvent?.("category_filter", { category: category.name, categories: selectedCategories });
+        updateFilters();
+      })),
+      ...(selectedCategories.length ? [element("render-category-tag", {
+        category: "Limpar categorias", variant: "action", kind: "all", onclick: () => {
+          selectedCategories = []; updateFilters();
         },
-      }, [categoryTagIcon("Curtidos", "favorites"), element("span", { class: "category-chip-label", text: "Curtidos".tr })]),
-      element("button", {
-        type: "button",
-        class: `category-chip${!showingFavorites && !selectedCategory ? " is-active" : ""}`,
-        "aria-pressed": String(!showingFavorites && !selectedCategory),
-        onclick: () => {
-          showingFavorites = false;
-          selectedCategory = "";
-          selectedSubcategory = "";
-          pageSize = 24;
-          if ($("#search") && /@/.test($("#search").value)) {
-            $("#search").value = "";
-          }
-          state.trackEvent?.("category_filter", { category: "Todas" });
-          render();
-        },
-      }, [categoryTagIcon("Todas", "all"), element("span", { class: "category-chip-label", text: "Todas".tr })]),
-      ...categories.map((category) =>
-        element("button", {
-          type: "button",
-          class: `category-chip${!showingFavorites && selectedCategory === category.id ? " is-active" : ""}`,
-          "aria-pressed": String(!showingFavorites && selectedCategory === category.id),
-          onclick: () => {
-            showingFavorites = false;
-            if (selectedCategory === category.id) {
-              // Clique na mesma categoria alterna e desmarca
-              selectedCategory = "";
-              selectedSubcategory = "";
-            } else {
-              selectedCategory = category.id;
-              selectedSubcategory = "";
-            }
-            pageSize = 24;
-            if ($("#search") && /@/.test($("#search").value)) {
-              $("#search").value = "";
-            }
-            state.trackEvent?.("category_filter", { category: category.name });
-            render();
-          },
-        }, [categoryTagIcon(category.name), element("span", { class: "category-chip-label", text: (category.name || "").tr })]),
-      ),
+      })] : []),
     );
 
-    // Listagem dinâmica de subcategorias na linha debaixo com largura total
     const subcatContainer = $("#subcategoryFilterControl");
     if (subcatContainer) {
-      if (selectedCategory && !showingFavorites) {
-        const availableSubs = getSubcategoryOptions(activeProducts, selectedCategory);
-        if (availableSubs.length > 0) {
-          subcatContainer.hidden = false;
-          if (selectedSubcategory && !availableSubs.some((s) => normalizeProductText(s) === normalizeProductText(selectedSubcategory))) {
-            selectedSubcategory = "";
-          }
-          const subElements = [
-            element("span", { class: "subcategory-header-badge", text: "🏷️ Subcategorias:".tr }),
-            element("button", {
-              type: "button",
-              class: `subcategory-chip${!selectedSubcategory ? " is-active" : ""}`,
-              "aria-pressed": String(!selectedSubcategory),
-              onclick: () => {
-                selectedSubcategory = "";
-                pageSize = 24;
-                render();
-              },
-            }, [element("span", { text: "✨ Todas".tr })]),
-            ...availableSubs.map((subName) =>
-              element("button", {
-                type: "button",
-                class: `subcategory-chip${normalizeProductText(selectedSubcategory) === normalizeProductText(subName) ? " is-active" : ""}`,
-                "aria-pressed": String(normalizeProductText(selectedSubcategory) === normalizeProductText(subName)),
-                onclick: () => {
-                  if (normalizeProductText(selectedSubcategory) === normalizeProductText(subName)) {
-                    selectedSubcategory = ""; // toggle
-                  } else {
-                    selectedSubcategory = subName;
-                  }
-                  pageSize = 24;
-                  render();
-                },
-              }, [element("span", { text: (subName || "").tr })]),
-            ),
-          ];
-          subcatContainer.replaceChildren(...subElements);
-        } else {
-          subcatContainer.hidden = true;
-          subcatContainer.replaceChildren();
+      const options = new Map();
+      for (const category of categories.filter(category => selectedCategories.includes(category.id))) {
+        for (const name of getSubcategoryOptions(activeProducts, category.id)) {
+          const key = normalizeProductText(name);
+          if (!options.has(key)) options.set(key, { name, parent: category.name });
         }
-      } else {
-        selectedSubcategory = "";
-        subcatContainer.hidden = true;
-        subcatContainer.replaceChildren();
       }
+      selectedSubcategories = selectedSubcategories.filter(key => options.has(key));
+      subcatContainer.hidden = options.size === 0;
+      subcatContainer.replaceChildren(...(options.size ? [
+        element("span", { class: "subcategory-header-badge", text: "Subcategorias:".tr }),
+        ...[...options.entries()].map(([key, sub]) => categoryFilter(sub.name,
+          selectedSubcategories.includes(key), () => {
+            selectedSubcategories = window.ConfloraCategoryUi.toggleSelection(selectedSubcategories, key);
+            pageSize = 24; render();
+          }, "", sub.parent)),
+        ...(selectedSubcategories.length ? [element("render-category-tag", {
+          category: "Limpar subcategorias", variant: "action", kind: "all", onclick: () => {
+            selectedSubcategories = []; pageSize = 24; render();
+          },
+        })] : []),
+      ] : []));
     }
-
-    if (selectedCategory) {
-      baseList = baseList.filter((product) => productMatchesCategory(product, selectedCategory));
-    }
-
-    if (selectedSubcategory) {
-      baseList = baseList.filter((product) => {
-        const sub = productSubcategory(product);
-        return normalizeProductText(sub) === normalizeProductText(selectedSubcategory);
-      });
-    }
+    baseList = baseList.filter(product => window.ConfloraCategoryUi.matchesAny(
+      selectedCategories, id => productMatchesCategory(product, id),
+    ) && window.ConfloraCategoryUi.matchesAny(
+      selectedSubcategories, name => normalizeProductText(productSubcategory(product)) === name,
+    ));
 
     const list = rawQuery
       ? searchProducts(
@@ -689,8 +585,8 @@ export function createCatalog(state, add, navigate) {
 
   function setFavoritesView(show) {
     showingFavorites = show;
-    selectedCategory = "";
-    selectedSubcategory = "";
+    selectedCategories = [];
+    selectedSubcategories = [];
     pageSize = 24;
     render();
   }
@@ -825,10 +721,7 @@ export function createCatalog(state, add, navigate) {
           ),
         ]),
         element("div", { class: "detail-copy" }, [
-          element("small", {
-            class: "detail-category",
-            text: categoryLabel(product),
-          }),
+          categoryTag(categoryLabel(product), "detail-category"),
           element("h1", { text: product.name, title: product.name }),
           element("strong", {
             class: "detail-price",

@@ -1042,6 +1042,7 @@ function renderAdminHtml(storeConfig) {
     </div>
   </div>
 
+  <script src="/store-assets/category-ui.js"></script>
   <script src="/store-assets/render-image.js"></script>
   <script src="/store-assets/product-card.js?v=${productAssetsVersion}"></script>
   <script src="/store-assets/stock-counting.js?v=${productAssetsVersion}"></script>

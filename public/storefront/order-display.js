@@ -1,7 +1,7 @@
 /* One safe, structured receipt and one set of labels for storefront and PDV. */
 (() => {
   const money = value => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  const payment = method => ({ PIX: 'Pix · QR Code / Copia e Cola', CASH: 'Dinheiro', DINHEIRO: 'Dinheiro', CREDITO: 'Cartão de crédito', DEBITO: 'Cartão de débito', FIADO: 'Fiado', CARD: 'Cartão', CARTAO: 'Cartão', MISTO: 'Pagamento dividido', SALDO_CLIENTE: 'Crédito do cliente' }[method] || 'Pagamento a combinar');
+  const payment = method => ({ PIX: 'PIX', CASH: 'Dinheiro', DINHEIRO: 'Dinheiro', CREDITO: 'Cartão de crédito', DEBITO: 'Cartão de débito', FIADO: 'Fiado', CARD: 'Cartão', CARTAO: 'Cartão', MISTO: 'Pagamento dividido', SALDO_CLIENTE: 'Crédito do cliente' }[method] || 'Pagamento a combinar');
   function status(order) {
     if (order.status === 'CANCELLED') return 'Cancelado';
     if (order.creditApprovalStatus === 'PENDING') return 'Fiado: aguardando aprovação do Admin';
@@ -32,7 +32,7 @@
     const customer = node('div', undefined, 'cf-receipt-customer');
     customer.append(node('strong', order.customerName || order.customer?.name || 'Cliente balcão'));
     if (order.customerPhone || order.customer?.phone) customer.append(node('p', order.customerPhone || order.customer.phone));
-    customer.append(node('p', order.orderType === 'DELIVERY' || order.fulfillment === 'delivery' ? `Entrega: ${order.deliveryAddress || order.address || 'Endereço informado'}` : 'Retirada na loja'));
+    customer.append(node('p', order.orderType === 'DELIVERY' || order.fulfillment === 'delivery' ? `Entrega: ${order.deliveryAddress || order.address || 'Endereço informado'}` : 'Retirada'));
     if (order.deliveryLocation?.reference) customer.append(node('p', 'Referência: ' + order.deliveryLocation.reference)); section.append(customer);
     const items = node('div', undefined, 'cf-receipt-items');
     for (const item of order.items) {
@@ -63,5 +63,9 @@
     if (order.deliveredBy?.name) details.append(node('small', 'Entregue por: ' + order.deliveredBy.name));
     section.append(details); return section;
   }
-  window.ConfloraOrderDisplay = { money, payment, status, renderReceipt, renderText };
+  const customerPaymentMethods = enabled => {
+    const available = new Set((enabled || []).flatMap(method => method === 'CARD' ? ['CREDITO', 'DEBITO'] : [method]));
+    return ['PIX', 'CASH', 'CREDITO', 'DEBITO'].filter(method => available.has(method));
+  };
+  window.ConfloraOrderDisplay = { money, payment, customerPaymentMethods, status, renderReceipt, renderText };
 })();

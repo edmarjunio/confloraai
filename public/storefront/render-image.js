@@ -112,43 +112,5 @@
     customElements.define("render-image", RenderImage);
   }
 
-  if (!customElements.get("render-category-tag")) {
-    class RenderCategoryTag extends HTMLElement {
-      static get observedAttributes() {
-        return ["category", "icon", "class"];
-      }
-
-      connectedCallback() {
-        this.render();
-      }
-
-      attributeChangedCallback() {
-        if (this.isConnected) this.render();
-      }
-
-      render() {
-        const category = (this.getAttribute("category") || "").trim();
-        const icon = this.getAttribute("icon") || categoryIcon(category);
-        const fullCategory = category || "Produto";
-        const translatedCategory = (fullCategory.tr || fullCategory);
-        const tag = document.createElement("span");
-        tag.className = `cf-product-category-tag ${this.getAttribute("class") || ""}`.trim();
-        tag.title = translatedCategory;
-        tag.setAttribute("aria-label", translatedCategory);
-        const iconElement = document.createElement("span");
-        iconElement.setAttribute("aria-hidden", "true");
-        iconElement.textContent = icon;
-        const label = document.createElement("span");
-        label.className = "cf-product-category-tag-label";
-        label.textContent = translatedCategory;
-        tag.append(iconElement, label);
-        this.style.display = "contents";
-        this.replaceChildren(tag);
-      }
-    }
-
-    customElements.define("render-category-tag", RenderCategoryTag);
-  }
-
   window.ConfloraProductUi = Object.freeze({ categoryIcon, normalizeCategory });
 })();

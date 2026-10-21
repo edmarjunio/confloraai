@@ -159,7 +159,7 @@ function existingConfig(products, saved, settings = { stockControlEnabled: true 
         });
       }
     }
-    result.checkout.enabledPayments = ["PIX", "CASH", "CREDITO", "DEBITO", "FIADO"];
+    result.checkout.enabledPayments = ["PIX", "CASH", "CREDITO", "DEBITO"];
     result.inventory = {
       stockControlEnabled: settings?.stockControlEnabled !== false,
     };
@@ -190,14 +190,14 @@ function existingConfig(products, saved, settings = { stockControlEnabled: true 
   };
   config.checkout.contactPhone =
     process.env.STORE_NOTIFICATION_PHONE || process.env.OWNER_WHATSAPP_NUMBER || "5564999351616";
-  config.checkout.enabledPayments = [...(config.checkout.pix.configured ? ["PIX"] : []), "CASH", "CREDITO", "DEBITO", "FIADO"];
+  config.checkout.enabledPayments = [...(config.checkout.pix.configured ? ["PIX"] : []), "CASH", "CREDITO", "DEBITO"];
   config.checkout.delivery = {
     enabled: true,
     label: "Entrega",
     serviceAreas: ["Mineiros - GO"],
     feeMinor: 0,
   };
-  config.checkout.pickup.label = "Retirada na loja";
+  config.checkout.pickup.label = "Retirada";
   return config;
 }
 function installExistingStore(app, { repository, assistant, catalog }) {
@@ -526,7 +526,7 @@ async function normalizeExistingCheckout(req, repository) {
     "Escolha entrega ou retirada.",
   );
   ensure(
-    (storeConfig.checkout.enabledPayments.includes(input.paymentMethod) || input.paymentMethod === "CARD"),
+    input.paymentMethod !== "FIADO" && (storeConfig.checkout.enabledPayments.includes(input.paymentMethod) || input.paymentMethod === "CARD"),
     "Pagamento inválido.",
   );
   ensure(

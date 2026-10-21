@@ -94,11 +94,11 @@ window.PdvComponents = (() => {
   }
   function PaymentPartsEditor({ parts, onChange, total, customerId, allowedMethods }) {
     const methodOptions = [
-      { id: 'DINHEIRO', label: '💵 Dinheiro' },
-      { id: 'DEBITO', label: '💳 Débito' },
-      { id: 'CREDITO', label: '💳 Crédito' },
-      { id: 'PIX', label: '⚡ Pix' },
-      { id: 'FIADO', label: '📝 Fiado' },
+      { id: 'DINHEIRO', label: window.ConfloraOrderDisplay.payment('DINHEIRO') },
+      { id: 'DEBITO', label: window.ConfloraOrderDisplay.payment('DEBITO') },
+      { id: 'CREDITO', label: window.ConfloraOrderDisplay.payment('CREDITO') },
+      { id: 'PIX', label: window.ConfloraOrderDisplay.payment('PIX') },
+      { id: 'FIADO', label: window.ConfloraOrderDisplay.payment('FIADO') },
     ].filter(item => !allowedMethods || allowedMethods.includes(item.id))
      .filter(item => item.id !== 'FIADO' || customerId);
 
@@ -268,7 +268,7 @@ window.PdvComponents = (() => {
               className="h-16 w-16 shrink-0 rounded-2xl border border-slate-100 bg-slate-50 object-cover"
             />
             <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">{product.categoryName || product.category || 'Produto'}</p>
+              <render-category-tag category={product.categoryName || product.category || 'Produto'} />
               <h2 title={product.name} className="text-lg font-black leading-tight text-[#0F381E]">{product.name}</h2>
             </div>
           </div>
@@ -359,7 +359,7 @@ window.PdvComponents = (() => {
   const dateTime = (value) => value
     ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Sao_Paulo' }).format(new Date(value))
     : '—';
-  const paymentLabel = (method) => ({ PIX: 'Pix', DINHEIRO: 'Dinheiro', DEBITO: 'Débito', CREDITO: 'Crédito', FIADO: 'Fiado', SALDO_CLIENTE: 'Saldo do cliente', CARTAO: 'Cartão', CARD: 'Cartão', CASH: 'Dinheiro' }[method] || method || '—');
+  const paymentLabel = method => window.ConfloraOrderDisplay.payment(method);
   const orderItemLabel = (item) => {
     const quantity = Number(item?.quantity || 0).toLocaleString('pt-BR', { maximumFractionDigits: item?.unit === 'KG' ? 3 : 0 });
     return item?.unit === 'KG' ? `${quantity} kg ${item?.name || 'Produto'}` : `${quantity} × ${item?.name || 'Produto'}`;
@@ -658,7 +658,7 @@ window.PdvComponents = (() => {
                 </span>
                 <p className="font-black text-sm text-slate-900 leading-tight flex items-center gap-1.5">
                   {isDelivery ? <span>🛵</span> : <span>🏬</span>}
-                  <span>{isDelivery ? driverName : 'Retirada no Balcão da Horta'}</span>
+                  <span>{isDelivery ? driverName : 'Retirada'}</span>
                 </p>
                 {isDelivery && order.deliveryAddress && (
                   <p className="text-xs text-slate-700 mt-1 font-medium">

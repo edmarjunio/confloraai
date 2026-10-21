@@ -133,21 +133,7 @@ const { useState, useEffect, useRef, useMemo } = React;
       { id: 'todas', label: 'Todas', icon: '🌿' },
     ];
 
-    const CATEGORY_ICONS = {
-      Hortifrutti: '🍎',
-      Horta: '🥗',
-      'Plantas / Mudas': '🌱',
-      Frutífera: '🍋',
-      Frutíferas: '🍋',
-      Pets: '🐾',
-      'Insumos / Outros': '🪴',
-      Palmeiras: '🌴',
-      'Flores & Ornamentais': '🌺',
-      'Horta & Temperos': '🥗',
-      'Agromadeiras & Rurais': '🪵',
-      'Gramas & Insumos': '🪴',
-      'Pets & Animais': '🐾',
-    };
+
 
     const formatBRL = (value) => {
       return Number(value || 0).toLocaleString('pt-BR', {
@@ -187,7 +173,6 @@ const { useState, useEffect, useRef, useMemo } = React;
           .map((category) => ({
             id: `categoria:${category}`,
             label: category,
-            icon: CATEGORY_ICONS[category] || '🌱',
           }));
 
         return [...CATEGORIES, ...productCategories];
@@ -196,38 +181,40 @@ const { useState, useEffect, useRef, useMemo } = React;
       const loadMoreRef = useRef(null);
       const imagePreloadRef = useRef({ queue: [], started: new Set(), inFlight: new Set(), active: 0 });
       // Aba inicial deve ser 'todas', enquanto a primeira aba visual é FAVORITOS.
-      const [selectedCategory, setSelectedCategory] = useState('todas');
-      const [selectedSubcategory, setSelectedSubcategory] = useState('');
+      const [selectedCategories, setSelectedCategories] = useState([]);
+      const [showingFavorites, setShowingFavorites] = useState(false);
+      const [selectedSubcategories, setSelectedSubcategories] = useState([]);
       const [searchQuery, setSearchQuery] = useState('');
       const handleSelectCategory = (catId) => {
-        if (selectedCategory === catId) {
-          setSelectedCategory('todas');
-          setSelectedSubcategory('');
-        } else {
-          setSelectedCategory(catId);
-          setSelectedSubcategory('');
-        }
+        if (catId === 'todas') { setSelectedCategories([]); setShowingFavorites(false); }
+        else if (catId === 'atalhos') setShowingFavorites(value => !value);
+        else setSelectedCategories(values => window.ConfloraCategoryUi.toggleSelection(values, catId));
+        setSelectedSubcategories([]);
       };
       const availableSubcategories = useMemo(() => {
-        if (!selectedCategory.startsWith('categoria:')) return [];
-        const catName = selectedCategory.slice('categoria:'.length).trim().toLowerCase();
-        const subs = new Set();
-        products.forEach((p) => {
-          if (String(p.status || p.STATUS || 'ATIVO').trim().toUpperCase() === 'ATIVO') {
-            const pCat = String(p.category || '').trim().toLowerCase();
-            if (pCat === catName && (p.subcategory || p.subcategoria)) {
-              subs.add(String(p.subcategory || p.subcategoria).trim());
-            }
-          }
+        const subs = new Map();
+        products.forEach(product => {
+          if (String(product.status || product.STATUS || 'ATIVO').trim().toUpperCase() !== 'ATIVO') return;
+          if (!selectedCategories.includes('categoria:' + product.category)) return;
+          const name = String(product.subcategory || product.subcategoria || '').trim();
+          const key = window.ConfloraCategoryUi.normalize(name);
+          if (key && !subs.has(key)) subs.set(key, {name, key, parent: product.category});
         });
-        return [...subs].sort((a, b) => a.localeCompare(b, 'pt-BR'));
-      }, [selectedCategory, products]);
+        return [...subs.values()].sort((a,b) => a.name.localeCompare(b.name, 'pt-BR'));
+      }, [selectedCategories, products]);
       useEffect(() => {
-        if (selectedCategory.startsWith('categoria:') && !categoryTabs.some((category) => category.id === selectedCategory)) {
-          setSelectedCategory('todas');
-        }
-      }, [categoryTabs, selectedCategory]);
-      useEffect(() => setVisibleCount(60), [selectedCategory, searchQuery]);
+        setSelectedSubcategories(current => {
+          const valid = current.filter(key => availableSubcategories.some(sub => sub.key === key));
+          return valid.length === current.length ? current : valid;
+        });
+      }, [availableSubcategories]);
+      useEffect(() => {
+        setSelectedCategories(current => {
+          const valid = current.filter(id => categoryTabs.some(category => category.id === id));
+          return valid.length === current.length ? current : valid;
+        });
+      }, [categoryTabs]);
+      useEffect(() => setVisibleCount(60), [selectedCategories, showingFavorites, selectedSubcategories, searchQuery]);
       const defaultMultiplier = 1;
 
       const [cart, setCart] = useState([]);
@@ -560,18 +547,12 @@ const { useState, useEffect, useRef, useMemo } = React;
 
       const filteredProducts = useMemo(() => {
         return products.filter((product) => {
-          const categoryValue = selectedCategory.startsWith('categoria:')
-            ? selectedCategory.slice('categoria:'.length)
-            : '';
-          const matchesCategory = selectedCategory === 'todas'
-            ? true
-            : selectedCategory === 'atalhos'
-              ? product.isShortcut
-              : product.category === categoryValue;
+          const matchesCategory = (!showingFavorites || product.isShortcut) && window.ConfloraCategoryUi.matchesAny(
+            selectedCategories, id => window.ConfloraCategoryUi.normalize(product.category) === window.ConfloraCategoryUi.normalize(id.slice('categoria:'.length)),
+          );
 
-          const matchesSubcategory = !selectedSubcategory
-            ? true
-            : String(product.subcategory || product.subcategoria || '').trim().toLowerCase() === selectedSubcategory.toLowerCase();
+          const matchesSubcategory = window.ConfloraCategoryUi.matchesAny(selectedSubcategories,
+            key => window.ConfloraCategoryUi.normalize(product.subcategory || product.subcategoria) === key);
 
           const normalizedQuery = searchQuery.trim().toLowerCase();
           const searchText = [product.name, product.sku, product.categoryName, product.description, product.searchTags]
@@ -582,7 +563,7 @@ const { useState, useEffect, useRef, useMemo } = React;
 
           return matchesCategory && matchesSubcategory && matchesSearch;
         });
-      }, [products, selectedCategory, searchQuery]);
+      }, [products, selectedCategories, showingFavorites, selectedSubcategories, searchQuery]);
 
       useEffect(() => {
         if (typeof IntersectionObserver === 'undefined' || !loadMoreRef.current) return undefined;
@@ -1304,20 +1285,14 @@ const { useState, useEffect, useRef, useMemo } = React;
               {/* Com Flora Category Pills Row */}
               <div className="cf-pos-categories mx-auto flex min-w-0 w-full max-w-[1600px] flex-col gap-2 lg:mx-0 lg:w-2/3">
                 <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-                  {categoryTabs.map((cat) => {
-                    const isActive = selectedCategory === cat.id;
-                    return (
-                      <button
-                        key={cat.id}
-                        type="button"
-                        onClick={() => handleSelectCategory(cat.id)}
-                        className={"cf-btn-3d cf-btn-3d--sm !rounded-xl shrink-0 " + (isActive ? 'cf-btn-3d--primary' : 'cf-btn-3d--secondary')}
-                      >
-                        <span className="cf-btn-3d__icon text-sm">{cat.icon}</span>
-                        <span className="cf-btn-3d__text">{cat.label}</span>
-                      </button>
-                    );
-                  })}
+                  {categoryTabs.map(cat => (
+                    <render-category-tag key={cat.id} category={cat.label} variant="filter"
+                      kind={cat.id === 'atalhos' ? 'favorites' : cat.id === 'todas' ? 'all' : ''}
+                      selected={String(cat.id === 'atalhos' ? showingFavorites : cat.id === 'todas' ? !showingFavorites && selectedCategories.length === 0 : selectedCategories.includes(cat.id))}
+                      onClick={() => handleSelectCategory(cat.id)} />
+                  ))}
+                  {selectedCategories.length > 0 && <render-category-tag category="Limpar categorias" variant="action" kind="all"
+                    onClick={() => {setSelectedCategories([]); setSelectedSubcategories([]);}} />}
                 </div>
 
                 {availableSubcategories.length > 0 && (
@@ -1325,26 +1300,13 @@ const { useState, useEffect, useRef, useMemo } = React;
                     <span className="text-[11px] font-black text-emerald-800 uppercase tracking-wide px-2 shrink-0">
                       🏷️ Sub:
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedSubcategory('')}
-                      className={"cf-btn-3d cf-btn-3d--sm !rounded-xl !text-xs !py-1 !px-3 shrink-0 " + (!selectedSubcategory ? 'cf-btn-3d--primary' : 'cf-btn-3d--secondary')}
-                    >
-                      Todas
-                    </button>
-                    {availableSubcategories.map((sub) => {
-                      const isSubActive = selectedSubcategory.toLowerCase() === sub.toLowerCase();
-                      return (
-                        <button
-                          key={sub}
-                          type="button"
-                          onClick={() => setSelectedSubcategory(isSubActive ? '' : sub)}
-                          className={"cf-btn-3d cf-btn-3d--sm !rounded-xl !text-xs !py-1 !px-3 shrink-0 " + (isSubActive ? 'cf-btn-3d--primary' : 'cf-btn-3d--secondary')}
-                        >
-                          {sub}
-                        </button>
-                      );
-                    })}
+                    {availableSubcategories.map(sub => (
+                      <render-category-tag key={sub.key} category={sub.name} variant="filter" color-category={sub.parent}
+                        selected={String(selectedSubcategories.includes(sub.key))}
+                        onClick={() => setSelectedSubcategories(values => window.ConfloraCategoryUi.toggleSelection(values, sub.key))} />
+                    ))}
+                    {selectedSubcategories.length > 0 && <render-category-tag category="Limpar subcategorias" variant="action" kind="all"
+                      onClick={() => setSelectedSubcategories([])} />}
                   </div>
                 )}
               </div>
@@ -1364,7 +1326,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <h2 className="text-sm sm:text-base font-bold text-slate-800 flex items-center gap-1">
-                      {selectedCategory === 'atalhos' ? (
+                      {showingFavorites ? (
                         <>
                           <span>FAVORITOS</span>
                           <ChevronDown className="w-4 h-4 text-emerald-700" />
@@ -1737,11 +1699,11 @@ const { useState, useEffect, useRef, useMemo } = React;
                   </p>
                   <div hidden={splitPayment} className={splitPayment ? 'hidden' : 'grid grid-cols-2 gap-2 mb-3 sm:grid-cols-5'}>
                     {[
-                      { id: 'pix', label: window.CONFLORA_PIX_MODE === 'MANUAL' ? 'Pix · conferência do caixa' : 'Pix · QR Code / Copia e Cola', icon: QrCode },
-                      { id: 'debito', label: 'Cartão de débito', icon: CreditCard },
-                      { id: 'credito', label: 'Cartão de crédito', icon: CreditCard },
-                      { id: 'dinheiro', label: 'Dinheiro', icon: Banknote },
-                      { id: 'fiado', label: 'Fiado · aprovação do Admin', icon: User },
+                      { id: 'pix', label: window.ConfloraOrderDisplay.payment('PIX'), icon: QrCode },
+                      { id: 'debito', label: window.ConfloraOrderDisplay.payment('DEBITO'), icon: CreditCard },
+                      { id: 'credito', label: window.ConfloraOrderDisplay.payment('CREDITO'), icon: CreditCard },
+                      { id: 'dinheiro', label: window.ConfloraOrderDisplay.payment('DINHEIRO'), icon: Banknote },
+                      { id: 'fiado', label: window.ConfloraOrderDisplay.payment('FIADO'), icon: User },
                     ].map((method) => {
                       const Icon = method.icon;
                       const active = paymentMethod === method.id;
