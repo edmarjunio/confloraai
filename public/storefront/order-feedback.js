@@ -9,7 +9,7 @@ const RATING_LABELS = {
 };
 
 const FEEDBACK_HIGHLIGHTS = [
-  "Mudas saudáveis e bem embaladas",
+  "Produtos impecáveis e bem protegidos",
   "Entrega pontual",
   "Cuidado no transporte",
   "Atendimento atencioso",

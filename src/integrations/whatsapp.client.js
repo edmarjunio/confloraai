@@ -159,7 +159,22 @@ class WhatsAppClient {
     return this.postRequest('/messages', payload);
   }
 
+  formatRecipient(to) {
+    if (!to) return to;
+    const digits = String(to).replace(/\D/g, '');
+    if (digits.startsWith('55') && digits.length === 12) {
+      const ddd = Number(digits.slice(2, 4));
+      if (ddd >= 11 && ddd <= 99) {
+        return 559;
+      }
+    }
+    return digits;
+  }
+
   async postRequest(endpoint, body) {
+    if (body?.to) {
+      body.to = this.formatRecipient(body.to);
+    }
     try {
       const response = await fetch(`${this.baseUrl}${endpoint}`, {
         method: 'POST',

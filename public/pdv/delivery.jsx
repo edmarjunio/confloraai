@@ -433,7 +433,7 @@ function PdvDelivery({ user, onBack }) {
             <div>
               <span className="block text-xs font-bold text-slate-700 mb-1.5">Destaques do pedido (opcional)</span>
               <div className="flex flex-wrap gap-1.5">
-                {['Mudas saudáveis e bem embaladas', 'Entrega pontual', 'Cuidado no transporte', 'Atendimento atencioso', 'Pedido completo e conferido'].map(tag => {
+                {['Produtos impecáveis e bem protegidos', 'Entrega pontual', 'Cuidado no transporte', 'Atendimento atencioso', 'Pedido completo e conferido'].map(tag => {
                   const active = feedbackHighlights.includes(tag);
                   return (
                     <button
