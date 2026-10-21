@@ -58,13 +58,14 @@ test('somente admin acessa histórico; falhas do navegador têm limite e rotas d
   assert.equal((await get('/api/admin/errors', cashier.headers.get('set-cookie').split(';')[0])).status, 403);
   const admin = await post('/api/admin/auth/login', { userId: 'usr-edmar', pin: '1234' });
   const cookie = admin.headers.get('set-cookie').split(';')[0];
+  assert.equal((await post('/api/client-errors', { message: 'TypeError: Cannot set property fetch of #<Window> which has only a getter', stack: 'at chrome-extension://almalgbpmcfpdaopimbdchdliminoign/executors/200.js:1:26303', file: 'chrome-extension://almalgbpmcfpdaopimbdchdliminoign/executors/200.js', page: '/' })).status, 204);
   for (let index = 0; index < 5; index++) assert.equal((await post('/api/client-errors', { message: 'Falha demonstrativa isolada ' + index, stack: 'Token Bearer segredo', page: '/?acesso=privado' })).status, 202);
   assert.equal((await post('/api/client-errors', { message: 'Excedente' })).status, 429);
   await app.locals.errorHistory.queue;
   const result = await get('/api/admin/errors', cookie); const body = await result.json();
   assert.equal(result.status, 200); assert.equal(body.entries.length, 5);
   assert.ok(body.entries.every(entry => entry.page === '/'));
-  assert.doesNotMatch(JSON.stringify(body), /privado|segredo/);
+  assert.doesNotMatch(JSON.stringify(body), /privado|segredo|chrome-extension/);
   assert.equal((await get('/simulador')).status, 404);
   assert.equal((await post('/chat', {})).status, 404);
   assert.equal((await post('/api/admin/whatsapp/test', {}, cookie)).status, 404);

@@ -79,9 +79,16 @@ class PdvRepository {
     const repo = this.repository;
     let rows;
     if (repo.firestore && !repo._firestoreClientDisabled) {
-      let query = repo.firestore.collection(collection).where(field, Array.isArray(value) ? 'in' : '==', value).orderBy('__name__').limit(size);
-      if (cursor) query = query.startAfter(cursor);
-      rows = (await query.get()).docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      try {
+        let query = repo.firestore.collection(collection).where(field, '==', value).orderBy('__name__').limit(size);
+        if (cursor) query = query.startAfter(cursor);
+        rows = (await query.get()).docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      } catch (err) {
+        if (err.code === 7 || String(err.message || '').includes('PERMISSION_DENIED')) {
+          repo._firestoreClientDisabled = true;
+        }
+        throw err;
+      }
     } else {
       const matched = Array.isArray(value) ? (await Promise.all(value.map(item => this.list(collection, field, item)))).flat() : await this.list(collection, field, value);
       rows = matched.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
@@ -605,21 +612,54 @@ class PdvRepository {
     });
   }
 
-  async recordWhatsAppStatus(status) {
-    if (!status?.id || !['sent', 'delivered', 'read', 'failed'].includes(status.status)) return;
-    const state = status.status.toUpperCase();
-    const id = createHash('sha256').update(`${status.id}:${status.status}`).digest('hex');
-    const jobs = await this.list('pdv_outbox', 'providerMessageId', status.id);
-    return this.transaction(async tx => {
-      if (await tx.get('whatsapp_delivery_events', id)) return { duplicate: true };
-      const current = await Promise.all(jobs.map(job => tx.get('pdv_outbox', job.id)));
-      const ranks = { ACCEPTED: 0, SENT: 1, DELIVERED: 2, READ: 3, FAILED: 4 };
-      tx.set('whatsapp_delivery_events', id, { id, messageId: status.id, status: state,
-        timestamp: String(status.timestamp || ''), expiresAt: new Date(Date.now() + 30 * 86400000) });
-      for (const job of current) {
-        if (job && (ranks[job.deliveryStatus] ?? 0) < ranks[state]) tx.set('pdv_outbox', job.id, { ...job, deliveryStatus: state });
+  async submitFeedback(orderId, input = {}, submitter = {}) {
+    const cleanId = String(orderId || '').trim();
+    if (!cleanId) throw new Error('Identificador do pedido inválido.');
+    const serviceRating = Number(input.serviceRating ?? input.rating);
+    const deliveryRating = Number(input.deliveryRating ?? serviceRating);
+    if (!Number.isInteger(serviceRating) || serviceRating < 1 || serviceRating > 5) {
+      throw new Error('Informe uma nota de 1 a 5 para o atendimento da Conflora.');
+    }
+    if (!Number.isInteger(deliveryRating) || deliveryRating < 1 || deliveryRating > 5) {
+      throw new Error('Informe uma nota de 1 a 5 para a entrega.');
+    }
+    const highlights = Array.isArray(input.highlights)
+      ? [...new Set(input.highlights.map(item => String(item || '').trim().slice(0, 60)).filter(Boolean))].slice(0, 6)
+      : [];
+    const comment = String(input.comment || '').trim().slice(0, 500);
+    return this.transaction(async (tx) => {
+      const order = await tx.get('orders', cleanId);
+      if (!order) throw new Error('Pedido não encontrado.');
+      if (order.status === 'CANCELLED') throw new Error('Pedidos cancelados não podem ser avaliados.');
+      if (order.deliveryStatus !== 'DELIVERED' && order.status !== 'DELIVERED') {
+        throw new Error('A avaliação só fica disponível após o pedido ser marcado como entregue.');
       }
-      return { duplicate: false };
+      const now = new Date().toISOString();
+      const overallRating = Number(((serviceRating + deliveryRating) / 2).toFixed(1));
+      const feedback = {
+        serviceRating,
+        deliveryRating,
+        overallRating,
+        highlights,
+        comment,
+        submittedAt: now,
+        submittedBy: {
+          id: String(submitter.id || order.customerId || 'customer'),
+          name: String(submitter.name || order.customerName || 'Cliente').slice(0, 120),
+          role: String(submitter.role || 'CLIENTE').toUpperCase(),
+        },
+      };
+      const updated = { ...order, feedback, updatedAt: now };
+      tx.set('orders', cleanId, updated);
+      tx.set('order_feedback', cleanId, {
+        id: cleanId,
+        orderId: cleanId,
+        ticketNumber: order.ticketNumber || '',
+        customerId: order.customerId || '',
+        driverId: order.deliveredBy?.id || order.assignedDriver?.id || '',
+        ...feedback,
+      });
+      return updated;
     });
   }
 }

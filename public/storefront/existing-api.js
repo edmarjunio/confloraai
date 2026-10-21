@@ -87,7 +87,7 @@ export function createExistingApi() {
     }
     if (route.startsWith("/customer/orders")) {
       const query = route.slice("/customer/orders".length);
-      return request(`/api/customer/orders${query}`);
+      return request(`/api/customer/orders${query}`, options);
     }
     if (route.startsWith("/auth/")) {
       return request("/api" + route, options);

@@ -25,13 +25,19 @@ function installErrorHistoryRoutes(app, history) {
   app.post('/api/client-errors', (req, res) => {
     const origin = req.get('Origin');
     if (origin) { try { if (new URL(origin).host !== req.get('host')) return res.sendStatus(403); } catch { return res.sendStatus(403); } }
+    const input = req.body || {};
+    if (typeof input.message !== 'string' || !input.message.trim()) return res.sendStatus(400);
+    if (
+      /(?:chrome|moz|safari|edge)-extension:\/\//i.test(`${input.file || ''}\n${input.stack || ''}`) ||
+      /Cannot set property fetch of #<Window> which has only a getter/i.test(input.message)
+    ) {
+      return res.sendStatus(204);
+    }
     const minute = Math.floor(Date.now() / 60000);
     if (minute !== globalMinute) { buckets.clear(); globalMinute = minute; globalCount = 0; }
     const attempts = buckets.get(req.ip) || 0;
     if (attempts >= 5 || globalCount >= 100 || buckets.size >= 256 && !buckets.has(req.ip)) return res.sendStatus(429);
     buckets.set(req.ip, attempts + 1); globalCount++;
-    const input = req.body || {};
-    if (typeof input.message !== 'string' || !input.message.trim()) return res.sendStatus(400);
     const cleanPath = value => { try { const url = new URL(value, 'https://local.invalid'); return url.pathname.slice(0, 200); } catch { return ''; } };
     const record = { level: 'ERROR', source: 'BROWSER', message: input.message.slice(0, 1000), error: { stack: String(input.stack || '').slice(0, 4000) }, page: cleanPath(input.page), file: cleanPath(input.file), line: Math.max(0, Math.min(1000000, Number(input.line) || 0)), requestId: req.requestId, revision: process.env.K_REVISION || 'local' };
     // Browser reports are bounded and treated as untrusted text in the admin.

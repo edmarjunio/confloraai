@@ -1038,6 +1038,60 @@ function createApp({
     }
   });
 
+  app.get('/api/customer/orders/pending-feedback', async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: 'Entre na sua conta.' });
+      const profiles = req.user.email ? await messageService.firestoreRepo.findCustomerProfilesByEmail(req.user.email) : [];
+      if (profiles.length > 1) return res.json({ success: true, order: null });
+      const data = await messageService.firestoreRepo.getCustomerOrderHistoryPage({
+        customerId: req.user.id,
+        customerIds: profiles.map((profile) => profile.id),
+        customerEmail: req.user.email,
+        limit: 20,
+      });
+      const pendingOrder = (Array.isArray(data.orders) ? data.orders : []).find(
+        (order) => (order.deliveryStatus === 'DELIVERED' || order.status === 'DELIVERED') && !order.feedback?.submittedAt,
+      );
+      res.json({
+        success: true,
+        order: pendingOrder
+          ? { ...withoutIdempotencyFingerprint(pendingOrder), receiptText: pendingOrder.receiptText || formatOrderReceipt(pendingOrder) }
+          : null,
+      });
+    } catch (err) {
+      Logger.warn('Não foi possível consultar avaliações pendentes', { error: err.message });
+      res.json({ success: true, order: null });
+    }
+  });
+
+  app.post('/api/customer/orders/:id/feedback', async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: 'Entre na sua conta para avaliar o pedido.' });
+      const orderId = String(req.params.id || '').trim();
+      const existing = await app.locals.pdv.store.read('orders', orderId);
+      if (!existing) return res.status(404).json({ error: 'Pedido não encontrado.' });
+      const isStaff = ['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(req.user.role);
+      if (!isStaff) {
+        const profiles = req.user.email ? await messageService.firestoreRepo.findCustomerProfilesByEmail(req.user.email) : [];
+        const linkedIds = new Set([String(req.user.id || ''), ...profiles.map((p) => String(p.id || ''))].filter(Boolean));
+        const userEmail = String(req.user.email || '').trim().toLowerCase();
+        const orderEmail = String(existing.customerEmail || '').trim().toLowerCase();
+        const ownsOrder = linkedIds.has(String(existing.customerId || '')) || (userEmail && orderEmail === userEmail);
+        if (!ownsOrder) {
+          return res.status(403).json({ error: 'Este pedido não pertence à sua conta.' });
+        }
+      }
+      const updated = await app.locals.pdv.store.submitFeedback(orderId, req.body || {}, req.user);
+      res.status(200).json({
+        success: true,
+        order: { ...withoutIdempotencyFingerprint(updated), receiptText: updated.receiptText || formatOrderReceipt(updated) },
+        feedback: updated.feedback,
+      });
+    } catch (err) {
+      res.status(err.status || 400).json({ success: false, error: err.message });
+    }
+  });
+
   app.get('/api/customer/profile', async (req, res) => {
     if (!req.user) return res.status(401).json({ error: 'Entre na sua conta.' });
     try {

@@ -2,6 +2,21 @@
 <html lang="pt-BR">
   <head>
     <script>
+      try {
+        for (const target of [window, Object.getPrototypeOf(window), window.Window?.prototype]) {
+          if (!target) continue;
+          const desc = Object.getOwnPropertyDescriptor(target, 'fetch');
+          if (desc && desc.get && !desc.set && desc.configurable !== false) {
+            let current = desc.get.call(window);
+            Object.defineProperty(target, 'fetch', {
+              configurable: true,
+              enumerable: desc.enumerable !== false,
+              get() { return current; },
+              set(fn) { if (typeof fn === 'function') current = fn; },
+            });
+          }
+        }
+      } catch {}
       if (typeof String.prototype.tr === 'undefined') {
         Object.defineProperty(String.prototype, 'tr', {
           get() { return window.tr ? window.tr(this.valueOf()) : this.valueOf(); },
