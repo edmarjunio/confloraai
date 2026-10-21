@@ -1323,3 +1323,102 @@ test('driver can notify arrival via WhatsApp when order is OUT_FOR_DELIVERY', as
   assert.equal(messages.length, 1);
   assert.equal(messages[0].phone, '5564999991234');
 });
+
+test('post-purchase feedback only accepts delivered orders and updates pending customer feedback state', async t => {
+  const s = setup();
+  const driver = { id: 'driver-feedback', name: 'Entregador Avaliação', role: 'ENTREGADOR', active: true, pin: '5656' };
+  s.base.inMemoryUsers.set(driver.id, driver);
+  const app = createApp({ messageService: { firestoreRepo: s.base, whatsappClient: s.whatsapp }, sicrediClient: s.pix });
+  const server = app.listen(0);
+  t.after(() => server.close());
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const post = (path, body, cookie = '') => fetch(origin + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie },
+    body: JSON.stringify(body)
+  });
+  const get = (path, cookie = '') => fetch(origin + path, { headers: { cookie } });
+
+  const reg = await post('/api/auth/register', { name: 'Cliente Avaliação', email: 'avaliacao@conflora.test', password: 'senha123' });
+  assert.equal(reg.status, 200);
+  const customerCookie = reg.headers.get('set-cookie').split(';')[0];
+
+  const createdRes = await post('/api/orders', {
+    customerName: 'Cliente Avaliação',
+    customerPhone: '64999998888',
+    orderType: 'DELIVERY',
+    paymentMethod: 'DINHEIRO',
+    deliveryAddress: 'Rua das Palmeiras, 45, Centro, Mineiros GO',
+    items: [{ productId: 'plant', quantity: 1 }]
+  }, customerCookie);
+  assert.equal(createdRes.status, 200);
+  const { order } = await createdRes.json();
+
+  // Before order is marked as Delivered, pending-feedback is null and feedback submission is rejected
+  const pendingBefore = await (await get('/api/customer/orders/pending-feedback', customerCookie)).json();
+  assert.equal(pendingBefore.order, null);
+  const earlyFeedback = await post(`/api/customer/orders/${order.id}/feedback`, {
+    serviceRating: 5,
+    deliveryRating: 5,
+    comment: 'Tentativa antes da entrega'
+  }, customerCookie);
+  assert.equal(earlyFeedback.status, 400);
+
+  // Dispatch, assign, start, and complete delivery
+  const cashierLogin = await post('/api/admin/auth/login', { userId: cashier.id, pin: cashier.pin });
+  const cashierCookie = cashierLogin.headers.get('set-cookie').split(';')[0];
+  const driverLogin = await post('/api/admin/auth/login', { userId: driver.id, pin: driver.pin });
+  const driverCookie = driverLogin.headers.get('set-cookie').split(';')[0];
+
+  assert.equal((await post(`/api/caixa/deliveries/${order.id}/dispatch`, {}, cashierCookie)).status, 200);
+  assert.equal((await post(`/api/caixa/deliveries/${order.id}/accept`, {}, driverCookie)).status, 200);
+  assert.equal((await post(`/api/caixa/deliveries/${order.id}/start`, {}, driverCookie)).status, 200);
+  const receiveRes = await post(`/api/caixa/deliveries/${order.id}/receive`, {
+    paymentMethod: 'DINHEIRO',
+    receivedAmount: 10
+  }, driverCookie);
+  assert.equal(receiveRes.status, 200);
+
+  // Now that order is marked as Delivered, pending-feedback returns this order
+  const pendingAfterDelivery = await (await get('/api/customer/orders/pending-feedback', customerCookie)).json();
+  assert.equal(pendingAfterDelivery.order?.id, order.id);
+  assert.equal(pendingAfterDelivery.order?.deliveryStatus, 'DELIVERED');
+
+  // Invalid rating outside 1-5 is rejected
+  assert.equal((await post(`/api/customer/orders/${order.id}/feedback`, {
+    serviceRating: 6,
+    deliveryRating: 5
+  }, customerCookie)).status, 400);
+
+  // Valid customer feedback persists ratings, highlights, and comment
+  const submitRes = await post(`/api/customer/orders/${order.id}/feedback`, {
+    serviceRating: 5,
+    deliveryRating: 4,
+    highlights: ['Plantas bem cuidadas', 'Entrega no prazo'],
+    comment: 'Mudas chegaram saudáveis e bem embaladas!'
+  }, customerCookie);
+  assert.equal(submitRes.status, 200);
+  const { order: ratedOrder, feedback } = await submitRes.json();
+  assert.equal(feedback.serviceRating, 5);
+  assert.equal(feedback.deliveryRating, 4);
+  assert.equal(feedback.overallRating, 4.5);
+  assert.deepEqual(feedback.highlights, ['Plantas bem cuidadas', 'Entrega no prazo']);
+  assert.equal(ratedOrder.feedback.comment, 'Mudas chegaram saudáveis e bem embaladas!');
+
+  // Pending feedback is now cleared
+  const pendingAfterSubmit = await (await get('/api/customer/orders/pending-feedback', customerCookie)).json();
+  assert.equal(pendingAfterSubmit.order, null);
+
+  // PDV delivery endpoint can also record/update feedback on delivered order
+  const driverFeedbackRes = await post(`/api/caixa/deliveries/${order.id}/feedback`, {
+    serviceRating: 5,
+    deliveryRating: 5,
+    highlights: ['Atendimento atencioso'],
+    comment: 'Cliente elogiou na entrega.'
+  }, driverCookie);
+  assert.equal(driverFeedbackRes.status, 200);
+  const updatedByDriver = await driverFeedbackRes.json();
+  assert.equal(updatedByDriver.feedback.deliveryRating, 5);
+  assert.equal(updatedByDriver.feedback.overallRating, 5);
+});
+

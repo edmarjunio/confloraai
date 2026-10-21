@@ -94,7 +94,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
   app.get('/api/customer/debt-pix/:id', requireCustomer, route(async (req, res) => res.json({ success: true, charge: await debtPix.read(req.params.id, req.user) })));
   app.use('/api/caixa', requireStaff, (req, res, next) => {
     if (req.user.role !== 'ENTREGADOR') return next();
-    if (/^\/deliveries(?:\/[^/]+\/(?:accept|start|release|complete|receive|notify-arriving))?$/.test(req.path) || req.path === '/orders/stream' || /^\/payment-proofs(?:\/[^/]+)?$/.test(req.path)) return next();
+    if (/^\/deliveries(?:\/[^/]+\/(?:accept|start|release|complete|receive|notify-arriving|feedback))?$/.test(req.path) || req.path === '/orders/stream' || /^\/payment-proofs(?:\/[^/]+)?$/.test(req.path)) return next();
     res.status(403).json({ error: 'Seu perfil permite apenas suas entregas e os recebimentos vinculados a elas.' });
   });
   require('../orders/manual-pix.routes').installManualPixRoutes(app, { store, proofStorage, service });
@@ -106,6 +106,10 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
   app.post('/api/caixa/deliveries/:id/release', requireDeliveryStaff, route(async (req, res) => res.json({ order: await service.releaseDelivery(req.params.id, req.user) })));
   app.post('/api/caixa/deliveries/:id/complete', requireDeliveryStaff, route(async (req, res) => res.json(await service.completeDelivery(req.params.id, req.user, req.body))));
   app.post('/api/caixa/deliveries/:id/notify-arriving', requireDeliveryStaff, route(async (req, res) => res.json(await service.notifyArriving(req.params.id, req.user))));
+  app.post('/api/caixa/deliveries/:id/feedback', requireDeliveryStaff, route(async (req, res) => {
+    const order = await service.submitFeedback(req.params.id, req.body, req.user);
+    res.json({ order, feedback: order.feedback });
+  }));
   app.post('/api/caixa/deliveries/:id/receive', requireDeliveryStaff, route(async (req, res) => {
     const existing = await store.read('orders', req.params.id); assertAssignedDelivery(existing, req.user);
     const isManualPix = req.body.manualPix === true || req.body.paymentMethod === 'PIX_MANUAL';

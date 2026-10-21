@@ -23,6 +23,7 @@ import { appStore } from "./store/index.js";
 import { storeQueries, queryClient } from "./query/tanstackQuery.js";
 import { renderOrderReceipt } from "./receipt.js";
 import { createPublicCache } from "./public-cache.mjs";
+import { createOrderFeedback } from "./order-feedback.js";
 
 const existingStore = !location.pathname.startsWith("/shop/");
 const slug = existingStore
@@ -151,6 +152,11 @@ function updateHeaderActions() {
       if (state.user?.id === userId) updateDebtBadge(ledger.balance);
     }).catch(() => {});
   }
+  if (isLoggedIn && existingStore) {
+    orderFeedback?.checkPendingDeliveredOrder();
+  } else {
+    orderFeedback?.hideFloatingPrompt();
+  }
   $("#accountButton").hidden = isLoggedIn;
   $("#adminSettingsButton").hidden = false;
   if ($('#siteNavigationDrawer')?.open) window.ConfloraNavigation.open(state.user);
@@ -216,6 +222,7 @@ let catalog;
 let cart;
 let chat;
 let admin;
+let orderFeedback;
 
 function navigate(path) {
   for (const dialog of document.querySelectorAll("dialog[open]")) {
@@ -557,6 +564,7 @@ function renderPurchase(order) {
       renderOrderReceipt(order),
     ]),
   ]);
+  const feedbackSection = orderFeedback?.renderOrderCardFeedback(order);
   return element("article", { class: "history-order-card" }, [
     element("div", { class: "history-order-summary" }, [
       element("div", {}, [
@@ -569,6 +577,7 @@ function renderPurchase(order) {
       ]),
     ]),
     element("p", { class: "history-order-items", text: `${items.length} ${items.length === 1 ? "item" : "itens"} · ${items.slice(0, 3).map((item) => item.name || "Produto").join(", ")}${items.length > 3 ? "…" : ""}` }),
+    feedbackSection,
     details,
   ]);
 }
@@ -594,6 +603,7 @@ async function loadHistoryPage() {
     const page = await state.api(`/customer/orders?${query}`);
     if (version !== accountVersion) return;
     historyState.buffer.push(...(page.orders || []));
+    orderFeedback?.inspectLoadedOrders(page.orders || []);
     historyState.cursor = page.nextCursor || "";
     historyState.hasMore = Boolean(page.hasMore);
     historyState.loaded = true;
@@ -932,6 +942,7 @@ try {
   cart = createCart(state);
   chat = createChat(state, catalog);
   admin = createAdmin(state);
+  orderFeedback = createOrderFeedback(state);
   state.productEntry = createProductEntry(state, async () => {
     await state.reloadProducts();
   });
@@ -965,8 +976,11 @@ try {
     if (/\/(admin|configuracoes)\/?$/.test(location.pathname)) await route();
   }).catch(() => {});
   const refreshOnReturn = () => {
-    if (document.visibilityState === "visible" && Date.now() - lastCatalogRefresh > 60000) {
-      refreshPublicCatalog().catch(() => {});
+    if (document.visibilityState === "visible") {
+      orderFeedback?.checkPendingDeliveredOrder();
+      if (Date.now() - lastCatalogRefresh > 60000) {
+        refreshPublicCatalog().catch(() => {});
+      }
     }
   };
   document.addEventListener("visibilitychange", refreshOnReturn);

@@ -1,11 +1,26 @@
 /* Each tab owns its session. Credentials never enter URLs or shared storage. */
 (() => {
+  try {
+    for (const target of [window, Object.getPrototypeOf(window), window.Window?.prototype]) {
+      if (!target) continue;
+      const desc = Object.getOwnPropertyDescriptor(target, 'fetch');
+      if (desc && desc.get && !desc.set && desc.configurable !== false) {
+        let current = desc.get.call(window);
+        Object.defineProperty(target, 'fetch', {
+          configurable: true,
+          enumerable: desc.enumerable !== false,
+          get() { return current; },
+          set(fn) { if (typeof fn === 'function') current = fn; },
+        });
+      }
+    }
+  } catch { /* Keep native fetch descriptor when not configurable. */ }
   if (typeof String !== 'undefined' && typeof String.prototype.tr === 'undefined') {
     Object.defineProperty(String.prototype, 'tr', {
       get() {
         try {
           return (typeof window.tr === 'function' ? window.tr(this.valueOf()) : this.valueOf()) || this.valueOf();
-        } catch (_) {
+        } catch {
           return this.valueOf();
         }
       },

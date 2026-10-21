@@ -597,6 +597,10 @@ class PdvService {
     const eligible = pending.filter((job) => !(job.nextAttemptAt > Date.now()) && !(job.leaseUntil > Date.now()));
     for (const job of eligible.slice(0, 100)) { await this.deliver(job.id); }
   }
+
+  async submitFeedback(orderId, input, user) {
+    return this.repository.submitFeedback(orderId, input, actor(user));
+  }
 }
 
 module.exports = { PdvService, actor, normalizePhone, requestId, ORDER_PAYMENT_METHODS, normalizeDeliveryLocation };

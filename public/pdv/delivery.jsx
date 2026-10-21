@@ -42,6 +42,12 @@ function PdvDelivery({ user, onBack }) {
     const stop = window.ConfloraSession.watchOrderUpdates(refresh);
     return () => { stop(); clearTimeout(pulseTimer.current); };
   }, []);
+  const [serviceRating, setServiceRating] = useState(5);
+  const [deliveryRating, setDeliveryRating] = useState(5);
+  const [feedbackHighlights, setFeedbackHighlights] = useState([]);
+  const [feedbackComment, setFeedbackComment] = useState('');
+  const [editingFeedback, setEditingFeedback] = useState(false);
+
   const act = async (order, action, payload = {}) => {
     if (busy) return;
     setBusy(true); setError('');
@@ -55,11 +61,37 @@ function PdvDelivery({ user, onBack }) {
       }
       if (['complete', 'receive'].includes(action) && actualDistanceKm !== '') payload.actualDistanceKm = Number(actualDistanceKm);
       const result = await request('/api/caixa/deliveries/' + encodeURIComponent(order.id) + '/' + action, payload);
-      setNotice(routeUnavailable ? 'Saída registrada sem distância do mapa. Você pode informar os km percorridos ao concluir.' : '');
+      if (['complete', 'receive'].includes(action) && result.order?.deliveryStatus === 'DELIVERED') {
+        setNotice('Entrega concluída! Avalie abaixo o atendimento e a entrega deste pedido.');
+        setEditingFeedback(true);
+      } else {
+        setNotice(routeUnavailable ? 'Saída registrada sem distância do mapa. Você pode informar os km percorridos ao concluir.' : '');
+      }
       setSelected(result.order || null); selectedRef.current = result.order || null;
       await refresh();
     } catch (err) { setError(err.message); }
     finally { setBusy(false); }
+  };
+  const submitDeliveryFeedback = async (order) => {
+    if (!order?.id || busy) return;
+    setBusy(true); setError('');
+    try {
+      const result = await request('/api/caixa/deliveries/' + encodeURIComponent(order.id) + '/feedback', {
+        serviceRating,
+        deliveryRating,
+        highlights: feedbackHighlights,
+        comment: feedbackComment.trim(),
+      });
+      setSelected(result.order || order);
+      selectedRef.current = result.order || order;
+      setEditingFeedback(false);
+      setNotice('Avaliação pós-entrega registrada com sucesso!');
+      await refresh();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
   };
   const settled = (order) => Boolean(order.completedAt && ['APPROVED', 'ON_ACCOUNT'].includes(order.paymentStatus));
   const ownRoute = selected?.deliveryStatus === 'OUT_FOR_DELIVERY' && (user.role === 'ADMIN' || selected.assignedDriver?.id === user.id);
@@ -73,6 +105,7 @@ function PdvDelivery({ user, onBack }) {
     ...(order.deliveryStatus === 'OUT_FOR_DELIVERY' ? [`${order.departedAt ? 'Saiu da horta há' : 'Em rota · horário antigo estimado há'} ${since(order.departedAt || order.acceptedAt)}`] : []),
     ...(order.deliveryStatus === 'DELIVERED' ? [`Tempo em rota: ${duration(order.deliveryMetrics?.durationSeconds ?? (Date.parse(order.deliveredAt) - Date.parse(order.departedAt || order.acceptedAt)) / 1000)}`] : []),
     ...(order.deliveryMetrics?.distanceKm ? [`${order.deliveryMetrics.distanceSource === 'DECLARED_ACTUAL' ? 'Km percorridos informados' : 'Km da rota estimada'}: ${number(order.deliveryMetrics.distanceKm)} km`] : order.deliveryRoute?.distanceMeters ? [`Rota estimada: ${number(order.deliveryRoute.distanceMeters / 1000)} km`] : []),
+    ...(order.feedback?.submittedAt ? [`Avaliação pós-entrega: ★ ${order.feedback.overallRating}/5 (Atendimento ${order.feedback.serviceRating}/5 · Entrega ${order.feedback.deliveryRating}/5)`] : []),
   ] }));
   const navigation = selected ? window.ConfloraDeliveryMaps.navigation(selected.deliveryLocation, selected.deliveryAddress) : null;
   const [checkedItems, setCheckedItems] = useState({});
@@ -80,6 +113,11 @@ function PdvDelivery({ user, onBack }) {
 
   useEffect(() => {
     setShowSeparation(false);
+    setServiceRating(selected?.feedback?.serviceRating || 5);
+    setDeliveryRating(selected?.feedback?.deliveryRating || 5);
+    setFeedbackHighlights(Array.isArray(selected?.feedback?.highlights) ? selected.feedback.highlights : []);
+    setFeedbackComment(selected?.feedback?.comment || '');
+    setEditingFeedback(false);
   }, [selected?.id]);
 
   const notifyArrival = async (targetOrder) => {
@@ -313,6 +351,139 @@ function PdvDelivery({ user, onBack }) {
           </button>
         )}
       </div>
+    )}
+
+    {/* DELIVERED flow: Post-purchase feedback for Conflora service and delivery */}
+    {selected.deliveryStatus === 'DELIVERED' && (
+      <section className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 space-y-3" aria-label="Avaliação pós-entrega">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <span className="text-xs font-bold text-emerald-800">Pedido entregue · Avaliação pós-compra</span>
+            <h3 className="text-sm font-black text-slate-900 mt-0.5">Experiência com o atendimento e entrega Conflora</h3>
+          </div>
+          {selected.feedback?.submittedAt && !editingFeedback && (
+            <button
+              type="button"
+              onClick={() => setEditingFeedback(true)}
+              className="rounded-xl border border-emerald-300 bg-white px-3 py-1.5 text-xs font-bold text-emerald-900 hover:bg-emerald-50 cursor-pointer"
+            >
+              Editar avaliação
+            </button>
+          )}
+        </div>
+
+        {selected.feedback?.submittedAt && !editingFeedback ? (
+          <div className="rounded-xl border border-emerald-200 bg-white p-3 space-y-1.5 text-xs">
+            <p className="font-bold text-amber-700">
+              Atendimento Conflora: {'★'.repeat(selected.feedback.serviceRating)}{'☆'.repeat(5 - selected.feedback.serviceRating)} ({selected.feedback.serviceRating}/5)
+              {' · '}
+              Entrega: {'★'.repeat(selected.feedback.deliveryRating)}{'☆'.repeat(5 - selected.feedback.deliveryRating)} ({selected.feedback.deliveryRating}/5)
+            </p>
+            {selected.feedback.highlights?.length > 0 && (
+              <p className="text-slate-600">{selected.feedback.highlights.join(' · ')}</p>
+            )}
+            {selected.feedback.comment && (
+              <p className="italic text-slate-800">“{selected.feedback.comment}”</p>
+            )}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-emerald-200 bg-white p-3.5 space-y-3">
+            <div>
+              <div className="flex items-center justify-between text-xs font-bold text-slate-800 mb-1.5">
+                <span>Atendimento Conflora e qualidade das mudas</span>
+                <span className="text-emerald-700">{serviceRating}/5 estrelas</span>
+              </div>
+              <div className="flex gap-1.5" role="group" aria-label="Nota para o atendimento Conflora">
+                {[1, 2, 3, 4, 5].map(star => (
+                  <button
+                    key={star}
+                    type="button"
+                    aria-label={`Atendimento: ${star} ${star === 1 ? 'estrela' : 'estrelas'}`}
+                    aria-pressed={serviceRating === star}
+                    onClick={() => setServiceRating(star)}
+                    className={`min-w-[42px] min-h-[42px] rounded-xl border text-lg font-bold transition cursor-pointer ${star <= serviceRating ? 'border-amber-400 bg-amber-50 text-amber-600' : 'border-slate-200 bg-slate-50 text-slate-400'}`}
+                  >
+                    {star <= serviceRating ? '★' : '☆'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between text-xs font-bold text-slate-800 mb-1.5">
+                <span>Experiência na entrega e transporte</span>
+                <span className="text-emerald-700">{deliveryRating}/5 estrelas</span>
+              </div>
+              <div className="flex gap-1.5" role="group" aria-label="Nota para a entrega">
+                {[1, 2, 3, 4, 5].map(star => (
+                  <button
+                    key={star}
+                    type="button"
+                    aria-label={`Entrega: ${star} ${star === 1 ? 'estrela' : 'estrelas'}`}
+                    aria-pressed={deliveryRating === star}
+                    onClick={() => setDeliveryRating(star)}
+                    className={`min-w-[42px] min-h-[42px] rounded-xl border text-lg font-bold transition cursor-pointer ${star <= deliveryRating ? 'border-amber-400 bg-amber-50 text-amber-600' : 'border-slate-200 bg-slate-50 text-slate-400'}`}
+                  >
+                    {star <= deliveryRating ? '★' : '☆'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <span className="block text-xs font-bold text-slate-700 mb-1.5">Destaques do pedido (opcional)</span>
+              <div className="flex flex-wrap gap-1.5">
+                {['Mudas saudáveis e bem embaladas', 'Entrega pontual', 'Cuidado no transporte', 'Atendimento atencioso', 'Pedido completo e conferido'].map(tag => {
+                  const active = feedbackHighlights.includes(tag);
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => setFeedbackHighlights(prev => prev.includes(tag) ? prev.filter(item => item !== tag) : [...prev, tag])}
+                      className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition cursor-pointer ${active ? 'border-emerald-600 bg-emerald-50 text-emerald-900' : 'border-slate-200 bg-slate-50 text-slate-700'}`}
+                    >
+                      {tag}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <label className="block text-xs font-bold text-slate-700">
+              Comentário sobre o atendimento e a entrega (opcional)
+              <textarea
+                rows={2}
+                maxLength={500}
+                value={feedbackComment}
+                onChange={event => setFeedbackComment(event.target.value)}
+                placeholder="Como chegaram as plantas ou observações do cliente..."
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs font-normal text-slate-800"
+              />
+            </label>
+
+            <div className="flex justify-end gap-2 pt-1">
+              {selected.feedback?.submittedAt && (
+                <button
+                  type="button"
+                  onClick={() => setEditingFeedback(false)}
+                  className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-600 cursor-pointer"
+                >
+                  Cancelar
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => submitDeliveryFeedback(selected)}
+                className="rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2.5 text-xs font-bold shadow-xs transition cursor-pointer"
+              >
+                {busy ? 'Salvando…' : selected.feedback?.submittedAt ? 'Atualizar avaliação' : 'Salvar avaliação pós-entrega'}
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
     )}
   </div>;
 
