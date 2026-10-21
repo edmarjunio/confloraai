@@ -466,7 +466,13 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     try { await service.retryMessages(); res.sendStatus(200); } catch { res.sendStatus(503); }
   });
   if (process.env.NODE_ENV !== 'test') {
-    const timer = setInterval(() => Promise.all([service.retryMessages(), service.expirePixOrders()]).catch((error) => Logger.error('Fila PDV pendente', error, { source: 'WORKER' })), 15000);
+    const timer = setInterval(() => {
+      if (!store.isAvailable()) return;
+      Promise.all([service.retryMessages(), service.expirePixOrders()]).catch((error) => {
+        if (store.repository?._firestoreClientDisabled) return;
+        Logger.error('Fila PDV pendente', error, { source: 'WORKER' });
+      });
+    }, 15000);
     timer.unref();
   }
   app.locals.pdv = { service, store };

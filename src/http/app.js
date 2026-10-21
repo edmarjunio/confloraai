@@ -670,7 +670,13 @@ function createApp({
     try { await retryIncoming(); res.sendStatus(200); } catch { res.sendStatus(503); }
   });
   if (process.env.NODE_ENV !== 'test') {
-    const timer = require('node:timers').setInterval(() => retryIncoming().catch(error => Logger.error('Entrada de mensagens pendente', error, { source: 'WORKER' })), 15000);
+    const timer = require('node:timers').setInterval(() => {
+      if (!incoming.store.isAvailable()) return;
+      retryIncoming().catch(error => {
+        if (incoming.store.repository?._firestoreClientDisabled) return;
+        Logger.error('Entrada de mensagens pendente', error, { source: 'WORKER' });
+      });
+    }, 15000);
     timer.unref();
   }
 

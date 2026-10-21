@@ -210,6 +210,26 @@ test('Firestore permission failure never accepts a financial write in process me
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
 });
 
+test('PdvRepository marks _firestoreClientDisabled on PERMISSION_DENIED and reports unavailable for background workers', async () => {
+  const s = setup();
+  s.base.isInMemory = false;
+  s.base.firestore = {
+    collection: () => ({
+      where: () => ({
+        get: async () => { throw Object.assign(new Error('7 PERMISSION_DENIED'), { code: 7 }); },
+        limit: () => ({
+          get: async () => { throw Object.assign(new Error('7 PERMISSION_DENIED'), { code: 7 }); },
+        }),
+      }),
+    }),
+  };
+  assert.equal(s.repository.isAvailable(), true);
+  await assert.rejects(s.repository.list('incoming_messages', 'status', 'PENDING'), /PERMISSION_DENIED/);
+  assert.equal(s.base._firestoreClientDisabled, true);
+  assert.equal(s.repository.isAvailable(), false);
+  await assert.rejects(s.repository.expiredPixOrders(), /Firestore indisponível/);
+});
+
 test('Pix receipt includes image; bank verification finalizes exactly once under repeated webhooks', async () => {
   const s = setup();
   const order = await s.service.create({ ...s.input, paymentMethod: 'PIX', customerId: 'customer' }, seller);
