@@ -391,10 +391,16 @@ class ConfloraAgentService {
         result = await this._buscarProdutos({ ...scope, parsed: { ...scope.parsed, query: text, limit: 3 } });
       } else {
         let query = scope.parsed.message.trim().replace(/[?!.,]+$/g, '');
-        // Anchored, small grammar; exact names remain available without any model call.
-        query = query.replace(/^(?:quanto (?:custa|tá|ta|está|esta)|qual (?:o )?(?:preço|preco)(?: d[ao])?|vocês têm|voces tem|tem|manda (?:uma )?foto d[ao]|foto d[ao])\s+/i, '');
-        query = query.replace(/^(?:a|o|da|do)\s+/i, '');
-        result = await this._consultarProduto({ ...scope, parsed: { ...scope.parsed, refs: [{ query }], intent: photo ? 'foto' : 'preco' } });
+        query = query.replace(/^(?:ol[áa]|oi|bom dia|boa tarde|boa noite|opa)[!?,.\s]*/i, '').trim();
+        query = query.replace(/^(?:quanto (?:custa|tá|ta|está|esta)|qual (?:o )?(?:preço|preco)(?: d[ao])?|(?:vocês?|voces?|vcs?)\s+(?:têm|tem)|tem|manda (?:uma )?foto d[ao]|foto d[ao])\s+/i, '').trim();
+        query = query.replace(/^(?:a|o|as|os|da|do|das|dos|de)\s+/i, '').trim();
+        await this.productIndex.ensureFresh();
+        const resIdx = this.productIndex.resolve(query);
+        if (resIdx.outcome === 'found') {
+          result = await this._consultarProduto({ ...scope, parsed: { ...scope.parsed, refs: [{ query }], intent: photo ? 'foto' : 'preco' } });
+        } else {
+          result = await this._buscarProdutos({ ...scope, parsed: { ...scope.parsed, query, limit: 3 } });
+        }
       }
     }
     if (result.next_action.send_customer_message) {
