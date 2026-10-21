@@ -620,16 +620,7 @@ function createApp({
         const value = change.value;
         for (const status of Array.isArray(value?.statuses) ? value.statuses : []) {
           if (!status.id || !['sent', 'delivered', 'read', 'failed'].includes(status.status)) continue;
-          const jobs = await app.locals.pdv.store.list('pdv_outbox', 'providerMessageId', status.id);
-          const eventId = createHash('sha256').update(status.id + ':' + status.status).digest('hex');
-          await app.locals.pdv.store.transaction(async tx => {
-            tx.set('whatsapp_delivery_events', eventId, { id: eventId, messageId: status.id, status: status.status.toUpperCase(), timestamp: String(status.timestamp || ''), expiresAt: new Date(Date.now() + 30 * 86400000) });
-          });
-          const ranks = { ACCEPTED: 0, SENT: 1, DELIVERED: 2, READ: 3, FAILED: 4 };
-          for (const job of jobs) await app.locals.pdv.store.transaction(async tx => {
-            const current = await tx.get('pdv_outbox', job.id);
-            if ((ranks[current.deliveryStatus] ?? 0) <= ranks[status.status.toUpperCase()]) tx.set('pdv_outbox', job.id, { ...current, deliveryStatus: status.status.toUpperCase() });
-          });
+          await app.locals.pdv.store.recordWhatsAppStatus(status);
         }
         if (!value || !Array.isArray(value.messages)) {
           continue;

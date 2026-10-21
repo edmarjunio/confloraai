@@ -2,13 +2,13 @@ const { PdvRepository } = require('../orders/pdv.repository');
 const { createHash, randomUUID } = require('node:crypto');
 
 class IncomingMessageService {
-  constructor(repository) { this.store = new PdvRepository(repository); }
+  constructor(repository, { now = Date.now } = {}) { this.store = new PdvRepository(repository); this.now = now; }
   id(value) { return createHash('sha256').update(String(value)).digest('hex'); }
   async accept(payload) {
     const id = this.id(payload.messageId);
     await this.store.transaction(async tx => {
       if (await tx.get('incoming_messages', id)) return;
-      tx.set('incoming_messages', id, { id, payload, status: 'PENDING', attempts: 0, createdAt: new Date().toISOString() });
+      tx.set('incoming_messages', id, { id, payload, status: 'PENDING', attempts: 0, createdAt: new Date(this.now()).toISOString() });
     });
   }
   async claim(messageId) {
@@ -17,9 +17,9 @@ class IncomingMessageService {
       const current = await tx.get('incoming_messages', id);
       if (current?.status === 'COMPLETED') return { completed: true };
       if (current?.status === 'NEEDS_RECONCILIATION') throw Object.assign(new Error('Mensagem exige conferência operacional.'), { status: 409 });
-      if (current?.nextAttemptAt > Date.now()) throw Object.assign(new Error('Mensagem em backoff.'), { status: 503 });
-      if (current?.leaseUntil > Date.now()) throw Object.assign(new Error('Mensagem em processamento. Tente novamente.'), { status: 503 });
-      tx.set('incoming_messages', id, { ...current, id, status: 'PROCESSING', owner, attempts: Number(current?.attempts || 0) + 1, leaseUntil: Date.now() + 120000, expiresAt: null });
+      if (current?.nextAttemptAt > this.now()) throw Object.assign(new Error('Mensagem em backoff.'), { status: 503 });
+      if (current?.leaseUntil > this.now()) throw Object.assign(new Error('Mensagem em processamento. Tente novamente.'), { status: 503 });
+      tx.set('incoming_messages', id, { ...current, id, status: 'PROCESSING', owner, attempts: Number(current?.attempts || 0) + 1, leaseUntil: this.now() + 120000, expiresAt: null });
       return { id, owner };
     });
   }
@@ -32,8 +32,8 @@ class IncomingMessageService {
       tx.set('incoming_messages', claim.id, { ...current,
         status: error ? (current.attempts >= maximum ? 'NEEDS_RECONCILIATION' : 'PENDING') : 'COMPLETED',
         leaseUntil: 0, lastError: error ? 'PROCESSING_FAILED' : '',
-        nextAttemptAt: error ? Date.now() + Math.min(3600000, 15000 * 2 ** Math.min(current.attempts, 8)) : 0,
-        ...(error ? {} : { completedAt: new Date().toISOString(), compactAfter: new Date(Date.now() + 30 * 86400000) }),
+        nextAttemptAt: error ? this.now() + Math.min(3600000, 15000 * 2 ** Math.min(current.attempts, 8)) : 0,
+        ...(error ? {} : { completedAt: new Date(this.now()).toISOString(), compactAfter: new Date(this.now() + 30 * 86400000) }),
         // Completion tombstones must survive indefinitely for persistent deduplication.
         expiresAt: null });
     });
@@ -41,7 +41,7 @@ class IncomingMessageService {
   async retry(processMessage) {
     const pending = await this.store.scanPage('incoming_messages', 'status', 'PENDING', 25);
     const interrupted = await this.store.scanPage('incoming_messages', 'status', 'PROCESSING', 25);
-    for (const event of [...pending, ...interrupted].filter(row => row.payload && !(row.leaseUntil > Date.now()) && !(row.nextAttemptAt > Date.now())).slice(0, 50)) {
+    for (const event of [...pending, ...interrupted].filter(row => row.payload && !(row.leaseUntil > this.now()) && !(row.nextAttemptAt > this.now())).slice(0, 50)) {
       try { await processMessage(event.payload); }
       catch (error) { require('../shared/logger').error('Falha ao processar mensagem recebida', error, { source: 'WHATSAPP', eventId: event.id }); }
     }

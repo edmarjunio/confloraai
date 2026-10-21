@@ -94,9 +94,12 @@ test('incoming failure removes old expiration and interrupted work is recoverabl
   let claim = await incoming.claim('one');
   await incoming.finish(claim, new Error('offline'));
   assert.equal(db.data.get(`incoming_messages/${claim.id}`).expiresAt, null);
+  await assert.rejects(incoming.claim('one'), /backoff/);
+  db.data.get(`incoming_messages/${claim.id}`).nextAttemptAt = 0;
   claim = await incoming.claim('one');
   await incoming.finish(claim);
-  assert.ok(db.data.get(`incoming_messages/${claim.id}`).expiresAt instanceof Date);
+  assert.ok(db.data.get(`incoming_messages/${claim.id}`).compactAfter instanceof Date);
+  assert.equal(db.data.get(`incoming_messages/${claim.id}`).expiresAt, null);
   assert.deepEqual(await incoming.claim('one'), { completed: true });
 });
 

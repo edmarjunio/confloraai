@@ -79,11 +79,12 @@ class PdvRepository {
     const repo = this.repository;
     let rows;
     if (repo.firestore && !repo._firestoreClientDisabled) {
-      let query = repo.firestore.collection(collection).where(field, '==', value).orderBy('__name__').limit(size);
+      let query = repo.firestore.collection(collection).where(field, Array.isArray(value) ? 'in' : '==', value).orderBy('__name__').limit(size);
       if (cursor) query = query.startAfter(cursor);
       rows = (await query.get()).docs.map(doc => ({ ...doc.data(), id: doc.id }));
     } else {
-      rows = (await this.list(collection, field, value)).sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+      const matched = Array.isArray(value) ? (await Promise.all(value.map(item => this.list(collection, field, item)))).flat() : await this.list(collection, field, value);
+      rows = matched.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
         .filter(row => !cursor || row.id > cursor).slice(0, size);
     }
     if (rows.length === size) this.scanCursors.set(key, rows[rows.length - 1].id);
@@ -102,10 +103,8 @@ class PdvRepository {
     const statuses = ['AWAITING_PAYMENT', 'CREATING_PIX', 'AWAITING_PIX', 'PENDING'];
     if (repo.firestore && !repo._firestoreClientDisabled) {
       try {
-        const snapshot = await repo.firestore.collection('orders')
-          .where('status', 'in', statuses).limit(500).get();
-        return snapshot.docs
-          .map(doc => ({ ...doc.data(), id: doc.id }))
+        const orders = await this.scanPage('orders', 'status', statuses, 500);
+        return orders
           .filter(order => Date.parse(order.pixExpiresAt || order.paymentExpiresAt || '') <= Date.parse(now))
           .slice(0, 100);
       } catch (err) {
@@ -157,7 +156,10 @@ class PdvRepository {
     feed.subscribers.add(subscriber);
     if (!feed.stop) feed.stop = feed.start();
     else if (feed.last) onChange(structuredClone(feed.last));
+    let closed = false;
     return () => {
+      if (closed) return;
+      closed = true;
       feed.subscribers.delete(subscriber);
       if (!feed.subscribers.size) {
         feed.stop?.();
@@ -600,6 +602,24 @@ class PdvRepository {
       if (['SENT', 'SKIPPED'].includes(updated.status) && !updated.completedAt) updated.completedAt = new Date().toISOString();
       if (Object.keys(updated).every(key => Object.is(updated[key], job[key]))) return;
       tx.set('pdv_outbox', id, updated);
+    });
+  }
+
+  async recordWhatsAppStatus(status) {
+    if (!status?.id || !['sent', 'delivered', 'read', 'failed'].includes(status.status)) return;
+    const state = status.status.toUpperCase();
+    const id = createHash('sha256').update(`${status.id}:${status.status}`).digest('hex');
+    const jobs = await this.list('pdv_outbox', 'providerMessageId', status.id);
+    return this.transaction(async tx => {
+      if (await tx.get('whatsapp_delivery_events', id)) return { duplicate: true };
+      const current = await Promise.all(jobs.map(job => tx.get('pdv_outbox', job.id)));
+      const ranks = { ACCEPTED: 0, SENT: 1, DELIVERED: 2, READ: 3, FAILED: 4 };
+      tx.set('whatsapp_delivery_events', id, { id, messageId: status.id, status: state,
+        timestamp: String(status.timestamp || ''), expiresAt: new Date(Date.now() + 30 * 86400000) });
+      for (const job of current) {
+        if (job && (ranks[job.deliveryStatus] ?? 0) < ranks[state]) tx.set('pdv_outbox', job.id, { ...job, deliveryStatus: state });
+      }
+      return { duplicate: false };
     });
   }
 }

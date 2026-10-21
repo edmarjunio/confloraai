@@ -80,6 +80,14 @@ class StorefrontAnalyticsService {
   }
   async summary({ days = 30 } = {}) {
     const range = Math.max(1, Math.min(90, Math.floor(Number(days) || 30)));
+    const key = `summary:${range}`;
+    if (this.pending.has(key)) return this.pending.get(key);
+    // Coalesce overlapping reports only; no financial snapshot survives completion.
+    const work = this.buildSummary(range).finally(() => this.pending.delete(key));
+    this.pending.set(key, work);
+    return work;
+  }
+  async buildSummary(range) {
     let navigation;
     if (this.primary()) {
       try { navigation = await this.navigation(range); } catch { /* Fallback is explicitly marked below. */ }

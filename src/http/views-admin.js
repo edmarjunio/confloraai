@@ -1,5 +1,4 @@
 const { renderFirebaseAuthScript } = require('./firebase-client');
-const { GOOGLE_ANALYTICS_TAG } = require('./analytics');
 const { createHash } = require('node:crypto');
 const { readFileSync } = require('node:fs');
 const { resolve } = require('node:path');
@@ -30,7 +29,6 @@ function renderAdminHtml(storeConfig) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${name} — Administração</title>
-  ${GOOGLE_ANALYTICS_TAG}
   <script src="/store-assets/tab-session.js"></script>
     <link rel="stylesheet" href="/store-assets/order-display.css" />
     <script src="/store-assets/order-display.js"></script>

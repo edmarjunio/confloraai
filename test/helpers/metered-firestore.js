@@ -15,13 +15,14 @@ function meteredFirestore(initial = {}) {
       delete: async () => { metrics.deletes++; data.delete(path); },
       collection: name => collection(`${path}/${name}`) };
   }
-  function collection(path, filters = [], orders = [], count = Infinity, cursor = null) {
+  function collection(path, filters = [], orders = [], count = Infinity, cursor = null, projection = null) {
     return {
       doc: id => doc(`${path}/${id || `auto-${++autoId}`}`),
-      where: (key, op, value) => collection(path, [...filters, [key, op, value]], orders, count, cursor),
-      orderBy: (key, direction = 'asc') => collection(path, filters, [...orders, [key, direction]], count, cursor),
-      limit: size => collection(path, filters, orders, size, cursor),
-      startAfter: value => collection(path, filters, orders, count, value),
+      where: (key, op, value) => collection(path, [...filters, [key, op, value]], orders, count, cursor, projection),
+      orderBy: (key, direction = 'asc') => collection(path, filters, [...orders, [key, direction]], count, cursor, projection),
+      limit: size => collection(path, filters, orders, size, cursor, projection),
+      startAfter: value => collection(path, filters, orders, count, value, projection),
+      select: (...fields) => collection(path, filters, orders, count, cursor, fields),
       get: async () => {
         const start = performance.now();
         metrics.queries++;
@@ -48,7 +49,8 @@ function meteredFirestore(initial = {}) {
         rows = rows.slice(0, count);
         metrics.reads += Math.max(1, rows.length);
         metrics.queryMs.push(performance.now() - start);
-        return { docs: rows, size: rows.length, empty: !rows.length };
+        const projected = projection ? rows.map(row => ({ ...row, data: () => Object.fromEntries(projection.filter(key => field(row.data(), key) !== undefined).map(key => [key, field(row.data(), key)])) })) : rows;
+        return { docs: projected, size: rows.length, empty: !rows.length };
       },
     };
   }

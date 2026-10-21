@@ -1981,9 +1981,23 @@ class FirestoreRepository {
       return this.salesOrdersCache.orders;
     }
     try {
-      const snapshot = await this.firestore.collection('orders').select('status', 'items').get();
-      const orders = snapshot.docs.map((doc) => doc.data());
-      this.salesOrdersCache = { orders, expiresAt: Date.now() + 60000 };
+      if (!this.salesOrdersPending) {
+        this.salesOrdersPending = (async () => {
+          const orders = [];
+          let cursor;
+          do {
+            let query = this.firestore.collection('orders').select('status', 'items').orderBy('__name__').limit(500);
+            if (cursor) query = query.startAfter(cursor);
+            const page = await query.get();
+            orders.push(...page.docs.map(doc => doc.data()));
+            if (page.size < 500) break;
+            cursor = page.docs[page.docs.length - 1];
+          } while (cursor);
+          this.salesOrdersCache = { orders, expiresAt: Date.now() + 60000 };
+          return orders;
+        })().finally(() => { this.salesOrdersPending = null; });
+      }
+      const orders = await this.salesOrdersPending;
       return orders;
     } catch (err) {
       if (

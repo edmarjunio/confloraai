@@ -201,7 +201,7 @@ function existingConfig(products, saved, settings = { stockControlEnabled: true 
   return config;
 }
 function installExistingStore(app, { repository, assistant, catalog }) {
-  const readSettings = () => readStoreSettings(repository);
+  const readSettings = async () => (await readStoreSettings(repository)) ?? null;
   const admin = (req) =>
     ensure(
       req.user?.role === "ADMIN",

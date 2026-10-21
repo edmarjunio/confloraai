@@ -1,0 +1,16 @@
+{
+  "deployment": "MANUAL_ONLY_AFTER_INSPECTION",
+  "ttl": [
+    { "collectionGroup": "web_sessions", "field": "expiresAt", "type": "Timestamp", "indexExemption": true, "reason": "Login expiry is enforced logically before physical deletion" },
+    { "collectionGroup": "request_limits", "field": "expiresAt", "type": "Timestamp", "indexExemption": true, "reason": "Expired rate-limit buckets cannot be reused in another minute" },
+    { "collectionGroup": "whatsapp_delivery_events", "field": "expiresAt", "type": "Timestamp", "indexExemption": true, "reason": "Technical receipts only; monotonic state remains in outbox tombstones" }
+  ],
+  "optionalTtl": [
+    { "collectionGroup": "messages", "field": "historyExpiresAt", "enabledByDefault": false, "minimumDays": 90, "requires": "Approved conversation-history retention policy and scope inspection" }
+  ],
+  "neverDeleteAutomatically": ["orders", "payment_proofs", "delivery_events", "delivery_driver_metrics", "sessions", "pdv_outbox", "incoming_messages", "processed_messages", "pdv_pix_events", "pdv_pix_late_payments", "customer_debts", "debt_settlements", "storefront_events"],
+  "compact": [
+    { "collection": "pdv_outbox", "status": "SENT", "defaultDays": 30, "preserveSameDocumentId": true },
+    { "collection": "incoming_messages", "status": "COMPLETED", "defaultDays": 30, "preserveSameDocumentId": true }
+  ]
+}

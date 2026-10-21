@@ -1,0 +1,156 @@
+{
+  "environment": "INSTRUMENTED_MOCK_NOT_CLOUD_BILLING",
+  "assumptions": {
+    "products": 1000,
+    "itemsPerCheckout": 3,
+    "concurrent": 20,
+    "webCheckoutShare": 1,
+    "visitsPerSale": 5,
+    "navigationEventsPerVisit": 6,
+    "whatsappMessagesPerSale": 2
+  },
+  "baseline": "Previous full-scan checkout reconstructed through existing compatibility path; financial writes excluded from this incremental measurement",
+  "scenarios": [
+    {
+      "salesPerDay": 100,
+      "webCheckout": {
+        "before": {
+          "reads": 100200,
+          "writes": 0,
+          "deletes": 0,
+          "queries": 100,
+          "measuredQueryMs": 113.78,
+          "durationMs": 9010
+        },
+        "after": {
+          "reads": 500,
+          "writes": 0,
+          "deletes": 0,
+          "queries": 0,
+          "measuredQueryMs": 0,
+          "durationMs": 34
+        },
+        "savedReads": 99700
+      },
+      "navigation": {
+        "events": 3000,
+        "beforeWrites": 3000,
+        "ga4Writes": 0,
+        "requiresValidatedMigration": true
+      },
+      "whatsapp": {
+        "messages": 200,
+        "payloadJsonBytesBefore": 90291,
+        "tombstoneJsonBytesAfter": 41401
+      },
+      "monthly30Days": {
+        "savedReads": 2991000,
+        "savedNavigationWrites": 90000,
+        "costFormula": "29.91 * readRatePer100k + 0.9 * writeRatePer100k",
+        "excludes": [
+          "free quotas",
+          "TTL delete charges",
+          "indexes",
+          "network",
+          "storage overhead",
+          "regional tariffs",
+          "GA4 quotas"
+        ]
+      }
+    },
+    {
+      "salesPerDay": 500,
+      "webCheckout": {
+        "before": {
+          "reads": 501000,
+          "writes": 0,
+          "deletes": 0,
+          "queries": 500,
+          "measuredQueryMs": 347.63,
+          "durationMs": 38263
+        },
+        "after": {
+          "reads": 2500,
+          "writes": 0,
+          "deletes": 0,
+          "queries": 0,
+          "measuredQueryMs": 0,
+          "durationMs": 141
+        },
+        "savedReads": 498500
+      },
+      "navigation": {
+        "events": 15000,
+        "beforeWrites": 15000,
+        "ga4Writes": 0,
+        "requiresValidatedMigration": true
+      },
+      "whatsapp": {
+        "messages": 1000,
+        "payloadJsonBytesBefore": 451891,
+        "tombstoneJsonBytesAfter": 207001
+      },
+      "monthly30Days": {
+        "savedReads": 14955000,
+        "savedNavigationWrites": 450000,
+        "costFormula": "149.55 * readRatePer100k + 4.5 * writeRatePer100k",
+        "excludes": [
+          "free quotas",
+          "TTL delete charges",
+          "indexes",
+          "network",
+          "storage overhead",
+          "regional tariffs",
+          "GA4 quotas"
+        ]
+      }
+    },
+    {
+      "salesPerDay": 1000,
+      "webCheckout": {
+        "before": {
+          "reads": 1002000,
+          "writes": 0,
+          "deletes": 0,
+          "queries": 1000,
+          "measuredQueryMs": 691.65,
+          "durationMs": 76131
+        },
+        "after": {
+          "reads": 5000,
+          "writes": 0,
+          "deletes": 0,
+          "queries": 0,
+          "measuredQueryMs": 0,
+          "durationMs": 268
+        },
+        "savedReads": 997000
+      },
+      "navigation": {
+        "events": 30000,
+        "beforeWrites": 30000,
+        "ga4Writes": 0,
+        "requiresValidatedMigration": true
+      },
+      "whatsapp": {
+        "messages": 2000,
+        "payloadJsonBytesBefore": 904891,
+        "tombstoneJsonBytesAfter": 414001
+      },
+      "monthly30Days": {
+        "savedReads": 29910000,
+        "savedNavigationWrites": 900000,
+        "costFormula": "299.1 * readRatePer100k + 9 * writeRatePer100k",
+        "excludes": [
+          "free quotas",
+          "TTL delete charges",
+          "indexes",
+          "network",
+          "storage overhead",
+          "regional tariffs",
+          "GA4 quotas"
+        ]
+      }
+    }
+  ]
+}

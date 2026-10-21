@@ -72,10 +72,14 @@ test('senhas novas e PIN legado são protegidos e nunca retornam no usuário pú
 });
 
 test('mensagem interrompida pode ser retomada e reivindicações concorrentes são bloqueadas', async () => {
-  const repo = new FirestoreRepository({ isInMemory: true }); const inbox = new IncomingMessageService(repo);
+  let now = Date.now();
+  const repo = new FirestoreRepository({ isInMemory: true }); const inbox = new IncomingMessageService(repo, { now: () => now });
   await inbox.accept({ messageId: 'wamid-review', phone: 'test', message: 'test' });
   const claim = await inbox.claim('wamid-review'); await assert.rejects(inbox.claim('wamid-review'));
-  await inbox.finish(claim, new Error('Falha temporária')); const retry = await inbox.claim('wamid-review');
+  await inbox.finish(claim, new Error('Falha temporária'));
+  await assert.rejects(inbox.claim('wamid-review'), /backoff/);
+  now += 30001;
+  const retry = await inbox.claim('wamid-review');
   await inbox.finish(retry); assert.equal((await inbox.claim('wamid-review')).completed, true);
 });
 
