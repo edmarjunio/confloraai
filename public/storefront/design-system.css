@@ -923,7 +923,7 @@ cf-card[data-order-card] > button:first-child {
 button-3d svg,
 .cf-btn-3d svg,
 .cf-button-3d svg,
-.cf-button svg,
+.cf-button:not(.cart-fab) svg,
 .product-content svg,
 .product-content .icon,
 .product-card-actions svg,

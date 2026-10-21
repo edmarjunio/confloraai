@@ -40,6 +40,8 @@ export function icon(name) {
   const node = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   for (const [key, value] of Object.entries({
     viewBox: "0 0 24 24",
+    width: "24",
+    height: "24",
     fill: "none",
     stroke: "currentColor",
     "stroke-width": "1.7",

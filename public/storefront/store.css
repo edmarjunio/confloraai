@@ -1041,9 +1041,22 @@ dialog:not([open]) { display: none; }
   transform: translateY(3px);
   box-shadow: 0 1px 0 #0f381e !important;
 }
-.cart-fab .icon {
-  width: 25px;
-  height: 25px;
+.cart-fab > [data-icon="cart"] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  line-height: 0;
+}
+.cart-fab > [data-icon="cart"] > .icon {
+  display: block;
+  width: 24px;
+  height: 24px;
+  max-width: 100%;
+  max-height: 100%;
+  flex: none;
 }
 #cartFabCount {
   position: absolute;
