@@ -620,7 +620,7 @@ function createApp({
         const value = change.value;
         for (const status of Array.isArray(value?.statuses) ? value.statuses : []) {
           if (!status.id || !['sent', 'delivered', 'read', 'failed'].includes(status.status)) continue;
-          await app.locals.pdv.store.recordWhatsAppStatus(status);
+          if (typeof app.locals.pdv?.store?.recordWhatsAppStatus === 'function') { await app.locals.pdv.store.recordWhatsAppStatus(status); }
         }
         if (!value || !Array.isArray(value.messages)) {
           continue;

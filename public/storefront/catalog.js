@@ -358,6 +358,31 @@ export function createCatalog(state, add, navigate) {
     return configuredIcon || sharedIcon || "🌿";
   };
 
+  // Keep category identity stable when filters are reordered or translated.
+  const categoryTagIcon = (name, kind) => {
+    const value = normalizeProductText(name);
+    let symbol;
+    let tone;
+    if (kind === "favorites") [symbol, tone] = ["heart", "rose"];
+    else if (kind === "all") [symbol, tone] = ["grid", "slate"];
+    else if (value.includes("frutifer")) [symbol, tone] = ["fruit", "yellow"];
+    else if (value.includes("hortifrut")) [symbol, tone] = ["fruit", "orange"];
+    else if (value.includes("horta")) [symbol, tone] = ["sprout", "green"];
+    else if (value.includes("pet") || value.includes("animal")) [symbol, tone] = ["paw", "blue"];
+    else if (value.includes("planta") || value.includes("muda")) [symbol, tone] = ["leaf", "deep-green"];
+    else if (value.includes("outro")) [symbol, tone] = ["box", "slate"];
+    else {
+      const tones = ["green", "yellow", "orange", "blue", "rose", "deep-green"];
+      const hash = Array.from(value).reduce((sum, char) => (sum * 31 + char.codePointAt(0)) >>> 0, 0);
+      [symbol, tone] = ["box", tones[hash % tones.length]];
+    }
+    return element("span", {
+      class: "category-chip-icon",
+      "data-tone": tone,
+      "aria-hidden": "true",
+    }, [icon(symbol)]);
+  };
+
   const productSubcategory = (product) => {
     return String(
       product?.subcategory ||
@@ -498,7 +523,7 @@ export function createCatalog(state, add, navigate) {
           state.trackEvent?.("category_filter", { category: showingFavorites ? "Curtidos" : "Todas" });
           render();
         },
-      }, [element("span", { class: "category-chip-icon", text: "❤️", "aria-hidden": "true" }), element("span", { class: "category-chip-label", text: "Curtidos".tr })]),
+      }, [categoryTagIcon("Curtidos", "favorites"), element("span", { class: "category-chip-label", text: "Curtidos".tr })]),
       element("button", {
         type: "button",
         class: `category-chip${!showingFavorites && !selectedCategory ? " is-active" : ""}`,
@@ -514,7 +539,7 @@ export function createCatalog(state, add, navigate) {
           state.trackEvent?.("category_filter", { category: "Todas" });
           render();
         },
-      }, [element("span", { class: "category-chip-icon", text: "🌿", "aria-hidden": "true" }), element("span", { class: "category-chip-label", text: "Todas".tr })]),
+      }, [categoryTagIcon("Todas", "all"), element("span", { class: "category-chip-label", text: "Todas".tr })]),
       ...categories.map((category) =>
         element("button", {
           type: "button",
@@ -537,7 +562,7 @@ export function createCatalog(state, add, navigate) {
             state.trackEvent?.("category_filter", { category: category.name });
             render();
           },
-        }, [element("span", { class: "category-chip-icon", text: categoryIcon(category.name), "aria-hidden": "true" }), element("span", { class: "category-chip-label", text: (category.name || "").tr })]),
+        }, [categoryTagIcon(category.name), element("span", { class: "category-chip-label", text: (category.name || "").tr })]),
       ),
     );
 

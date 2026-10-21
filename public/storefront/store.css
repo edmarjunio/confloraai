@@ -3596,6 +3596,34 @@ body {
   white-space: nowrap;
 }
 
+/* Persistent palette badges remain identifiable in the selected green chip. */
+.category-chip-icon[data-tone] {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 50%;
+  background: var(--category-icon-bg);
+  color: var(--category-icon-color);
+}
+.category-chip-icon[data-tone] > .icon {
+  display: block;
+  width: 17px;
+  height: 17px;
+  flex: none;
+}
+.category-chip-icon[data-tone="green"] { --category-icon-bg: #dcfce7; --category-icon-color: #15803d; }
+.category-chip-icon[data-tone="deep-green"] { --category-icon-bg: #e8f5eb; --category-icon-color: #0f381e; }
+.category-chip-icon[data-tone="yellow"] { --category-icon-bg: #fff8df; --category-icon-color: #a66d00; }
+.category-chip-icon[data-tone="orange"] { --category-icon-bg: #fff3e9; --category-icon-color: #bd5a12; }
+.category-chip-icon[data-tone="blue"] { --category-icon-bg: #edf5ff; --category-icon-color: #28669e; }
+.category-chip-icon[data-tone="rose"] { --category-icon-bg: #fff1f2; --category-icon-color: #e11d48; }
+.category-chip-icon[data-tone="slate"] { --category-icon-bg: #f1f5f9; --category-icon-color: #475569; }
+
+@media (max-width: 600px) {
+  .category-chip-icon[data-tone] { width: 24px; height: 24px; flex-basis: 24px; }
+  .category-chip-icon[data-tone] > .icon { width: 15px; height: 15px; }
+}
+
 /* LISTAGEM DE SUBCATEGORIAS (LINHA DEBAIXO COM LARGURA TOTAL) */
 .catalog-subcategory-filter {
   display: flex;
