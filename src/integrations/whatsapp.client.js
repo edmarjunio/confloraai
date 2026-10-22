@@ -143,7 +143,20 @@ class WhatsAppClient {
   async sendWelcomeTemplate(to, customerName = '') {
     const templateName = process.env.WHATSAPP_WELCOME_TEMPLATE || 'boas_vindas_conflora';
     const language = config.whatsapp.templates.language || 'pt_BR';
-    return this.sendTemplate(to, templateName, language, []);
+    const cleanName = customerName?.trim?.() || '';
+    const greetingText = cleanName ? `Olá, ${cleanName}! ` : 'Olá! ';
+    const components = [
+      {
+        type: 'body',
+        parameters: [
+          {
+            type: 'text',
+            text: greetingText,
+          },
+        ],
+      },
+    ];
+    return this.sendTemplate(to, templateName, language, components);
   }
 
   /**

@@ -3944,34 +3944,82 @@ body {
 
 /* Checkout follows four visible steps, with readable labels and clear inputs. */
 .cart-drawer #checkoutCustomer { border: 1px solid #dce9e0; border-radius: 16px; padding: 15px; background: #f7fbf8; margin-bottom: 18px; }
-.cart-drawer #checkoutCustomerTitle, .cart-drawer .checkout-section-title, .cart-drawer #checkoutForm legend { display: flex; align-items: center; gap: 9px; color: #173c26; font-size: 15px; font-weight: 800; line-height: 1.4; margin-bottom: 12px; }
-.cart-drawer .checkout-step { display: inline-grid; place-items: center; flex: 0 0 25px; width: 25px; height: 25px; border-radius: 9px; background: #e0f1e5; color: #157437; font-size: 12px; font-weight: 850; }
-.cart-drawer #checkoutCustomer p { font-size: 12px; line-height: 1.5; margin-bottom: 14px; color: #53655b; }
-.cart-drawer #checkoutCustomer label, .cart-drawer #checkoutForm > label, .cart-drawer #deliveryFields > label { display: grid; gap: 7px; margin-bottom: 13px; font-size: 13px; line-height: 1.45; font-weight: 750; color: #263e2e; }
-.cart-drawer #checkoutCustomer input, .cart-drawer #checkoutForm input:not([type=radio]), .cart-drawer #checkoutForm textarea, .cart-drawer #checkoutForm select { min-height: 44px; padding: 11px 12px; border: 1px solid #cbdacf; border-radius: 11px; background: #fff; font-size: 14px; font-weight: 400; }
-.cart-drawer #checkoutForm fieldset { min-width: 0; padding: 16px 0; margin: 0; border: 0; border-top: 1px solid #e5ece7; }
+.cart-drawer #checkoutCustomerTitle, .cart-drawer .checkout-section-title, .cart-drawer #checkoutForm legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #173c26;
+  font-size: 14.5px;
+  font-weight: 800;
+  line-height: 1.3;
+  margin-bottom: 4px !important;
+}
+.cart-drawer .checkout-step {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  background: #e0f1e5;
+  color: #157437;
+  font-size: 12px;
+  font-weight: 850;
+}
+.cart-drawer #checkoutCustomer p {
+  font-size: 12px;
+  line-height: 1.5;
+  margin-bottom: 10px;
+  color: #53655b;
+}
+.cart-drawer #checkoutCustomer label, .cart-drawer #checkoutForm > label, .cart-drawer #deliveryFields > label {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 750;
+  color: #263e2e;
+}
+.cart-drawer #checkoutCustomer input, .cart-drawer #checkoutForm input:not([type=radio]), .cart-drawer #checkoutForm textarea, .cart-drawer #checkoutForm select {
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid #cbdacf;
+  border-radius: 11px;
+  background: #fff;
+  font-size: 14px;
+  font-weight: 400;
+}
+.cart-drawer #checkoutForm fieldset {
+  min-width: 0;
+  padding: 6px 0 2px 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-top: 1px solid #e5ece7 !important;
+}
 /* 3D Cartoon Choices Grid (Entrega / Retirada & Formas de Pagamento) */
 .cart-drawer .choices,
 #checkoutForm .choices {
   display: grid !important;
   grid-template-columns: repeat(2, 1fr) !important;
-  gap: 10px !important;
+  gap: 8px !important;
   width: 100% !important;
   box-sizing: border-box !important;
-  margin: 10px 0 14px 0 !important;
+  margin: 4px 0 4px 0 !important;
 }
 
 .cart-drawer .choices label,
 #checkoutForm .choices label {
   position: relative !important;
-  display: flex !important;
+  display: grid !important;
+  grid-template-columns: 28px 1fr !important;
   align-items: center !important;
-  justify-content: center !important;
+  text-align: left !important;
   gap: 8px !important;
-  padding: 12px 10px !important;
+  padding: 10px 12px !important;
   min-height: 48px !important;
   border-radius: 14px !important;
-  font-size: 13.5px !important;
+  font-size: 13px !important;
   font-weight: 800 !important;
   line-height: 1.2 !important;
   cursor: pointer !important;
@@ -3979,7 +4027,6 @@ body {
   -webkit-user-select: none !important;
   -webkit-tap-highlight-color: transparent !important;
   box-sizing: border-box !important;
-  text-align: center !important;
   margin: 0 !important;
   width: 100% !important;
 
@@ -4027,29 +4074,97 @@ body {
   box-shadow: 0 1px 0 #0f381e !important;
 }
 
-/* Ícones dentro dos botões 3D da Sacola */
-.cart-drawer .choices label .icon,
-.cart-drawer .choices label svg,
-#checkoutForm .choices label .icon,
-#checkoutForm .choices label svg {
-  width: 18px !important;
-  height: 18px !important;
+/* Alinhamento fixo de ícone e texto */
+.cart-drawer .choices label .choice-icon-slot,
+#checkoutForm .choices label .choice-icon-slot {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 28px !important;
+  height: 28px !important;
   flex-shrink: 0 !important;
-  transition: color 0.15s ease, fill 0.15s ease, stroke 0.15s ease !important;
+  line-height: 0 !important;
 }
 
-.cart-drawer .choices label:has(input:checked) .icon,
-.cart-drawer .choices label:has(input:checked) svg,
-#checkoutForm .choices label:has(input:checked) .icon,
-#checkoutForm .choices label:has(input:checked) svg {
-  color: #ffffff !important;
+.cart-drawer .choices label .choice-icon-slot svg,
+#checkoutForm .choices label .choice-icon-slot svg {
+  width: 24px !important;
+  height: 24px !important;
+  display: block !important;
+  overflow: visible !important;
+}
+
+.cart-drawer .choices label .choice-label-slot,
+#checkoutForm .choices label .choice-label-slot {
+  display: flex !important;
+  align-items: center !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  line-height: 1.2 !important;
+  text-align: left !important;
+}
+
+/* Tipografia e logo oficial do PIX */
+.pix-brand-svg {
+  display: block !important;
+  overflow: visible !important;
+}
+.cart-drawer .choices label:has(input:checked) .pix-brand-svg path {
   stroke: #ffffff !important;
+}
+.cart-drawer .choices label:has(input:checked) .pix-brand-svg polygon {
   fill: #ffffff !important;
 }
-.cart-drawer #pixBox { padding: 14px; border-radius: 13px; line-height: 1.5; }
-.cart-drawer #pixBox small { display: block; margin-top: 6px; font-size: 12px; }
-.cart-drawer #checkoutForm > .total { background: #f1f8f3; border: 1px solid #dceadf; border-radius: 14px; padding: 15px; margin: 16px 0; }
-.cart-drawer #checkoutTotal { font-size: 23px; color: #155d30; }
+.cart-drawer .choices label:has(input:checked) .cf-pix-svg .pix-glyph {
+  fill: #ffffff !important;
+}
+
+.cart-drawer #pixBox {
+  padding: 10px 14px !important;
+  border-radius: 13px !important;
+  line-height: 1.4 !important;
+  margin: 6px 0 8px 0 !important;
+}
+.cart-drawer #pixBox small {
+  display: block !important;
+  margin-top: 4px !important;
+  font-size: 11.5px !important;
+}
+
+/* Valor total destacado e chamativo */
+.cart-drawer #checkoutForm > .total {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 14px 18px !important;
+  margin: 10px 0 14px 0 !important;
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%) !important;
+  border: 2px solid #16a34a !important;
+  border-radius: 16px !important;
+  box-shadow: 0 4px 0 #15803d, 0 6px 16px rgba(22, 163, 74, 0.16) !important;
+  box-sizing: border-box !important;
+}
+.cart-drawer #checkoutForm > .total > span {
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+  color: #14532d !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+.cart-drawer #checkoutForm > .total > span::before {
+  content: "🏷️";
+  font-size: 15px;
+}
+.cart-drawer #checkoutTotal {
+  font-size: 26px !important;
+  font-weight: 900 !important;
+  color: #14532d !important;
+  letter-spacing: -0.5px !important;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+}
 .cart-drawer #submitOrder,
 #submitOrder,
 .btn-checkout {
@@ -4126,25 +4241,33 @@ body {
   display: inline-flex !important;
   align-items: center !important;
   gap: 8px !important;
-  padding: 9px 15px !important;
-  background: #ffffff !important;
-  color: #14532d !important;
-  border: 1.5px solid #86efac !important;
+  padding: 10px 18px !important;
+  min-height: 42px !important;
+  background: linear-gradient(180deg, #fef08a 0%, #facc15 100%) !important;
+  color: #713f12 !important;
+  border: 2px solid #854d0e !important;
   border-radius: 9999px !important;
-  font-size: 13px !important;
-  font-weight: 700 !important;
-  box-shadow: 0 4px 14px rgba(15, 56, 30, 0.12) !important;
+  font-size: 13.5px !important;
+  font-weight: 850 !important;
+  box-shadow: 0 4px 0 #854d0e, 0 6px 14px rgba(133, 77, 14, 0.25) !important;
   cursor: pointer !important;
-  transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease !important;
+  user-select: none !important;
+  transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.12s ease, background-color 0.15s ease !important;
 }
 .site-feedback-fab:hover {
   transform: translateY(-2px) !important;
-  background: #f0fdf4 !important;
-  border-color: #22c55e !important;
-  box-shadow: 0 6px 20px rgba(15, 56, 30, 0.18) !important;
+  background: linear-gradient(180deg, #fff085 0%, #fde047 100%) !important;
+  border-color: #854d0e !important;
+  box-shadow: 0 6px 0 #854d0e, 0 8px 18px rgba(133, 77, 14, 0.3) !important;
+}
+.site-feedback-fab:active {
+  transform: translateY(2px) !important;
+  box-shadow: 0 1px 0 #854d0e !important;
 }
 .site-feedback-fab .site-feedback-star {
-  font-size: 15px;
+  font-size: 17px !important;
+  line-height: 1 !important;
+  filter: drop-shadow(0 1px 1px rgba(113, 63, 18, 0.4)) !important;
 }
 .cf-feedback-input {
   width: 100%;
@@ -4456,8 +4579,9 @@ body {
   .site-feedback-fab {
     left: 12px !important;
     bottom: calc(75px + env(safe-area-inset-bottom)) !important;
-    padding: 7px 12px !important;
-    font-size: 12px !important;
+    padding: 8px 14px !important;
+    font-size: 12.5px !important;
+    min-height: 38px !important;
   }
   .order-feedback-dialog {
     left: 12px !important;

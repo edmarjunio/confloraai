@@ -371,8 +371,13 @@ class MessageService {
     const isGreetingOnly = /^(oi|ola|opa|bom dia|boa tarde|boa noite|e ai|eai|tudo bem|tudo bom|como vai|salve|fala|oie|oii|oiii)(\s+(tudo bem|tudo bom|amigo|amiga|equipe|conflora|pessoal))?[!?.]*$/i.test(normalizeText(trimmed));
     if (isGreetingOnly) {
       Logger.info('Saudação isolada recebida. Disparando modelo de boas-vindas com botões da loja...', { phone, message });
+      let resolvedName = customerName?.trim?.() || '';
+      if (!resolvedName && this.firestoreRepo?.getCustomerProfile) {
+        const profile = await this.firestoreRepo.getCustomerProfile(phone).catch(() => null);
+        resolvedName = profile?.name || profile?.customerName || '';
+      }
       if (this.whatsappClient) {
-        await this.whatsappClient.sendWelcomeTemplate(phone, customerName).catch((err) => {
+        await this.whatsappClient.sendWelcomeTemplate(phone, resolvedName).catch((err) => {
           Logger.warn('Aviso: template de boas-vindas ainda não aprovado na Meta ou token pendente', { error: err.message });
         });
       }
