@@ -1,5 +1,5 @@
 /* Bump this version whenever the application shell changes before publishing. */
-const CACHE_NAME = 'conflora-public-shell-v32';
+const CACHE_NAME = 'conflora-public-shell-v35';
 const SHELL_URL = '/storefront/index.html';
 const CORE_FILES = [
   SHELL_URL, '/store-assets/site-navigation.js?v=1',
@@ -7,10 +7,10 @@ const CORE_FILES = [
   '/store-assets/v5/store.css', '/store-assets/site-header.css?v=topbar-1',
   '/store-assets/design-system.css', '/store-assets/brands/conflora-logo.png',
   '/store-assets/delivery-maps.js', '/store-assets/delivery.css',
-  '/store-assets/tab-session.js', '/store-assets/order-display.js', '/store-assets/order-display.css',
+  '/store-assets/tab-session.js', '/store-assets/order-display.js', '/store-assets/order-display.css', '/store-assets/order-notifications.css',
   '/store-assets/category-ui.js', '/store-assets/render-image.js', '/store-assets/product-card.js',
   ...['app.js', 'ui.js', 'catalog.js', 'cart.js', 'cart-storage.mjs',
-    'public-cache.mjs', 'chat.js', 'admin.js', 'existing-api.js',
+    'public-cache.mjs', 'purchase-insights.mjs', 'browser-notifications.js', 'customer-order-notifications.js', 'order-notification-state.mjs', 'search-autocomplete.js', 'search-suggestions.mjs', 'chat.js', 'admin.js', 'existing-api.js',
     'product-entry.js', 'icons.js', 'receipt.js', 'guided-search.mjs',
     'guided-chat.js', 'ai-chat.js', 'product-info-content.js', 'team-drawer.js',
     'store/index.js', 'store/zustand.js', 'query/tanstackQuery.js',
@@ -69,5 +69,17 @@ self.addEventListener('fetch', event => {
       for (const entry of extras.slice(0, Math.max(0, keys.length - 160))) await cache.delete(entry);
     }
     return response;
+  })());
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  event.waitUntil((async () => {
+    const target = new URL(event.notification.data?.url || '/', self.location.origin);
+    if (target.origin !== self.location.origin) return;
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const client = windows.find(entry => entry.url === event.notification.data?.clientUrl);
+    if (client) { await client.navigate(target.href); await client.focus(); }
+    else await self.clients.openWindow(target.href);
   })());
 });

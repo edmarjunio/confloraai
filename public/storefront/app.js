@@ -6,6 +6,8 @@ import {
   notify,
   money,
 } from "./ui.js";
+import { createSearchAutocomplete } from "./search-autocomplete.js";
+import { createCustomerOrderNotifications } from "./customer-order-notifications.js";
 import { createCatalog } from "./catalog.js";
 import { createCart } from "./cart.js";
 import { createChat } from "./chat.js";
@@ -23,6 +25,7 @@ import { appStore } from "./store/index.js";
 import { storeQueries, queryClient } from "./query/tanstackQuery.js";
 import { renderOrderReceipt } from "./receipt.js";
 import { createPublicCache } from "./public-cache.mjs";
+import { createPurchaseInsights } from "./purchase-insights.mjs";
 import { createOrderFeedback } from "./order-feedback.js";
 
 const existingStore = !location.pathname.startsWith("/shop/");
@@ -47,6 +50,10 @@ const state = {
   products: [],
   user: null,
 };
+
+state.purchaseInsights = createPurchaseInsights(state);
+state.orderNotifications = createCustomerOrderNotifications(state, (id) => openPurchaseHistory(id));
+createSearchAutocomplete(state);
 
 let analyticsVisitorId = "";
 try {
@@ -133,11 +140,13 @@ function updateHeaderActions() {
   const nextOwner = state.user?.id || null;
   if (accountOwner !== nextOwner) {
     accountOwner = nextOwner; accountVersion += 1;
+    state.purchaseInsights.invalidate();
     $('#historyDialog').close(); $('#ledgerContent').replaceChildren();
     document.querySelectorAll('.history-order-card').forEach(node => node.remove());
     Object.assign(historyState, { buffer: [], cursor: '', hasMore: false, loading: false, failed: false, loaded: false });
   }
   cart?.setOwner(state.user);
+  state.orderNotifications.setUser(state.user);
   const role = String(state.user?.role || "CLIENTE").toUpperCase();
   const isLoggedIn = Boolean(state.user);
   const allowedCashierRoles = ["ADMIN", "CAIXA", "VENDEDOR", "ENTREGADOR"];
@@ -425,7 +434,7 @@ async function account() {
           try {
             await state.api("/auth/logout", { method: "POST" });
             if (existingStore && window.signOutGoogle) await window.signOutGoogle().catch(() => {});
-            state.user = null; appStore.getState().setUser(null); catalog?.refreshFavorites(); updateHeaderActions();
+            state.user = null; appStore.getState().setUser(null); updateHeaderActions(); catalog?.refreshPurchases();
             $("#accountDialog").close(); navigate(basePath || "/");
           } catch (error) { notify(error.message); }
           finally { button.disabled = false; }
@@ -500,8 +509,9 @@ async function account() {
           })
         ).user;
         appStore.getState().setUser(state.user);
-        catalog?.refreshFavorites();
         updateHeaderActions();
+
+        catalog?.refreshPurchases();
         $("#accountDialog").close();
         route();
       } catch (error) {
@@ -532,8 +542,9 @@ $("#googleAccountButton").addEventListener("click", async () => {
     }
     state.user = result.user;
     appStore.getState().setUser(state.user);
-    catalog?.refreshFavorites();
     updateHeaderActions();
+
+    catalog?.refreshPurchases();
     $("#accountDialog").close();
     route();
   } catch (error) {
@@ -547,6 +558,33 @@ const historyDialog = $("#historyDialog");
 const historyList = $("#historyList");
 const historySentinel = $("#historyLoadSentinel");
 const historyState = { buffer: [], cursor: "", hasMore: false, loading: false, failed: false, loaded: false };
+
+const spendingSection = element('section', { class: 'spending-trends', 'aria-label': 'Tendências de Gastos' });
+let disposeSpendingChart;
+let spendingRevision = 0;
+async function renderSpendingTrends() {
+  const revision = ++spendingRevision;
+  const owner = state.user?.id;
+  disposeSpendingChart?.();
+  disposeSpendingChart = undefined;
+  spendingSection.replaceChildren(element('h3', { text: 'Tendências de Gastos'.tr }), element('p', { role: 'status', text: 'Carregando seus gastos...'.tr }));
+  try {
+    const [insights, chart] = await Promise.all([state.purchaseInsights.load(), import('./dist/spending-chart.js')]);
+    if (revision !== spendingRevision || owner !== state.user?.id || !historyDialog.open) return;
+    const host = element('div', { class: 'spending-chart' });
+    const values = element('details', { class: 'spending-values' }, [element('summary', { text: 'Ver valores por mês'.tr }),
+      ...insights.months.map(month => element('p', { text: month.label + ': ' + money(month.amountMinor) })),
+    ]);
+    spendingSection.replaceChildren(element('h3', { text: 'Tendências de Gastos'.tr }),
+      element('p', { class: 'muted', text: 'Últimos 6 meses, incluindo o mês atual. Compras confirmadas, incluindo fiado; cancelamentos não entram.'.tr }), host, values);
+    if (!insights.months.some(month => month.amountMinor > 0)) spendingSection.append(element('p', { text: 'Nenhum gasto registrado neste período.'.tr }));
+    disposeSpendingChart = chart.mountSpendingChart(host, insights.months);
+  } catch (error) {
+    if (revision !== spendingRevision || owner !== state.user?.id) return;
+    spendingSection.replaceChildren(element('h3', { text: 'Tendências de Gastos'.tr }), element('p', { role: 'status', text: error.message }), element('button', { type: 'button', class: 'quiet', text: 'Tentar novamente'.tr, onclick: renderSpendingTrends }));
+  }
+}
+historyDialog.addEventListener('close', () => { spendingRevision++; disposeSpendingChart?.(); disposeSpendingChart = undefined; });
 
 function renderPurchase(order) {
   const createdAt = order.createdAt ? new Date(order.createdAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "Data não informada";
@@ -565,7 +603,7 @@ function renderPurchase(order) {
     ]),
   ]);
   const feedbackSection = orderFeedback?.renderOrderCardFeedback(order);
-  return element("article", { class: "history-order-card" }, [
+  return element("article", { class: "history-order-card", "data-order-id": order.id }, [
     element("div", { class: "history-order-summary" }, [
       element("div", {}, [
         element("strong", { text: `Pedido #${order.ticketNumber || String(order.id || "").slice(-8).toUpperCase()}` }),
@@ -584,10 +622,19 @@ function renderPurchase(order) {
 
 function renderHistoryBatch() {
   const nextOrders = historyState.buffer.splice(0, 6);
-  for (const order of nextOrders) historyList.insertBefore(renderPurchase(order), historySentinel);
+  for (const order of nextOrders) {
+    const card = renderPurchase(order);
+    historyList.insertBefore(card, historySentinel);
+    if (order.id === historyState.focusOrderId) {
+      card.querySelector('details').open = true;
+      card.scrollIntoView({ block: 'nearest' });
+      historyState.focusOrderId = '';
+    }
+  }
   if (!historyList.querySelector(".history-order-card") && !historyState.loading && !historyState.hasMore && !historyState.failed) {
     historyList.insertBefore(element("p", { class: "muted", text: "Você ainda não tem compras vinculadas a esta conta." }), historySentinel);
   }
+  if (historyState.focusOrderId && historyState.buffer.length) window.setTimeout(renderHistoryBatch, 0);
   if (!historyState.buffer.length && historyState.hasMore && !historyState.loading) loadHistoryPage();
   if (!historyState.buffer.length && !historyState.hasMore && !historyState.loading) historySentinel.replaceChildren();
 }
@@ -600,7 +647,7 @@ async function loadHistoryPage() {
   try {
     const query = new URLSearchParams({ limit: "12" });
     if (historyState.cursor) query.set("cursor", historyState.cursor);
-    const page = await state.api(`/customer/orders?${query}`);
+    const page = state.existingStore ? await state.api(`/customer/orders?${query}`) : { orders: await state.api('/orders'), hasMore: false };
     if (version !== accountVersion) return;
     historyState.buffer.push(...(page.orders || []));
     orderFeedback?.inspectLoadedOrders(page.orders || []);
@@ -627,7 +674,8 @@ async function loadHistoryPage() {
   }
 }
 
-function openPurchaseHistory() {
+function openPurchaseHistory(orderId = "") {
+  historyState.focusOrderId = typeof orderId === "string" ? orderId : "";
   if (!state.user) {
     notify("Entre na sua conta para consultar seu histórico.");
     return;
@@ -638,10 +686,12 @@ function openPurchaseHistory() {
   historyState.loading = false;
   historyState.failed = false;
   historyState.loaded = false;
-  historyList.replaceChildren(ledgerContent, element("h3", { class: "ledger-section-title", text: "Histórico de compras" }), historySentinel);
+  historyList.replaceChildren(state.orderNotifications.button(), spendingSection, ledgerContent, element("h3", { class: "ledger-section-title", text: "Histórico de compras" }), historySentinel);
   historySentinel.textContent = "Carregando suas compras…";
   openDialog(historyDialog);
-  loadCustomerLedger();
+  ledgerContent.hidden = !state.existingStore;
+  if (state.existingStore) loadCustomerLedger();
+  renderSpendingTrends();
   if (!historyState.observer && typeof IntersectionObserver === "function") {
     historyState.observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting) && !historyState.loading && !historyState.failed) {
@@ -972,7 +1022,9 @@ try {
     updateHeaderActions();
     if (topbarIntent.has('sacola')) cart.open();
       if (topbarIntent.has('conta')) account().then(() => { if (topbarIntent.has('editar')) editOwnProfile(); }).catch(error => notify(error.message));
-    catalog.refreshFavorites();
+    catalog.refreshPurchases();
+    const notificationOrder = new URLSearchParams(location.search).get("order");
+    if (notificationOrder && state.user) openPurchaseHistory(notificationOrder);
     if (/\/(admin|configuracoes)\/?$/.test(location.pathname)) await route();
   }).catch(() => {});
   const refreshOnReturn = () => {

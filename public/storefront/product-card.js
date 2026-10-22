@@ -437,12 +437,17 @@
     connectedCallback() {
       this.addEventListener("click", this._boundClick);
       this.addEventListener("keydown", this._boundKeydown);
+      this._boundLangChange = () => this.render();
+      window.addEventListener("conflora-lang-change", this._boundLangChange);
       this.render();
     }
 
     disconnectedCallback() {
       this.removeEventListener("click", this._boundClick);
       this.removeEventListener("keydown", this._boundKeydown);
+      if (this._boundLangChange) {
+        window.removeEventListener("conflora-lang-change", this._boundLangChange);
+      }
     }
 
     set product(value) {
@@ -600,7 +605,6 @@
     }
 
     renderStorefront(vm, compact = false, editing = false) {
-      const favorite = this.getAttribute("favorite") === "true";
       const safeName = escapeHtml(vm.name);
       const variantClasses = compact
         ? "recommendation"
@@ -613,7 +617,7 @@
       this.removeAttribute("aria-label");
 
       this.innerHTML = `
-        ${vm.isUnavailable && vm.isInactive ? `<span class="badge-inactive">⚠️ INATIVO - Indisponível</span>` : ""}
+        ${vm.isUnavailable && vm.isInactive ? `<span class="badge-inactive">⚠️ ${"Item Inativo".tr} - ${"Indisponível".tr}</span>` : ""}
         <button type="button" class="product-photo" aria-label="${"Ver".tr} ${safeName}" data-action="open">
           ${this.buildImageHtml(vm, "product-card-image")}
           ${!compact && vm.category ? `<render-category-tag category="${escapeHtml(vm.category)}" class="product-category-tag"></render-category-tag>` : ""}
@@ -621,16 +625,15 @@
         ${
           !compact && !editing
             ? `<div class="cf-product-actions product-card-actions">
-          <button type="button" class="favorite" data-action="favorite" aria-label="${"Favoritar".tr} ${safeName}" aria-pressed="${favorite}">${ICONS.heart(favorite, "icon")}</button>
-          <button type="button" class="cf-product-info-button product-information-button" data-action="info" aria-label="Informações de ${safeName}" title="Informações de ${safeName}">${ICONS.info}</button>
-          <button type="button" class="cf-product-info-button product-add-quick-button" data-action="add" aria-label="Adicionar ${safeName} ao carrinho" title="Adicionar ao carrinho" ${vm.isUnavailable ? "disabled" : ""}>${ICONS.cartPlus}</button>
+          <button type="button" class="cf-product-info-button product-information-button" data-action="info" aria-label="${"Informações de".tr} ${safeName}" title="${"Informações de".tr} ${safeName}">${ICONS.info}</button>
+          <button type="button" class="cf-product-info-button product-add-quick-button" data-action="add" aria-label="${"Adicionar".tr} ${safeName} ${"ao carrinho".tr}" title="${"Adicionar ao carrinho".tr}" ${vm.isUnavailable ? "disabled" : ""}>${ICONS.cartPlus}</button>
         </div>`
             : ""
         }
         <div class="product-content">
           <button type="button" class="product-name" title="${safeName}" data-action="open">${safeName}</button>
           <div class="cf-shared-store-price"><strong>${vm.formattedPrice}</strong><span>${escapeHtml(vm.saleUnitLabel)}</span></div>
-          <button type="button" class="cf-button product-card-add-button" style="width:100%;height:38px;min-height:38px;max-height:40px;padding:6px 14px;font-size:13px;font-weight:800;border-radius:999px;margin-top:auto;display:inline-flex;align-items:center;justify-content:center;gap:8px;box-sizing:border-box;" data-action="${editing ? "edit" : "add"}" ${editing ? 'aria-label="Editar produto"' : ""} ${!editing && vm.isUnavailable ? "disabled" : ""}>${editing ? "✎" : ICONS.cart}<span>${editing ? "Editar produto".tr : vm.isUnavailable ? "Indisponível".tr : "Adicionar".tr}</span></button>
+          <button type="button" class="cf-button product-card-add-button" style="width:100%;height:38px;min-height:38px;max-height:40px;padding:6px 14px;font-size:13px;font-weight:800;border-radius:999px;margin-top:auto;display:inline-flex;align-items:center;justify-content:center;gap:8px;box-sizing:border-box;" data-action="${editing ? "edit" : "add"}" ${editing ? `aria-label="${"Editar produto".tr}"` : ""} ${!editing && vm.isUnavailable ? "disabled" : ""}>${editing ? "✎" : ICONS.cart}<span>${editing ? "Editar produto".tr : vm.isUnavailable ? "Indisponível".tr : "Adicionar".tr}</span></button>
         </div>`;
     }
 

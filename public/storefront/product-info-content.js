@@ -67,21 +67,21 @@ function categoryContent(kind, values, product) {
           ? `Uma boa escolha para sua horta. Observe a identificação da variedade e ajuste o cultivo à luz e ao espaço disponíveis.`
           : `${name} ganha destaque quando recebe luz, espaço e cuidados compatíveis com a espécie.`),
       facts: [
-        { label: "Iluminação", icon: "sun", tone: "yellow", value: make("light", fruiting
+        { label: "Iluminação".tr, icon: "sun", tone: "yellow", value: make("light", fruiting
           ? "A maioria das frutíferas prefere local ensolarado; confirme a necessidade desta variedade."
           : "A necessidade de sol varia por espécie. Confira a identificação e aclimate aos poucos." ) },
-        { label: "Rega", icon: "drop", tone: "blue", value: make("watering", "Confira a umidade do solo antes de regar e evite encharcar as raízes.") },
-        { label: "Onde deixar", icon: "mapPin", tone: "green", value: make("environment", fruiting
+        { label: "Rega".tr, icon: "drop", tone: "blue", value: make("watering", "Confira a umidade do solo antes de regar e evite encharcar as raízes.") },
+        { label: "Onde deixar".tr, icon: "mapPin", tone: "green", value: make("environment", fruiting
           ? "Jardim ou vaso compatível com o porte adulto, em local iluminado e com boa drenagem."
           : "Escolha um local ventilado e compatível com a luz e o porte que a planta terá." ) },
-        { label: "Porte e espaço", icon: "leaf", tone: "green", value: make("matureSize", "Confirme o porte adulto para escolher o vaso ou canteiro adequado.") },
+        { label: "Porte e espaço".tr, icon: "leaf", tone: "green", value: make("matureSize", "Confirme o porte adulto para escolher o vaso ou canteiro adequado.") },
       ],
-      pairTitle: "O ambiente ideal",
-      likesTitle: "O que favorece",
+      pairTitle: "O ambiente ideal".tr,
+      likesTitle: "O que favorece".tr,
       likes: make("likes", "Luz adequada à espécie, solo drenado e uma rotina de cuidados constante."),
-      avoidTitle: "O que evitar",
+      avoidTitle: "O que evitar".tr,
       avoid: make("avoid", "Solo encharcado e mudanças bruscas de ambiente sem aclimatação."),
-      tipsTitle: "Cuidados simples que ajudam",
+      tipsTitle: "Cuidados simples que ajudam".tr,
       tips: careTips.length ? careTips : [
         "Toque a terra antes de regar e ajuste a frequência conforme o clima.",
         "Use vaso ou canteiro com drenagem e espaço compatível com o crescimento.",
@@ -94,17 +94,17 @@ function categoryContent(kind, values, product) {
     return {
       summary: values.description || `${name} é uma opção fresca para suas receitas. A conservação ideal depende do tipo e do ponto de maturação.`,
       facts: [
-        { label: "Como escolher", icon: "leaf", tone: "green", value: make("selection", "Observe aparência, firmeza e maturação de acordo com o uso que você prefere.") },
-        { label: "Conservação", icon: "box", tone: "blue", value: make("storage", "Siga a recomendação para esta variedade; alguns alimentos pedem refrigeração e outros, local seco.") },
-        { label: "Como aproveitar", icon: "sparkle", tone: "yellow", value: make("usage", "Higienize conforme o tipo de alimento e aproveite em preparos frescos ou receitas.") },
-        { label: "Validade", icon: "clock", tone: "orange", value: make("durability", "Confira as condições do produto e consuma enquanto estiver próprio para uso.") },
+        { label: "Como escolher".tr, icon: "leaf", tone: "green", value: make("selection", "Observe aparência, firmeza e maturação de acordo com o uso que você prefere.") },
+        { label: "Conservação".tr, icon: "box", tone: "blue", value: make("storage", "Siga a recomendação para esta variedade; alguns alimentos pedem refrigeração e outros, local seco.") },
+        { label: "Como aproveitar".tr, icon: "sparkle", tone: "yellow", value: make("usage", "Higienize conforme o tipo de alimento e aproveite em preparos frescos ou receitas.") },
+        { label: "Validade".tr, icon: "clock", tone: "orange", value: make("durability", "Confira as condições do produto e consuma enquanto estiver próprio para uso.") },
       ],
-      pairTitle: "Dica para aproveitar melhor",
-      likesTitle: "Para preservar o frescor",
+      pairTitle: "Dica para aproveitar melhor".tr,
+      likesTitle: "Para preservar o frescor".tr,
       likes: make("likes", "Armazenamento adequado ao tipo de alimento e consumo no ponto de sua preferência."),
-      avoidTitle: "O que evitar",
+      avoidTitle: "O que evitar".tr,
       avoid: make("avoid", "Calor e umidade excessivos, além de guardar sem observar a recomendação da variedade."),
-      tipsTitle: "Boas práticas",
+      tipsTitle: "Boas práticas".tr,
       tips: careTips.length ? careTips : [
         "Higienize antes do consumo, seguindo o cuidado adequado ao alimento.",
         "Guarde conforme a recomendação para esta variedade e seu estágio de maturação.",
@@ -117,17 +117,17 @@ function categoryContent(kind, values, product) {
     return {
       summary: values.description || `${name} pode fazer parte da rotina do seu pet. Confira a indicação de espécie, porte e idade na embalagem ou com a equipe.`,
       facts: [
-        { label: "Indicação", icon: "heart", tone: "green", value: make("suitability", "Confira no rótulo a espécie, idade e porte para os quais o produto é indicado.") },
-        { label: "Uso ou alimentação", icon: "leaf", tone: "yellow", value: make("feeding", "Siga as instruções do fabricante e não altere a rotina alimentar sem orientação adequada.") },
-        { label: "Armazenamento", icon: "box", tone: "blue", value: make("storage", "Mantenha a embalagem fechada, em local seco e conforme as instruções do rótulo.") },
-        { label: "Bem-estar", icon: "shield", tone: "orange", value: make("environment", "Use somente para a finalidade e para a espécie indicadas pelo fabricante.") },
+        { label: "Indicação".tr, icon: "heart", tone: "green", value: make("suitability", "Confira no rótulo a espécie, idade e porte para os quais o produto é indicado.") },
+        { label: "Uso ou alimentação".tr, icon: "leaf", tone: "yellow", value: make("feeding", "Siga as instruções do fabricante e não altere a rotina alimentar sem orientação adequada.") },
+        { label: "Armazenamento".tr, icon: "box", tone: "blue", value: make("storage", "Mantenha a embalagem fechada, em local seco e conforme as instruções do rótulo.") },
+        { label: "Bem-estar".tr, icon: "shield", tone: "orange", value: make("environment", "Use somente para a finalidade e para a espécie indicadas pelo fabricante.") },
       ],
-      pairTitle: "Escolha com segurança",
-      likesTitle: "O que ajuda",
+      pairTitle: "Escolha com segurança".tr,
+      likesTitle: "O que ajuda".tr,
       likes: make("likes", "Respeitar a indicação, o modo de uso e as recomendações da embalagem."),
-      avoidTitle: "O que evitar",
+      avoidTitle: "O que evitar".tr,
       avoid: make("avoid", "Oferecer a uma espécie, idade ou porte diferente do indicado."),
-      tipsTitle: "Antes de usar",
+      tipsTitle: "Antes de usar".tr,
       tips: careTips.length ? careTips : [
         "Confira a indicação e o modo de uso no rótulo.",
         "Armazene conforme a embalagem e mantenha fora do alcance de crianças.",
@@ -140,17 +140,17 @@ function categoryContent(kind, values, product) {
     return {
       summary: values.description || `Conheça as necessidades de ${name} antes de levar para casa. Espaço, abrigo, alimentação e manejo variam conforme a espécie e a idade.`,
       facts: [
-        { label: "Moradia", icon: "mapPin", tone: "green", value: make("housing", "Prepare um abrigo seco e ventilado, protegido de chuva, sol intenso e predadores, com área de descanso e espaço para se movimentar. Prefira materiais seguros e fáceis de limpar; confirme o tamanho adequado para a espécie.") },
-        { label: "Manejo", icon: "heart", tone: "blue", value: make("handling", "Aproxime-se com calma e deixe o animal se acostumar ao ambiente. Confirme com a equipe a forma segura de pegar e manejar esta espécie.") },
-        { label: "Alimentação e petiscos", icon: "leaf", tone: "yellow", value: make("feeding", "Ofereça dieta própria para a espécie e a fase de vida. Use apenas petiscos próprios para o animal, com moderação, e confirme alimentos e quantidades com a equipe ou um veterinário.") },
-        { label: "O que não oferecer", icon: "shield", tone: "orange", value: make("prohibitedFood", "Não ofereça restos, plantas, medicamentos ou alimentos sem confirmar que são seguros para esta espécie.") },
+        { label: "Moradia".tr, icon: "mapPin", tone: "green", value: make("housing", "Prepare um abrigo seco e ventilado, protegido de chuva, sol intenso e predadores, com área de descanso e espaço para se movimentar. Prefira materiais seguros e fáceis de limpar; confirme o tamanho adequado para a espécie.") },
+        { label: "Manejo".tr, icon: "heart", tone: "blue", value: make("handling", "Aproxime-se com calma e deixe o animal se acostumar ao ambiente. Confirme com a equipe a forma segura de pegar e manejar esta espécie.") },
+        { label: "Alimentação e petiscos".tr, icon: "leaf", tone: "yellow", value: make("feeding", "Ofereça dieta própria para a espécie e a fase de vida. Use apenas petiscos próprios para o animal, com moderação, e confirme alimentos e quantidades com a equipe ou um veterinário.") },
+        { label: "O que não oferecer".tr, icon: "shield", tone: "orange", value: make("prohibitedFood", "Não ofereça restos, plantas, medicamentos ou alimentos sem confirmar que são seguros para esta espécie.") },
       ],
-      pairTitle: "Bem-estar e segurança",
-      likesTitle: "O que ajuda",
+      pairTitle: "Bem-estar e segurança".tr,
+      likesTitle: "O que ajuda".tr,
       likes: make("likes", "Rotina tranquila, água limpa, abrigo adequado e alimentação específica para a espécie."),
-      avoidTitle: "O que evitar",
+      avoidTitle: "O que evitar".tr,
       avoid: make("avoid", "Mudanças bruscas de dieta, recinto apertado ou inseguro e contato sem adaptação."),
-      tipsTitle: "Antes de levar para casa",
+      tipsTitle: "Antes de levar para casa".tr,
       tips: careTips.length ? careTips : [
         "Confirme espécie, idade, sexo e necessidades de espaço com a equipe.",
         "Prepare o abrigo e os itens essenciais antes da chegada do animal.",
@@ -162,17 +162,17 @@ function categoryContent(kind, values, product) {
   return {
     summary: values.description || `${name}: consulte a descrição e as orientações da embalagem para escolher e usar este item da melhor forma.`,
     facts: [
-      { label: "Indicação", icon: "sparkle", tone: "green", value: make("usage", "Confira a finalidade e a compatibilidade deste produto antes de usar.") },
-      { label: "Conservação", icon: "box", tone: "blue", value: make("storage", "Guarde em local limpo e seco, seguindo as instruções do fabricante.") },
-        { label: "Cuidados", icon: "shield", tone: "orange", value: make("precautions", "Observe as orientações de uso e manuseio informadas na embalagem.") },
-      { label: "Informações", icon: "info", tone: "yellow", value: make("durability", "Nossa equipe pode ajudar a confirmar detalhes e compatibilidade.") },
+      { label: "Indicação".tr, icon: "sparkle", tone: "green", value: make("usage", "Confira a finalidade e a compatibilidade deste produto antes de usar.") },
+      { label: "Conservação".tr, icon: "box", tone: "blue", value: make("storage", "Guarde em local limpo e seco, seguindo as instruções do fabricante.") },
+      { label: "Cuidados".tr, icon: "shield", tone: "orange", value: make("precautions", "Observe as orientações de uso e manuseio informadas na embalagem.") },
+      { label: "Informações".tr, icon: "info", tone: "yellow", value: make("durability", "Nossa equipe pode ajudar a confirmar detalhes e compatibilidade.") },
     ],
-    pairTitle: "Dica de compra",
-    likesTitle: "Pode combinar com",
+    pairTitle: "Dica de compra".tr,
+    likesTitle: "Pode combinar com".tr,
     likes: make("likes", "Consulte a equipe para encontrar itens complementares para sua necessidade."),
-    avoidTitle: "Antes de escolher",
+    avoidTitle: "Antes de escolher".tr,
     avoid: make("avoid", "Verifique medidas, indicação e compatibilidade com o uso pretendido."),
-    tipsTitle: "Para aproveitar melhor",
+    tipsTitle: "Para aproveitar melhor".tr,
     tips: careTips.length ? careTips : [
       "Leia as instruções de uso e conservação do fabricante.",
       "Confira medidas, conteúdo e compatibilidade antes de comprar.",

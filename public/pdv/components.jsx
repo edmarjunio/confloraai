@@ -1534,7 +1534,7 @@ window.PdvComponents = (() => {
       </div>
     </section>;
   }
-  function CashierQueue({ user, view, onBack, onDebt }) {
+  function CashierQueue({ user, view, onBack, onDebt, initialOrderId, onInitialOrderOpened }) {
     const today = dateInSaoPaulo();
     const [dateFrom, setDateFrom] = useState(today);
     const [dateTo, setDateTo] = useState(today);
@@ -1547,6 +1547,12 @@ window.PdvComponents = (() => {
     const [pulsedOrderIds, setPulsedOrderIds] = useState(() => new Set());
     const [newOrderNotice, setNewOrderNotice] = useState('');
     const dataRef = useRef(null);
+    useEffect(() => {
+      if (!initialOrderId) return;
+      let active = true;
+      api('/api/caixa/orders/' + encodeURIComponent(initialOrderId)).then(order => { if (active) { setSelectedOrder(order); onInitialOrderOpened?.(); } }).catch(error => { if (active) setError(error.message); });
+      return () => { active = false; };
+    }, [initialOrderId, user.id]);
 
     const refresh = async (silent = false) => {
       if (!silent) setRefreshing(true);

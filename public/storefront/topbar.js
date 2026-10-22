@@ -30,7 +30,7 @@
         '<a class="cf-topbar-brand" href="/" aria-label="Conflora - página inicial"><img src="/store-assets/brands/conflora-logo.png" alt="Conflora Horta e Viveiro"></a>' +
         '<form class="cf-topbar-search" role="search">' + icon('search') + '<input type="search" aria-label="Buscar produtos" placeholder="O que você procura?"><button type="submit">Buscar</button></form>' +
         '<div class="cf-topbar-actions">' +
-        '<select class="cf-topbar-language" aria-label="Idioma do catálogo"><option value="pt">BR PT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select>' +
+        '<select class="cf-topbar-language" aria-label="Idioma do catálogo"><option value="pt">🇧🇷 PT</option><option value="en">🇺🇸 EN</option><option value="es">🇪🇸 ES</option><option value="fr">🇫🇷 FR</option></select>' +
         '<button class="cf-topbar-identity" type="button" aria-label="Abrir minha conta">' + icon('user') + '<img hidden ' + (admin ? 'id="loggedUserPhoto"' : '') + ' alt="Foto do operador" referrerpolicy="no-referrer"><span><strong ' + (admin ? 'id="loggedUserName"' : '') + '></strong><small ' + (admin ? 'id="loggedUserRole"' : '') + '></small></span></button>' +
         '<a class="cf-topbar-pill cf-topbar-guide" href="/guias" aria-label="Guias Operacionais" title="Guias e Treinamento" hidden>' + icon('book') + '<span>GUIA</span></a>' +
         '<a class="cf-topbar-pill cf-topbar-dark" href="/" data-primary>' + icon('cart') + '<span>Sacola</span></a>' +
@@ -72,8 +72,22 @@
       const language = this.querySelector('select');
       try { language.value = window.localStorage.getItem('conflora_lang') || 'pt'; } catch { /* The catalog remains usable without storage. */ }
       language.onchange = () => {
-        import('/store-assets/v5/i18n/index.js').then(module => module.setLanguage(language.value)).catch(() => {});
+        if (typeof window.setLanguage === 'function') {
+          window.setLanguage(language.value);
+        } else {
+          import('./i18n/index.js').then(module => module.setLanguage(language.value)).catch(() => {
+            import('/storefront/i18n/index.js').then(module => module.setLanguage(language.value)).catch(() => {});
+          });
+        }
       };
+      this.onLangChange = () => {
+        try {
+          const l = window.localStorage.getItem('conflora_lang') || 'pt';
+          if (language && language.value !== l) language.value = l;
+        } catch (_) {}
+        this.updateIdentity();
+      };
+      window.addEventListener('conflora-lang-change', this.onLangChange);
       this.updateIdentity();
       this.updateSize = () => document.documentElement.style.setProperty('--cf-topbar-height', this.header.getBoundingClientRect().height + 'px');
       this.updateSize();

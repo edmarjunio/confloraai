@@ -22,3 +22,5 @@ playwright-report/
 
 .private/
 public/pdv/dist/
+
+public/storefront/dist/

@@ -90,6 +90,27 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     catch (error) { Logger.warn('Operação PDV não concluída', { error: error.message, requestId: req.requestId }); res.status(error.status || (/Firestore|banco.*indisponível/i.test(error.message) ? 503 : 400)).json({ error: error.message, requestId: req.requestId }); }
   };
   const requireCustomer = (req, res, next) => req.user ? next() : res.status(401).json({ error: 'Entre na sua conta.' });
+  app.get('/api/customer/orders/stream', requireCustomer, route(async (req, res) => {
+    const profiles = req.user.email ? await repository.findCustomerProfilesByEmail(req.user.email) : [];
+    if (profiles.length > 1) return res.status(409).json({ error: 'Peça à equipe para corrigir o vínculo da sua conta.' });
+    if (res.destroyed) return;
+    const ids = new Set([req.user.id, ...profiles.map(profile => profile.id)].map(String));
+    const email = String(req.user.email || '').trim().toLowerCase();
+    res.set({ 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'private, no-store, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
+    res.flushHeaders?.();
+    res.write('retry: 5000\n\n');
+    let closed = false;
+    let lastPayload = '';
+    const heartbeat = setInterval(() => { if (!closed) res.write(': keep-alive\n\n'); }, 20000);
+    heartbeat.unref?.();
+    const unsubscribe = store.watchOpenOrders(orders => {
+      if (closed) return;
+      const visible = orders.filter(order => ids.has(String(order.customerId || '')) || (email && String(order.customerEmail || '').trim().toLowerCase() === email));
+      const payload = JSON.stringify({ orders: visible.map(({ id, ticketNumber, status, deliveryStatus, paymentStatus, paidAt }) => ({ id, ticketNumber, status, deliveryStatus, paymentStatus, paidAt })).sort((a, b) => String(a.id).localeCompare(String(b.id))) });
+      if (payload !== lastPayload) { res.write(`event: order-status\ndata: ${payload}\n\n`); lastPayload = payload; }
+    }, () => { if (!closed) res.write('event: stream-fallback\ndata: {}\n\n'); });
+    res.on('close', () => { closed = true; clearInterval(heartbeat); unsubscribe?.(); });
+  }));
   app.post('/api/customer/debt-pix', requireCustomer, route(async (req, res) => res.json({ success: true, charge: await debtPix.create(req.body, req.user) })));
   app.get('/api/customer/debt-pix/:id', requireCustomer, route(async (req, res) => res.json({ success: true, charge: await debtPix.read(req.params.id, req.user) })));
   app.use('/api/caixa', requireStaff, (req, res, next) => {

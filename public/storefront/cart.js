@@ -25,6 +25,8 @@ export function createCart(state) {
   let key = `store:${state.slug}:cart:v2:${owner}`;
   const stored = storageGet(key, []);
   let items = normalizeStoredCart(stored);
+  let previousCount = items.reduce((sum, item) => sum + item.quantity, 0);
+  let fabAnimation;
   let deliveryLocation = null;
   const locationPicker = $("#deliveryLocationPicker");
   locationPicker?.addEventListener("locationchange", (event) => { deliveryLocation = event.detail; if (!form.elements.address.value.trim() && deliveryLocation.address) form.elements.address.value = deliveryLocation.address; });
@@ -96,6 +98,11 @@ export function createCart(state) {
 
   function render() {
     const count = items.reduce((sum, item) => sum + item.quantity, 0);
+    if (count > previousCount && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      fabAnimation?.cancel();
+      fabAnimation = $("#cartFab").animate([{ scale: '1' }, { scale: '1.08', offset: 0.45 }, { scale: '1' }], { duration: 300, easing: 'ease-out' });
+    }
+    previousCount = count;
     $("#cartCount").textContent = $("#mobileCount").textContent = Number(
       count.toFixed(3),
     ).toLocaleString("pt-BR");
@@ -410,6 +417,8 @@ export function createCart(state) {
       // Execute order via TanStack Query mutation
       const order = await storeQueries.submitOrder(payload, state.api, pending.key);
       if (owner !== submittingOwner) return;
+      state.purchaseInsights?.invalidate();
+      state.orderNotifications?.received(order);
       state.trackEvent?.("order_created", {
         orderId: order.id,
         value: Number(order.totalMinor || subtotal()) / 100,
@@ -440,6 +449,7 @@ export function createCart(state) {
         element("h2", { text: "cart.order_success_title".tr }),
         element("p", { text: "cart.order_success_desc".tr }),
         renderOrderReceipt(order),
+        state.orderNotifications.button(),
       );
       receipt.append(
         element("button", {
@@ -519,6 +529,8 @@ export function createCart(state) {
     if (owner === nextOwner) return;
     persist(); owner = nextOwner; key = `store:${state.slug}:cart:v2:${owner}`;
     items = normalizeStoredCart(storageGet(key, []));
+    previousCount = items.reduce((sum, item) => sum + item.quantity, 0);
+    fabAnimation?.cancel();
     pending = storageGet(`${key}:pending`, null);
     confirmationAccepted = false; deliveryLocation = null;
     form.reset(); form.hidden = false; $('#checkoutCustomer').hidden = false;

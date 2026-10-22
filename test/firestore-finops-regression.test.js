@@ -136,7 +136,8 @@ test('PDV subscribers share two listeners, replay latest snapshot and close once
   const first = store.watchOpenOrders(() => { received++; });
   const second = store.watchOpenOrders(() => { received++; });
   assert.equal(starts, 2);
-  callbacks[0]({ docs: [{ id: 'order', data: () => ({ status: 'PENDING' }) }] }); assert.equal(received, 2);
+  callbacks[0]({ docs: [{ id: 'order', data: () => ({ status: 'PENDING' }) }] }); assert.equal(received, 0);
+  callbacks[1]({ docs: [] }); assert.equal(received, 2);
   const third = store.watchOpenOrders(() => { received++; }); assert.equal(received, 3);
   first(); first(); second(); assert.equal(stops, 0); third(); assert.equal(stops, 2);
   const fresh = store.watchOpenOrders(() => {}); assert.equal(starts, 4); fresh();

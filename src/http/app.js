@@ -631,7 +631,8 @@ function createApp({
           const messageId = msg.id;
           const isMedia = Boolean(msg.image || msg.document);
           const mediaCaption = msg.image?.caption || msg.document?.caption || '';
-          const text = msg.text?.body || mediaCaption || (isMedia ? '[COMPROVANTE_ENVIADO]' : '');
+          const buttonText = msg.button?.text || msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || '';
+          const text = msg.text?.body || buttonText || mediaCaption || (isMedia ? '[COMPROVANTE_ENVIADO]' : '');
           const customerName = value.contacts?.[0]?.profile?.name || '';
 
           if (!text && !isMedia) {
@@ -1089,6 +1090,98 @@ function createApp({
       });
     } catch (err) {
       res.status(err.status || 400).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post(['/api/site-feedback', '/api/feedback'], async (req, res) => {
+    try {
+      const { name, phone, email, rating, type, highlights, comment } = req.body || {};
+      const feedbackId = randomUUID();
+      const clientName = String(name || req.user?.name || '').trim();
+      const clientPhone = String(phone || req.user?.phone || '').trim();
+      const clientEmail = String(email || req.user?.email || '').trim();
+      const numRating = Math.max(1, Math.min(5, Number(rating) || 5));
+      const feedbackType = String(type || 'Avaliação do Site').trim();
+      const feedbackHighlights = Array.isArray(highlights) ? highlights : [];
+      const feedbackComment = String(comment || '').trim();
+      const nowIso = new Date().toISOString();
+
+      const record = {
+        id: feedbackId,
+        name: clientName,
+        phone: clientPhone,
+        email: clientEmail,
+        rating: numRating,
+        type: feedbackType,
+        highlights: feedbackHighlights,
+        comment: feedbackComment,
+        userId: req.user?.id || null,
+        userRole: req.user?.role || 'CLIENTE',
+        submittedAt: nowIso,
+      };
+
+      try {
+        if (app.locals.pdv?.store?.transaction) {
+          await app.locals.pdv.store.transaction(async (tx) => {
+            tx.set('site_feedbacks', feedbackId, record);
+          });
+        }
+      } catch (storeErr) {
+        Logger.warn('Aviso ao registrar feedback avulso no banco:', { error: storeErr.message });
+      }
+
+      const rawOwnerPhone = process.env.OWNER_WHATSAPP_NUMBER || config.whatsapp?.ownerNumber || '5564999361572';
+      const ownerPhone = normalizeWhatsAppNumber(rawOwnerPhone);
+      const stars = '★'.repeat(numRating) + '☆'.repeat(5 - numRating);
+      const formattedDate = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+
+      const msgLines = [
+        '🌿 *CONFLORA — NOVA AVALIAÇÃO DO SITE* 🌿',
+        '',
+        `👤 *Cliente:* ${clientName || 'Não identificado / Anônimo'}`,
+        `📱 *Contato:* ${clientPhone || 'Não informado'}${clientEmail ? ` (${clientEmail})` : ''}`,
+        `⭐ *Nota:* ${numRating}/5 (${stars})`,
+        `🏷️ *Tipo:* ${feedbackType}`,
+      ];
+
+      if (feedbackHighlights.length) {
+        msgLines.push(`📌 *Destaques:* ${feedbackHighlights.join(' · ')}`);
+      }
+
+      msgLines.push(
+        '',
+        '💬 *Comentário / Reclamação:*',
+        feedbackComment ? `"${feedbackComment}"` : '(Sem mensagem adicional)',
+        '',
+        `🕒 ${formattedDate}`
+      );
+
+      const messageText = msgLines.join('\n');
+      let sentViaApi = false;
+
+      if (messageService.whatsappClient?.sendTextMessage && ownerPhone) {
+        try {
+          await messageService.whatsappClient.sendTextMessage(ownerPhone, messageText);
+          sentViaApi = true;
+          Logger.info('Avaliação enviada ao WhatsApp do proprietário com sucesso', { ownerPhone, feedbackId });
+        } catch (waErr) {
+          Logger.warn('WhatsApp API não confirmou envio direto ao proprietário:', { error: waErr.message });
+        }
+      }
+
+      const ownerWhatsappUrl = ownerPhone
+        ? `https://wa.me/${ownerPhone}?text=${encodeURIComponent(messageText)}`
+        : '';
+
+      res.status(200).json({
+        success: true,
+        sentViaApi,
+        ownerWhatsappUrl,
+        feedback: record,
+      });
+    } catch (err) {
+      Logger.error('Erro na rota de avaliação do site', err);
+      res.status(500).json({ success: false, error: err.message });
     }
   });
 

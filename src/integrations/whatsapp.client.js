@@ -136,6 +136,17 @@ class WhatsAppClient {
   }
 
   /**
+   * Envia o modelo de boas-vindas com os botões diretos de Montar Sacola, Catálogo e Atendente.
+   * @param {string} to
+   * @param {string} [customerName='']
+   */
+  async sendWelcomeTemplate(to, customerName = '') {
+    const templateName = process.env.WHATSAPP_WELCOME_TEMPLATE || 'boas_vindas_conflora';
+    const language = config.whatsapp.templates.language || 'pt_BR';
+    return this.sendTemplate(to, templateName, language, []);
+  }
+
+  /**
    * Marca a mensagem como lida.
    * Apenas executa para IDs oficiais da Meta (wamid.), prevenindo erro #131009 em testes locais.
    * @param {string} messageId

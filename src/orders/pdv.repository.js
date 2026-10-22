@@ -185,7 +185,7 @@ class PdvRepository {
       ];
       const stops = queries.map((query, index) => query.onSnapshot(snapshot => {
         snapshots.set(index, snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
-        onChange([...new Map([...snapshots.values()].flat().map(order => [order.id, order])).values()]);
+        if (snapshots.size === queries.length) onChange([...new Map([...snapshots.values()].flat().map(order => [order.id, order])).values()]);
       }, onError));
       return () => stops.forEach(stop => stop());
     }

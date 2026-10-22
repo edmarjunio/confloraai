@@ -24,6 +24,7 @@
     const value = normalize(name);
     let tone, symbol;
     if (kind === 'favorites') [tone, symbol] = ['rose', 'heart'];
+    else if (kind === 'purchases') [tone, symbol] = ['green', 'box'];
     else if (kind === 'all') [tone, symbol] = ['slate', 'grid'];
     else if (value.includes('frutifer')) [tone, symbol] = ['yellow', 'fruit'];
     else if (value.includes('hortifrut')) [tone, symbol] = ['orange', 'fruit'];
@@ -71,6 +72,7 @@
     }
     .cf-category-chip.category-chip:active { transform:translateY(1px); box-shadow:0 1px 0 var(--category-strong); }
     .cf-category-chip.category-chip:focus-visible { outline:3px solid var(--category-strong); outline-offset:3px; }
+    .cf-category-chip.category-chip.cf-category-clear { width:38px; min-width:38px; padding:7px; gap:0; }
     .cf-category-tag.cf-product-category-tag { gap:4px; }
     .cf-category-icon { display:inline-flex; align-items:center; justify-content:center; flex:none; line-height:0; }
     .cf-category-icon > svg { display:block; width:16px; height:16px; flex:none; }
@@ -101,6 +103,9 @@
       if (!tag || tag.localName !== tagName) { tag = document.createElement(tagName); this.replaceChildren(tag); }
       tag.className = filter ? `category-chip cf-category-chip${selected ? ' is-active' : ''}`
         : `cf-product-category-tag cf-category-tag ${this.getAttribute('class') || ''}`.trim();
+      tag.classList.toggle('cf-category-clear', action);
+      if (action) tag.setAttribute('aria-label', labelText);
+      else tag.removeAttribute('aria-label');
       tag.dataset.categoryTone = theme.tone;
       tag.style.setProperty('--category-strong', theme.strong);
       tag.style.setProperty('--category-soft', theme.soft);
@@ -117,12 +122,12 @@
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       svg.setAttribute('class', 'cf-category-svg');
       for (const [key, value] of Object.entries({ viewBox:'0 0 24 24', width:'16', height:'16', fill:'none', stroke:'currentColor', 'stroke-width':'1.8', 'stroke-linecap':'round', 'stroke-linejoin':'round' })) svg.setAttribute(key, value);
-      for (const d of paths[theme.symbol]) { const path = document.createElementNS(svg.namespaceURI, 'path'); path.setAttribute('d', d); svg.append(path); }
+      for (const d of action ? ['M6 6l12 12M18 6 6 18'] : paths[theme.symbol]) { const path = document.createElementNS(svg.namespaceURI, 'path'); path.setAttribute('d', d); svg.append(path); }
       icon.append(svg);
       const label = document.createElement('span');
       label.className = filter ? 'category-chip-label' : 'cf-product-category-tag-label';
       label.textContent = labelText;
-      tag.replaceChildren(icon, label);
+      tag.replaceChildren(...(action ? [icon] : [icon, label]));
       this.style.display = 'contents';
     }
   }

@@ -96,6 +96,9 @@ export function createExistingApi() {
       const { reply } = await request("/api/chat", options);
       return { message: reply };
     }
+    if (route === "/site-feedback" || route === "/feedback") {
+      return request("/api" + route, options);
+    }
     if (route === "/inventory-settings") {
       if (options.method === "PUT") {
         catalogPromise = null;

@@ -30,8 +30,7 @@ class MessageService {
     this.catalogRepo = catalogRepo;
     this.firestoreRepo = firestoreRepo;
     this.orderService = orderService;
-    this.outgoing = require('./conversation-outbox').createConversationOutbox(firestoreRepo, whatsappClient);
-    this.whatsappClient = this.outgoing.client;
+    this.whatsappClient = whatsappClient;
     this.learningService = learningService;
   }
 
@@ -54,7 +53,7 @@ class MessageService {
     const claim = await this.incoming.claim(payload.messageId);
     if (claim.completed) return { reply: '', intent: 'DUPLICATE', latencyMs: 0 };
     try {
-      const result = await this.outgoing.run(payload.messageId, () => this.processCustomerMessage(payload));
+      const result = await this.processCustomerMessage(payload);
       await this.incoming.finish(claim);
       return result;
     } catch (error) {
@@ -71,33 +70,98 @@ class MessageService {
     verifyOnly = false,
   }) {
     const startTime = performance.now();
-    if (this.metaAgentService) {
-      const owner = require('../config/env').whatsapp.agentOwner;
-      await this.firestoreRepo.appendMessage(phone, 'user', message, { requirePersistence: true, messageId });
-      if (verifyOnly || !require('../config/env').whatsapp.assistantEnabled || owner !== 'cloud_api') return { reply: '', intent: 'AUTOMATION_DISABLED', imagesSent: 0, latencyMs: 0 };
-      const envelope = await this.metaAgentService.execute('atender_mensagem', {
-        customer_phone: phone, message_id: messageId, message,
-      }, { rememberProducts: false });
-      if (!envelope.next_action.send_customer_message) return { reply: '', intent: 'HUMAN_HANDOFF', imagesSent: 0, latencyMs: envelope.latency_ms };
-      if (!messageId) return { reply: '', intent: 'MESSAGE_ID_REQUIRED', imagesSent: 0, latencyMs: 0 };
-      // Persist references, never prices or rendered commercial messages. Delivery revalidates them.
-      const { PdvRepository } = require('../orders/pdv.repository');
-      const { sha256 } = require('../agent/util');
-      const store = new PdvRepository(this.firestoreRepo);
-      const id = 'catalog-' + sha256(`${phone}:${messageId}`);
-      await store.transaction(async tx => {
-        if (await tx.get('pdv_outbox', id)) return;
-        tx.set('pdv_outbox', id, {
-          id, recipient: phone, kind: 'conversation-catalog', status: 'PENDING', attempts: 0,
-          productIds: envelope.data.products.map(p => p.id).slice(0, 3),
-          photoRequested: Boolean(envelope.data.photo_requested), criteriaQuery: envelope.data.criteria_query || '',
-          createdAt: new Date().toISOString(),
-        });
-      });
-      return { reply: '', intent: 'CATALOG_QUEUED', imagesSent: 0, latencyMs: envelope.latency_ms };
+    // 1. Marcar como lida e salvar mensagem
+    if (messageId && this.whatsappClient) {
+      this.whatsappClient.markAsRead(messageId).catch(() => {});
     }
-    // A production worker without the verified service must never fall back to free-form AI.
-    if (process.env.NODE_ENV !== 'test') return { reply: '', intent: 'CATALOG_UNAVAILABLE', imagesSent: 0, latencyMs: 0 };
+    await this.firestoreRepo.appendMessage(phone, 'user', message, { requirePersistence: true, messageId });
+
+    // 2. Se for saudação isolada (ex: "Bom dia", "Oi", "Boa tarde"), dispara o modelo de boas-vindas com os botões diretos
+    const { normalizeText } = require('../shared/string.util');
+    const trimmed = String(message || '').trim().toLowerCase();
+    const isGreetingOnly = /^(oi|ola|opa|bom dia|boa tarde|boa noite|e ai|eai|tudo bem|tudo bom|como vai|salve|fala|oie|oii|oiii)(\s+(tudo bem|tudo bom|amigo|amiga|equipe|conflora|pessoal))?[!?.]*$/i.test(normalizeText(trimmed));
+    if (isGreetingOnly) {
+      Logger.info('Saudação isolada recebida. Disparando modelo de boas-vindas com botões da loja...', { phone, message });
+      if (this.whatsappClient) {
+        await this.whatsappClient.sendWelcomeTemplate(phone, customerName).catch((err) => {
+          Logger.warn('Aviso: template de boas-vindas ainda não aprovado na Meta ou token pendente', { error: err.message });
+        });
+      }
+      return {
+        reply: 'Modelo de boas-vindas enviado',
+        intent: 'WELCOME_TEMPLATE_SENT',
+        imagesSent: 0,
+        latencyMs: Math.round(performance.now() - startTime)
+      };
+    }
+
+    // 3. Detecção de solicitação de atendimento humano ou resposta negativa ("NÃO era isso")
+    const isHumanRequest = /\b(atendente|humano|pessoa|vendedor|falar com (um |uma )?(atendente|humano|pessoa|vendedor)|alguem ai|alguém aí)\b/i.test(trimmed);
+    const isNegativeResponse = /^(n[aã]o|nao era|não era|nenhum|nenhuma|errado|outro|outra|nada disso|queria outr[oa])\b/i.test(trimmed);
+
+    if (isHumanRequest || isNegativeResponse) {
+      const reply = 'Entendido perfeitamente! Já avisei a nossa equipe da loja e um de nossos atendentes vai te responder por aqui em instantes. Um momento, por favor!';
+      await this.firestoreRepo.appendMessage(phone, 'assistant', reply);
+      if (this.whatsappClient) {
+        await this.whatsappClient.sendTextMessage(phone, reply);
+
+        const ownerPhone = process.env.OWNER_WHATSAPP_NUMBER || process.env.STORE_NOTIFICATION_PHONE;
+        if (ownerPhone) {
+          const formattedCustomerPhone = this.whatsappClient.formatRecipient(phone);
+          const reasonText = isNegativeResponse
+            ? 'Cliente informou que NÃO era o produto/informação desejada'
+            : 'Cliente solicitou falar com atendente humano';
+          const alertMessage = [
+            '🚨 *CONFLORA — ATENDIMENTO HUMANO SOLICITADO*',
+            `👤 *Cliente:* ${customerName || 'Cliente'}`,
+            `📱 *WhatsApp:* ${phone}`,
+            `💬 *Motivo:* ${reasonText}`,
+            `📝 *Mensagem:* "${message}"`,
+            '',
+            `👉 *Clique para responder agora:* https://wa.me/${formattedCustomerPhone}`
+          ].join('\n');
+          await this.whatsappClient.sendTextMessage(ownerPhone, alertMessage).catch(err => {
+            Logger.warn('Aviso: falha ao notificar telefone do dono', { error: err.message });
+          });
+        }
+      }
+
+      try {
+        const { customerKeyFor } = require('../agent/agent-store');
+        const customerKey = customerKeyFor('conflora', phone);
+        await this.firestoreRepo.firestore.collection('agent_conversations').doc('conflora__' + customerKey).set({
+          tenantId: 'conflora',
+          customerKey,
+          automation: 'paused',
+          updatedAt: new Date().toISOString(),
+          reason: isNegativeResponse ? 'customer_declined_bot' : 'human_requested'
+        }, { merge: true });
+      } catch (err) {
+        Logger.warn('Aviso ao registrar pausa de automação', { error: err.message });
+      }
+
+      return {
+        reply,
+        intent: 'HUMAN_HANDOFF',
+        imagesSent: 0,
+        latencyMs: Math.round(performance.now() - startTime)
+      };
+    }
+
+    // 3. Verificação de conversa já em atendimento humano
+    try {
+      const { customerKeyFor } = require('../agent/agent-store');
+      const customerKey = customerKeyFor('conflora', phone);
+      const convSnap = await this.firestoreRepo.firestore.collection('agent_conversations').doc('conflora__' + customerKey).get();
+      if (convSnap.exists && convSnap.data()?.automation === 'paused' && process.env.NODE_ENV === 'production') {
+        Logger.info('Conversa em atendimento humano. Automação silenciada.', { phone });
+        return { reply: '', intent: 'HUMAN_HANDOFF_ACTIVE', imagesSent: 0, latencyMs: 0 };
+      }
+    } catch {}
+
+    if (verifyOnly || !require('../config/env').whatsapp.assistantEnabled) {
+      return { reply: '', intent: 'AUTOMATION_DISABLED', imagesSent: 0, latencyMs: 0 };
+    }
 
     // 1. Prevenção de duplicidade (Idempotência da Meta)
     // The public entry point owns the durable claim and marks completion only on success.

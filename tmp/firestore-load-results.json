@@ -7,7 +7,7 @@
     {
       "salesPerDay": 100,
       "before": {
-        "durationMs": 556,
+        "durationMs": 629,
         "sends": 100,
         "reads": 101520,
         "writes": 1400,
@@ -16,7 +16,7 @@
         "transactions": 720
       },
       "after": {
-        "durationMs": 221,
+        "durationMs": 150,
         "sends": 100,
         "reads": 1820,
         "writes": 1400,
@@ -29,7 +29,7 @@
     {
       "salesPerDay": 500,
       "before": {
-        "durationMs": 2863,
+        "durationMs": 2570,
         "sends": 500,
         "reads": 507520,
         "writes": 7000,
@@ -38,7 +38,7 @@
         "transactions": 3520
       },
       "after": {
-        "durationMs": 448,
+        "durationMs": 438,
         "sends": 500,
         "reads": 9020,
         "writes": 7000,
@@ -51,7 +51,7 @@
     {
       "salesPerDay": 1000,
       "before": {
-        "durationMs": 3915,
+        "durationMs": 3842,
         "sends": 1000,
         "reads": 1015020,
         "writes": 14000,
@@ -60,7 +60,7 @@
         "transactions": 7020
       },
       "after": {
-        "durationMs": 899,
+        "durationMs": 841,
         "sends": 1000,
         "reads": 18020,
         "writes": 14000,

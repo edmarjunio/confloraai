@@ -295,6 +295,14 @@ const { useState, useEffect, useRef, useMemo } = React;
 
       // Atribuição de venda e recebimento vem da sessão autenticada.
       const [currentUser, setCurrentUser] = useState(null);
+      const [notificationOrderId, setNotificationOrderId] = useState(() => new URLSearchParams(window.location.search).get('order') || '');
+      useEffect(() => {
+        if (!currentUser) return;
+        return window.ConfloraNotifications.createCashierNotifications(currentUser, id => {
+          setNotificationOrderId(id);
+          navigateCashierPage('orders');
+        });
+      }, [currentUser?.id, currentUser?.role]);
       const [authReady, setAuthReady] = useState(false);
       const [customerId, setCustomerId] = useState('');
       const [customerCreditBalance, setCustomerCreditBalance] = useState(0);
@@ -1230,7 +1238,7 @@ const { useState, useEffect, useRef, useMemo } = React;
       if (!authReady) return <PdvComponents.Loading />;
       if (!currentUser) return <PdvComponents.Login onLogin={setCurrentUser} />;
       if (currentUser.role === 'ENTREGADOR' || cashierPage === 'deliveries') return <PdvDelivery user={currentUser} onBack={() => navigateCashierPage(null)} />;
-      if (cashierPage) return <PdvComponents.CashierQueue user={currentUser} view={cashierPage} onBack={() => navigateCashierPage(null)} onDebt={() => { navigateCashierPage(null); setActiveModal('debt_settle'); }} />;
+      if (cashierPage) return <PdvComponents.CashierQueue onInitialOrderOpened={() => setNotificationOrderId('')} initialOrderId={notificationOrderId} user={currentUser} view={cashierPage} onBack={() => navigateCashierPage(null)} onDebt={() => { navigateCashierPage(null); setActiveModal('debt_settle'); }} />;
       return (
         <div className="min-h-screen bg-[#F4F6F5] text-slate-800 flex flex-col font-sans select-none">
           {/* Main Responsive Wrapper (Full width or Mobile Frame simulator) */}

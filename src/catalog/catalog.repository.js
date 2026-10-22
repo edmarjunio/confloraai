@@ -8,6 +8,31 @@ function isStoredProductImage(value) {
   );
 }
 
+const STOP_WORDS = new Set([
+  'voce', 'voces', 'tem', 'teria', 'teriam', 'temos', 'para', 'pra', 'com', 'sem',
+  'vcs', 'por', 'favor', 'gentileza', 'acaso', 'saber', 'vender', 'vende', 'vendem',
+  'trabalha', 'trabalham', 'quanto', 'custa', 'qual', 'quais', 'preco', 'precos',
+  'valor', 'valores', 'manda', 'mandar', 'enviar', 'foto', 'fotos', 'imagem', 'imagens',
+  'aqui', 'loja', 'estoque', 'disponivel', 'gostaria', 'quero', 'queria', 'bom', 'dia',
+  'boa', 'tarde', 'noite', 'ola', 'opa', 'mais', 'menos', 'algo', 'tipo', 'desses',
+  'dessa', 'desse', 'sobre', 'ai', 'dar', 've', 'mim'
+]);
+
+function getWordStem(w) {
+  if (w.endsWith('ada') || w.endsWith('ado') || w.endsWith('ados') || w.endsWith('adas')) return w.slice(0, -3);
+  if (w.endsWith('eiro') || w.endsWith('eira')) return w.slice(0, -4);
+  return toSingular(w);
+}
+
+function wordMatchToken(haystack, token) {
+  const words = haystack.split(/\s+/);
+  const stem = getWordStem(token);
+  for (const w of words) {
+    if (w === token || toSingular(w) === token || (stem.length >= 4 && w.startsWith(stem))) return true;
+  }
+  return false;
+}
+
 class CatalogRepository {
   constructor({ mockData = null, firestoreRepo = null, cacheTtlMs = 600000, now = Date.now } = {}) {
     if (mockData && process.env.NODE_ENV !== 'test') {throw new Error('Catálogo simulado permitido apenas em testes.');}
@@ -268,7 +293,62 @@ class CatalogRepository {
       }
     }
 
+    const searchResults = this.searchProducts(query, { limit: 1 });
+    if (searchResults.length > 0) {
+      return searchResults[0];
+    }
+
     return null;
+  }
+
+  searchProducts(queryText, { limit = 8 } = {}) {
+    const norm = normalizeText(queryText);
+    const words = norm.split(/\s+/).filter((w) => w.length >= 3 && !STOP_WORDS.has(w));
+    if (words.length === 0) return [];
+
+    const scored = [];
+    const seen = new Set();
+
+    for (const [key, group] of this.productByNameMap.entries()) {
+      if (seen.has(group.canonicalName)) continue;
+      const pName = normalizeText(group.canonicalName || key);
+      const pCat = normalizeText(group.category || '');
+      const pSub = normalizeText(group.subcategory || '');
+      const pTags = Array.from(group.tags || []).map((t) => normalizeText(t)).join(' ');
+      const pDesc = normalizeText(group.descriptionAi || '');
+
+      let score = 0;
+      let matchedWords = 0;
+
+      for (const w of words) {
+        if (wordMatchToken(pName, w)) {
+          score += 35;
+          matchedWords++;
+        } else if (wordMatchToken(pTags, w) || wordMatchToken(pDesc, w)) {
+          score += 20;
+          matchedWords++;
+        } else if (wordMatchToken(pCat, w) || wordMatchToken(pSub, w)) {
+          score += 15;
+          matchedWords++;
+        }
+      }
+
+      if (matchedWords === words.length && words.length > 1) {
+        score += 30;
+      }
+
+      if (pName.includes(words.join(' '))) {
+        score += 40;
+      }
+
+      if (score >= 20) {
+        seen.add(group.canonicalName);
+        scored.push({ product: group, score });
+      }
+    }
+
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, limit).map((s) => s.product);
   }
 
   registerLearnedTag(productName, newTag) {

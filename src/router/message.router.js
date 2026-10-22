@@ -50,13 +50,14 @@ function cleanConversationalPrefixes(text) {
   let cleaned = normalizeText(text);
 
   const prefixes = [
-    /^(ola|oi|bom dia|boa tarde|boa noite|opa|por favor|por gentileza)\b/g,
+    /^(ola|oi|bom dia|boa tarde|boa noite|opa|por favor|por gentileza|por acaso)\b/g,
     /^(gostaria de saber se (voces?|vcs?) (tem|trabalham com|vendem|possuem))\b/g,
     /^(gostaria de saber se tem)\b/g,
     /^(saber se (voces?|vcs?) (tem|trabalham com|vendem|possuem))\b/g,
     /^(saber se tem)\b/g,
-    /^(voces?|vcs?) (tem|possuem|trabalham com|vendem|vende)\b/g,
-    /^(tem|teria|teriam)\b/g,
+    /^(voces?|vcs?) (tem|possuem|trabalham com|vendem|vende)\s*(ai|aqui)?\b/g,
+    /^(tem|teria|teriam)\s*(ai|aqui)?\b/g,
+    /^(ai|aqui)\b/g,
     /^(trabalham com|trabalha com|vende|vendem)\b/g,
     /^(qual|quais) (e o |sao as? |o )?(valor|preco|tabela de precos?)\s*(d[aoe]s?)?\b/g,
     /^(quanto (custa|e|ta|sai))\s*(o|a|os|as)?\b/g,
@@ -79,7 +80,8 @@ function cleanConversationalPrefixes(text) {
     }
   }
 
-  cleaned = cleaned.replace(/^(d[aoe]s?|um|uma|uns|umas|o|a|os|as)\s+/g, '').trim();
+  cleaned = cleaned.replace(/^(d[aoe]s?|um|uma|uns|umas|o|a|os|as|de)\s+/g, '').trim();
+  cleaned = cleaned.replace(/\s+(ai|aqui)$/g, '').trim();
   return cleaned;
 }
 
@@ -245,9 +247,24 @@ class MessageRouter {
     if (!isCategory && cleaned.length >= 3) {
       const matchedProduct = this.catalogRepository.findProductByName(cleaned);
       if (matchedProduct) {
+        const related = typeof this.catalogRepository.searchProducts === 'function'
+          ? this.catalogRepository.searchProducts(cleaned, { limit: 5 }).filter((p) => p.canonicalName !== matchedProduct.canonicalName)
+          : [];
         return {
           intent: INTENTS.DIRECT_PRICE,
           matchedProduct,
+          suggestedProducts: related,
+        };
+      }
+    }
+
+    // Busca inteligente multi-palavras em todo o catálogo
+    if (typeof this.catalogRepository.searchProducts === 'function') {
+      const searchResults = this.catalogRepository.searchProducts(cleaned.length >= 3 ? cleaned : rawMessage, { limit: 8 });
+      if (searchResults.length > 0) {
+        return {
+          intent: INTENTS.CONSULTATIVE_SALES,
+          suggestedProducts: searchResults,
         };
       }
     }

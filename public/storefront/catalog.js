@@ -3,8 +3,6 @@ import {
   element,
   money,
   quantityControl,
-  storageGet,
-  storageSet,
 } from "./ui.js";
 import { icon } from "./icons.js";
 import { searchProducts, normalize as normalizeProductText } from "./guided-search.mjs";
@@ -17,10 +15,10 @@ export function createCatalog(state, add, navigate) {
   let selectedCategories = [];
   let selectedSubcategories = [];
   let showingFavorites = false;
-  const favoriteKey = () => `store:${state.slug}:user:${state.user?.id || "guest"}:favorites`;
-  const favorites = new Set();
-  let favoriteRevision = 0;
-  let favoriteSaveQueue = Promise.resolve();
+  let purchaseQuantities = new Map();
+  let purchaseLoading = false;
+  let purchaseError = '';
+  let purchaseRevision = 0;
   let searchEventTimer;
   const loadMoreButton = $("#loadMore");
 
@@ -117,70 +115,27 @@ export function createCatalog(state, add, navigate) {
       }, { rootMargin: "700px 0px" })
     : null;
 
-  function persistFavorites() {
-    favoriteRevision += 1;
-    storageSet(favoriteKey(), [...favorites]);
-    if (state.user && state.existingStore) {
-      const snapshot = [...favorites];
-      const owner = state.user.id;
-      favoriteSaveQueue = favoriteSaveQueue
-        .then(() => owner === state.user?.id ? state.api("/favorites", {
-          method: "PUT",
-          body: { favoriteProductIds: snapshot },
-        }) : undefined)
-        .catch((error) => console.warn("Não foi possível sincronizar os favoritos.", error));
-    }
-  }
-
-  async function refreshFavorites() {
-    const revisionAtStart = ++favoriteRevision;
+  async function refreshPurchases() {
+    const revision = ++purchaseRevision;
     const owner = state.user?.id;
-    const saved = storageGet(favoriteKey(), []);
-    favorites.clear();
-    for (const id of Array.isArray(saved) ? saved : []) favorites.add(id);
-    if (state.user && state.existingStore) {
-      try {
-        const result = await state.api("/favorites");
-        if (favoriteRevision === revisionAtStart && state.user?.id === owner) {
-          favorites.clear();
-          for (const id of result.favoriteProductIds || []) favorites.add(id);
-          storageSet(favoriteKey(), [...favorites]);
-        }
-      } catch (error) {
-        console.warn("Não foi possível carregar favoritos da conta.", error);
+    purchaseQuantities = new Map();
+    purchaseError = '';
+    purchaseLoading = Boolean(owner && showingFavorites);
+    render();
+    if (!purchaseLoading) return;
+    try {
+      const insights = await state.purchaseInsights.load();
+      if (revision !== purchaseRevision || state.user?.id !== owner) return;
+      purchaseQuantities = insights.quantities;
+    } catch (error) {
+      if (revision !== purchaseRevision || state.user?.id !== owner) return;
+      purchaseError = error.message;
+    } finally {
+      if (revision === purchaseRevision && state.user?.id === owner) {
+        purchaseLoading = false;
+        render();
       }
     }
-    render();
-  }
-
-  function toggleFavorite(product) {
-    if (!state.user) {
-      const accountDialog = $("#accountDialog");
-      if (accountDialog && !accountDialog.open) accountDialog.showModal();
-      return false;
-    }
-    if (favorites.has(product.id)) favorites.delete(product.id);
-    else favorites.add(product.id);
-    persistFavorites();
-    if (showingFavorites) render();
-    return true;
-  }
-
-  function favorite(product) {
-    const isFavorite = favorites.has(product.id);
-    const button = element("button", {
-      type: "button",
-      class: "favorite",
-      "aria-label": isFavorite ? "Remover dos curtidos" : "Adicionar aos curtidos",
-      "aria-pressed": String(isFavorite),
-      onclick: () => {
-        if (!toggleFavorite(product)) return;
-        const nowFavorite = favorites.has(product.id);
-        button.setAttribute("aria-pressed", String(nowFavorite));
-        button.setAttribute("aria-label", nowFavorite ? "Remover dos curtidos" : "Adicionar aos curtidos");
-      },
-    }, [icon("heart")]);
-    return button;
   }
 
   function openProductInformation(product) {
@@ -425,13 +380,11 @@ export function createCatalog(state, add, navigate) {
     const card = element("render-product-card", {
       variant: chat ? "cashier" : compact ? "recommendation" : "storefront",
       "product-data": JSON.stringify(cardProduct),
-      favorite: String(favorites.has(product.id)),
     });
     card.addEventListener("cf-product-card-action", (event) => {
       const { action } = event.detail || {};
       if (action === "open") open();
       if (action === "add" && !unavailable) addFromCard(product, product.saleUnit?.minimum || 1, chat ? () => card.dispatchEvent(new CustomEvent('chat-product-added', { bubbles: true, detail: { product } })) : null);
-      if (action === "favorite" && toggleFavorite(product) && !showingFavorites) render();
       if (action === "info") openProductInformation(product);
     });
     return card;
@@ -448,7 +401,7 @@ export function createCatalog(state, add, navigate) {
     );
     let baseList = activeProducts;
     if (showingFavorites) {
-      baseList = baseList.filter((product) => favorites.has(product.id));
+      baseList = baseList.filter((product) => purchaseQuantities.has(String(product.id)));
     }
     const categories = categoryOptions(activeProducts);
     $("#categoryFilterControl").hidden = false;
@@ -472,10 +425,11 @@ export function createCatalog(state, add, navigate) {
       render();
     };
     $("#categoryFilterControl").replaceChildren(
-      categoryFilter("Curtidos", showingFavorites, () => {
+      categoryFilter("Mais comprados".tr, showingFavorites, () => {
         showingFavorites = !showingFavorites;
         updateFilters();
-      }, "favorites"),
+        refreshPurchases();
+      }, "purchases"),
       categoryFilter("Todas", !showingFavorites && selectedCategories.length === 0, () => {
         showingFavorites = false;
         selectedCategories = [];
@@ -532,7 +486,10 @@ export function createCatalog(state, add, navigate) {
         ).map((result) => result.product)
       : [...baseList];
     const sortOrder = $("#sortOrder").value;
-    if (!rawQuery || sortOrder !== "az") {
+    $("#sortOrder").disabled = showingFavorites;
+    if (showingFavorites) {
+      list.sort((a, b) => (purchaseQuantities.get(String(b.id)) || 0) - (purchaseQuantities.get(String(a.id)) || 0) || a.name.localeCompare(b.name, "pt-BR"));
+    } else if (!rawQuery || sortOrder !== "az") {
       list.sort((a, b) => {
         if (sortOrder === "price-asc" || sortOrder === "price-desc") {
           const priceDifference =
@@ -553,9 +510,10 @@ export function createCatalog(state, add, navigate) {
       const emptyElements = [
         element("p", {
           class: "empty",
-          text: showingFavorites ? "Você ainda não salvou produtos. Toque no coração para guardá-los aqui.".tr : "Nenhum produto encontrado. Tente outra busca.".tr,
+          text: showingFavorites ? (purchaseLoading ? "Carregando suas compras..." : purchaseError || (state.user ? "Seus produtos comprados aparecerão aqui, dos mais comprados para os menos comprados." : "Entre na sua conta para ver os produtos que você mais compra.")).tr : "Nenhum produto encontrado. Tente outra busca.".tr,
         }),
       ];
+      if (showingFavorites && purchaseError) emptyElements.push(element('button', { type: 'button', class: 'quiet', text: 'Tentar novamente'.tr, onclick: refreshPurchases }));
       if (rawQuery) {
         emptyElements.push(
           element("button", {
@@ -573,7 +531,7 @@ export function createCatalog(state, add, navigate) {
       $("#products").append(...emptyElements);
     }
     $("#resultCount").textContent = list.length === 1 ? `1 ${"produto".tr}` : `${list.length} ${"produtos".tr}`;
-    $("#catalogTitle").textContent = showingFavorites ? "Seus produtos salvos".tr : "Explore o catálogo".tr;
+    $("#catalogTitle").textContent = showingFavorites ? "Produtos que mais comprei".tr : "Explore o catálogo".tr;
     loadMoreButton.textContent = "catalog.load_more".tr;
     loadMoreButton.hidden = list.length <= pageSize;
     if (pageObserver && !loadMoreButton.hidden) {
@@ -585,6 +543,7 @@ export function createCatalog(state, add, navigate) {
 
   function setFavoritesView(show) {
     showingFavorites = show;
+    refreshPurchases();
     selectedCategories = [];
     selectedSubcategories = [];
     pageSize = 24;
@@ -693,7 +652,6 @@ export function createCatalog(state, add, navigate) {
         element("div", { class: "detail-gallery" }, [
           element("div", { class: "detail-hero" }, [
             mainPhoto,
-            favorite(product),
           ]),
           element(
             "div",
@@ -866,7 +824,10 @@ export function createCatalog(state, add, navigate) {
     pageSize += 24;
     render();
   });
+  window.addEventListener("conflora-lang-change", () => {
+    render();
+  });
 
-  refreshFavorites().catch(() => {});
-  return { render, details, card: renderCard, setFavoritesView, refreshFavorites };
+
+  return { render, details, card: renderCard, setFavoritesView, refreshPurchases };
 }
