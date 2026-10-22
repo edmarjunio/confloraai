@@ -35,3 +35,13 @@ test('Sicredi bloqueia configuração ausente, identificador inválido e callbac
   const missing = new SicrediPixClient({ clientId: '', clientSecret: '', certificate: '', privateKey: '', pixKey: '' });
   await assert.rejects(missing.getAccessToken(), /Configure/);
 });
+test('Sicredi resolve URL de webhook via SICREDI_WEBHOOK_URL ou SERVICE_URL + SICREDI_WEBHOOK_SECRET e registra com PUT /webhook/:pixKey', async () => {
+  const secret = 's'.repeat(32);
+  const { client, calls } = setup();
+  client.serviceUrl = 'https://conflora.example.com';
+  client.webhookSecret = secret;
+  assert.equal(client.resolveWebhookUrl(), `https://conflora.example.com/webhooks/sicredi-pix/${secret}`);
+  const registered = await client.registerWebhook();
+  assert.equal(registered.webhookUrl, `https://conflora.example.com/webhooks/sicredi-pix/${secret}`);
+  assert.ok(calls.some(call => call.options.method === 'PUT' && call.url.endsWith('/webhook/52998224725')));
+});

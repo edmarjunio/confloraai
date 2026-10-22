@@ -238,6 +238,7 @@ function renderAdminHtml(storeConfig) {
           <option value="ENTREGADOR">ENTREGADOR (Entregas)</option>
         </select>
       </span>
+      <button type="button" class="header-btn" id="tabBtn-pix" onclick="openSicrediPixMonitor()" style="background:#f0fdf4; border:1px solid #32bcad; color:#0f766e; font-weight:800; display:none; align-items:center; gap:6px;">💠 Monitor PIX &amp; Simulador Sicredi</button>
       <button class="header-btn" onclick="openLoginModal()">Trocar operador</button>
       <button class="header-btn cf-notification-button" onclick="showTab('notifs')" aria-label="Notificações" title="Notificações não lidas"><svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg><span id="notifBadge">0</span></button>
       <button class="cf-danger-button" onclick="logoutAdmin()">Sair</button>
@@ -555,6 +556,164 @@ function renderAdminHtml(storeConfig) {
         </thead>
         <tbody id="todayOrdersBody"></tbody>
       </table></div>
+
+      <!-- PAINEL DE MONITORAMENTO PIX SICREDI & SIMULADOR DE WEBHOOK (ADMIN) -->
+      <section id="sicrediPixMonitorSection" hidden style="margin-top:28px; background:#ffffff; border:2px solid #99f6e4; border-radius:18px; padding:22px; box-shadow:0 8px 24px rgba(15, 118, 110, 0.07);">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:14px; margin-bottom:18px; border-bottom:1px solid #e2e8f0; padding-bottom:16px;">
+          <div>
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+              <span style="display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:10px; background:#ccfbf1; color:#0f766e; font-size:18px; font-weight:800;">💠</span>
+              <div>
+                <h3 style="margin:0; font-size:18px; font-weight:800; color:#0f172a;">Monitor de Pagamentos PIX (Sicredi) &amp; Simulador de Webhook</h3>
+                <p style="margin:3px 0 0; font-size:12px; color:#475569;">
+                  Monitore pedidos PIX (<strong>pendente</strong>, <strong>confirmado</strong> ou <strong>expirado</strong>) e simule o retorno do Webhook do Sicredi agora mesmo, antes de configurar os tokens de produção.
+                </p>
+              </div>
+            </div>
+            <div id="sicrediPixConfigStatusLine" style="margin-top:10px; display:flex; flex-wrap:wrap; gap:8px; font-size:11px; color:#334155;"></div>
+          </div>
+
+          <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+            <button type="button" class="action-btn" id="btnSimCreatePixOrder" onclick="createSimulatedSicrediOrder()" style="background:#0f766e; color:#ffffff; border:1px solid #0d9488; font-weight:800; padding:9px 14px; border-radius:10px; font-size:12px;">
+              ➕ 1. Gerar Pedido PIX Teste (Valor Travado)
+            </button>
+            <button type="button" class="action-btn" id="btnSimTriggerWebhook" onclick="triggerSimulatedSicrediWebhook('', 'confirm')" style="background:#15803d; color:#ffffff; border:1px solid #16a34a; font-weight:800; padding:9px 14px; border-radius:10px; font-size:12px;">
+              ⚡ 2. Simular Webhook Sicredi (Confirmar PIX)
+            </button>
+            <button type="button" class="action-btn" id="btnSimFullFlow" onclick="runFullSandboxSimulation()" style="background:#0284c7; color:#ffffff; border:1px solid #0369a1; font-weight:800; padding:9px 14px; border-radius:10px; font-size:12px;">
+              🧪 Testar Fluxo Completo (3 Etapas)
+            </button>
+            <button type="button" class="action-btn btn-gray" onclick="loadSicrediPixMonitor()" style="padding:9px 12px; border-radius:10px; font-size:12px;">
+              🔄 Atualizar
+            </button>
+          </div>
+        </div>
+
+        <!-- BARRA DE FILTRO POR DATA E EXPORTAÇÃO PARA CONCILIAÇÃO BANCÁRIA (CSV / PDF) -->
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; padding:12px 14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; margin-bottom:16px;">
+          <div style="display:flex; align-items:center; flex-wrap:wrap; gap:8px;">
+            <span style="font-size:12px; font-weight:800; color:#0f172a;">📅 Filtrar por Data:</span>
+            <button type="button" class="action-btn btn-gray" id="pixDatePreset-today" onclick="setSicrediPixDatePreset('today')" style="padding:5px 10px; font-size:11px; font-weight:700;">Hoje</button>
+            <button type="button" class="action-btn btn-gray" id="pixDatePreset-7d" onclick="setSicrediPixDatePreset('7d')" style="padding:5px 10px; font-size:11px; font-weight:700;">Últimos 7 dias</button>
+            <button type="button" class="action-btn btn-green" id="pixDatePreset-all" onclick="setSicrediPixDatePreset('all')" style="padding:5px 10px; font-size:11px; font-weight:700;">Todas as datas</button>
+            <div style="display:inline-flex; align-items:center; gap:6px; margin-left:4px;">
+              <label for="pixMonitorDateFrom" style="font-size:11px; font-weight:700; color:#475569;">De</label>
+              <input type="date" id="pixMonitorDateFrom" onchange="applySicrediPixDateFilter()" style="height:32px; padding:4px 8px; border:1px solid #cbd5e1; border-radius:8px; font-size:11px; background:#fff; color:#0f172a;" />
+              <label for="pixMonitorDateTo" style="font-size:11px; font-weight:700; color:#475569;">Até</label>
+              <input type="date" id="pixMonitorDateTo" onchange="applySicrediPixDateFilter()" style="height:32px; padding:4px 8px; border:1px solid #cbd5e1; border-radius:8px; font-size:11px; background:#fff; color:#0f172a;" />
+            </div>
+          </div>
+
+          <div style="display:flex; align-items:center; flex-wrap:wrap; gap:8px;">
+            <span style="font-size:11px; font-weight:700; color:#475569;">Conciliação Bancária:</span>
+            <button type="button" class="action-btn" id="btnExportPixCsv" onclick="exportSicrediPixReport('csv')" style="background:#ffffff; color:#0f766e; border:1px solid #0d9488; font-weight:800; padding:6px 12px; border-radius:8px; font-size:11px;">
+              📄 Exportar CSV
+            </button>
+            <button type="button" class="action-btn" id="btnExportPixPdf" onclick="exportSicrediPixReport('pdf')" style="background:#0f766e; color:#ffffff; border:1px solid #0d9488; font-weight:800; padding:6px 12px; border-radius:8px; font-size:11px;">
+              📑 Exportar PDF
+            </button>
+          </div>
+        </div>
+
+        <!-- CONTADOR VISUAL COMPARATIVO: PENDENTES VS. CONFIRMADOS (FIRESTORE) -->
+        <div id="pixPendingVsConfirmedWidget" style="margin-bottom:18px; padding:14px 16px; border-radius:12px; border:1px solid #cbd5e1; background:linear-gradient(90deg, #fffbeb 0%, #f0fdf4 100%);">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:10px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <strong style="font-size:13px; color:#0f172a;">⚖️ Contador Visual Firestore: Pendentes vs. Confirmados</strong>
+              <span id="pixVsPeriodTag" style="font-size:11px; background:#ffffff; border:1px solid #cbd5e1; padding:2px 8px; border-radius:999px; color:#475569; font-weight:700;">Todas as datas</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap; font-size:12px;">
+              <span style="color:#a16207; font-weight:800;">⏳ Pendentes: <strong id="pixVsPendenteLabel">0 (0%) · R$ 0,00</strong></span>
+              <span style="color:#cbd5e1;">|</span>
+              <span style="color:#15803d; font-weight:800;">✅ Confirmados: <strong id="pixVsConfirmadoLabel">0 (0%) · R$ 0,00</strong></span>
+            </div>
+          </div>
+          <div style="height:12px; width:100%; background:#e2e8f0; border-radius:999px; overflow:hidden; display:flex;">
+            <div id="pixVsBarPendente" style="width:50%; background:#f59e0b; transition:width 0.3s ease;" title="Proporção de PIX Pendentes"></div>
+            <div id="pixVsBarConfirmado" style="width:50%; background:#16a34a; transition:width 0.3s ease;" title="Proporção de PIX Confirmados"></div>
+          </div>
+        </div>
+
+        <!-- CARDS DE CONTAGEM E FILTRO POR STATUS (PENDENTE, CONFIRMADO, EXPIRADO) -->
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(190px, 1fr)); gap:12px; margin-bottom:18px;">
+          <button type="button" id="pixFilterBtn-todos" onclick="setSicrediPixFilter('todos')" style="text-align:left; padding:14px 16px; border-radius:12px; border:2px solid #0f766e; background:#f0fdfa; cursor:pointer;">
+            <div style="font-size:11px; font-weight:800; text-transform:uppercase; color:#0f766e;">📋 Todos os Pedidos PIX</div>
+            <div id="pixCountTotal" style="font-size:24px; font-weight:800; color:#0f172a; margin-top:4px;">0</div>
+            <div style="font-size:11px; color:#475569; margin-top:2px;">Clique para listar todos</div>
+          </button>
+
+          <button type="button" id="pixFilterBtn-pendente" onclick="setSicrediPixFilter('pendente')" style="text-align:left; padding:14px 16px; border-radius:12px; border:1px solid #fde047; background:#fefce8; cursor:pointer;">
+            <div style="font-size:11px; font-weight:800; text-transform:uppercase; color:#a16207;">⏳ Status: Pendente</div>
+            <div id="pixCountPendente" style="font-size:24px; font-weight:800; color:#854d0e; margin-top:4px;">0</div>
+            <div id="pixSumPendente" style="font-size:11px; color:#a16207; margin-top:2px;">R$ 0,00 aguardando webhook</div>
+          </button>
+
+          <button type="button" id="pixFilterBtn-confirmado" onclick="setSicrediPixFilter('confirmado')" style="text-align:left; padding:14px 16px; border-radius:12px; border:1px solid #86efac; background:#f0fdf4; cursor:pointer;">
+            <div style="font-size:11px; font-weight:800; text-transform:uppercase; color:#15803d;">✅ Status: Confirmado</div>
+            <div id="pixCountConfirmado" style="font-size:24px; font-weight:800; color:#166534; margin-top:4px;">0</div>
+            <div id="pixSumConfirmado" style="font-size:11px; color:#15803d; margin-top:2px;">R$ 0,00 conciliados</div>
+          </button>
+
+          <button type="button" id="pixFilterBtn-expirado" onclick="setSicrediPixFilter('expirado')" style="text-align:left; padding:14px 16px; border-radius:12px; border:1px solid #fca5a5; background:#fef2f2; cursor:pointer;">
+            <div style="font-size:11px; font-weight:800; text-transform:uppercase; color:#b91c1c;">⌛ Status: Expirado</div>
+            <div id="pixCountExpirado" style="font-size:24px; font-weight:800; color:#991b1b; margin-top:4px;">0</div>
+            <div id="pixSumExpirado" style="font-size:11px; color:#b91c1c; margin-top:2px;">R$ 0,00 vencidos (estoque livre)</div>
+          </button>
+        </div>
+
+        <!-- TELA VISUAL SIMULADORA DO RETORNO DO WEBHOOK SICREDI -->
+        <div id="sicrediWebhookSimulatorVisualizer" style="margin-bottom:20px; background:#0f172a; color:#f8fafc; border-radius:14px; padding:18px; border:1px solid #1e293b;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="background:#14b8a6; color:#042f2e; font-size:11px; font-weight:800; padding:3px 8px; border-radius:6px;">INSPEÇÃO EM TEMPO REAL</span>
+              <strong style="font-size:14px; color:#f1f5f9;">O que o Webhook do Sicredi devolve &amp; Como o Firebase atualiza</strong>
+            </div>
+            <span id="sicrediSimTimestamp" style="font-size:11px; color:#94a3b8;">Clique nos botões acima ou em um pedido abaixo para simular</span>
+          </div>
+          <div id="sicrediWebhookSimulatorBody" style="font-size:12px; color:#cbd5e1; line-height:1.55;">
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:12px;">
+              <div style="background:#1e293b; border:1px solid #334155; border-radius:10px; padding:12px;">
+                <div style="color:#38bdf8; font-weight:800; margin-bottom:6px;">1️⃣ Geração do QR Code (Valor Travado)</div>
+                <div style="color:#94a3b8;">O backend envia <code>PUT /api/v2/cob/:txid</code> com <code>"modalidadeAlteracao": 0</code>. O cliente não consegue alterar o valor no app do banco e o estoque fica reservado.</div>
+              </div>
+              <div style="background:#1e293b; border:1px solid #334155; border-radius:10px; padding:12px;">
+                <div style="color:#4ade80; font-weight:800; margin-bottom:6px;">2️⃣ Payload do Webhook Sicredi</div>
+                <div style="color:#94a3b8;">Assim que o cliente paga, o Sicredi dispara <code>POST /webhooks/sicredi-pix</code> enviando <code>{ "pix": [{ "endToEndId", "txid", "valor", "horario" }] }</code> e o servidor faz dupla checagem em <code>GET /pix/:endToEndId</code>.</div>
+              </div>
+              <div style="background:#1e293b; border:1px solid #334155; border-radius:10px; padding:12px;">
+                <div style="color:#facc15; font-weight:800; margin-bottom:6px;">3️⃣ Atualização no Firebase</div>
+                <div style="color:#94a3b8;">O pedido muda automaticamente de <strong>pendente</strong> (<code>AWAITING_PIX</code>) para <strong>confirmado</strong> (<code>CONFIRMED</code> / <code>APPROVED</code>) e o estoque reservado é baixado definitivamente.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- LISTA DE PEDIDOS PIX (PENDENTE, CONFIRMADO, EXPIRADO) -->
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+          <h4 style="margin:0; font-size:14px; font-weight:800; color:#0f172a;">
+            Pedidos PIX Monitorados (<span id="sicrediPixActiveFilterLabel">Todos</span>)
+          </h4>
+          <span style="font-size:11px; color:#64748b;">Dica: Você pode simular o pagamento via Webhook ou a expiração em qualquer pedido <strong>pendente</strong> da lista.</span>
+        </div>
+
+        <div class="table-scroll" tabindex="0" role="region" aria-label="Monitor de pagamentos PIX Sicredi">
+          <table id="sicrediPixOrdersTable">
+            <thead>
+              <tr>
+                <th>Pedido / Horário</th>
+                <th>Cliente</th>
+                <th>Identificadores Sicredi (txid / E2E)</th>
+                <th>Valor Travado</th>
+                <th>Status PIX</th>
+                <th>Ações / Simular Webhook</th>
+              </tr>
+            </thead>
+            <tbody id="sicrediPixOrdersBody">
+              <tr><td colspan="6" style="text-align:center; padding:20px; color:#64748b;">Carregando pagamentos PIX...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
 
     <!-- ABA 3: SOLICITAÇÕES DE ALTERAÇÃO - GIT DIFF (ADMIN E CAIXA) -->
@@ -1147,19 +1306,44 @@ function renderAdminHtml(storeConfig) {
         const button = document.getElementById('tabBtn-' + tab);
         if (button) button.style.display = visibleTabs.includes(tab) ? 'block' : 'none';
       }
+      const pixTabBtn = document.getElementById('tabBtn-pix');
+      if (pixTabBtn) pixTabBtn.style.display = isAdmin ? 'inline-flex' : 'none';
+      const pixSection = document.getElementById('sicrediPixMonitorSection');
+      if (pixSection) pixSection.hidden = !isAdmin;
       const salesFilter = document.getElementById('adminSalesFilterWrap');
       if (salesFilter) salesFilter.hidden = !isAdmin;
       const alterationsButton = document.getElementById('cashierAlterationsButton');
       if (alterationsButton) alterationsButton.hidden = ['VENDEDOR', 'ENTREGADOR'].includes(currentUser.role);
       const defaultTab = isDriver ? 'orders' : 'cashier';
-      const requestedTab = new URLSearchParams(location.search).get('tab') || defaultTab;
+      const rawRequestedTab = new URLSearchParams(location.search).get('tab') || defaultTab;
+      if (rawRequestedTab === 'pix' && isAdmin) {
+        showTab('cashier', { replace: true });
+        setTimeout(() => openSicrediPixMonitor(), 120);
+        return;
+      }
+      const requestedTab = rawRequestedTab;
       showTab(document.getElementById('tab-' + requestedTab) && (isAdmin || visibleTabs.includes(requestedTab) || ['diff', 'price', 'notifs'].includes(requestedTab)) ? requestedTab : defaultTab, { replace: true });
+    }
+
+    function openSicrediPixMonitor() {
+      if (!currentUser || currentUser.role !== 'ADMIN') return;
+      showTab('cashier');
+      const sec = document.getElementById('sicrediPixMonitorSection');
+      if (sec) {
+        sec.hidden = false;
+        sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      loadSicrediPixMonitor();
     }
 
     window.addEventListener('cf-admin-navigate', event => showTab(event.detail.tab));
     window.addEventListener('popstate', () => showTab(new URLSearchParams(location.search).get('tab') || 'cashier', { fromHistory: true }));
     function showTab(tab, options = {}) {
       if (!currentUser || !['ADMIN', 'CAIXA', 'VENDEDOR'].includes(currentUser.role)) return;
+      if (tab === 'pix' && currentUser.role === 'ADMIN') {
+        openSicrediPixMonitor();
+        return;
+      }
       const isAdmin = currentUser.role === 'ADMIN';
       const isStaffAuxiliaryTab = ['diff', 'price', 'notifs'].includes(tab);
       if (!isAdmin && tab !== 'cashier' && !(['CAIXA', 'VENDEDOR'].includes(currentUser.role) && ['diff', 'price', 'notifs'].includes(tab))) return;
@@ -1303,6 +1487,9 @@ function renderAdminHtml(storeConfig) {
         }
 
         renderTodayOrdersTable(currentCashierOrdersList);
+        if (isAdmin) {
+          loadSicrediPixMonitor();
+        }
       } catch (err) {
         document.getElementById('todayOrdersBody').innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:#b91c1c;">' + escapeHtml(err.message || 'Erro ao carregar vendas.') + '</td></tr>';
       }
@@ -3109,6 +3296,475 @@ function renderAdminHtml(storeConfig) {
         loadAdminProducts();
         loadCashierDaily();
       }
+    }
+
+    // 13. MONITOR PIX SICREDI & SIMULADOR INTERATIVO DE WEBHOOK
+    let sicrediPixOrdersCache = [];
+    let sicrediPixCurrentFilter = 'todos';
+    let sicrediPixDateFrom = '';
+    let sicrediPixDateTo = '';
+
+    function buildSicrediPixQueryParams(forExport = false) {
+      const params = new URLSearchParams();
+      if (sicrediPixDateFrom && sicrediPixDateTo) {
+        if (sicrediPixDateFrom === sicrediPixDateTo) {
+          params.set('date', sicrediPixDateFrom);
+        } else {
+          params.set('from', sicrediPixDateFrom);
+          params.set('to', sicrediPixDateTo);
+        }
+      } else if (sicrediPixDateFrom) {
+        params.set('from', sicrediPixDateFrom);
+      } else if (sicrediPixDateTo) {
+        params.set('to', sicrediPixDateTo);
+      } else if (forExport) {
+        params.set('date', 'all');
+      }
+      if (forExport && ['pendente', 'confirmado', 'expirado'].includes(sicrediPixCurrentFilter)) {
+        params.set('status', sicrediPixCurrentFilter);
+      }
+      const qs = params.toString();
+      return qs ? '?' + qs : '';
+    }
+
+    function setSicrediPixDatePreset(preset) {
+      const todayIso = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+      const fromInput = document.getElementById('pixMonitorDateFrom');
+      const toInput = document.getElementById('pixMonitorDateTo');
+      if (preset === 'today') {
+        sicrediPixDateFrom = todayIso;
+        sicrediPixDateTo = todayIso;
+      } else if (preset === '7d') {
+        const d = new Date();
+        d.setDate(d.getDate() - 6);
+        sicrediPixDateFrom = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(d);
+        sicrediPixDateTo = todayIso;
+      } else {
+        sicrediPixDateFrom = '';
+        sicrediPixDateTo = '';
+      }
+      if (fromInput) fromInput.value = sicrediPixDateFrom;
+      if (toInput) toInput.value = sicrediPixDateTo;
+
+      ['today', '7d', 'all'].forEach(k => {
+        const b = document.getElementById('pixDatePreset-' + k);
+        if (b) b.className = 'action-btn ' + (k === preset ? 'btn-green' : 'btn-gray');
+      });
+      loadSicrediPixMonitor();
+    }
+
+    function applySicrediPixDateFilter() {
+      sicrediPixDateFrom = document.getElementById('pixMonitorDateFrom')?.value || '';
+      sicrediPixDateTo = document.getElementById('pixMonitorDateTo')?.value || '';
+      ['today', '7d', 'all'].forEach(k => {
+        const b = document.getElementById('pixDatePreset-' + k);
+        if (b) b.className = 'action-btn btn-gray';
+      });
+      loadSicrediPixMonitor();
+    }
+
+    async function exportSicrediPixReport(format = 'csv') {
+      const ext = format === 'pdf' ? 'pdf' : 'csv';
+      const btnId = ext === 'pdf' ? 'btnExportPixPdf' : 'btnExportPixCsv';
+      const btn = document.getElementById(btnId);
+      const originalText = btn ? btn.textContent : '';
+      if (btn) { btn.disabled = true; btn.textContent = 'Gerando ' + ext.toUpperCase() + '...'; }
+      try {
+        const res = await window.ConfloraSession.apiFetch('/api/admin/sicredi-pix/export.' + ext + buildSicrediPixQueryParams(true));
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || 'Não foi possível exportar o relatório PIX.');
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const dateTag = sicrediPixDateFrom || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+        a.href = url;
+        a.download = 'conciliacao-pix-sicredi-' + dateTag + '.' + ext;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+      } catch (err) {
+        alert(err.message || 'Erro ao exportar relatório de conciliação PIX.');
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = originalText; }
+      }
+    }
+
+    async function loadSicrediPixMonitor() {
+      if (!currentUser || currentUser.role !== 'ADMIN') return;
+      const section = document.getElementById('sicrediPixMonitorSection');
+      if (section) section.hidden = false;
+
+      try {
+        const [statusRes, ordersRes] = await Promise.all([
+          window.ConfloraSession.apiFetch('/api/admin/sicredi-pix/status'),
+          window.ConfloraSession.apiFetch('/api/admin/sicredi-pix/orders' + buildSicrediPixQueryParams(false)),
+        ]);
+        const statusData = await statusRes.json().catch(() => ({}));
+        const ordersData = await ordersRes.json().catch(() => ({}));
+
+        const statusLine = document.getElementById('sicrediPixConfigStatusLine');
+        if (statusLine && statusData.success) {
+          const apiBadge = statusData.isOfficialApiConfigured
+            ? '<span style="background:#dcfce7; color:#166534; padding:3px 8px; border-radius:6px; font-weight:800;">🟢 Certificados mTLS &amp; Credenciais Configurados</span>'
+            : '<span style="background:#fef9c3; color:#854d0e; padding:3px 8px; border-radius:6px; font-weight:800;">🧪 Modo Simulação Pré-Tokens Ativo (Teste completo liberado sem credenciais)</span>';
+          statusLine.innerHTML = apiBadge +
+            '<span style="background:#f1f5f9; color:#334155; padding:3px 8px; border-radius:6px;"><strong>PIX_MODE:</strong> ' + escapeHtml(statusData.pixMode || 'SICREDI') + '</span>' +
+            '<span style="background:#f1f5f9; color:#334155; padding:3px 8px; border-radius:6px;"><strong>Chave:</strong> ' + escapeHtml(statusData.pixKey || 'Não definida') + '</span>' +
+            '<span style="background:#f1f5f9; color:#334155; padding:3px 8px; border-radius:6px;"><strong>TTL:</strong> ' + Number(statusData.ttlSeconds || 3600) + 's</span>';
+        }
+
+        if (!ordersRes.ok || !ordersData.success) {
+          throw new Error(ordersData.error || 'Não foi possível carregar os pedidos PIX.');
+        }
+
+        sicrediPixOrdersCache = Array.isArray(ordersData.orders) ? ordersData.orders : [];
+        const summary = ordersData.summary || { total: 0, pendente: 0, confirmado: 0, expirado: 0, totalPendenteValor: 0, totalConfirmadoValor: 0, totalExpiradoValor: 0 };
+        const fmtMoney = v => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        document.getElementById('pixCountTotal').textContent = String(summary.total || 0);
+        document.getElementById('pixCountPendente').textContent = String(summary.pendente || 0);
+        document.getElementById('pixCountConfirmado').textContent = String(summary.confirmado || 0);
+        document.getElementById('pixCountExpirado').textContent = String(summary.expirado || 0);
+
+        document.getElementById('pixSumPendente').textContent = fmtMoney(summary.totalPendenteValor) + ' aguardando webhook';
+        document.getElementById('pixSumConfirmado').textContent = fmtMoney(summary.totalConfirmadoValor) + ' conciliados';
+        document.getElementById('pixSumExpirado').textContent = fmtMoney(summary.totalExpiradoValor) + ' vencidos (estoque livre)';
+
+        // Atualiza Contador Visual Pendentes vs. Confirmados
+        const pvc = summary.pendentesVsConfirmados || {
+          pendente: summary.pendente || 0,
+          confirmado: summary.confirmado || 0,
+          pendentePercent: 0,
+          confirmadoPercent: 0,
+        };
+        const pendLabel = document.getElementById('pixVsPendenteLabel');
+        const confLabel = document.getElementById('pixVsConfirmadoLabel');
+        const barPend = document.getElementById('pixVsBarPendente');
+        const barConf = document.getElementById('pixVsBarConfirmado');
+        const periodTag = document.getElementById('pixVsPeriodTag');
+
+        if (pendLabel) pendLabel.textContent = pvc.pendente + ' (' + pvc.pendentePercent + '%) · ' + fmtMoney(summary.totalPendenteValor);
+        if (confLabel) confLabel.textContent = pvc.confirmado + ' (' + pvc.confirmadoPercent + '%) · ' + fmtMoney(summary.totalConfirmadoValor);
+        const totalActive = (pvc.pendente || 0) + (pvc.confirmado || 0);
+        if (barPend && barConf) {
+          if (totalActive === 0) {
+            barPend.style.width = '50%';
+            barConf.style.width = '50%';
+          } else {
+            barPend.style.width = pvc.pendentePercent + '%';
+            barConf.style.width = pvc.confirmadoPercent + '%';
+          }
+        }
+        if (periodTag) {
+          if (sicrediPixDateFrom && sicrediPixDateTo) {
+            periodTag.textContent = sicrediPixDateFrom === sicrediPixDateTo
+              ? 'Data: ' + sicrediPixDateFrom.split('-').reverse().join('/')
+              : sicrediPixDateFrom.split('-').reverse().join('/') + ' a ' + sicrediPixDateTo.split('-').reverse().join('/');
+          } else {
+            periodTag.textContent = 'Todas as datas';
+          }
+        }
+
+        renderSicrediPixOrdersTable();
+      } catch (err) {
+        const tbody = document.getElementById('sicrediPixOrdersBody');
+        if (tbody) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:18px; color:#b91c1c;">' + escapeHtml(err.message || 'Erro ao carregar monitor PIX.') + '</td></tr>';
+        }
+      }
+    }
+
+    function setSicrediPixFilter(filter) {
+      sicrediPixCurrentFilter = filter || 'todos';
+      const labels = { todos: 'Todos', pendente: 'Pendentes', confirmado: 'Confirmados', expirado: 'Expirados' };
+      const labelEl = document.getElementById('sicrediPixActiveFilterLabel');
+      if (labelEl) labelEl.textContent = labels[sicrediPixCurrentFilter] || 'Todos';
+
+      ['todos', 'pendente', 'confirmado', 'expirado'].forEach(key => {
+        const btn = document.getElementById('pixFilterBtn-' + key);
+        if (!btn) return;
+        btn.style.boxShadow = key === sicrediPixCurrentFilter ? '0 0 0 3px rgba(15, 118, 110, 0.28)' : 'none';
+      });
+      renderSicrediPixOrdersTable();
+    }
+
+    function renderSicrediPixOrdersTable() {
+      const tbody = document.getElementById('sicrediPixOrdersBody');
+      if (!tbody) return;
+      const filtered = sicrediPixCurrentFilter === 'todos'
+        ? sicrediPixOrdersCache
+        : sicrediPixOrdersCache.filter(o => o.pixStatus === sicrediPixCurrentFilter);
+
+      if (!filtered.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:24px; color:#64748b;">Nenhum pedido PIX com status <strong>' + escapeHtml(sicrediPixCurrentFilter) + '</strong> no momento. Clique em <strong>"➕ 1. Gerar Pedido PIX Teste"</strong> acima para criar um pedido agora.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = '';
+      filtered.forEach(order => {
+        const tr = document.createElement('tr');
+        const fmtMoney = 'R$ ' + Number(order.pixAmount || order.total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const createdStr = order.createdAt ? new Date(order.createdAt).toLocaleString('pt-BR') : '—';
+        const paidStr = order.paidAt ? new Date(order.paidAt).toLocaleTimeString('pt-BR') : '';
+
+        let badgeHtml = '';
+        if (order.pixStatus === 'confirmado') {
+          badgeHtml = '<span style="display:inline-flex; align-items:center; gap:4px; background:#dcfce7; color:#166534; border:1px solid #86efac; padding:4px 10px; border-radius:999px; font-size:11px; font-weight:800; text-transform:uppercase;">✅ confirmado</span>' +
+            (paidStr ? '<div style="font-size:10px; color:#15803d; margin-top:3px;">Pago às ' + escapeHtml(paidStr) + '</div>' : '');
+        } else if (order.pixStatus === 'expirado') {
+          badgeHtml = '<span style="display:inline-flex; align-items:center; gap:4px; background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; padding:4px 10px; border-radius:999px; font-size:11px; font-weight:800; text-transform:uppercase;">⌛ expirado</span>' +
+            '<div style="font-size:10px; color:#b91c1c; margin-top:3px;">Reserva liberada</div>';
+        } else {
+          badgeHtml = '<span style="display:inline-flex; align-items:center; gap:4px; background:#fef9c3; color:#854d0e; border:1px solid #fde047; padding:4px 10px; border-radius:999px; font-size:11px; font-weight:800; text-transform:uppercase;">⏳ pendente</span>' +
+            '<div style="font-size:10px; color:#a16207; margin-top:3px;">Aguardando Webhook</div>';
+        }
+
+        const txidShort = order.txid ? order.txid.slice(0, 14) + '…' + order.txid.slice(-6) : 'Sem txid';
+        const e2eShort = order.endToEndId ? order.endToEndId.slice(0, 14) + '…' + order.endToEndId.slice(-6) : 'Aguardando banco';
+
+        const actionsHtml = order.pixStatus === 'pendente'
+          ? \`<div style="display:flex; flex-wrap:wrap; gap:6px;">
+              <button type="button" class="action-btn btn-green" style="padding:5px 10px; font-size:11px;" onclick="triggerSimulatedSicrediWebhook('\${escapeHtml(order.id)}', 'confirm')">⚡ Simular Webhook Pago</button>
+              <button type="button" class="action-btn btn-red" style="padding:5px 10px; font-size:11px;" onclick="triggerSimulatedSicrediWebhook('\${escapeHtml(order.id)}', 'expire')">⌛ Simular Expiração</button>
+              <button type="button" class="action-btn btn-gray" style="padding:5px 10px; font-size:11px;" onclick="inspectSicrediPixOrder('\${escapeHtml(order.id)}')">🔍 Ver QR / JSON</button>
+            </div>\`
+          : \`<div style="display:flex; flex-wrap:wrap; gap:6px;">
+              <button type="button" class="action-btn btn-gray" style="padding:5px 10px; font-size:11px;" onclick="inspectSicrediPixOrder('\${escapeHtml(order.id)}')">🔍 Ver Payload / Detalhes</button>
+            </div>\`;
+
+        tr.innerHTML = \`
+          <td>
+            <strong>#\${escapeHtml(order.ticketNumber || order.id.slice(-6))}</strong>
+            <div style="font-size:11px; color:#64748b;">\${escapeHtml(createdStr)}</div>
+          </td>
+          <td>
+            <strong>\${escapeHtml(order.customerName)}</strong>
+            <div style="font-size:11px; color:#64748b;">\${escapeHtml(order.customerPhone || 'Balcão')}</div>
+          </td>
+          <td style="font-family:monospace; font-size:11px;">
+            <div><strong>txid:</strong> <span title="\${escapeHtml(order.txid)}">\${escapeHtml(txidShort)}</span></div>
+            <div style="color:#475569;"><strong>E2E:</strong> <span title="\${escapeHtml(order.endToEndId)}">\${escapeHtml(e2eShort)}</span></div>
+            <div style="color:#0f766e; font-weight:700;">🔒 modalidadeAlteracao: 0</div>
+          </td>
+          <td>
+            <strong style="color:#0f172a; font-size:14px;">\${fmtMoney}</strong>
+            <div style="font-size:10px; color:#15803d; font-weight:700;">Valor travado no QR</div>
+          </td>
+          <td>\${badgeHtml}</td>
+          <td>\${actionsHtml}</td>
+        \`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function createSimulatedSicrediOrder() {
+      const btn = document.getElementById('btnSimCreatePixOrder');
+      if (btn) { btn.disabled = true; btn.textContent = 'Gerando cobrança PIX...'; }
+      try {
+        const res = await window.ConfloraSession.apiFetch('/api/admin/sicredi-pix/simulate-order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            customerName: 'Cliente Teste Sicredi #' + Math.floor(100 + Math.random() * 900),
+            customerPhone: '5564999112233',
+            productName: 'Palmeira Rabo de Raposa (Teste PIX Sicredi)',
+            unitPrice: 65,
+            quantity: 1,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || 'Falha ao gerar pedido PIX de teste.');
+
+        const ord = data.order;
+        const body = document.getElementById('sicrediWebhookSimulatorBody');
+        document.getElementById('sicrediSimTimestamp').textContent = 'Cobrança gerada às ' + new Date().toLocaleTimeString('pt-BR');
+        if (body) {
+          body.innerHTML = \`
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:14px; align-items:start;">
+              <div style="background:#1e293b; border:1px solid #334155; border-radius:10px; padding:14px; text-align:center;">
+                <div style="color:#38bdf8; font-weight:800; margin-bottom:8px;">1️⃣ QR Code Dinâmico Gerado (Status: PENDENTE)</div>
+                \${ord.qrCodeBase64 ? \`<img src="\${escapeHtml(ord.qrCodeBase64)}" alt="QR Code PIX Sicredi" style="width:160px; height:160px; border-radius:8px; background:#fff; padding:6px; margin:0 auto 8px; display:block;" />\` : ''}
+                <div style="font-size:13px; font-weight:800; color:#4ade80;">Valor Travado: R$ \${Number(ord.pixAmount || 0).toFixed(2).replace('.', ',')}</div>
+                <div style="font-size:11px; color:#94a3b8; margin-top:4px;">Pedido <strong>#\${escapeHtml(ord.ticketNumber)}</strong> aguarda o Webhook.</div>
+                <button type="button" class="action-btn btn-green" style="margin-top:10px; width:100%; justify-content:center;" onclick="triggerSimulatedSicrediWebhook('\${escapeHtml(ord.id)}', 'confirm')">
+                  ⚡ Disparar Webhook do Sicredi para este Pedido
+                </button>
+              </div>
+              <div style="background:#1e293b; border:1px solid #334155; border-radius:10px; padding:14px;">
+                <div style="color:#facc15; font-weight:800; margin-bottom:6px;">Requisição enviada ao Sicredi (PUT \${escapeHtml(data.cobRequest?.endpoint || '/api/v2/cob/:txid')})</div>
+                <pre style="margin:0; padding:10px; background:#090d16; border-radius:8px; color:#a7f3d0; font-size:11px; overflow-x:auto;">\${escapeHtml(JSON.stringify(data.cobRequest?.payload || {}, null, 2))}</pre>
+                <div style="margin-top:8px; font-size:11px; color:#cbd5e1;">
+                  <strong>PIX Copia e Cola:</strong>
+                  <input type="text" readonly value="\${escapeHtml(ord.pixCopiaECola || '')}" style="width:100%; margin-top:4px; padding:6px 8px; border-radius:6px; border:1px solid #334155; background:#090d16; color:#e2e8f0; font-family:monospace; font-size:11px;" onclick="this.select()" />
+                </div>
+              </div>
+            </div>
+          \`;
+        }
+        await loadSicrediPixMonitor();
+      } catch (err) {
+        alert(err.message || 'Erro ao criar pedido PIX de teste.');
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '➕ 1. Gerar Pedido PIX Teste (Valor Travado)'; }
+      }
+    }
+
+    async function triggerSimulatedSicrediWebhook(orderId = '', action = 'confirm') {
+      const btn = document.getElementById('btnSimTriggerWebhook');
+      if (btn) { btn.disabled = true; btn.textContent = 'Simulando Webhook...'; }
+      try {
+        const res = await window.ConfloraSession.apiFetch('/api/admin/sicredi-pix/simulate-webhook', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId, action }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || 'Não foi possível simular o webhook.');
+
+        const body = document.getElementById('sicrediWebhookSimulatorBody');
+        document.getElementById('sicrediSimTimestamp').textContent = 'Webhook simulado às ' + new Date().toLocaleTimeString('pt-BR');
+
+        if (body) {
+          if (action === 'expire') {
+            body.innerHTML = \`
+              <div style="background:#1e293b; border:1px solid #ef4444; border-radius:10px; padding:14px;">
+                <div style="color:#f87171; font-weight:800; margin-bottom:6px;">⌛ Simulação de Expiração de Cobrança PIX Concluída</div>
+                <p style="margin:0 0 8px; color:#e2e8f0;">O pedido <strong>#\${escapeHtml(data.after?.ticketNumber || '')}</strong> mudou de <strong>\${escapeHtml(data.before?.pixStatus)}</strong> para <strong>\${escapeHtml(data.after?.pixStatus)}</strong> (<code>\${escapeHtml(data.after?.rawStatus)}</code>) e o estoque reservado foi liberado no Firebase.</p>
+                <pre style="margin:0; padding:10px; background:#090d16; border-radius:8px; color:#fca5a5; font-size:11px; overflow-x:auto;">\${escapeHtml(JSON.stringify(data.webhookPayload || {}, null, 2))}</pre>
+              </div>
+            \`;
+          } else {
+            body.innerHTML = \`
+              <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:12px;">
+                <div style="background:#1e293b; border:1px solid #334155; border-radius:10px; padding:12px;">
+                  <div style="color:#4ade80; font-weight:800; margin-bottom:6px;">1️⃣ Payload Recebido no Webhook (POST /webhooks/sicredi-pix)</div>
+                  <pre style="margin:0; padding:10px; background:#090d16; border-radius:8px; color:#86efac; font-size:11px; overflow-x:auto;">\${escapeHtml(JSON.stringify(data.webhookPayload || {}, null, 2))}</pre>
+                </div>
+                <div style="background:#1e293b; border:1px solid #334155; border-radius:10px; padding:12px;">
+                  <div style="color:#38bdf8; font-weight:800; margin-bottom:6px;">2️⃣ Dupla Checagem no Sicredi (GET \${escapeHtml(data.bankVerificationEndpoint || '/api/v2/pix/:e2e')})</div>
+                  <pre style="margin:0; padding:10px; background:#090d16; border-radius:8px; color:#7dd3fc; font-size:11px; overflow-x:auto;">\${escapeHtml(JSON.stringify(data.bankVerification || {}, null, 2))}</pre>
+                </div>
+                <div style="background:#1e293b; border:1px solid #22c55e; border-radius:10px; padding:12px;">
+                  <div style="color:#facc15; font-weight:800; margin-bottom:6px;">3️⃣ Transição de Status no Firebase</div>
+                  <div style="padding:10px; background:#090d16; border-radius:8px; font-size:11px; color:#e2e8f0;">
+                    <div><strong>Pedido:</strong> #\${escapeHtml(data.after?.ticketNumber || '')}</div>
+                    <div style="margin-top:4px;"><strong>Antes:</strong> <span style="color:#fde047;">\${escapeHtml(data.before?.pixStatus?.toUpperCase())} (\${escapeHtml(data.before?.rawStatus)})</span></div>
+                    <div style="margin-top:4px;"><strong>Depois:</strong> <span style="color:#4ade80; font-weight:800;">\${escapeHtml(data.after?.pixStatus?.toUpperCase())} (\${escapeHtml(data.after?.rawStatus)} / \${escapeHtml(data.after?.paymentStatus)})</span></div>
+                    <div style="margin-top:4px;"><strong> auditado via:</strong> <code>\${escapeHtml(data.after?.verifiedVia || 'SICREDI_PIX_WEBHOOK')}</code></div>
+                    <div style="margin-top:4px;"><strong>Evento Webhook:</strong> <code>\${escapeHtml(data.event?.status || 'DONE')}</code></div>
+                  </div>
+                </div>
+              </div>
+            \`;
+          }
+        }
+        await loadSicrediPixMonitor();
+        await loadCashierDaily();
+      } catch (err) {
+        alert(err.message || 'Erro ao simular webhook Sicredi.');
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '⚡ 2. Simular Webhook Sicredi (Confirmar PIX)'; }
+      }
+    }
+
+    async function runFullSandboxSimulation() {
+      const btn = document.getElementById('btnSimFullFlow');
+      if (btn) { btn.disabled = true; btn.textContent = 'Executando 3 etapas...'; }
+      try {
+        const res = await window.ConfloraSession.apiFetch('/api/admin/sicredi-pix/simulate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productName: 'Muda de Ipê Amarelo (Simulação Completa)', unitPrice: 45, quantity: 2 }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || 'Falha na simulação completa.');
+
+        const s1 = data.steps?.step1_qrCodeGeneration || {};
+        const s2 = data.steps?.step2_webhookReception || {};
+        const s3 = data.steps?.step3_firebaseUpdate || {};
+
+        document.getElementById('sicrediSimTimestamp').textContent = 'Fluxo completo validado às ' + new Date().toLocaleTimeString('pt-BR');
+        const body = document.getElementById('sicrediWebhookSimulatorBody');
+        if (body) {
+          body.innerHTML = \`
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(270px, 1fr)); gap:12px;">
+              <div style="background:#1e293b; border:1px solid #38bdf8; border-radius:10px; padding:12px;">
+                <div style="color:#38bdf8; font-weight:800; margin-bottom:6px;">✅ Etapa 1: QR Code &amp; Valor Travado</div>
+                \${s1.qrCodeBase64 ? \`<img src="\${escapeHtml(s1.qrCodeBase64)}" alt="QR Code Simulado" style="width:120px; height:120px; background:#fff; padding:4px; border-radius:6px; display:block; margin-bottom:8px;" />\` : ''}
+                <div style="font-size:11px;"><strong>Valor Travado:</strong> R$ \${Number(s1.lockedAmount || 0).toFixed(2)} (<code>modalidadeAlteracao: \${s1.modalidadeAlteracao}</code>)</div>
+                <div style="font-size:11px;"><strong>Status Inicial:</strong> <code>\${escapeHtml(s1.statusBeforeWebhook)}</code></div>
+                <div style="font-size:11px;"><strong>Estoque Antes do Webhook:</strong> Total \${s1.stockBeforeWebhook?.stockQuantity} | Reservado \${s1.stockBeforeWebhook?.reservedQuantity}</div>
+              </div>
+              <div style="background:#1e293b; border:1px solid #4ade80; border-radius:10px; padding:12px;">
+                <div style="color:#4ade80; font-weight:800; margin-bottom:6px;">✅ Etapa 2: Recepção do Webhook Sicredi</div>
+                <div style="font-size:11px; margin-bottom:4px;">Payload recebido em <code>POST /webhooks/sicredi-pix</code>:</div>
+                <pre style="margin:0; padding:8px; background:#090d16; border-radius:6px; color:#86efac; font-size:10px; overflow-x:auto;">\${escapeHtml(JSON.stringify(s2.payloadReceived || {}, null, 2))}</pre>
+                <div style="font-size:11px; margin-top:6px;"><strong>Dupla Checagem GET /pix/:e2e:</strong> \${s2.bankCheckPerformed ? 'Confirmada ✓' : 'Falhou'} | Evento: <code>\${escapeHtml(s2.eventStatus)}</code></div>
+              </div>
+              <div style="background:#1e293b; border:1px solid #facc15; border-radius:10px; padding:12px;">
+                <div style="color:#facc15; font-weight:800; margin-bottom:6px;">✅ Etapa 3: Atualização no Firebase</div>
+                <div style="font-size:11px;"><strong>Novo Status Pedido:</strong> <span style="color:#4ade80; font-weight:800;">\${escapeHtml(s3.statusAfterWebhook)} (\${escapeHtml(s3.paymentStatusAfterWebhook)})</span></div>
+                <div style="font-size:11px; margin-top:4px;"><strong>Verificado via:</strong> <code>\${escapeHtml(s3.verifiedVia)}</code></div>
+                <div style="font-size:11px; margin-top:4px;"><strong>E2E ID:</strong> <code style="word-break:break-all;">\${escapeHtml(s3.paymentTransactionId)}</code></div>
+                <div style="font-size:11px; margin-top:4px;"><strong>Estoque Após Webhook:</strong> Total \${s3.stockAfterWebhook?.stockQuantity} (Baixado!) | Reservado \${s3.stockAfterWebhook?.reservedQuantity}</div>
+              </div>
+            </div>
+          \`;
+        }
+      } catch (err) {
+        alert(err.message || 'Erro ao executar simulação completa.');
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '🧪 Testar Fluxo Completo (3 Etapas)'; }
+      }
+    }
+
+    function inspectSicrediPixOrder(orderId) {
+      const ord = sicrediPixOrdersCache.find(o => String(o.id) === String(orderId));
+      if (!ord) return;
+      const body = document.getElementById('sicrediWebhookSimulatorBody');
+      if (!body) return;
+      document.getElementById('sicrediSimTimestamp').textContent = 'Inspecionando pedido #' + (ord.ticketNumber || ord.id.slice(-6));
+      const simulatedWebhookPreview = {
+        pix: [{
+          endToEndId: ord.endToEndId || 'E0118152120261022SIMULACAO000001',
+          txid: ord.txid || 'TXID_GERADO_PELO_BACKEND',
+          valor: Number(ord.pixAmount || ord.total || 0).toFixed(2),
+          horario: ord.paidAt || new Date().toISOString(),
+        }],
+      };
+      body.innerHTML = \`
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:12px; align-items:start;">
+          <div style="background:#1e293b; border:1px solid #334155; border-radius:10px; padding:12px; text-align:center;">
+            <div style="color:#38bdf8; font-weight:800; margin-bottom:6px;">Pedido #\${escapeHtml(ord.ticketNumber)} (\${escapeHtml(ord.pixStatus.toUpperCase())})</div>
+            \${ord.qrCodeBase64 ? \`<img src="\${escapeHtml(ord.qrCodeBase64)}" alt="QR Code PIX" style="width:140px; height:140px; background:#fff; padding:6px; border-radius:8px; margin:0 auto 8px; display:block;" />\` : '<div style="padding:20px; color:#94a3b8;">Sem imagem QR Code</div>'}
+            <div style="font-size:12px; font-weight:800; color:#4ade80;">R$ \${Number(ord.pixAmount || ord.total || 0).toFixed(2).replace('.', ',')}</div>
+            \${ord.pixStatus === 'pendente' ? \`<button type="button" class="action-btn btn-green" style="margin-top:8px; width:100%; justify-content:center;" onclick="triggerSimulatedSicrediWebhook('\${escapeHtml(ord.id)}', 'confirm')">⚡ Simular Webhook Pago Agora</button>\` : ''}
+          </div>
+          <div style="background:#1e293b; border:1px solid #334155; border-radius:10px; padding:12px;">
+            <div style="color:#4ade80; font-weight:800; margin-bottom:6px;">Payload do Webhook Sicredi (\${ord.pixStatus === 'confirmado' ? 'Recebido' : 'Formato Esperado'})</div>
+            <pre style="margin:0; padding:10px; background:#090d16; border-radius:8px; color:#86efac; font-size:11px; overflow-x:auto;">\${escapeHtml(JSON.stringify(simulatedWebhookPreview, null, 2))}</pre>
+          </div>
+          <div style="background:#1e293b; border:1px solid #334155; border-radius:10px; padding:12px;">
+            <div style="color:#facc15; font-weight:800; margin-bottom:6px;">Estado Atual no Firebase (orders/\${escapeHtml(ord.id.slice(0, 8))}…)</div>
+            <pre style="margin:0; padding:10px; background:#090d16; border-radius:8px; color:#fde047; font-size:11px; overflow-x:auto;">\${escapeHtml(JSON.stringify({
+              id: ord.id,
+              pixStatus: ord.pixStatus,
+              status: ord.rawStatus,
+              paymentStatus: ord.paymentStatus,
+              pixMode: ord.pixMode,
+              txid: ord.txid,
+              endToEndId: ord.endToEndId,
+              verifiedVia: ord.verifiedVia,
+              paidAt: ord.paidAt,
+              pixExpiresAt: ord.pixExpiresAt,
+            }, null, 2))}</pre>
+          </div>
+        </div>
+      \`;
+      document.getElementById('sicrediWebhookSimulatorVisualizer')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
     // INICIALIZAÇÃO

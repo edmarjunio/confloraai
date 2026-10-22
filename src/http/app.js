@@ -892,7 +892,9 @@ function createApp({
         }
       }
       let pixData = null;
-      const manualPix = resolvedPaymentMethod === 'PIX' ? require('../orders/pix-mode').manualPixSettings() : null;
+      const manualPix = resolvedPaymentMethod === 'PIX' && require('../orders/pix-mode').pixMode() === 'MANUAL'
+        ? require('../orders/pix-mode').manualPixSettings()
+        : null;
       if (manualPix) require('../orders/manual-pix.routes').orderAccessToken({ id: orderId });
       if (resolvedPaymentMethod === 'PIX' && !manualPix) {
         if (!sicrediPixClient.isOfficialApiConfigured) {
@@ -941,7 +943,7 @@ function createApp({
         ...(resolvedPaymentMethod === 'PIX' ? { pixMode: manualPix ? 'MANUAL' : 'SICREDI' } : {}),
         ...(manualPix ? { manualPix, paymentReviewStatus: 'AWAITING_PAYMENT' } : {}),
         ...(pixData ? { pixData, pixProvider: 'SICREDI', paymentProvider: 'SICREDI' } : {}),
-      }, { requirePersistence: resolvedPaymentMethod === 'PIX' && !(manualPix && messageService.firestoreRepo.isInMemory && !messageService.firestoreRepo.firestore), reserveInventory: true });
+      }, { requirePersistence: resolvedPaymentMethod === 'PIX' && !(messageService.firestoreRepo.isInMemory && !messageService.firestoreRepo.firestore), reserveInventory: true });
 
       let receiptDelivery = { sent: false, reason: 'Envio não solicitado.' };
       if (order.source === 'WEB_CATALOG') {

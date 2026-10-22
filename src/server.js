@@ -72,8 +72,11 @@ async function bootstrap() {
     messageService.metaAgentService = metaAgentService;
   }
 
-  // 3. Aplicação Express
-  const app = createApp({ messageService, taskQueueClient });
+  // 3. Aplicação Express e Integração PIX Sicredi
+  const { SicrediPixClient } = require('./integrations/sicredi-pix.client');
+  const { pixMode } = require('./orders/pix-mode');
+  const sicrediClient = new SicrediPixClient();
+  const app = createApp({ messageService, taskQueueClient, sicrediClient });
 
   const host = '0.0.0.0';
   const primaryPort = Number(process.env.PORT) || 3000;
@@ -85,6 +88,13 @@ async function bootstrap() {
     console.log(`👉 Catálogo / Loja : http://localhost:${primaryPort}`);
     console.log(`👉 Painel Caixa PDV: http://localhost:${primaryPort}/pdv`);
     console.log(`==================================================\n`);
+
+    const resolvedWebhookUrl = sicrediClient.resolveWebhookUrl();
+    if (pixMode() === 'SICREDI' && sicrediClient.isOfficialApiConfigured && resolvedWebhookUrl.startsWith('https://')) {
+      sicrediClient.registerWebhook(resolvedWebhookUrl)
+        .then(() => Logger.info('Webhook PIX Sicredi sincronizado com sucesso.', { webhookUrl: resolvedWebhookUrl }))
+        .catch((err) => Logger.warn('Não foi possível sincronizar automaticamente o Webhook PIX Sicredi na inicialização', { error: err.message }));
+    }
   });
 
   server.on('error', error => { Logger.error('Erro no servidor HTTP', error); process.exitCode = 1; });

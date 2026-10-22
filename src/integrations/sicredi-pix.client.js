@@ -33,11 +33,21 @@ class SicrediPixClient {
     authUrl = process.env.SICREDI_OAUTH_URL || 'https://api-pix.sicredi.com.br/oauth/token',
     clientId = process.env.SICREDI_CLIENT_ID || '', clientSecret = process.env.SICREDI_CLIENT_SECRET || '',
     certificate = process.env.SICREDI_CERT_PEM || '', privateKey = process.env.SICREDI_KEY_PEM || '',
-    pixKey = process.env.SICREDI_PIX_KEY || process.env.PIX_KEY || '', request = requestJson,
+    pixKey = process.env.SICREDI_PIX_KEY || process.env.PIX_KEY || process.env.STORE_PIX_KEY || '',
+    beneficiario = process.env.SICREDI_BENEFICIARIO || process.env.PIX_TITULAR || 'Conflora Horta e Viveiro',
+    cidade = process.env.SICREDI_CIDADE || 'Mineiros',
+    webhookUrl = process.env.SICREDI_WEBHOOK_URL || '',
+    webhookSecret = process.env.SICREDI_WEBHOOK_SECRET || '',
+    serviceUrl = process.env.SERVICE_URL || '',
+    defaultTtlSeconds = Number(process.env.PIX_PAYMENT_TTL_SECONDS) || 3600,
+    request = requestJson,
   } = {}) {
     Object.assign(this, {
       baseUrl: baseUrl.replace(/\/$/, ''), authUrl, clientId, clientSecret,
-      certificate: normalizePem(certificate), privateKey: normalizePem(privateKey), pixKey, request,
+      certificate: normalizePem(certificate), privateKey: normalizePem(privateKey), pixKey,
+      beneficiario, cidade, webhookUrl, webhookSecret, serviceUrl,
+      defaultTtlSeconds: Math.min(86400, Math.max(300, Number(defaultTtlSeconds) || 3600)),
+      request,
     });
     this.tokenExpiresAt = 0;
   }
@@ -45,6 +55,22 @@ class SicrediPixClient {
     return Boolean(this.clientId && this.clientSecret && this.certificate && this.privateKey && this.pixKey);
   }
   generateTxId() { return randomBytes(16).toString('hex').toUpperCase(); }
+  resolveWebhookUrl(explicitUrl) {
+    if (explicitUrl !== undefined) return String(explicitUrl || '').trim();
+    const secret = String(this.webhookSecret || process.env.SICREDI_WEBHOOK_SECRET || '').trim();
+    const configuredUrl = String(this.webhookUrl || process.env.SICREDI_WEBHOOK_URL || '').trim().replace(/\/$/, '');
+    if (configuredUrl) {
+      if (secret.length >= 32 && /\/webhooks\/sicredi-pix$/i.test(configuredUrl)) {
+        return `${configuredUrl}/${encodeURIComponent(secret)}`;
+      }
+      return configuredUrl;
+    }
+    const baseService = String(this.serviceUrl || process.env.SERVICE_URL || '').trim().replace(/\/$/, '');
+    if (!baseService) return '';
+    return secret.length >= 32
+      ? `${baseService}/webhooks/sicredi-pix/${encodeURIComponent(secret)}`
+      : `${baseService}/webhooks/sicredi-pix`;
+  }
   async getAccessToken() {
     if (!this.isOfficialApiConfigured) { throw new Error('Configure credenciais, certificado, chave privada e chave Pix do Sicredi.'); }
     if (this.token && Date.now() < this.tokenExpiresAt) { return this.token; }
@@ -72,10 +98,11 @@ class SicrediPixClient {
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
   }
-  async createCharge({ amount, txid = this.generateTxId(), ticketNumber = '', expiresInSeconds = 3600 }) {
+  async createCharge({ amount, txid = this.generateTxId(), ticketNumber = '', expiresInSeconds = this.defaultTtlSeconds }) {
     if (!Number.isFinite(amount) || amount <= 0 || !/^[a-zA-Z0-9]{26,35}$/.test(txid) || !this.pixKey) { throw new Error('Configure a chave Pix Sicredi e informe um valor válido.'); }
+    const ttl = Math.min(86400, Math.max(300, Number(expiresInSeconds) || this.defaultTtlSeconds || 3600));
     const requestBody = {
-      calendario: { expiracao: Math.min(86400, Math.max(300, Number(expiresInSeconds) || 3600)) },
+      calendario: { expiracao: ttl },
       valor: { original: amount.toFixed(2), modalidadeAlteracao: 0 },
       chave: this.pixKey,
       solicitacaoPagador: `Pedido Conflora #${ticketNumber}`,
@@ -97,6 +124,9 @@ class SicrediPixClient {
       txid,
       pixCopiaECola: data.pixCopiaECola,
       amount,
+      expiresInSeconds: ttl,
+      beneficiario: this.beneficiario,
+      cidade: this.cidade,
       provider: 'SICREDI',
       mode: 'API_SICREDI_FIXED_AMOUNT',
       qrCodeBase64: await QRCode.toDataURL(data.pixCopiaECola, { width: 320, margin: 2 }),
@@ -108,11 +138,15 @@ class SicrediPixClient {
     const raw = await this.call('GET', '/pix/' + encodeURIComponent(endToEndId));
     return { endToEndId, raw, isPaid: raw.endToEndId === endToEndId };
   }
-  async registerWebhook(webhookUrl) {
+  async registerWebhook(webhookUrl = this.resolveWebhookUrl()) {
     let parsedUrl;
     try { parsedUrl = new URL(webhookUrl); } catch { throw new Error('Informe uma URL pública válida para o webhook Sicredi.'); }
     if (parsedUrl.protocol !== 'https:' || !this.pixKey) { throw new Error('O webhook Sicredi exige URL HTTPS e chave Pix Sicredi configurada.'); }
     return this.call('PUT', '/webhook/' + encodeURIComponent(this.pixKey), { webhookUrl: parsedUrl.toString() });
+  }
+  async getWebhook() {
+    if (!this.pixKey) { throw new Error('Configure a chave Pix Sicredi para consultar o webhook.'); }
+    return this.call('GET', '/webhook/' + encodeURIComponent(this.pixKey));
   }
 }
 module.exports = { SicrediPixClient, requestJson, normalizePem };

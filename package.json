@@ -15,6 +15,7 @@
     "test": "npm run test:dev",
     "test:dev": "node --import ./scripts/test-env.js --test test/*.test.js",
     "test:pix": "node --import ./scripts/test-env.js --test test/order-integrity.test.js test/pdv.test.js test/manual-pix.test.js",
+    "test:sicredi": "node --import ./scripts/test-env.js --test test/sicredi-client.test.js test/sicredi-full-flow.test.js",
     "test:pdv": "node --import ./scripts/test-env.js --test test/pdv.test.js",
     "test:whatsapp": "node --import ./scripts/test-env.js --test test/whatsapp-flow.test.js",
     "check:whatsapp": "node scripts/check-whatsapp-config.js",
