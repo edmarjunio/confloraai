@@ -242,14 +242,16 @@ export function createAdmin(state) {
     form.elements.fee.min = "0";
     for (const [method, label] of [
       ["PIX", "PIX"],
-      ["CARD", "Cartão"],
       ["CASH", "Dinheiro"],
+      ["CREDITO", "Cartão de crédito"],
+      ["DEBITO", "Cartão de débito"],
     ]) {
       form.append(
         checkbox(
           label,
           method,
-          config.checkout.enabledPayments.includes(method),
+          config.checkout.enabledPayments.includes(method) ||
+            ((method === "CREDITO" || method === "DEBITO") && config.checkout.enabledPayments.includes("CARD")),
         ),
       );
     }
@@ -333,8 +335,8 @@ export function createAdmin(state) {
       next.checkout = {
         ...next.checkout,
         contactPhone: f.phone.value,
-        enabledPayments: ["PIX", "CARD", "CASH"].filter(
-          (method) => f[method].checked,
+        enabledPayments: ["PIX", "CASH", "CREDITO", "DEBITO"].filter(
+          (method) => f[method]?.checked,
         ),
         pix: { key: f.pixKey.value, recipientName: f.pixRecipient.value },
         completionMode: f.handoff.checked ? "WHATSAPP_HANDOFF" : "IN_APP",

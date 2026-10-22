@@ -186,10 +186,9 @@ const { useState, useEffect, useRef, useMemo } = React;
       const [selectedSubcategories, setSelectedSubcategories] = useState([]);
       const [searchQuery, setSearchQuery] = useState('');
       const handleSelectCategory = (catId) => {
-        if (catId === 'todas') { setSelectedCategories([]); setShowingFavorites(false); }
+        if (catId === 'todas') { setSelectedCategories([]); setShowingFavorites(false); setSelectedSubcategories([]); }
         else if (catId === 'atalhos') setShowingFavorites(value => !value);
         else setSelectedCategories(values => window.ConfloraCategoryUi.toggleSelection(values, catId));
-        setSelectedSubcategories([]);
       };
       const availableSubcategories = useMemo(() => {
         const subs = new Map();
@@ -927,7 +926,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                         ? 'bg-[#109E46] text-white border-[#109E46]'
                         : 'bg-white text-slate-700 border-slate-200')}
                     >
-                      <span>{orderType === 'DELIVERY' ? '🛵 Entrega' : '🏪 Balcão'}</span>
+                      <span>{orderType === 'DELIVERY' ? '🛵 Entrega' : '🏪 Retirada'}</span>
                     </button>
 
                     {/* Botão Adicionar Cliente */}
@@ -1032,7 +1031,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                 aria-pressed={orderType === 'PICKUP'}
                 className={"flex-1 cf-btn-3d cf-btn-3d--sm !rounded-xl " + (orderType === 'PICKUP' ? 'cf-btn-3d--primary' : 'cf-btn-3d--secondary')}
               >
-                <span>🏪 Balcão</span>
+                <span>🏪 Retirada</span>
               </button>
               <button
                 type="button"
@@ -1459,7 +1458,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                           Identificar Cliente
                         </h3>
                         <p className="text-xs text-slate-500">
-                          {orderType === 'DELIVERY' ? '🛵 Pedido para Entrega · Informe o endereço' : '🏪 Venda Balcão ou Retirada'}
+                          {orderType === 'DELIVERY' ? '🛵 Entrega · Informe o endereço' : '🏪 Retirada'}
                         </p>
                       </div>
                     </div>
@@ -1668,7 +1667,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                     </div>
                     <div className="text-right text-xs text-emerald-100">
                       <p>{distinctItemsCount} itens ({totalUnitsCount} un.)</p>
-                      <p className="font-bold text-emerald-300">{orderType === 'DELIVERY' ? '🛵 Entrega' : '🏪 Balcão'}</p>
+                      <p className="font-bold text-emerald-300">{orderType === 'DELIVERY' ? '🛵 Entrega' : '🏪 Retirada'}</p>
                       {discountPercent > 0 && <p>Desc: -{discountPercent}%</p>}
                       {orderType === 'DELIVERY' && <p>Entrega: {formatBRL(freightValue)}</p>}
                     </div>
@@ -1678,7 +1677,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                   <div className="mb-4 p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
                     <div className="min-w-0 flex-1">
                       <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                        Cliente • {orderType === 'DELIVERY' ? '🛵 Pedido para Entrega' : '🏪 Balcão'}
+                        Cliente • {orderType === 'DELIVERY' ? '🛵 Entrega' : '🏪 Retirada'}
                       </span>
                       <span className="font-bold text-slate-800 truncate block">{customerName || 'Cliente Balcão'}</span>
                       {customerCreditBalance > 0 && <span className="text-[11px] font-semibold text-emerald-700 block">Crédito disponível: {formatBRL(customerCreditBalance)}</span>}
@@ -1700,9 +1699,9 @@ const { useState, useEffect, useRef, useMemo } = React;
                   <div hidden={splitPayment} className={splitPayment ? 'hidden' : 'grid grid-cols-2 gap-2 mb-3 sm:grid-cols-5'}>
                     {[
                       { id: 'pix', label: window.ConfloraOrderDisplay.payment('PIX'), icon: QrCode },
-                      { id: 'debito', label: window.ConfloraOrderDisplay.payment('DEBITO'), icon: CreditCard },
-                      { id: 'credito', label: window.ConfloraOrderDisplay.payment('CREDITO'), icon: CreditCard },
                       { id: 'dinheiro', label: window.ConfloraOrderDisplay.payment('DINHEIRO'), icon: Banknote },
+                      { id: 'credito', label: window.ConfloraOrderDisplay.payment('CREDITO'), icon: CreditCard },
+                      { id: 'debito', label: window.ConfloraOrderDisplay.payment('DEBITO'), icon: CreditCard },
                       { id: 'fiado', label: window.ConfloraOrderDisplay.payment('FIADO'), icon: User },
                     ].map((method) => {
                       const Icon = method.icon;

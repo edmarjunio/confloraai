@@ -466,43 +466,43 @@ export function createCatalog(state, add, navigate) {
     const categoryFilter = (name, selected, onclick, kind = "", colorCategory = "") => element("render-category-tag", {
       category: name, variant: "filter", selected: String(selected), kind, "color-category": colorCategory, onclick,
     });
-    const updateFilters = () => {
-      selectedSubcategories = [];
+    const updateFilters = (clearSubcats = false) => {
+      if (clearSubcats) selectedSubcategories = [];
       pageSize = 24;
       render();
     };
     $("#categoryFilterControl").replaceChildren(
       categoryFilter("Curtidos", showingFavorites, () => {
         showingFavorites = !showingFavorites;
-        updateFilters();
+        updateFilters(true);
       }, "favorites"),
       categoryFilter("Todas", !showingFavorites && selectedCategories.length === 0, () => {
         showingFavorites = false;
         selectedCategories = [];
-        updateFilters();
+        updateFilters(true);
       }, "all"),
       ...categories.map(category => categoryFilter(category.name, selectedCategories.includes(category.id), () => {
         selectedCategories = window.ConfloraCategoryUi.toggleSelection(selectedCategories, category.id);
         state.trackEvent?.("category_filter", { category: category.name, categories: selectedCategories });
-        updateFilters();
+        updateFilters(false);
       })),
       ...(selectedCategories.length ? [element("render-category-tag", {
         category: "Limpar categorias", variant: "action", kind: "all", onclick: () => {
-          selectedCategories = []; updateFilters();
+          selectedCategories = []; updateFilters(true);
         },
       })] : []),
     );
 
     const subcatContainer = $("#subcategoryFilterControl");
-    if (subcatContainer) {
-      const options = new Map();
-      for (const category of categories.filter(category => selectedCategories.includes(category.id))) {
-        for (const name of getSubcategoryOptions(activeProducts, category.id)) {
-          const key = normalizeProductText(name);
-          if (!options.has(key)) options.set(key, { name, parent: category.name });
-        }
+    const options = new Map();
+    for (const category of categories.filter(category => selectedCategories.includes(category.id))) {
+      for (const name of getSubcategoryOptions(activeProducts, category.id)) {
+        const key = normalizeProductText(name);
+        if (!options.has(key)) options.set(key, { name, parent: category.name, parentId: category.id });
       }
-      selectedSubcategories = selectedSubcategories.filter(key => options.has(key));
+    }
+    selectedSubcategories = selectedSubcategories.filter(key => options.has(key));
+    if (subcatContainer) {
       subcatContainer.hidden = options.size === 0;
       subcatContainer.replaceChildren(...(options.size ? [
         element("span", { class: "subcategory-header-badge", text: "Subcategorias:".tr }),
@@ -518,11 +518,19 @@ export function createCatalog(state, add, navigate) {
         })] : []),
       ] : []));
     }
-    baseList = baseList.filter(product => window.ConfloraCategoryUi.matchesAny(
-      selectedCategories, id => productMatchesCategory(product, id),
-    ) && window.ConfloraCategoryUi.matchesAny(
-      selectedSubcategories, name => normalizeProductText(productSubcategory(product)) === name,
-    ));
+    const categoriesWithSelectedSub = new Set(
+      selectedSubcategories.map(key => options.get(key)?.parentId).filter(Boolean),
+    );
+    baseList = baseList.filter(product => {
+      if (!window.ConfloraCategoryUi.matchesAny(selectedCategories, id => productMatchesCategory(product, id))) {
+        return false;
+      }
+      if (selectedSubcategories.length === 0) return true;
+      const prodSub = normalizeProductText(productSubcategory(product));
+      if (selectedSubcategories.includes(prodSub)) return true;
+      const matchesCatWithSub = [...categoriesWithSelectedSub].some(catId => productMatchesCategory(product, catId));
+      return !matchesCatWithSub;
+    });
 
     const list = rawQuery
       ? searchProducts(

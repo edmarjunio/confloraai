@@ -94,10 +94,10 @@ window.PdvComponents = (() => {
   }
   function PaymentPartsEditor({ parts, onChange, total, customerId, allowedMethods }) {
     const methodOptions = [
-      { id: 'DINHEIRO', label: window.ConfloraOrderDisplay.payment('DINHEIRO') },
-      { id: 'DEBITO', label: window.ConfloraOrderDisplay.payment('DEBITO') },
-      { id: 'CREDITO', label: window.ConfloraOrderDisplay.payment('CREDITO') },
       { id: 'PIX', label: window.ConfloraOrderDisplay.payment('PIX') },
+      { id: 'DINHEIRO', label: window.ConfloraOrderDisplay.payment('DINHEIRO') },
+      { id: 'CREDITO', label: window.ConfloraOrderDisplay.payment('CREDITO') },
+      { id: 'DEBITO', label: window.ConfloraOrderDisplay.payment('DEBITO') },
       { id: 'FIADO', label: window.ConfloraOrderDisplay.payment('FIADO') },
     ].filter(item => !allowedMethods || allowedMethods.includes(item.id))
      .filter(item => item.id !== 'FIADO' || customerId);
@@ -919,11 +919,11 @@ window.PdvComponents = (() => {
     }, [order.id, order.status, order.paymentMethod, order.total]);
 
     const methodLabels = {
-      DINHEIRO: '💵 Dinheiro',
-      DEBITO: '💳 Débito',
-      CREDITO: '💳 Crédito',
-      PIX: window.CONFLORA_PIX_MODE === 'MANUAL' ? '⚡ Pix (Manual)' : '⚡ Pix (QR Code)',
-      ...(!deliveryMode ? { FIADO: '📝 Fiado (Admin)' } : {})
+      PIX: 'PIX',
+      DINHEIRO: 'Dinheiro',
+      CREDITO: 'Cartão de crédito',
+      DEBITO: 'Cartão de débito',
+      ...(!deliveryMode ? { FIADO: 'Fiado' } : {})
     };
     const availableMethods = Object.keys(methodLabels).filter(m => (m !== 'FIADO' || order.customerId));
 

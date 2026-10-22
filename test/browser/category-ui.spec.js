@@ -42,13 +42,15 @@ test('category filters combine selections, deselect, reset and keep subcategory 
   await filter('Horta').click();
   await expect(page.locator('#products render-product-card')).toHaveCount(1);
   await page.locator('#subcategoryFilterControl').getByRole('button', { name: 'Temperos', exact: true }).click();
+  await expect(page.locator('#subcategoryFilterControl').getByRole('button', { name: 'Limpar subcategorias', exact: true })).toBeVisible();
   await expect(page.locator('#products render-product-card')).toHaveCount(1);
   await filter('Pets').click();
   await expect(page.locator('#products render-product-card')).toHaveCount(2);
   await expect(filter('Horta')).toHaveAttribute('aria-pressed', 'true');
   await expect(filter('Pets')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('#subcategoryFilterControl')).toBeHidden();
+  await expect(page.locator('#categoryFilterControl').getByRole('button', { name: 'Limpar categorias', exact: true })).toBeVisible();
   await filter('Horta').click();
+  await expect(page.locator('#subcategoryFilterControl')).toBeHidden();
   await expect(page.locator('#products render-product-card')).toHaveCount(1);
   await expect(page.locator('#products')).toContainText('Pets produto');
   await filter('Todas').focus();

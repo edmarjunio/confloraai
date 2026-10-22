@@ -34,7 +34,7 @@ function defaultStoreConfig(slug, name = "Minha Loja") {
         serviceAreas: [],
         feeMinor: 0,
       },
-      pickup: { enabled: true, label: "Retirada no local", address: "" },
+      pickup: { enabled: true, label: "Retirada", address: "" },
     },
     assistant: {
       mode: "GUIDED",
