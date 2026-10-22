@@ -51,7 +51,7 @@ function createCashierSnapshotPdf(snapshot, user, issuedAt = new Date()) {
     if (!snapshot.cashierSettlements.length) line('Nenhum recebimento de cliente neste período.');
     for (const row of snapshot.cashierSettlements) {
       line((row.customerName || row.customerId || 'Cliente') + ' - ' + money(row.amount), { bold: true });
-      line((row.entryType === 'CREDITO_CLIENTE' ? 'Crédito antecipado' : 'Quitação de fiado') + ' | ' + (row.paymentParts || [{ method: row.paymentMethod, amount: row.amount }]).map(part => (labels[part.method] || part.method) + ' ' + money(part.amount)).join(' | '), { size: 9 });
+      line((row.entryType === 'ENCOMENDA_SINAL' ? 'Sinal de encomenda' : row.entryType === 'CREDITO_CLIENTE' ? 'Crédito antecipado' : 'Quitação de fiado') + ' | ' + (row.paymentParts || [{ method: row.paymentMethod, amount: row.amount }]).map(part => (labels[part.method] || part.method) + ' ' + money(part.amount)).join(' | '), { size: 9 });
     }
     const range = doc.bufferedPageRange();
     for (let index = 0; index < range.count; index++) {

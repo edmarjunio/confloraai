@@ -1,33 +1,20 @@
-/* Bump this version whenever the application shell changes before publishing. */
-const CACHE_NAME = 'conflora-public-shell-v42';
-const SHELL_URL = '/storefront/index.html';
-const CORE_FILES = [
-  SHELL_URL, '/store-assets/site-navigation.js?v=1',
-  '/store-assets/error-monitor.js',
-  '/store-assets/v5/store.css', '/store-assets/site-header.css?v=topbar-1',
-  '/store-assets/design-system.css', '/store-assets/brands/conflora-logo.webp',
-  '/store-assets/delivery-maps.js', '/store-assets/delivery.css',
-  '/store-assets/tab-session.js', '/store-assets/order-display.js', '/store-assets/order-display.css', '/store-assets/order-notifications.css',
-  '/store-assets/category-ui.js', '/store-assets/render-image.js', '/store-assets/product-card.js',
-  ...['app.js', 'ui.js', 'catalog.js', 'cart.js', 'cart-storage.mjs',
-    'public-cache.mjs', 'purchase-insights.mjs', 'browser-notifications.js', 'customer-order-notifications.js', 'order-notification-state.mjs', 'search-autocomplete.js', 'search-suggestions.mjs', 'chat.js', 'admin.js', 'existing-api.js',
-    'product-entry.js', 'icons.js', 'receipt.js', 'guided-search.mjs',
-    'guided-chat.js', 'ai-chat.js', 'product-info-content.js', 'team-drawer.js',
-    'store/index.js', 'store/zustand.js', 'query/tanstackQuery.js',
-    'i18n/index.js', 'i18n/pt.js', 'i18n/en.js', 'i18n/es.js', 'i18n/fr.js',
-  ].map(file => '/store-assets/v5/' + file),
-];
+/* BUILD_MANIFEST */
+/* Public UI only. API responses and transaction requests never enter CacheStorage. */
+const BUILD = self.CONFLORA_BUILD || { version: 'source-v43', core: [] };
+const CACHE_NAME = 'conflora-public-shell-' + BUILD.version;
+const SHELL_URL = '/storefront/shell.html';
+const CORE_FILES = BUILD.core;
 const CORE_URLS = new Set(CORE_FILES.map(file => new URL(file, self.location.origin).href));
+const isVersioned = path => /^\/storefront\/dist\/versioned\/[\w-]+-(?:[a-f0-9]{16}|[A-Z0-9]{8})\.(?:js|css|png|webp|svg)$/.test(path);
 
 self.addEventListener('install', event => {
-  self.skipWaiting();
+  // Let the current tabs finish with their current worker. Never force a reload.
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
-    // Install atomically: an incomplete new shell must not replace the old one.
-    await cache.addAll(CORE_FILES);
+    try { await cache.addAll(CORE_FILES); }
+    catch (error) { await caches.delete(CACHE_NAME); throw error; }
   })());
 });
-
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
     for (const name of await caches.keys()) {
@@ -36,42 +23,43 @@ self.addEventListener('activate', event => {
     await self.clients.claim();
   })());
 });
-
 function isPublicNavigation(path) {
   return path === '/' || /^\/products\/[^/]+\/?$/.test(path) ||
     /^\/shop\/[^/]+(?:\/products\/[^/]+)?\/?$/.test(path);
 }
-
 self.addEventListener('fetch', event => {
   const request = event.request;
   const url = new URL(request.url);
   if (request.method !== 'GET' || url.origin !== self.location.origin) return;
   const navigation = request.mode === 'navigate' && isPublicNavigation(url.pathname);
-  const asset = /^\/(store-assets|storefront)\//.test(url.pathname) &&
-    /\.(?:js|mjs|css|png|jpg|jpeg|webp|svg|woff2)$/.test(url.pathname) &&
-    !url.pathname.endsWith('/sw.js');
+  const asset = isVersioned(url.pathname) && !url.search;
   if (!navigation && !asset) return;
-
-  const key = navigation ? SHELL_URL : request;
   event.respondWith((async () => {
-    const cache = await caches.open(CACHE_NAME);
-    const saved = await cache.match(key);
-    if (saved) return saved;
-    // Static UI is versioned with this worker. New releases install in the
-    // background, then activate after existing tabs close; avoid mixed modules.
-    const response = await fetch(navigation ? SHELL_URL : request);
-    if (response.ok && !response.redirected &&
+    const key = navigation ? SHELL_URL : request;
+    let cache, saved;
+    try {
+      cache = await caches.open(CACHE_NAME);
+      saved = await cache.match(key);
+    } catch { /* Disabled or corrupt storage must still allow an online response. */ }
+    if (asset && saved) return saved;
+    // Network-first HTML discovers each new hashed release on the next visit.
+    // No automatic reload may interrupt a cart or a checkout.
+    let response;
+    try { response = await fetch(navigation ? SHELL_URL : request); }
+    catch (error) { if (saved) return saved; throw error; }
+    if (navigation && response.status >= 500 && saved) return saved;
+    if (cache && response.ok && !response.redirected &&
         !/no-store|private/i.test(response.headers.get('Cache-Control') || '')) {
-      await cache.put(key, response.clone());
-      const keys = await cache.keys();
-      // Bound storage growth while preserving the preloaded shell.
-      const extras = keys.filter(entry => !CORE_URLS.has(entry.url));
-      for (const entry of extras.slice(0, Math.max(0, keys.length - 160))) await cache.delete(entry);
+      try {
+        await cache.put(key, response.clone());
+        const keys = await cache.keys();
+        const extras = keys.filter(entry => !CORE_URLS.has(entry.url));
+        for (const entry of extras.slice(0, Math.max(0, extras.length - 80))) await cache.delete(entry);
+      } catch { /* Quota/storage errors must not turn a good response into a failure. */ }
     }
     return response;
   })());
 });
-
 self.addEventListener('notificationclick', event => {
   event.notification.close();
   event.waitUntil((async () => {

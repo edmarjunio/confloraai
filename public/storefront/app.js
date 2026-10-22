@@ -11,9 +11,7 @@ import { createCustomerOrderNotifications } from "./customer-order-notifications
 import { createCatalog } from "./catalog.js";
 import { createCart } from "./cart.js";
 import { createChat } from "./chat.js";
-import { createAdmin } from "./admin.js";
 import { createExistingApi } from "./existing-api.js";
-import { createProductEntry } from "./product-entry.js";
 import { icon } from "./icons.js";
 import {
   getLanguage,
@@ -24,11 +22,14 @@ import {
 import { appStore } from "./store/index.js";
 import { storeQueries, queryClient } from "./query/tanstackQuery.js";
 import { renderOrderReceipt } from "./receipt.js";
-import { createPublicCache } from "./public-cache.mjs";
+import { createPublicCache, PUBLIC_FRESH_TIME } from "./public-cache.mjs";
+import { startPerformanceMonitor } from "./performance.mjs";
 import { createPurchaseInsights } from "./purchase-insights.mjs";
 import { createOrderFeedback } from "./order-feedback.js";
 
 const existingStore = !location.pathname.startsWith("/shop/");
+const performanceMonitor = startPerformanceMonitor();
+const shellLogoUrl = $('#logo').getAttribute('src') || '/store-assets/brands/conflora-logo.webp';
 const slug = existingStore
   ? "conflora"
   : decodeURIComponent(location.pathname.split("/")[2]);
@@ -50,6 +51,23 @@ const state = {
   config: null,
   products: [],
   user: null,
+};
+let catalogRevision = 0;
+const transport = state.api;
+state.api = async (path, options = {}) => {
+  const result = await transport(path, options);
+  if (options.method && !['GET', 'HEAD'].includes(options.method) && /(?:products|stock|orders|config|inventory)/.test(path)) {
+    publicCache.invalidate();
+    catalogRevision++;
+    queryClient.invalidateQueries({ queryKey: ['catalog', slug] });
+    // Keep the receipt/checkout in place; refresh the public display in the background.
+    lastCatalogRefresh = 0;
+    setTimeout(async () => {
+      await catalogRefresh?.catch(() => {});
+      refreshPublicCatalog().catch(() => {});
+    }, 0);
+  }
+  return result;
 };
 
 state.purchaseInsights = createPurchaseInsights(state);
@@ -235,10 +253,11 @@ let admin;
 let orderFeedback;
 
 function navigate(path) {
+  history.replaceState({ ...history.state, scrollY: window.scrollY }, "");
   for (const dialog of document.querySelectorAll("dialog[open]")) {
     dialog.close();
   }
-  history.pushState({}, "", path);
+  history.pushState({ scrollY: 0 }, "", path);
   route();
   window.scrollTo({ top: 0 });
 }
@@ -266,7 +285,8 @@ async function route() {
   document.title = state.config.identity?.name || "Loja";
   try {
     if (isAdmin) {
-      await admin.render();
+      admin ||= import("./admin.js").then(({ createAdmin }) => createAdmin(state));
+      await (await admin).render();
     } else if (isProduct) {
       catalog.details(decodeURIComponent(path[4] || ""));
     } else {
@@ -327,10 +347,10 @@ function applyConfig() {
     .filter(Boolean)
     .join(" · ");
   const logoUrl = existingStore
-    ? "/store-assets/brands/conflora-logo.webp"
-    : config.branding?.logoUrl || "/store-assets/brands/conflora-logo.webp";
+    ? shellLogoUrl
+    : config.branding?.logoUrl || shellLogoUrl;
   const logo = $("#logo");
-  const defaultLogoUrl = "/store-assets/brands/conflora-logo.webp";
+  const defaultLogoUrl = shellLogoUrl;
   $("#brand").classList.add("has-logo");
   logo.hidden = false;
   logo.onerror = () => {
@@ -355,12 +375,9 @@ state.applyConfig = applyConfig;
 state.persistPublicSnapshot = () => publicCache.write(state);
 state.refreshCatalog = () => catalog?.render();
 state.reloadProducts = async () => {
-  // Query via TanStack Query cache invalidation
   queryClient.invalidateQueries({ queryKey: ["catalog"] });
-  state.products = await storeQueries.getCatalog(slug, state.api);
-  publicCache.write(state);
-  catalog?.render();
-  cart?.render();
+  publicCache.invalidate();
+  return refreshPublicCatalog();
 };
 
 function editOwnProfile() {
@@ -1015,27 +1032,34 @@ onLanguageChange(() => {
   }
 });
 
-window.addEventListener("popstate", route);
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+window.addEventListener("popstate", async (event) => {
+  await route();
+  requestAnimationFrame(() => window.scrollTo({ top: event.state?.scrollY || 0 }));
+});
 
 // Application bootstrap
 let catalogRefresh;
 let lastCatalogRefresh = 0;
 async function refreshPublicCatalog() {
   if (catalogRefresh) return catalogRefresh;
-  lastCatalogRefresh = Date.now();
+  const revision = catalogRevision;
   catalogRefresh = (async () => {
     const [config, products] = await Promise.all([
       state.api("/config"), state.api("/products"),
     ]);
+    if (revision !== catalogRevision) return;
     publicCache.write({ config, products });
-    const changed = JSON.stringify([state.config, state.products]) !== JSON.stringify([config, products]);
-    if (!changed) return;
+    lastCatalogRefresh = Date.now();
+    const configChanged = JSON.stringify(state.config) !== JSON.stringify(config);
+    const productsChanged = JSON.stringify(state.products) !== JSON.stringify(products);
+    if (!configChanged && !productsChanged) return;
     state.config = config;
     state.products = products;
     queryClient.setQueryData(["catalog", slug], products);
-    applyConfig();
-    catalog.render();
-    cart.render();
+    if (configChanged) applyConfig();
+    if (configChanged || productsChanged) catalog.render();
+    if (productsChanged) cart.render();
     // Update a product page without replacing an open administrative form.
     if (location.pathname.includes("/products/")) await route();
   })();
@@ -1052,6 +1076,8 @@ try {
 
   const session = state.api("/me").catch(() => ({ user: null }));
   const saved = publicCache.read();
+  const savedIsFresh = publicCache.isFresh();
+  performanceMonitor.count(saved ? 'catalogCacheHits' : 'catalogCacheMisses');
   if (saved) {
     state.config = saved.config;
     state.products = saved.products;
@@ -1071,11 +1097,17 @@ try {
   );
   cart = createCart(state);
   chat = createChat(state, catalog);
-  admin = createAdmin(state);
   orderFeedback = createOrderFeedback(state);
-  state.productEntry = createProductEntry(state, async () => {
-    await state.reloadProducts();
-  });
+  let productEntry;
+  state.productEntry = {
+    async open(product = null) {
+      try {
+        productEntry ||= import("./product-entry.js").then(({ createProductEntry }) => createProductEntry(state, state.reloadProducts));
+        (await productEntry).open(product);
+      } catch (error) { productEntry = null; notify(error.message); }
+    },
+  };
+  $('#openProductEntry')?.addEventListener('click', () => state.productEntry.open());
 
   applyConfig();
   catalog.render();
@@ -1094,7 +1126,9 @@ try {
     catalog.render();
   }
 
-  if (saved) refreshPublicCatalog().catch(() => {});
+  performanceMonitor.markCatalogReady();
+  if (savedIsFresh) lastCatalogRefresh = Date.now() - publicCache.age();
+  if (saved && !savedIsFresh) refreshPublicCatalog().catch(() => {});
   // Login resolution does not block the public catalogue or its first render.
   session.then(async ({ user }) => {
     state.user = user || null;
@@ -1107,16 +1141,44 @@ try {
     if (notificationOrder && state.user) openPurchaseHistory(notificationOrder);
     if (/\/(admin|configuracoes)\/?$/.test(location.pathname)) await route();
   }).catch(() => {});
+  let lastCatalogInteraction = Date.now();
   const refreshOnReturn = () => {
     if (document.visibilityState === "visible") {
+      lastCatalogInteraction = Date.now();
       orderFeedback?.checkPendingDeliveredOrder();
-      if (Date.now() - lastCatalogRefresh > 60000) {
+      if (Date.now() - lastCatalogRefresh >= PUBLIC_FRESH_TIME) {
         refreshPublicCatalog().catch(() => {});
       }
     }
   };
   document.addEventListener("visibilitychange", refreshOnReturn);
-  window.addEventListener("online", refreshOnReturn);
+  window.addEventListener("online", () => { lastCatalogRefresh = 0; refreshOnReturn(); });
+  const catalogInteraction = () => {
+    lastCatalogInteraction = Date.now();
+    if (Date.now() - lastCatalogRefresh >= PUBLIC_FRESH_TIME) refreshPublicCatalog().catch(() => {});
+  };
+  window.addEventListener('pointerdown', catalogInteraction, { passive: true });
+  window.addEventListener('keydown', catalogInteraction);
+  // Only one short-lived public refresh while visible; no private background polling.
+  let catalogTimer;
+  const scheduleCatalogRefresh = () => {
+    clearTimeout(catalogTimer);
+    catalogTimer = setTimeout(async () => {
+      if (document.visibilityState === 'visible' && Date.now() - lastCatalogInteraction < 120000) {
+        try { await refreshPublicCatalog(); } catch { lastCatalogRefresh = Date.now(); }
+      }
+      scheduleCatalogRefresh();
+    }, document.visibilityState === 'visible' && Date.now() - lastCatalogInteraction < 120000 ? Math.max(1000, PUBLIC_FRESH_TIME - (Date.now() - lastCatalogRefresh)) : PUBLIC_FRESH_TIME);
+  };
+  scheduleCatalogRefresh();
+  window.addEventListener('pagehide', () => clearTimeout(catalogTimer));
+  window.addEventListener('pageshow', () => { refreshOnReturn(); scheduleCatalogRefresh(); });
+  window.addEventListener('storage', event => {
+    if ((event.key === publicCache.key || event.key === null) && !event.newValue) {
+      lastCatalogRefresh = 0;
+      refreshOnReturn();
+    }
+  });
   if ("serviceWorker" in navigator && window.isSecureContext) {
     navigator.serviceWorker.register("/storefront/sw.js", { scope: "/", updateViaCache: "none" }).catch(() => {});
   }
@@ -1124,8 +1186,9 @@ try {
     import("/storefront-auth.js").catch(() => {});
   }
 } catch (error) {
+  $('#products').removeAttribute('aria-busy');
   $("#storeName").textContent = "Loja Conflora";
-  $("#logo").src = "/store-assets/brands/conflora-logo.webp";
+  $("#logo").src = shellLogoUrl;
   $("#logo").alt = "Conflora Horta e Viveiro";
   $("#logo").hidden = false;
   $("#brand").classList.add("has-logo");

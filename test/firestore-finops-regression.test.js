@@ -37,7 +37,7 @@ test('web checkout reads only requested IDs and always obtains current stock, pr
   await normalizeExistingCheckout(request(), repo);
 });
 
-test('catalog reads each settings document once per response, with no cross-request cache', async () => {
+test('public catalog shares a short snapshot and invalidates after a product edit', async () => {
   const { repo, db } = setup({ 'products/p': { name: 'Produto', price: 12, unit: 'UN' } });
   repo.getAllProducts = async () => (await db.collection('products').get()).docs.map(doc => ({ ...doc.data(), id: doc.id }));
   repo.getSalesOrders = async () => [];
@@ -51,7 +51,7 @@ test('catalog reads each settings document once per response, with no cross-requ
     };
     return query;
   };
-  const routes = new Map(); const app = { get: (path, handler) => routes.set(path, handler), post() {}, put() {}, use() {} };
+  const routes = new Map(); const app = { locals: {}, get: (path, handler) => routes.set(path, handler), post() {}, put() {}, use() {} };
   installExistingStore(app, { repository: repo });
   let body;
   const res = { set() { return this; }, json(value) { body = value; } };
@@ -59,7 +59,10 @@ test('catalog reads each settings document once per response, with no cross-requ
   await routes.get('/api/storefront/catalog')({}, res, next);
   assert.equal(configReads, 1); assert.equal(inventoryReads, 1);
   assert.equal(body.products[0].price.amountMinor, 1200);
+  await routes.get('/api/storefront/catalog')({}, res, next);
+  assert.equal(configReads, 1); assert.equal(inventoryReads, 1);
   db.data.get('products/p').price = 20;
+  app.locals.publicCatalogCache.invalidate();
   await routes.get('/api/storefront/catalog')({}, res, next);
   assert.equal(configReads, 2); assert.equal(body.products[0].price.amountMinor, 2000);
 });

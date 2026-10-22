@@ -9,6 +9,7 @@ const { prepareStockReservation, applyStockReservation } = require('./stock-rese
 const { setInterval, clearInterval } = require('node:timers');
 const { runTransaction } = require('../database/transactions');
 const { createCommercialOrder, COMMERCIAL_SOURCES } = require('./commercial-order');
+const { payableTotal, assertProcurementReady } = require('./procurement-payment');
 
 /** PDV writes never fall back to process memory when Firestore fails. */
 class PdvRepository {
@@ -150,7 +151,7 @@ class PdvRepository {
     if (repo.firestore && !repo._firestoreClientDisabled) {
       const snapshots = new Map();
       const queries = [
-        repo.firestore.collection('orders').where('status', 'in', ['AWAITING_CONFIRMATION', 'AWAITING_CASHIER', 'AWAITING_PAYMENT', 'CREATING_PIX', 'AWAITING_PIX', 'PENDING']).limit(1000),
+        repo.firestore.collection('orders').where('status', 'in', ['AWAITING_CONFIRMATION', 'AWAITING_CASHIER', 'AWAITING_PAYMENT', 'CREATING_PIX', 'AWAITING_PIX', 'PENDING', 'AWAITING_QUOTE', 'AWAITING_QUOTE_ACCEPTANCE', 'AWAITING_ARRIVAL', 'AWAITING_FULFILLMENT', 'AWAITING_RECONCILIATION']).limit(1000),
         repo.firestore.collection('orders').where('completedAt', '>=', new Date(Date.now() - 7 * 86400000).toISOString()).orderBy('completedAt', 'desc').limit(200),
       ];
       const stops = queries.map((query, index) => query.onSnapshot(snapshot => {
@@ -167,7 +168,7 @@ class PdvRepository {
     const notify = () => {
       if (!active) return;
       const orders = [...repo.inMemoryOrders.values()].filter((order) =>
-        ['AWAITING_CONFIRMATION', 'AWAITING_CASHIER', 'AWAITING_PAYMENT', 'CREATING_PIX', 'AWAITING_PIX', 'PENDING', 'CONFIRMED', 'PAID_CONFIRMED', 'DELIVERED'].includes(order.status),
+        ['AWAITING_CONFIRMATION', 'AWAITING_CASHIER', 'AWAITING_PAYMENT', 'CREATING_PIX', 'AWAITING_PIX', 'PENDING', 'AWAITING_QUOTE', 'AWAITING_QUOTE_ACCEPTANCE', 'AWAITING_ARRIVAL', 'AWAITING_FULFILLMENT', 'AWAITING_RECONCILIATION', 'CONFIRMED', 'PAID_CONFIRMED', 'DELIVERED'].includes(order.status),
       );
       onChange(orders);
     };
@@ -227,6 +228,7 @@ class PdvRepository {
     return this.transaction(async (tx) => {
       const order = await tx.get('orders', orderId);
       if (!isDelivery(order) || order.status === 'CANCELLED') throw new Error('Pedido de entrega não encontrado.');
+      assertProcurementReady(order);
       if (['PREPARING_DELIVERY', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.deliveryStatus)) throw new Error('Este pedido já saiu para entrega.');
       if (order.paymentMethod === 'PIX' && !isDeliverySettled(order)) throw new Error('Confirme o Pix antes de liberar a entrega.');
       const reservation = !order.inventoryReserved && !order.stockDeducted ? await prepareStockReservation(tx, order.items) : null;
@@ -243,6 +245,7 @@ class PdvRepository {
     return this.transaction(async (tx) => {
       const order = await tx.get('orders', orderId);
       if (!isDelivery(order) || order.status === 'CANCELLED') throw new Error('Pedido de entrega não encontrado.');
+      assertProcurementReady(order);
       if (['PREPARING_DELIVERY', 'OUT_FOR_DELIVERY'].includes(order.deliveryStatus) && order.assignedDriver?.id === actor.id) return order;
       if ((!['PENDING_DELIVERY', 'PENDING_DISPATCH'].includes(order.deliveryStatus)) || order.creditApprovalStatus === 'PENDING' || order.assignedDriver?.id) throw new Error('Esta entrega não está disponível. Outro entregador pode ter aceitado.');
       if (order.paymentMethod === 'PIX' && !isDeliverySettled(order)) throw new Error('O pagamento Pix ainda não foi confirmado.');
@@ -345,12 +348,13 @@ class PdvRepository {
     return this.transaction(async (tx) => {
       const order = await tx.get('orders', orderId);
       if (!order || !COMMERCIAL_SOURCES.has(order.source)) { throw new Error('Comanda não encontrada.'); }
+      assertProcurementReady(order);
       if (order.completedAt || order.status === 'CANCELLED') { throw new Error('Esta comanda já foi finalizada ou cancelada.'); }
       if (!canReceiveOrder(order, receiver)) { throw new Error('Sem permissão para gerar Pix deste pedido.'); }
       if (Date.parse(order.pixExpiresAt || order.paymentExpiresAt || '') <= Date.now()) throw new Error('O prazo de pagamento venceu. Inicie uma nova comanda.');
       if (order.paymentMethod === 'PIX' && order.pixData) { return order; }
       if (!['AWAITING_CONFIRMATION', 'AWAITING_CASHIER', 'AWAITING_PAYMENT', 'PENDING'].includes(order.status)) { throw new Error('A comanda não está aguardando recebimento no caixa.'); }
-      const paymentParts = normalizePaymentParts(requestedParts, 'PIX', order.total);
+      const paymentParts = normalizePaymentParts(requestedParts, 'PIX', payableTotal(order));
       const approvingCredit = paymentParts.some(part => part.method === 'FIADO');
       if (approvingCredit && receiver.role !== 'ADMIN' && order.creditApprovedBy?.role !== 'ADMIN') throw new Error('Fiado exige aprovação de um Admin antes de gerar o Pix.');
       if (!paymentParts.some((part) => part.method === 'PIX') || paymentParts.some((part) => part.method === 'SALDO_CLIENTE')) throw new Error('Combine Pix com dinheiro, débito, crédito ou fiado.');
@@ -379,14 +383,16 @@ class PdvRepository {
       if (finishDelivery) assertAssignedDelivery(order, receiver);
       if (receiver?.role === 'ENTREGADOR' && !canReceiveOrder(order, receiver)) throw new Error('Sem permissão para receber esta entrega.');
       if (order.completedAt) { return { ...order, alreadyConfirmed: true }; }
+      assertProcurementReady(order);
       const inventory = { stockControlEnabled: (await tx.get('store_settings', 'inventory'))?.stockControlEnabled ?? process.env.STORE_STOCK_CONTROL_ENABLED !== 'false' };
       if (order.pixMode === 'MANUAL' && order.paymentProofId && verification?.manualPixProofId !== order.paymentProofId) throw new Error('O comprovante mudou. Atualize a comanda.');
-      if (Date.parse(order.pixExpiresAt || order.paymentExpiresAt || '') <= Date.now()) {
+      if (verification?.manualPixProofId && verification.manualPixProofId === order.procurement?.deposit?.proof?.id) throw new Error('Anexe o comprovante do saldo. O comprovante do sinal não pode quitar o restante.');
+      if (Date.parse(order.pixExpiresAt || order.paymentExpiresAt || '') <= Date.now() && !(order.procurement && verification?.verifiedVia === 'MANUAL_CAIXA_PIX')) {
         throw new Error('O prazo de pagamento venceu. Aguarde o cancelamento e a liberação do estoque.');
       }
-      const paymentParts = normalizePaymentParts(requestedParts || (paymentMethodOverride ? undefined : order.paymentParts), paymentMethodOverride || order.paymentMethod, order.total);
+      const paymentParts = normalizePaymentParts(requestedParts || (paymentMethodOverride ? undefined : order.paymentParts?.length ? order.paymentParts : undefined), paymentMethodOverride || order.paymentMethod, payableTotal(order));
       if (order.pixData?.txid && requestedParts) {
-        const issuedParts = normalizePaymentParts(order.paymentParts, order.paymentMethod, order.total);
+        const issuedParts = normalizePaymentParts(order.paymentParts, order.paymentMethod, payableTotal(order));
         const allocation = (parts) => JSON.stringify(parts.map(({ method, amount }) => ({ method, amount })).sort((a, b) => a.method.localeCompare(b.method)));
         if (allocation(paymentParts) !== allocation(issuedParts)) throw new Error('As parcelas da cobrança Pix emitida não podem ser alteradas.');
       }
@@ -445,6 +451,7 @@ class PdvRepository {
       const deliveryMetrics = finishDelivery ? completionMetrics(order, now, actualDistanceKm) : null;
       const deliveryDriver = finishDelivery ? order.assignedDriver || receiver : null;
       const previousDeliveryStats = finishDelivery ? await tx.get('delivery_driver_metrics', deliveryDriver.id) : null;
+      const procurementRequest = order.procurement ? await tx.get('agent_handoffs', order.procurementRequestId) : null;
       // No transaction reads after this point.
       for (const { id, quantity, product, stock, ownReservation } of products) {
         tx.set('products', id, { ...product, stockQuantity: stock, estoque: stock,
@@ -462,6 +469,7 @@ class PdvRepository {
         ...(finishDelivery ? { deliveryStatus: 'DELIVERED', deliveredBy: receiver, deliveredAt: now, deliveryMetrics, deliveryHistory: recordDeliveryEvent(tx, order, 'DELIVERED', receiver, now) } : {}), paymentMethod, paymentParts: paymentParts.map((part) => ({ ...part, receivedBy, receivedAt: part.receivedAt || (part.status === 'RECEIVED_AT_CASHIER' ? order.createdAt : now), status: part.method === 'FIADO' ? 'ON_ACCOUNT' : 'APPROVED' })), receivedBy, cashierName: receivedBy.name, cashierEmail: receivedBy.email || '', status: 'CONFIRMED',
         paymentStatus: onAccount ? 'ON_ACCOUNT' : 'APPROVED', paidAt: onAccount ? null : now,
         completedAt: now, ...(order.pixMode === 'MANUAL' ? { paymentReviewStatus: 'APPROVED' } : {}), stockDeducted: true, stockDeductedAt: order.stockDeductedAt || now,
+        ...(order.procurement ? { amountDue: 0, procurement: { ...order.procurement, stage: 'COMPLETED', completedAt: now } } : {}),
         inventoryReserved: false, reservationReleasedAt: order.inventoryReserved ? now : order.reservationReleasedAt || '',
         verifiedVia: verification ? (verification.verifiedVia || 'SICREDI_PIX_WEBHOOK') : 'CAIXA', updatedAt: now,
         ...(amountFor('DINHEIRO') ? { cashReceived: tendered, changeGiven: (Math.round(tendered * 100) - Math.round(amountFor('DINHEIRO') * 100)) / 100 } : {}),
@@ -487,6 +495,7 @@ class PdvRepository {
         tx.set('delivery_driver_metrics', deliveryDriver.id, mergeDriverPerformance(previousDeliveryStats, completed, now));
       }
       tx.set('orders', order.id, completed);
+      if (procurementRequest) tx.set('agent_handoffs', procurementRequest.id, { ...procurementRequest, status: 'closed', requestStatus: 'COMPLETED', version: procurementRequest.version + 1, updatedAt: now });
       if (!onAccount && completed.source === 'WEB_CATALOG' && /^[a-f0-9-]{36}$/.test(completed.analyticsClientId || '') && require('../integrations/ga4-purchase.client').ga4PurchaseEnabled()) {
         const id = `${order.id}-ga4-purchase`;
         tx.set('pdv_outbox', id, { id, kind: 'ga4-purchase', orderId, status: 'PENDING', attempts: 0, createdAt: now });

@@ -22,7 +22,7 @@
   if (!customElements.get("render-image")) {
     class RenderImage extends HTMLElement {
       static get observedAttributes() {
-        return ["src", "alt", "image-candidates", "fallback-src", "loading", "decoding", "class"];
+        return ["src", "alt", "image-candidates", "fallback-src", "loading", "decoding", "class", "fetchpriority"];
       }
 
       connectedCallback() {
@@ -35,11 +35,12 @@
       disconnectedCallback() {
         if (this.onLangChange) {
           window.removeEventListener('conflora-lang-change', this.onLangChange);
+          this.onLangChange = null;
         }
       }
 
-      attributeChangedCallback() {
-        if (this.isConnected) this.render();
+      attributeChangedCallback(_name, oldValue, newValue) {
+        if (oldValue !== newValue && this.isConnected) this.render();
       }
 
       readCandidates() {
@@ -55,6 +56,9 @@
       }
 
       render() {
+        const signature = JSON.stringify(this.constructor.observedAttributes.map(name => this.getAttribute(name)));
+        if (this.renderSignature === signature && this.firstElementChild) return;
+        this.renderSignature = signature;
         const sources = [
           this.getAttribute("src"),
           ...this.readCandidates(),
@@ -73,6 +77,7 @@
         const image = document.createElement("img");
         image.alt = this.getAttribute("alt") || "";
         image.loading = this.getAttribute("loading") || "lazy";
+        image.fetchPriority = this.getAttribute('fetchpriority') || 'auto';
         image.decoding = this.getAttribute("decoding") || "async";
         image.className = this.getAttribute("class") || "";
         image.style.display = "block";

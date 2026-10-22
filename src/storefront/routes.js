@@ -18,10 +18,12 @@ function installStorefront(app, { express, firestore, repository, assistant }) {
   const auth = createStoreAuth(repo);
   const router = express.Router({ mergeParams: true });
   const assets = path.resolve(__dirname, "../../public/storefront");
+  const exists = require('node:fs').existsSync;
+  const shell = () => path.join(assets, exists(path.join(assets, 'shell.html')) ? 'shell.html' : 'index.html');
   const brandImages = new Map();
   app.get('/storefront/sw.js', (_req, res) => {
     res.set('Service-Worker-Allowed', '/').set('Cache-Control', 'no-cache')
-      .sendFile(path.join(assets, 'sw.js'));
+      .sendFile(path.join(assets, exists(path.join(assets, 'sw-built.js')) ? 'sw-built.js' : 'sw.js'));
   });
   app.get("/store-assets/brands/:file", async (req, res, next) => {
     if (!/^[a-zA-Z0-9_-]+\.(png|jpg|jpeg|webp)$/.test(req.params.file)) {
@@ -56,8 +58,9 @@ function installStorefront(app, { express, firestore, repository, assistant }) {
     }
   });
   const staticOptions = {
-    setHeaders: (res) => {
-      res.setHeader("Cache-Control", "no-cache, must-revalidate");
+    setHeaders: (res, file) => {
+      const hashed = /[/\\]dist[/\\]versioned[/\\][\w-]+-(?:[a-f0-9]{16}|[A-Z0-9]{8})\.(?:js|css|webp|png|svg)$/.test(file);
+      res.setHeader("Cache-Control", hashed ? 'public, max-age=31536000, immutable' : "no-cache, must-revalidate");
     },
   };
   app.use(
@@ -77,7 +80,7 @@ function installStorefront(app, { express, firestore, repository, assistant }) {
         );
         res
           .set("Cache-Control", "no-store")
-          .sendFile(path.join(assets, "index.html"));
+          .sendFile(shell());
       } catch (error) {
         next(error);
       }

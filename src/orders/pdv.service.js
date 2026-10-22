@@ -7,6 +7,7 @@ const { formatCustomerOrderMessage } = require('./customer-order-message');
 const { pixMode, manualPixSettings } = require('./pix-mode');
 const { commercialLine } = require('../catalog/commercial-product');
 const { COMMERCIAL_SOURCES } = require('./commercial-order');
+const { payableTotal, assertProcurementReady } = require('./procurement-payment');
 
 const ORDER_PAYMENT_METHODS = new Set(['DINHEIRO', 'DEBITO', 'CREDITO', 'FIADO', 'SALDO_CLIENTE']);
 function actor(user) {
@@ -30,11 +31,24 @@ function messageChunks(text, limit) {
   let current = '';
   for (const line of text.split('\n')) {
     if (line.length > limit) { throw new Error('Linha do recibo excede o limite de mensagem.'); }
-    if (current.length + line.length + 1 > limit) { chunks.push(current); current = ''; }
+    if (current && current.length + line.length + 1 > limit) { chunks.push(current); current = ''; }
     current += (current ? '\n' : '') + line;
   }
   if (current) { chunks.push(current); }
   return chunks;
+}
+
+function notificationChunks(text, limit) {
+  const lines = [];
+  for (let line of text.split('\n')) {
+    while (line.length > limit) {
+      const at = line.lastIndexOf(' ', limit);
+      const split = at > 0 ? at : limit;
+      lines.push(line.slice(0, split)); line = line.slice(split).trimStart();
+    }
+    lines.push(line);
+  }
+  return messageChunks(lines.join('\n'), limit);
 }
 
 function normalizeDeliveryLocation(raw) {
@@ -201,6 +215,14 @@ class PdvService {
     if (!order || order.completedAt || order.status === 'CANCELLED' || order.paymentTransactionId) return false;
     const expiresAt = Date.parse(order.pixExpiresAt || order.paymentExpiresAt || '');
     if (!Number.isFinite(expiresAt) || expiresAt > Date.now()) return false;
+    if (order.procurement?.deposit?.receivedAt) {
+      await this.repository.transaction(async tx => {
+        const current = await tx.get('orders', order.id);
+        if (!current || current.completedAt || current.status === 'CANCELLED') return;
+        tx.set('orders', current.id, { ...current, status: 'AWAITING_RECONCILIATION', paymentReviewStatus: 'BALANCE_PIX_EXPIRED', updatedAt: new Date().toISOString() });
+      });
+      return true;
+    }
     await this.repository.repository.cancelOrder(order.id, 'Prazo de pagamento expirado');
     return true;
   }
@@ -219,7 +241,7 @@ class PdvService {
     if (order.completedAt || order.paidAt) return order;
     if (order.pixData && Date.parse(order.pixExpiresAt || '') <= Date.now()) {
       await this.expirePixOrder(order.id);
-      throw new Error('Esta cobrança Pix venceu. Inicie uma nova venda.');
+      throw new Error(order.procurement ? 'O Pix do saldo venceu. O caixa precisa conferir o pagamento; o sinal foi preservado.' : 'Esta cobrança Pix venceu. Inicie uma nova venda.');
     }
     if (order.paymentMethod !== 'PIX' || !order.pixData || order.pixData.pixCopiaECola) { return order; }
     const charge = await this.pix.createCharge({ amount: partAmount(order, 'PIX'), txid: order.pixData.txid, ticketNumber: order.ticketNumber,
@@ -233,7 +255,8 @@ class PdvService {
       return this.repository.transaction(async tx => {
         const current = await tx.get('orders', orderId);
         if (!current || current.completedAt || current.status === 'CANCELLED' || current.pixData?.txid) throw new Error('A comanda não pode ser alterada.');
-        const updated = { ...current, paymentMethod: 'PIX', paymentParts: normalizePaymentParts(paymentParts, 'PIX', current.total), pixMode: 'MANUAL', manualPix: settings, status: 'AWAITING_PAYMENT', paymentReviewStatus: 'AWAITING_PAYMENT' };
+          assertProcurementReady(current);
+          const updated = { ...current, paymentMethod: 'PIX', paymentParts: normalizePaymentParts(paymentParts, 'PIX', payableTotal(current)), pixMode: 'MANUAL', manualPix: settings, status: 'AWAITING_PAYMENT', paymentReviewStatus: 'AWAITING_PAYMENT' };
         tx.set('orders', orderId, updated); return updated;
       });
     }
@@ -464,6 +487,46 @@ class PdvService {
       return result;
     };
     try {
+      if (['order-request-notice', 'order-request-forecast', 'order-request-event'].includes(job.kind)) {
+        const request = await this.repository.read('agent_handoffs', job.requestId);
+        if (!request || request.kind !== 'ORDER_REQUEST' || request.tenantId !== 'conflora') throw new Error('Comanda de atendimento não encontrada.');
+        if (job.kind === 'order-request-forecast' && request.arrivalForecast !== job.forecast) {
+          await update({ status: 'SKIPPED', leaseUntil: 0, lastError: 'FORECAST_SUPERSEDED' });
+          return;
+        }
+        if (job.kind === 'order-request-event' && ((job.event === 'quote' && (job.quoteVersion !== request.quoteVersion || request.requestStatus !== 'AWAITING_CUSTOMER')) ||
+            (job.event === 'arrival' && request.requestStatus !== 'READY'))) {
+          await update({ status: 'SKIPPED', leaseUntil: 0, lastError: 'PROCUREMENT_MESSAGE_SUPERSEDED' }); return;
+        }
+        const summary = require('../services/order-intake.service').names(request.items);
+        if (job.target === 'admin') {
+          const users = await this.repository.repository.getAllUsers();
+          const admins = users.filter(user => user.active !== false && user.role === 'ADMIN');
+          if (!admins.length) throw new Error('Responsáveis da Conflora não configurados.');
+          for (const user of admins) await this.repository.repository.createNotification({
+            id: `${request.id}-admin-${user.id}`, toUserId: user.id, type: 'ORDER_REQUEST', title: 'Novo pedido de atendimento',
+            message: `${request.customerName || 'Cliente'}: ${summary}. Aguarda cotação/previsão.`,
+            data: { requestId: request.id },
+          });
+        } else {
+          if (typeof this.whatsapp?.sendTextMessage !== 'function' && typeof this.whatsapp?.sendPdvText !== 'function') throw new Error('PROVIDER_NOT_CONFIGURED');
+          const recipient = ['order-request-forecast', 'order-request-event'].includes(job.kind) ? request.customerPhone
+            : job.target === 'junior' ? process.env.JUNIOR_WHATSAPP_NUMBER || process.env.OWNER_WHATSAPP_NUMBER
+              : process.env.STORE_NOTIFICATION_PHONE || this.ownerPhone;
+          const phone = normalizePhone(recipient);
+          if (!phone) throw new Error('Configure o WhatsApp do responsável pela encomenda.');
+          const text = job.kind === 'order-request-event' ? job.text : job.kind === 'order-request-forecast'
+            ? `Previsão da sua encomenda (${summary}): ${job.forecast}.`
+            : `CONFLORA — PEDIDO ${request.id}\n${request.customerName || 'Cliente'}: ${request.customerPhone}\n${summary}\nPendente de cotação e previsão. Sem pagamento ou reserva de estoque.`;
+          const chunks = notificationChunks(text, this.whatsapp.sendPdvText ? 900 : 3500);
+          for (let index = job.textChunksSent || 0; index < chunks.length; index++) {
+            await sendOnce('text', () => this.whatsapp.sendPdvText ? this.whatsapp.sendPdvText(phone, chunks[index]) : this.whatsapp.sendTextMessage(phone, chunks[index]),
+              { textChunksSent: index + 1, deliveryStatus: 'ACCEPTED' });
+          }
+        }
+        await update({ status: 'SENT', leaseUntil: 0, sentAt: new Date().toISOString(), lastError: '' });
+        return;
+      }
       if (job.kind === 'admin-new') {
         const order = await this.repository.read('orders', job.orderId);
         if (order && order.status !== 'CANCELLED') await this.repository.repository.notifyAllAdminUsersOfSale(order);
@@ -577,10 +640,11 @@ class PdvService {
         intent: job.photoRequested ? 'foto' : 'preco', criteria_query: job.criteriaQuery || undefined,
       });
       if (!envelope.next_action.send_customer_message) return skip('REVALIDATION_FAILED');
-      const cards = envelope.data.cards;
-      if (!cards.length || cards.length > 3) return handoff('invalid_outgoing_products');
+      const intake = envelope.data.kind === 'ORDER_INTAKE';
+      const cards = envelope.data.cards || [];
+      if (!intake && (!cards.length || cards.length > 3)) return handoff('invalid_outgoing_products');
       const products = cards.map(c => ({ ...c, priceCents: c.price_cents }));
-      const text = products.length === 1 ? priceBlock(products[0]) : productList({ items: products, heading: 'Opções cadastradas' });
+      const text = intake ? envelope.data.customer_message : products.length === 1 ? priceBlock(products[0]) : productList({ items: products, heading: 'Opções cadastradas' });
       if (!verifyCustomerMessage(text, { allowedCents: cards.map(c => c.price_cents) }).ok) return handoff('outgoing_guard_violation');
       if ((await agent.handoffStore.getConversation(agent.tenantId, customerKey)).automation === 'paused') return skip('HUMAN_HANDOFF');
       // Do not retry an uncertain network outcome: Meta has no client idempotency key for sends.
@@ -590,7 +654,7 @@ class PdvService {
         : await this.whatsapp.sendTextMessage(job.recipient, text);
       if (result?.mock || !result?.messages?.[0]?.id) throw new Error('PROVIDER_NOT_ACKNOWLEDGED');
       await update({ status: 'SENT', providerMessageId: result.messages[0].id, sentAt: new Date().toISOString(), leaseUntil: 0, lastError: '' });
-      if (!job.photoRequested) await agent.handoffStore.rememberProducts(agent.tenantId, customerKey, cards);
+      if (!job.photoRequested && !intake) await agent.handoffStore.rememberProducts(agent.tenantId, customerKey, cards);
       await this.repository.repository.appendMessage(job.recipient, 'assistant', text, { requirePersistence: true, messageId: job.id });
     } catch {
       // Includes timeout and persistence failure after acceptance; require human reconciliation.

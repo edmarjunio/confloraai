@@ -16,6 +16,21 @@ test('public cache isolates shops, expires and persists only the public snapshot
   assert.equal(main.read(), null);
 });
 
+test('a fresh public snapshot avoids revalidation for one minute and can be selectively removed', async () => {
+  const { createPublicCache } = await import('../public/storefront/public-cache.mjs');
+  const entries = new Map();
+  const storage = { getItem: key => entries.get(key), setItem: (key, value) => entries.set(key, value), removeItem: key => entries.delete(key) };
+  let now = 1000;
+  const cache = createPublicCache('garden', storage, () => now);
+  cache.write({ config: { identity: { name: 'Garden' } }, products: [] });
+  assert.equal(cache.isFresh(), true);
+  now += 60000;
+  assert.equal(cache.isFresh(), false);
+  assert.ok(cache.read()); // stale public content remains an offline fallback
+  cache.invalidate();
+  assert.equal(cache.read(), null);
+});
+
 test('public cache tolerates malformed or blocked browser storage', async () => {
   const { createPublicCache } = await import('../public/storefront/public-cache.mjs');
   const config = { identity: { name: 'Test' } };

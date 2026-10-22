@@ -172,10 +172,7 @@ class ConfloraAgentService {
         });
       }
       if (res.outcome === 'not_found') {
-        return await this._triggerSilentHandoff(scope, 'product_not_found', {
-          query: res.ref.query,
-          candidates: res.candidates,
-        });
+        return this._offerOrder(scope, parsed.refs);
       }
     }
 
@@ -198,7 +195,7 @@ class ConfloraAgentService {
     if (rawDocs.length !== ids.length) return this._triggerSilentHandoff(scope, 'incomplete_product_read', {});
     for (const raw of rawDocs) {
       if (!raw.exists) {
-        return await this._triggerSilentHandoff(scope, 'product_not_found_on_read', { id: raw.id });
+        return this._offerOrder(scope, parsed.refs);
       }
       const evalRes = evaluateProduct(raw, ctx);
       const criteria = interpretTraits(parsed.criteriaQuery || '');
@@ -208,11 +205,14 @@ class ConfloraAgentService {
       sourceRecords.push(evalRes.source);
 
       if (!evalRes.ok) {
+        if (evalRes.issues.some(issue => ['product_inactive', 'price_missing'].includes(issue.code))) return this._offerOrder(scope, parsed.refs);
         return await this._triggerSilentHandoff(scope, 'invalid_or_conflicted_product', {
           id: raw.id,
           issues: evalRes.issues,
         });
       }
+
+      if (evalRes.product.stock.known && evalRes.product.stock.availableMilli <= 0) return this._offerOrder(scope, parsed.refs);
 
       evaluatedProducts.push(evalRes.product);
       allowedCents.push(evalRes.product.priceCents);
@@ -284,10 +284,7 @@ class ConfloraAgentService {
     });
 
     if (matchedEntries.length === 0) {
-      return await this._triggerSilentHandoff(scope, 'no_products_matching_filter', {
-        query: parsed.query,
-        category: parsed.category,
-      });
+      return this._offerOrder(scope, [{ query: parsed.query }]);
     }
 
     const limit = Math.min(parsed.limit, 3);
@@ -367,6 +364,11 @@ class ConfloraAgentService {
 
   async _atenderMensagem(scope, conversation) {
     const text = normalizeName(scope.parsed.message);
+    if (this.orderIntake) {
+      const result = await this.orderIntake.handle({ phone: scope.parsed.customerPhone,
+        message: scope.parsed.message, messageId: scope.parsed.messageId });
+      if (result) return this._intakeEnvelope(scope, result);
+    }
     let result;
     if (/\b(atendente|humano|falar com alguem|falar com pessoa)\b/.test(text)) {
       return this._triggerSilentHandoff(scope, 'customer_requested_human', {});
@@ -391,6 +393,8 @@ class ConfloraAgentService {
         result = await this._buscarProdutos({ ...scope, parsed: { ...scope.parsed, query: text, limit: 3 } });
       } else {
         let query = scope.parsed.message.trim().replace(/[?!.,]+$/g, '');
+          if (/^(?:quanto custa|qual o preco)\s+(?:a|o)\s+(?:grande|pequena|pequeno|maior|menor)\b/.test(text)) return this._triggerSilentHandoff(scope, 'ambiguous_reference', {});
+        if (traits.unsupported && /\b(?:nao|sem|ou|mas|exceto)\b/.test(text)) return this._triggerSilentHandoff(scope, 'unsupported_characteristics', {});
         query = query.replace(/^(?:ol[áa]|oi|bom dia|boa tarde|boa noite|opa)[!?,.\s]*/i, '').trim();
         query = query.replace(/^(?:quanto (?:custa|tá|ta|está|esta)|qual (?:o )?(?:preço|preco)(?: d[ao])?|(?:vocês?|voces?|vcs?)\s+(?:têm|tem)|tem|manda (?:uma )?foto d[ao]|foto d[ao])\s+/i, '').trim();
         query = query.replace(/^(?:a|o|as|os|da|do|das|dos|de)\s+/i, '').trim();
@@ -405,6 +409,7 @@ class ConfloraAgentService {
         }
       }
     }
+    if (result.data.kind === 'ORDER_INTAKE') return result;
     if (result.next_action.send_customer_message) {
       result.data.photo_requested = photo;
       result.data.criteria_query = interpretTraits(text).constraints.length ? scope.parsed.message : '';
@@ -461,6 +466,7 @@ class ConfloraAgentService {
       } else {
         const res = this.productIndex.resolve(item.query);
         if (res.outcome !== 'found') {
+          if (res.outcome === 'not_found') return this._offerOrder(scope, parsed.items);
           return await this._triggerSilentHandoff(scope, res.outcome === 'ambiguous' ? 'ambiguous_product' : 'product_not_found', {
             query: item.query,
             candidates: res.candidates,
@@ -839,6 +845,24 @@ class ConfloraAgentService {
   }
 
   // --- Auxiliares de Handoff Silencioso e Envelope ---
+
+  _intakeEnvelope(scope, result) {
+    return assertEnvelope(this._buildEnvelope({ requestId: scope.requestId, status: 'found',
+      data: { kind: 'ORDER_INTAKE', customer_message: result.reply, products: [], cards: [],
+        ...(result.requestId ? { request_id: result.requestId } : {}) },
+      validation: { checks: [], allowed_cents: [] }, provenance: { kind: 'ORDER_INTAKE', financial_order: false },
+      nextAction: { send_customer_message: true, handoff_to_human: false }, latencyMs: Date.now() - scope.startMs }));
+  }
+
+  async _offerOrder(scope, refs) {
+    const queries = refs.map(ref => ref.query).filter(Boolean);
+    if (this.orderIntake && queries.length) {
+      const result = await this.orderIntake.handle({ phone: scope.parsed.customerPhone,
+        message: `Tem ${queries.join(' e ')}?`, messageId: scope.parsed.messageId, force: true });
+      if (result) return this._intakeEnvelope(scope, result);
+    }
+    return this._intakeEnvelope(scope, { reply: queries.length ? require('../services/customer-service-policy').ORDER_OFFER : 'Qual produto você quer encomendar?' });
+  }
 
   async _triggerSilentHandoff(scope, reason, metadata = {}) {
     const handoffRecord = {

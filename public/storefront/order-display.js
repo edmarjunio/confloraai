@@ -4,6 +4,12 @@
   const payment = method => ({ PIX: 'PIX', PIX_MANUAL: 'PIX', CASH: 'Dinheiro', DINHEIRO: 'Dinheiro', CREDITO: 'Cartão de crédito', CARTAO_CREDITO: 'Cartão de crédito', CARD: 'Cartão de crédito', CARTAO: 'Cartão de crédito', DEBITO: 'Cartão de débito', CARTAO_DEBITO: 'Cartão de débito', FIADO: 'Fiado', MISTO: 'Pagamento dividido', SALDO_CLIENTE: 'Crédito do cliente' }[String(method || '').trim().toUpperCase()] || 'Pagamento a combinar');
   function status(order) {
     if (order.status === 'CANCELLED') return 'Cancelado';
+    if (order.status === 'AWAITING_RECONCILIATION') return 'Saldo Pix: aguardando conferência do caixa';
+    if (order.status === 'AWAITING_QUOTE') return 'Aguardando cotação';
+    if (order.status === 'AWAITING_QUOTE_ACCEPTANCE') return 'Aguardando aceite da cotação';
+    if (order.status === 'AWAITING_ARRIVAL') return 'Aguardando chegada';
+    if (order.status === 'AWAITING_FULFILLMENT') return 'Disponível: escolha entrega ou retirada';
+    if (order.procurement && order.deliveryStatus === 'PENDING_DELIVERY') return 'Aguardando entregador';
     if (order.creditApprovalStatus === 'PENDING') return 'Fiado: aguardando aprovação do Admin';
     if (order.deliveryStatus === 'DELIVERED') return 'Entregue';
     if (order.paymentStatus === 'ON_ACCOUNT') return 'Fiado aprovado';
@@ -39,17 +45,21 @@
       const quantity = Number(item.quantity || 0); const price = Number(item.price?.amountMinor !== undefined ? item.price.amountMinor / 100 : item.price ?? item.unitPrice ?? 0);
       const row = node('div', undefined, 'cf-receipt-item'); const copy = node('div');
       copy.append(node('strong', item.name || 'Produto'), node('small', `${quantity.toLocaleString('pt-BR', { maximumFractionDigits: 3 })}${item.unit === 'KG' ? ' kg' : ' ×'} · ${money(price)}${item.unit === 'KG' ? '/kg' : '/un.'}`));
-      row.append(copy, node('strong', money(item.subtotalMinor !== undefined ? item.subtotalMinor / 100 : item.subtotal ?? quantity * price))); items.append(row);
+      row.append(copy, node('strong', order.total === null ? 'A cotar' : money(item.subtotalMinor !== undefined ? item.subtotalMinor / 100 : item.subtotal ?? quantity * price))); items.append(row);
     }
     section.append(items);
     const total = Number(order.totalMinor !== undefined ? order.totalMinor / 100 : order.total || 0);
     const subtotal = Number(order.subtotal ?? order.items.reduce((sum, item) => sum + Number(item.price?.amountMinor !== undefined ? item.price.amountMinor / 100 : item.price || 0) * Number(item.quantity || 0), 0));
     const totals = node('div', undefined, 'cf-receipt-totals');
-    const addTotal = (title, value, className) => { const row = node('div', undefined, className); row.append(node('span', title), node('strong', money(value))); totals.append(row); };
-    addTotal('Subtotal', subtotal);
+    const addTotal = (title, value, className) => { const row = node('div', undefined, className); row.append(node('span', title), node('strong', value === null ? 'A confirmar' : money(value))); totals.append(row); };
+    addTotal('Subtotal', order.total === null ? null : subtotal);
     if (Number(order.discountAmount || order.discount)) addTotal('Desconto', -Number(order.discountAmount || order.discount));
     if (Number(order.freightValue)) addTotal('Entrega', order.freightValue);
-    addTotal('Total', total, 'cf-receipt-grand-total'); section.append(totals);
+    addTotal('Total', order.total === null ? null : total, 'cf-receipt-grand-total'); section.append(totals);
+    if (order.procurement) {
+      addTotal('Sinal recebido', (order.procurement.deposit?.amountMinor || 0) / 100);
+      addTotal(order.completedAt ? 'Saldo recebido na conclusão' : 'Saldo a pagar', (Math.round(total * 100) - (order.procurement.deposit?.amountMinor || 0)) / 100);
+    }
     const details = node('div', undefined, 'cf-receipt-details');
     details.append(node('p', payment(order.paymentMethod)));
     for (const part of order.paymentParts?.length > 1 ? order.paymentParts : []) details.append(node('p', `${payment(part.method)}: ${money(part.amount)}`));

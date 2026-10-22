@@ -440,6 +440,7 @@ function createApp({
   installExistingStore(app, {
     catalog: messageService.catalogRepo,
     repository: messageService.firestoreRepo,
+    getOrderIntake: () => messageService.orderIntake,
     assistant: storeAssistant || new StoreAssistant({ client: messageService.agentService?.getAiClient?.(), model: config.gemini.model }),
   });
   app.get('/api/maps-config', (_req, res) => {
@@ -509,7 +510,8 @@ function createApp({
       return res.redirect('/shop/' + encodeURIComponent(process.env.STOREFRONT_STORE_SLUG) + detail);
     }
     res.setHeader('Cache-Control', 'no-store');
-    return res.sendFile(require('node:path').resolve(__dirname, '../../public/storefront/index.html'));
+    const shellPath = require('node:path').resolve(__dirname, '../../public/storefront/shell.html');
+    return res.sendFile(require('node:fs').existsSync(shellPath) ? shellPath : require('node:path').resolve(__dirname, '../../public/storefront/index.html'));
   });
   app.get('/catalogo-classico', (_req, res) => res.redirect(308, '/'));
 
@@ -752,7 +754,8 @@ function createApp({
         return res.status(200).send(Buffer.from(photo.data, 'base64'));
       }
       if (photo?.imageUrl && photo.imageUrl !== `/api/images/${id}`) {
-        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        // The photo ID can be repointed; only content-hashed URLs are immutable.
+        res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
         return res.redirect(302, photo.imageUrl);
       }
       const cleanProdId = String(photo?.productId || id.replace(/^img_/, ''));
@@ -892,9 +895,7 @@ function createApp({
         }
       }
       let pixData = null;
-      const manualPix = resolvedPaymentMethod === 'PIX' && require('../orders/pix-mode').pixMode() === 'MANUAL'
-        ? require('../orders/pix-mode').manualPixSettings()
-        : null;
+      const manualPix = resolvedPaymentMethod === 'PIX' ? require('../orders/pix-mode').manualPixSettings() : null;
       if (manualPix) require('../orders/manual-pix.routes').orderAccessToken({ id: orderId });
       if (resolvedPaymentMethod === 'PIX' && !manualPix) {
         if (!sicrediPixClient.isOfficialApiConfigured) {
@@ -943,7 +944,7 @@ function createApp({
         ...(resolvedPaymentMethod === 'PIX' ? { pixMode: manualPix ? 'MANUAL' : 'SICREDI' } : {}),
         ...(manualPix ? { manualPix, paymentReviewStatus: 'AWAITING_PAYMENT' } : {}),
         ...(pixData ? { pixData, pixProvider: 'SICREDI', paymentProvider: 'SICREDI' } : {}),
-      }, { requirePersistence: resolvedPaymentMethod === 'PIX' && !(messageService.firestoreRepo.isInMemory && !messageService.firestoreRepo.firestore), reserveInventory: true });
+      }, { requirePersistence: resolvedPaymentMethod === 'PIX' && !(manualPix && messageService.firestoreRepo.isInMemory && !messageService.firestoreRepo.firestore), reserveInventory: true });
 
       let receiptDelivery = { sent: false, reason: 'Envio não solicitado.' };
       if (order.source === 'WEB_CATALOG') {
@@ -1435,7 +1436,17 @@ function createApp({
   if (messageService.orderService) {
     messageService.orderService.commerce = { pdv: app.locals.pdv.service, pix: sicrediPixClient };
   }
-  app.use('/pdv-assets/dist', express.static(require('node:path').resolve(__dirname, '../../public/pdv/dist')));
+  messageService.orderIntake ||= new (require('../services/order-intake.service').OrderIntakeService)(messageService.firestoreRepo, {
+    catalog: messageService.catalogRepo,
+    notify: id => app.locals.pdv.service.deliver(id),
+  });
+  if (messageService.metaAgentService) messageService.metaAgentService.orderIntake = messageService.orderIntake;
+  app.locals.orderIntake = messageService.orderIntake;
+  messageService.orderIntake.procurement.pdv = app.locals.pdv.service;
+  require('./order-intake.routes').installOrderIntakeRoutes(app, messageService.orderIntake);
+  app.use('/pdv-assets/dist', express.static(require('node:path').resolve(__dirname, '../../public/pdv/dist'), {
+    setHeaders: (res, file) => res.setHeader('Cache-Control', /[/\\][a-f0-9]{16}\.(?:js|css)$/.test(file) ? 'public, max-age=31536000, immutable' : 'no-cache, must-revalidate'),
+  }));
   app.use('/guias', express.static(require('node:path').resolve(__dirname, '../../public/guias')));
 
   // --- API DO CAIXA & PDV RÁPIDO (CELULAR & BALCÃO) ---

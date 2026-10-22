@@ -79,7 +79,7 @@ function summarizeDailyExecutiveMetrics({ date, orders = [], settlements = [], u
   );
   const dailySettlements = settlements.filter((settlement) =>
     settlement?.createdAt && getBusinessDate(settlement.createdAt) === date &&
-    ['QUITACAO_FIADO', 'CREDITO_CLIENTE'].includes(settlement.entryType || settlement.type || 'QUITACAO_FIADO')
+    ['QUITACAO_FIADO', 'CREDITO_CLIENTE', 'ENCOMENDA_SINAL'].includes(settlement.entryType || settlement.type || 'QUITACAO_FIADO')
   );
 
   let totalRevenueMinor = 0;
@@ -116,7 +116,7 @@ function summarizeDailyExecutiveMetrics({ date, orders = [], settlements = [], u
 
     totalRevenueMinor += orderMinor;
     let receiptMinor = isPaid && paymentMethod !== 'SALDO_CLIENTE' ? orderMinor : 0;
-    if (order.paymentParts?.length > 1) {
+    if (order.paymentParts?.length > 1 || order.procurement) {
       receiptMinor = 0;
       for (const part of order.paymentParts) {
         const amount = currencyToMinor(part.amount);
@@ -200,7 +200,7 @@ function summarizeDailyExecutiveMetrics({ date, orders = [], settlements = [], u
 
   for (const settlement of dailySettlements) {
     const amountMinor = currencyToMinor(settlement.amount);
-    if ((settlement.entryType || settlement.type) === 'CREDITO_CLIENTE') { advanceCreditMinor += amountMinor; }
+    if (['CREDITO_CLIENTE', 'ENCOMENDA_SINAL'].includes(settlement.entryType || settlement.type)) { advanceCreditMinor += amountMinor; }
     else { debtReceivedMinor += amountMinor; }
     const actor = settlement.receivedBy || { id: settlement.receivedById, name: settlement.operatorName };
     if (actor.id || actor.name) {

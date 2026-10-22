@@ -424,7 +424,7 @@
   // ============================================================================
   class RenderProductCard extends HTMLElement {
     static get observedAttributes() {
-      return ["variant", "product-data", "selected", "quantity", "favorite"];
+      return ["variant", "product-data", "selected", "quantity", "favorite", "image-loading", "image-priority"];
     }
 
     constructor() {
@@ -544,7 +544,8 @@
       );
       imageEl.setAttribute("fallback-src", vm.fallbackImage);
       imageEl.setAttribute("alt", alt);
-      imageEl.setAttribute("loading", "lazy");
+      imageEl.setAttribute("loading", this.getAttribute('image-loading') || 'lazy');
+      imageEl.setAttribute("fetchpriority", this.getAttribute('image-priority') || 'auto');
       imageEl.setAttribute("decoding", "async");
       imageEl.setAttribute("class", className);
       return imageEl.outerHTML;

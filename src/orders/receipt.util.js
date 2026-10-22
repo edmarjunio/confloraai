@@ -90,6 +90,10 @@ function formatOrderReceipt(order) {
   ];
 
   const copiaECola = order.pixCopiaECola || order.pixData?.pixCopiaECola || order.pixData?.copiaECola || order.pixCode;
+  if (order.procurement) {
+    lines.push(`Sinal recebido: ${money((order.procurement.deposit?.amountMinor || 0) / 100)}`,
+      `Saldo ${order.completedAt ? 'recebido nesta conclusão' : 'a pagar na retirada ou entrega'}: ${money(require('./procurement-payment').payableTotal(order))}`);
+  }
   if (rawPaymentMethod === 'PIX' && order.pixMode === 'MANUAL' && order.manualPix?.configured && !order.completedAt && !order.paidAt) {
     lines.push(`Chave PIX: ${order.manualPix.key}`, `Titular: ${order.manualPix.recipientName}`,
       'A loja confere o crédito na conta antes de confirmar o pagamento.');

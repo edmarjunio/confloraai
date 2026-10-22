@@ -1016,6 +1016,7 @@ class FirestoreRepository {
       if (!order) {throw new Error('Pedido não encontrado.');}
       if (order.status === status) {return;}
       if (status === 'CANCELLED') {
+        if (order.procurement?.deposit?.receivedAt) throw new Error('Encomenda com sinal recebido exige conciliação/estorno antes de cancelar.');
         if (PAID_ORDER_STATUSES.has(order.status) || order.stockDeducted || order.paymentTransactionId) {
           throw new Error('Pedido com baixa ou pagamento exige conciliação/estorno antes de cancelar.');
         }

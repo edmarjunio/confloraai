@@ -152,7 +152,13 @@
           aria-label="Filtrar por subcategoria"
           hidden
         ></div>
-        <div id="products" class="products"></div>
+        <div id="products" class="products" aria-busy="true">
+          <span class="sr-only" role="status">Carregando produtos...</span>
+          <div class="catalog-skeleton" aria-hidden="true"><span class="product-photo"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span><span class="skeleton-action"></span></div>
+          <div class="catalog-skeleton" aria-hidden="true"><span class="product-photo"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span><span class="skeleton-action"></span></div>
+          <div class="catalog-skeleton" aria-hidden="true"><span class="product-photo"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span><span class="skeleton-action"></span></div>
+          <div class="catalog-skeleton" aria-hidden="true"><span class="product-photo"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span><span class="skeleton-action"></span></div>
+        </div>
         <button id="loadMore" class="quiet" hidden data-i18n="catalog.load_more">
           Mostrar mais produtos
         </button>

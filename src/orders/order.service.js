@@ -126,56 +126,12 @@ class OrderService {
    * @param {boolean} [options.isUpdated=false]
    * @returns {string}
    */
-  formatCustomerReceipt(order, { isVipProposal = false, isUpdated = false } = {}) {
-    if (!order || !order.items || order.items.length === 0) {
-      return '';
-    }
-
-    const itemsText = order.items
-      .map((item) => `• ${item.quantity}x ${item.name} (${formatCurrency(item.price)} un) = ${formatCurrency(item.subtotal)}`)
-      .join('\n');
-
-    // Exemplo 2: Cliente com Histórico ("O de sempre")
-    if (isVipProposal && order.deliveryAddress && order.paymentMethod) {
-      return (
-        `Claro! Vai ser o de sempre?\n\n` +
-        `${itemsText}\n\n` +
-        `💰 *Valor total:* ${formatCurrency(order.total)}\n\n` +
-        `📍 *Entregar em:* ${order.deliveryAddress}?\n\n` +
-        `💳 No *${order.paymentMethod}* né?`
-      );
-    }
-
-    // Exemplo 3: Reconfirmação após alteração de dados
-    if (isUpdated) {
-      const addressLine = order.deliveryAddress
-        ? `📍 *Entregar em:* ${order.deliveryAddress}\n\n`
-        : `📍 *Endereço para entrega:*\n\n`;
-
-      const paymentLine = order.paymentMethod
-        ? `💳 *Forma de pagamento:* ${order.paymentMethod}\n\n`
-        : `💳 *Forma de pagamento:*\n\n`;
-
-      return (
-        `Perfeito! Já atualizei o seu pedido:\n\n` +
-        `📋 *Resumo do Pedido:*\n\n` +
-        `${itemsText}\n\n` +
-        `💰 *Valor total:* ${formatCurrency(order.total)}\n\n` +
-        `${addressLine}` +
-        `${paymentLine}` +
-        `Poderia me confirmar para finalizarmos?`
-      );
-    }
-
-    // Exemplo 1: Pedido Novo / Múltiplo sem histórico completo
-    return (
-      `Certo! Já anotei o seu pedido:\n\n` +
-      `📋 *Resumo do Pedido:*\n\n` +
-      `${itemsText}\n\n` +
-      `💰 *Valor total:* ${formatCurrency(order.total)}\n\n` +
-      `📍 Poderia me confirmar o pedido e mandar o endereço pra gente entregar?\n\n` +
-      `💳 Qual seria a forma de pagamento?`
-    );
+  formatCustomerReceipt(order) {
+    if (!order?.items?.length) return '';
+    const items = order.items.map(item => item.quantity + ' ' + item.name).join(' e ');
+    const total = formatCurrency(order.total);
+    const details = [order.deliveryAddress, order.paymentMethod].filter(Boolean).join('; ');
+    return items + '. Total: ' + total + '.' + (details ? ' ' + details + '.' : '') + ' Posso confirmar?';
   }
 
   /**

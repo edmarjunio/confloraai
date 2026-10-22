@@ -80,15 +80,6 @@
             roles: ['ADMIN'],
           },
           {
-            id: 'pix-monitor',
-            label: 'Monitor PIX & Webhook Sicredi'.tr,
-            subtitle: 'Status pendente/confirmado/expirado e simulador'.tr,
-            icon: '💠',
-            iconBg: '#ccfbf1',
-            href: '/admin?tab=pix',
-            roles: ['ADMIN'],
-          },
-          {
             id: 'stock',
             label: 'Controle de Estoque'.tr,
             subtitle: 'Inventário, contagem e baixas'.tr,

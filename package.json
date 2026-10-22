@@ -15,7 +15,6 @@
     "test": "npm run test:dev",
     "test:dev": "node --import ./scripts/test-env.js --test test/*.test.js",
     "test:pix": "node --import ./scripts/test-env.js --test test/order-integrity.test.js test/pdv.test.js test/manual-pix.test.js",
-    "test:sicredi": "node --import ./scripts/test-env.js --test test/sicredi-client.test.js test/sicredi-full-flow.test.js",
     "test:pdv": "node --import ./scripts/test-env.js --test test/pdv.test.js",
     "test:whatsapp": "node --import ./scripts/test-env.js --test test/whatsapp-flow.test.js",
     "check:whatsapp": "node scripts/check-whatsapp-config.js",
@@ -41,7 +40,12 @@
     "gcp-build": "npm run build:frontend",
     "deploy:firestore": "firebase deploy --only firestore:rules --project confloraai",
     "deploy": "gcloud run deploy confloraai --source . --region us-central1",
-    "test:notifications": "node --import ./scripts/test-env.js --test test/notifications-and-search.test.js test/customer-notification-stream.test.js && playwright test --config=playwright.notifications.config.js"
+    "test:notifications": "node --import ./scripts/test-env.js --test test/notifications-and-search.test.js test/customer-notification-stream.test.js && playwright test --config=playwright.notifications.config.js",
+    "test:loading": "node --import ./scripts/test-env.js --test test/public-cache.test.js test/public-snapshot.test.js test/smart-loading.test.js",
+    "test:loading:browser": "playwright test --config=playwright.loading.config.js",
+    "benchmark:loading": "node scripts/benchmark-loading.js",
+    "pretest:loading": "npm run build:frontend",
+    "pretest:loading:browser": "npm run build:frontend"
   },
   "dependencies": {
     "@google-cloud/firestore": "9.3.1",

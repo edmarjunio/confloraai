@@ -2,6 +2,7 @@ const PAID_ORDER_STATUSES = new Set(['CONFIRMED', 'PAID_CONFIRMED', 'DELIVERED']
 
 /** Validate the persisted order inside the same transaction as its stock writes. */
 function validateOrderConfirmation(order, updates) {
+  if (order.procurement) throw new Error('Receba a encomenda pelo caixa, com conferência do sinal e do saldo.');
   if (order.status === 'CANCELLED') {
     throw new Error('Pedido cancelado não pode receber baixa ou confirmação.');
   }

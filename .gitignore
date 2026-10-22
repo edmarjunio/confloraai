@@ -24,5 +24,7 @@ playwright-report/
 public/pdv/dist/
 
 public/storefront/dist/
+public/storefront/shell.html
+public/storefront/sw-built.js
 
 tmp/logo-*

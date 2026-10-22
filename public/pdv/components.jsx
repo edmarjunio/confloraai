@@ -374,6 +374,7 @@ window.PdvComponents = (() => {
     return <div ref={ref} />;
   }
   function orderStatusLabel(order) {
+    if (order.procurement && !order.completedAt) return window.ConfloraOrderDisplay.status(order);
     if (order.creditApprovalStatus === 'PENDING') return 'Fiado: aguardando aprovação do Admin';
     if (order.status === 'CANCELLED') return 'Cancelado';
     if (order.paymentStatus === 'ON_ACCOUNT') return 'Fiado registrado';
@@ -833,7 +834,7 @@ window.PdvComponents = (() => {
     showSeparationModalInitial = false,
     onCloseSeparationModal
   }) {
-    const total = Number(order.total || 0);
+    const total = order.procurement && !order.completedAt ? (Math.round(Number(order.total || 0) * 100) - Number(order.procurement.deposit?.amountMinor || 0)) / 100 : Number(order.total || 0);
     const totalCents = Math.round(total * 100);
     const initialMethod = ['CARTAO', 'CARD', 'MISTO'].includes(order.paymentMethod) ? 'CREDITO' : order.paymentMethod === 'CASH' ? 'DINHEIRO' : order.paymentMethod || 'DINHEIRO';
 
@@ -960,7 +961,7 @@ window.PdvComponents = (() => {
     const [directPix, setDirectPix] = useState(order.pixMode === 'MANUAL');
     const hasPixPart = parts.some((p) => p.method === 'PIX');
     const needsManualProof = (directPix || window.CONFLORA_PIX_MODE === 'MANUAL') && hasPixPart;
-    const pixCopyPaste = order.pixData?.pixCopiaECola || order.pixCopiaECola || '';
+    const pixCopyPaste = order.status === 'AWAITING_RECONCILIATION' ? '' : order.pixData?.pixCopiaECola || order.pixCopiaECola || '';
     const pixAmount = (order.paymentParts || parts).filter((p) => p.method === 'PIX').reduce((sum, p) => sum + Number(p.amount || 0), 0) || total;
 
     const copyPixCode = async () => {
@@ -1933,6 +1934,7 @@ window.PdvComponents = (() => {
   }
 
   function resolveOrderTargetColumn(order, explicitStage) {
+    if (order?.procurement && ['AWAITING_QUOTE', 'AWAITING_QUOTE_ACCEPTANCE', 'AWAITING_ARRIVAL', 'AWAITING_FULFILLMENT', 'AWAITING_RECONCILIATION'].includes(order.status)) return { stage: 'procurement', title: 'ENCOMENDAS', tone: 'amber' };
     const isPaidStage = explicitStage === 'paid' || Boolean(
       order && (
         order.paidAt ||
@@ -2161,7 +2163,7 @@ window.PdvComponents = (() => {
         setData(nextData);
         setSelectedOrder((current) => {
           if (!current) return current;
-          const available = [nextData.pendingConfirmation, nextData.pendingPayment, nextData.confirmed, nextData.paid, nextData.awaitingDriver || [], nextData.outForDelivery || [], nextData.history].flat();
+          const available = [nextData.procurementOrders || [], nextData.pendingConfirmation, nextData.pendingPayment, nextData.confirmed, nextData.paid, nextData.awaitingDriver || [], nextData.outForDelivery || [], nextData.history].flat();
           return available.find((order) => order.id === current.id) || current;
         });
       } catch (err) { setError(err.message); }
@@ -2214,6 +2216,7 @@ window.PdvComponents = (() => {
 
     const deliveryOrderIds = new Set([...(data?.awaitingDriver || []), ...(data?.outForDelivery || [])].map(order => order.id));
     const columns = data ? [
+      { title: 'ENCOMENDAS', hint: 'Cotação, sinal e chegada na administração da loja', orders: data.procurementOrders || [], tone: 'amber', stage: 'procurement' },
       { title: 'ESPERANDO CONFIRMAÇÃO', hint: 'Pedidos que exigem confirmação prévia da loja', orders: data.pendingConfirmation, tone: 'amber', stage: 'confirmation' },
       { title: 'ESPERANDO PAGAMENTO', hint: 'Receba no caixa ou aguarde a confirmação do Pix', orders: data.pendingPayment, tone: 'blue', stage: 'payment' },
       { title: 'ESPERANDO ENTREGADOR', hint: 'Pedidos disponíveis ou em separação', orders: data.awaitingDriver || [], tone: 'amber', stage: 'delivery' },
@@ -2233,7 +2236,7 @@ window.PdvComponents = (() => {
     const reportCreditUsedTotal = reportPaidOrders.reduce((sum, order) => sum + methodAmount(order, 'SALDO_CLIENTE'), 0);
     const reportSalesTotal = reportCashOrders.reduce((sum, order) => sum + cashAmount(order), 0);
     const reportDebtSettlements = (data?.debtHistory || []).filter((item) => (item.entryType || item.type) === 'QUITACAO_FIADO');
-    const reportAdvanceCredits = (data?.debtHistory || []).filter((item) => (item.entryType || item.type) === 'CREDITO_CLIENTE');
+    const reportAdvanceCredits = (data?.debtHistory || []).filter((item) => ['CREDITO_CLIENTE', 'ENCOMENDA_SINAL'].includes(item.entryType || item.type));
     const reportDebtTotal = reportDebtSettlements.reduce((sum, item) => sum + Number(item.amount || 0), 0);
     const reportAdvanceTotal = reportAdvanceCredits.reduce((sum, item) => sum + Number(item.amount || 0), 0);
     const reportPaymentTotals = Object.fromEntries(['PIX', 'DINHEIRO', 'CREDITO', 'DEBITO', 'SALDO_CLIENTE'].map((method) => [method,
@@ -2477,7 +2480,7 @@ window.PdvComponents = (() => {
             </>}
           </>}
       </main>
-      {selectedOrder && <OrderDetails key={`${selectedOrder.id}:${selectedOrder.status}:${selectedOrder.paymentMethod}`} order={selectedOrder} canApproveCredit={user.role === 'ADMIN' && selectedOrder.creditApprovalStatus === 'PENDING'} canAdvance={user.role !== 'VENDEDOR' && selectedOrder.status === 'AWAITING_CONFIRMATION' && selectedOrder.creditApprovalStatus !== 'PENDING'} onAdvance={(order) => moveOrder(order.id, 'confirmation', 'payment')} canReceive={(user.role === 'ADMIN' && selectedOrder.creditApprovalStatus === 'PENDING' && selectedOrder.paymentParts?.length > 1 || user.role !== 'VENDEDOR' && ['AWAITING_CASHIER', 'AWAITING_PAYMENT', 'PENDING'].includes(selectedOrder.status)) && !selectedOrder.pixData?.txid} canConfirmManualPix={selectedOrder.pixMode !== 'MANUAL' && (user.role !== 'VENDEDOR' || selectedOrder.createdBy?.id === user.id && (!selectedOrder.pixData?.txid || (selectedOrder.paymentParts || [{ method: selectedOrder.paymentMethod }]).every(part => part.method === 'PIX'))) && (selectedOrder.paymentMethod === 'PIX' && ['CREATING_PIX', 'AWAITING_PIX'].includes(selectedOrder.status) || user.role === 'VENDEDOR' && ['AWAITING_CASHIER', 'AWAITING_PAYMENT', 'PENDING'].includes(selectedOrder.status))} busy={busy} error={error} onReceive={receive} onManualPix={async (order, note, proofId) => {
+      {selectedOrder && <OrderDetails extraContent={selectedOrder.procurement ? <a className={button} href="/configuracoes">Gerenciar encomenda</a> : null} key={`${selectedOrder.id}:${selectedOrder.status}:${selectedOrder.paymentMethod}`} order={selectedOrder} canApproveCredit={user.role === 'ADMIN' && selectedOrder.creditApprovalStatus === 'PENDING'} canAdvance={user.role !== 'VENDEDOR' && selectedOrder.status === 'AWAITING_CONFIRMATION' && selectedOrder.creditApprovalStatus !== 'PENDING'} onAdvance={(order) => moveOrder(order.id, 'confirmation', 'payment')} canReceive={(user.role === 'ADMIN' && selectedOrder.creditApprovalStatus === 'PENDING' && selectedOrder.paymentParts?.length > 1 || user.role !== 'VENDEDOR' && ['AWAITING_CASHIER', 'AWAITING_PAYMENT', 'PENDING'].includes(selectedOrder.status)) && !selectedOrder.pixData?.txid} canConfirmManualPix={selectedOrder.pixMode !== 'MANUAL' && (user.role !== 'VENDEDOR' || selectedOrder.createdBy?.id === user.id && (!selectedOrder.pixData?.txid || (selectedOrder.paymentParts || [{ method: selectedOrder.paymentMethod }]).every(part => part.method === 'PIX'))) && (selectedOrder.paymentMethod === 'PIX' && ['CREATING_PIX', 'AWAITING_PIX', ...(selectedOrder.procurement ? ['AWAITING_RECONCILIATION'] : [])].includes(selectedOrder.status) || user.role === 'VENDEDOR' && ['AWAITING_CASHIER', 'AWAITING_PAYMENT', 'PENDING'].includes(selectedOrder.status))} busy={busy} error={error} onReceive={receive} onManualPix={async (order, note, proofId) => {
         setBusy(true); setError('');
         try {
           const response = await api('/api/caixa/orders/' + order.id + '/confirm-manual-pix', { proofSeen: true, note, proofId });

@@ -1,3 +1,4 @@
+import { renderProcurements } from './procurement.js';
 import { $, element, inputField, notify, money } from "./ui.js";
 const field = (label, name, value) => inputField(label, name, value ?? "");
 const textarea = (label, name, value = "") =>
@@ -18,6 +19,9 @@ export function createAdmin(state) {
   let configDraft;
   async function render() {
     view.replaceChildren(element("h1", { text: "Gerenciar loja" }));
+    if (state.existingStore && state.user?.role === 'CAIXA') {
+      await orderRequests(view); return;
+    }
     if (state.user?.role !== "ADMIN") {
       view.append(
         element("p", { text: "Entre com a conta administrativa desta loja." }),
@@ -27,18 +31,21 @@ export function createAdmin(state) {
     const tabs = element("nav", { class: "admin-tabs" });
     const panel = element("section", { class: "admin-panel" });
     for (const [label, action] of state.existingStore
-      ? [["Personalizar loja", () => settings(panel)]]
+      ? [["Personalizar loja", () => settings(panel)], ["Encomendas", () => orderRequests(panel)]]
       : [
           ["Configurações", () => settings(panel)],
           ["Produtos", () => products(panel)],
           ["Pedidos", () => orders(panel)],
         ]) {
-      tabs.append(
-        element("button", {
-          text: label,
-          onclick: () => action().catch((error) => notify(error.message)),
-        }),
-      );
+      const activate = () => {
+        action().then(() => {
+          for (const item of tabs.children) item.setAttribute('aria-pressed', String(item === control));
+        }).catch((error) => notify(error.message));
+      };
+      const control = state.existingStore
+        ? window.createButton3D({ text: label, variant: 'secondary', onClick: activate, attributes: { 'aria-pressed': String(!tabs.children.length) } })
+        : element('button', { text: label, onclick: activate });
+      tabs.append(control);
     }
     view.append(tabs, panel);
     if (state.existingStore) {
@@ -51,7 +58,11 @@ export function createAdmin(state) {
     }
     await settings(panel);
   }
+  async function orderRequests(panel) {
+    return renderProcurements(panel, state);
+  }
   async function settings(panel) {
+    panel.classList.remove('procurement-panel');
     const response = await state.api("/admin/config");
     configDraft = response.config;
     const config = configDraft;

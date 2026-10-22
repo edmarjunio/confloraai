@@ -4,10 +4,13 @@ import {
   money,
   quantityControl,
   openDialog,
+  notify,
 } from "./ui.js";
 import { icon } from "./icons.js";
 import { searchProducts, normalize as normalizeProductText } from "./guided-search.mjs";
-import { buildProductInfoContent } from "./product-info-content.js";
+let productInfoModule;
+const prepareProductInfo = () => productInfoModule ||= import('./product-info-content.js').catch(error => { productInfoModule = null; throw error; });
+const canPrefetch = () => !navigator.connection?.saveData && !/^(slow-)?2g$/.test(navigator.connection?.effectiveType || '');
 
 function triggerButtonKick(btn) {
   if (!btn) return;
@@ -31,6 +34,7 @@ export function createCatalog(state, add, navigate) {
   let purchaseError = '';
   let purchaseRevision = 0;
   let searchEventTimer;
+  const cardCache = new Map();
   const loadMoreButton = $("#loadMore");
 
   function isSoldByKg(product) {
@@ -150,7 +154,10 @@ export function createCatalog(state, add, navigate) {
     }
   }
 
-  function openProductInformation(product) {
+  async function openProductInformation(product) {
+    let buildProductInfoContent;
+    try { ({ buildProductInfoContent } = await prepareProductInfo()); }
+    catch { notify('Não foi possível carregar os detalhes. Reabra a loja para atualizar a versão.'); return; }
     state.trackEvent?.("view_item", {
       productId: product.id,
       productName: product.name,
@@ -372,7 +379,7 @@ export function createCatalog(state, add, navigate) {
     );
   }
 
-  function renderCard(product, { compact = false, chat = false } = {}) {
+  function renderCard(product, { compact = false, chat = false, priority = false } = {}) {
     const open = () =>
       navigate(
         `${state.basePath ?? `/shop/${state.slug}`}/products/${encodeURIComponent(product.id)}`,
@@ -393,7 +400,18 @@ export function createCatalog(state, add, navigate) {
     const card = element("render-product-card", {
       variant: chat ? "chat-mini" : compact ? "recommendation" : "storefront",
       "product-data": JSON.stringify(cardProduct),
+      'image-loading': priority ? 'eager' : 'lazy',
+      'image-priority': priority ? 'high' : 'auto',
     });
+    let intentTimer;
+    const prepare = () => {
+      clearTimeout(intentTimer);
+      if (canPrefetch()) intentTimer = setTimeout(() => prepareProductInfo().catch(() => {}), 120);
+    };
+    card.addEventListener('pointerenter', prepare);
+    card.addEventListener('focusin', prepare);
+    card.addEventListener('pointerleave', () => clearTimeout(intentTimer));
+    card.addEventListener('focusout', () => clearTimeout(intentTimer));
     card.addEventListener("cf-product-card-action", (event) => {
       const { action, nativeEvent } = event.detail || {};
       if (action === "open") open();
@@ -550,7 +568,27 @@ export function createCatalog(state, add, navigate) {
     }
 
     renderedItems = list;
-    $("#products").replaceChildren(...list.slice(0, pageSize).map((product) => renderCard(product)));
+    const container = $('#products');
+    container.removeAttribute('aria-busy');
+    const visible = list.slice(0, pageSize);
+    const desired = visible.map((product, index) => {
+      const priority = index < (window.innerWidth < 768 ? 2 : 4);
+      const signature = JSON.stringify([product, categoryLabel(product), priority]);
+      let entry = cardCache.get(product.id);
+      if (!entry || entry.signature !== signature) {
+        entry = { signature, node: renderCard(product, { priority }) };
+        cardCache.set(product.id, entry);
+        window.ConfloraPerformance?.count('cardsCreated');
+      } else { window.ConfloraPerformance?.count('cardsReused'); }
+      return entry.node;
+    });
+    const keep = new Set(desired);
+    for (const child of [...container.children]) if (!keep.has(child)) child.remove();
+    desired.forEach((node, index) => {
+      if (container.children[index] !== node) container.insertBefore(node, container.children[index] || null);
+    });
+    const visibleIds = new Set(visible.map(product => product.id));
+    for (const id of cardCache.keys()) if (!visibleIds.has(id)) cardCache.delete(id);
     if (!list.length) {
       const emptyContainer = element("div", {
         class: "catalog-empty-state",
@@ -655,6 +693,8 @@ export function createCatalog(state, add, navigate) {
       alt: product.imageIsIllustrative
         ? `Imagem ilustrativa de ${product.name}`
         : images[0].alt,
+      loading: 'eager',
+      fetchpriority: 'high',
     });
     const quantity = element("input", {
       type: "number",

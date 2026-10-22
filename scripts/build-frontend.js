@@ -23,3 +23,4 @@ console.log('Interface do caixa compilada com dependências locais e arquivos ve
 const storefrontDestination = resolve(root, 'public/storefront/dist');
 mkdirSync(storefrontDestination, { recursive: true });
 esbuild.buildSync({ entryPoints: [resolve(root, 'public/storefront/spending-chart.jsx')], outfile: resolve(storefrontDestination, 'spending-chart.js'), bundle: true, format: 'esm', minify: true, define: { 'process.env.NODE_ENV': '"production"' }, target: ['es2020'], logLevel: 'warning' });
+require('./build-storefront').buildStorefront(root);

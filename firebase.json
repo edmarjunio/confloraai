@@ -7,7 +7,70 @@
     "public": "public",
     "headers": [
       {
-        "source": "/storefront/sw.js",
+        "source": "/storefront/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=0, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "/storefront/dist/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=0, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "/storefront/shell.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=0, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "/storefront/dist/versioned/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=31536000, immutable"
+          }
+        ]
+      },
+      {
+        "source": "/pdv/dist/*.@(js|css)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=31536000, immutable"
+          }
+        ]
+      },
+      {
+        "source": "/pdv/dist/manifest.json",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, must-revalidate"
+          }
+        ]
+      },
+      {
+        "regex": "^/(?:products/[^/]+/?|configuracoes/?|shop/[^/]+(?:/(?:products/[^/]+|admin))?/?)?$",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=0, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "/storefront/sw{,-built}.js",
         "headers": [
           {
             "key": "Service-Worker-Allowed",
@@ -16,15 +79,6 @@
           {
             "key": "Cache-Control",
             "value": "no-cache"
-          }
-        ]
-      },
-      {
-        "source": "/storefront/**",
-        "headers": [
-          {
-            "key": "Cache-Control",
-            "value": "public, max-age=0, must-revalidate"
           }
         ]
       }
@@ -36,20 +90,34 @@
       "reports/**",
       "**/*.jsx",
       "pdv/*.styles.js",
-      "pdv/styles.css"
+      "pdv/styles.css",
+      "storefront/sw.js"
     ],
     "rewrites": [
       {
+        "source": "/storefront/sw.js",
+        "destination": "/storefront/sw-built.js"
+      },
+      {
         "source": "/health",
-        "run": { "serviceId": "confloraai", "region": "southamerica-east1" }
+        "run": {
+          "serviceId": "confloraai",
+          "region": "southamerica-east1"
+        }
       },
       {
         "source": "/reports/**",
-        "run": { "serviceId": "confloraai", "region": "southamerica-east1" }
+        "run": {
+          "serviceId": "confloraai",
+          "region": "southamerica-east1"
+        }
       },
       {
         "source": "/pdv-assets/**",
-        "run": { "serviceId": "confloraai", "region": "southamerica-east1" }
+        "run": {
+          "serviceId": "confloraai",
+          "region": "southamerica-east1"
+        }
       },
       {
         "source": "/webhook",
@@ -116,8 +184,11 @@
       },
       {
         "source": "**",
-        "destination": "/storefront/index.html"
+        "destination": "/storefront/shell.html"
       }
+    ],
+    "predeploy": [
+      "npm run build:frontend"
     ]
   }
 }

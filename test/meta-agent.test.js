@@ -361,17 +361,21 @@ test('Agent Service: consulta, adição ao carrinho, alteração, finalização 
     customer_phone: customerPhone,
     query: 'Muda de Jabuticaba Adulta Inexistente',
   });
-  assert.equal(notFoundRes.status, 'handoff');
-  // Silêncio absoluto: sem mensagem ao cliente
-  assert.equal(notFoundRes.next_action.send_customer_message, false);
-  assert.equal(notFoundRes.next_action.handoff_to_human, true);
-  assert.equal(notFoundRes.data.customer_message, undefined);
+  assert.equal(notFoundRes.status, 'found');
+  assert.equal(notFoundRes.next_action.send_customer_message, true);
+  assert.equal(notFoundRes.next_action.handoff_to_human, false);
+  assert.match(notFoundRes.data.customer_message, /encomendar/);
+  assert.deepEqual(notFoundRes.data.products, []);
+
+  // Missing catalogue entries no longer pause automation; explicit human requests still do.
+  assert.equal((await handoffStore.listOpen('conflora')).length, 0);
+  await service.execute('encaminhar_atendente', { customer_phone: customerPhone, message_id: 'explicit-human' });
 
   // Verificar se o handoff foi registrado
   const openHandoffs = await handoffStore.listOpen('conflora');
   assert.equal(openHandoffs.length, 1);
   assert.equal(openHandoffs[0].customerPhone, customerPhone);
-  assert.equal(openHandoffs[0].reason, 'product_not_found');
+  assert.equal(openHandoffs[0].reason, 'customer_requested_human');
 
   // Verificar se a conversa está com automação pausada
   const key = customerKeyFor('conflora', customerPhone);

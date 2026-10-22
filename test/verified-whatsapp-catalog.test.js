@@ -77,16 +77,31 @@ for (const [label, patch] of [
   ['10 missing price', { price: null }],
   ['11 conflicting price', { valor_num: 99 }],
 ]) test(label, async () => {
-  const f = fixture(); await f.db.doc('products/b').update(patch); silent(await f.ask('Hibisco'));
+  const f = fixture(); await f.db.doc('products/b').update(patch);
+  const result = await f.ask('Hibisco');
+  if (patch.valor_num) silent(result);
+  else {
+    assert.equal(result.next_action.send_customer_message, true);
+    assert.match(result.data.customer_message, /encomendar/);
+    assert.deepEqual(result.data.products, []);
+  }
 });
 
 for (const [label, message] of [
   ['12 unmatched', 'Planta inexistente'], ['13 unintelligible', 'asdjhqw'],
   ['14 human requested', 'Quero falar com alguém'],
 ]) test(label, async () => {
-  const f = fixture(); silent(await f.ask(message));
-  assert.equal((await f.handoffs.listOpen('conflora')).length, 1);
-  assert.equal((await f.handoffs.getConversation('conflora', customerKeyFor('conflora', phone))).automation, 'paused');
+  const f = fixture(); const result = await f.ask(message);
+  if (label.startsWith('14')) {
+    silent(result);
+    assert.equal((await f.handoffs.listOpen('conflora')).length, 1);
+    assert.equal((await f.handoffs.getConversation('conflora', customerKeyFor('conflora', phone))).automation, 'paused');
+  } else {
+    assert.equal(result.next_action.send_customer_message, true);
+    assert.match(result.data.customer_message, /encomendar/);
+    assert.deepEqual(result.data.products, []);
+    assert.equal((await f.handoffs.listOpen('conflora')).length, 0);
+  }
 });
 
 test('15 Firestore unavailable remains silent even if handoff persistence fails', async () => {

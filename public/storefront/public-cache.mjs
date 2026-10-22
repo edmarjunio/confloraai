@@ -1,4 +1,5 @@
 const MAX_AGE = 24 * 60 * 60 * 1000;
+export const PUBLIC_FRESH_TIME = 60 * 1000;
 const PREFIX = 'conflora:public-catalog:v1:';
 
 /** Only the public catalogue is persisted; identity and transactions never enter here. */
@@ -23,5 +24,20 @@ export function createPublicCache(slug, storage, now = Date.now) {
       // Storage can be disabled or full. The live catalogue still works.
     }
   }
-  return { read, write };
+  function isFresh() {
+    if (!read()) return false;
+    try {
+      const saved = JSON.parse((storage || globalThis.localStorage).getItem(key));
+      return now() - saved.savedAt < PUBLIC_FRESH_TIME;
+    } catch { return false; }
+  }
+  function age() {
+    if (!read()) return Infinity;
+    try { return now() - JSON.parse((storage || globalThis.localStorage).getItem(key)).savedAt; }
+    catch { return Infinity; }
+  }
+  function invalidate() {
+    try { (storage || globalThis.localStorage).removeItem(key); } catch {}
+  }
+  return { key, read, write, isFresh, invalidate, age };
 }

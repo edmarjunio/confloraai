@@ -430,9 +430,6 @@ export function createProductEntry(state, onSaved) {
   }
 
   // Bind trigger buttons if they exist
-  const headerBtn = $("#openProductEntry");
-  if (headerBtn) {
-    headerBtn.addEventListener("click", () => open(null));
-  }
+  // The shared shell owns the trigger, including the first lazy import.
   return { open, render };
 }

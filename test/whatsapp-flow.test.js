@@ -157,6 +157,8 @@ test('MessageService handles WhatsApp native flow: Atendente, Montar Sacola, and
     getProductsBySubcategory: (sub) => sub === 'Palmeiras' ? [{ id: 'prod1', name: 'Muda de Palmeira', price: 5000 }] : [],
     findProductByName: () => null,
   };
+  for (const product of mockCatalog.items) firestoreRepo.inMemoryProducts.set(product.id, { ...product, unit: 'UN', status: 'ATIVO', stockQuantity: 10 });
+  firestoreRepo.getInventorySettings = async () => ({ stockControlEnabled: true });
 
   let mockMessageId = 0;
   const sendMock = async () => ({ messages: [{ id: `wamid.mock-${++mockMessageId}` }] });
@@ -213,7 +215,7 @@ test('MessageService handles WhatsApp native flow: Atendente, Montar Sacola, and
     interactiveId: 'btn_atendente',
   });
   assert.equal(atendenteRes.intent, 'AGENT_ASSISTANCE');
-  assert.match(atendenteRes.reply, /atendente virtual da Conflora/i);
+  assert.equal(atendenteRes.reply, 'Qual produto você procura?');
   assert.equal(sentTexts.at(-1)[0], '5564999990001');
 
   // Conversas antigas pausadas por pedido de atendente voltam ao agente no próximo contato.

@@ -2,7 +2,7 @@
 const { formatBRL, formatQuantity, unitLabel } = require('./units');
 const { safeDisplayText } = require('./util');
 
-const ASK_MORE = 'Você precisa de mais algum produto?';
+const ASK_MORE = '';
 
 function title(product) {
   return product.presentation ? `${product.name} (${product.presentation})` : product.name;
@@ -14,7 +14,7 @@ function priceText(product) {
 
 /** Bloco de preço. `availability` só é passada quando a disponibilidade foi verificada. */
 function priceBlock(product, { availability } = {}) {
-  const lines = [`🌿 *${product.name}*`];
+  const lines = [`*${product.name}*`];
   if (product.presentation) lines.push(product.presentation);
   lines.push(`💰 *${priceText(product)}*`);
   if (availability) lines.push(availability);

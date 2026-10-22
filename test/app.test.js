@@ -146,6 +146,10 @@ function createTestMessageService(aiMock = null, captures = {}) {
   const agentService = new AgentService({ aiClient: aiMock });
 
   const mockWhatsapp = {
+    async sendInteractiveButtons(to, content) {
+      captures.messages.push({ to, text: content.bodyText });
+      return { messages: [{ id: 'wamid.menu-' + captures.messages.length }] };
+    },
     async sendTextMessage(to, text) {
       captures.messages.push({ to, text });
       return { messages: [{ id: 'wamid.fixture-' + captures.messages.length + '-' + captures.images.length }] };
@@ -287,11 +291,11 @@ test('6. Cliente VIP com Histórico ("O de sempre") corta conversa e propõe rec
   });
 
   assert.strictEqual(result.intent, INTENTS.PLACE_ORDER);
-  assert.match(result.reply, /Claro! Vai ser o de sempre\?/);
-  assert.match(result.reply, /3x ALFACE CRESPA \(R\$ 8,00 un\) = R\$ 24,00/i);
-  assert.match(result.reply, /Valor total:.*?24,00/);
-  assert.match(result.reply, /Avenida Alessandro Marchió, 162, Centro/);
-  assert.match(result.reply, /No \*PIX\* né\?/);
+  assert.match(result.reply, /3 ALFACE CRESPA/);
+  assert.match(result.reply, /Total: R\$ 24,00/);
+  assert.match(result.reply, /Avenida Alessandro/);
+  assert.match(result.reply, /PIX/);
+  assert.match(result.reply, /Posso confirmar\?/);
 });
 
 test('7. Pedido múltiplo com preços definidos (Exemplo 1 - Recibo com subtotais)', async () => {
@@ -305,14 +309,11 @@ test('7. Pedido múltiplo com preços definidos (Exemplo 1 - Recibo com subtotai
   });
 
   assert.strictEqual(result.intent, INTENTS.PLACE_ORDER);
-  assert.match(result.reply, /Certo! Já anotei o seu pedido:/);
-  assert.match(result.reply, /📋 \*Resumo do Pedido:\*/);
-  assert.match(result.reply, /3x ALFACE CABEÇA \/ AMERICANA \(R\$ 8,00 un\) = R\$ 24,00/i);
-  assert.match(result.reply, /3x RÚCULA \(R\$ 8,00 un\) = R\$ 24,00/i);
-  assert.match(result.reply, /5x CEBOLINHA \(R\$ 8,00 un\) = R\$ 40,00/i);
-  assert.match(result.reply, /💰 \*Valor total:\* R\$ 88,00/);
-  assert.match(result.reply, /Poderia me confirmar o pedido e mandar o endereço pra gente entregar\?/);
-  assert.match(result.reply, /Qual seria a forma de pagamento\?/);
+  assert.match(result.reply, /3 ALFACE CABEÇA \/ AMERICANA/i);
+  assert.match(result.reply, /3 RÚCULA/i);
+  assert.match(result.reply, /5 CEBOLINHA/i);
+  assert.match(result.reply, /Total: R\$ 88,00/);
+  assert.match(result.reply, /Posso confirmar\?/);
 });
 
 test('8. Alteração de forma de pagamento ("Hoje vai ser no débito") e reenvio de recibo atualizado', async () => {
@@ -334,10 +335,9 @@ test('8. Alteração de forma de pagamento ("Hoje vai ser no débito") e reenvio
   });
 
   assert.strictEqual(updateResult.intent, INTENTS.UPDATE_ORDER_DETAILS);
-  assert.match(updateResult.reply, /Perfeito! Já atualizei o seu pedido:/);
-  assert.match(updateResult.reply, /💳 \*Forma de pagamento:\* Cartão de Débito/);
-  assert.match(updateResult.reply, /💰 \*Valor total:\* R\$ 88,00/);
-  assert.match(updateResult.reply, /Poderia me confirmar para finalizarmos\?/);
+  assert.match(updateResult.reply, /Cartão de Débito/);
+  assert.match(updateResult.reply, /Total: R\$ 88,00/);
+  assert.match(updateResult.reply, /Posso confirmar\?/);
 });
 
 test('9. Confirmação do pedido: Envio ao dono e fechamento com cliente', async (t) => {

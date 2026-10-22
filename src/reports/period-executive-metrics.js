@@ -38,7 +38,7 @@ function summarizePeriod({ from, to, orders = [], settlements = [], catalog = []
   const validSettlements = settlements.filter((entry) => {
     const businessDate = getBusinessDate(entry?.createdAt);
     const type = entry.entryType || entry.type || 'QUITACAO_FIADO';
-    return businessDate >= from && businessDate <= to && ['QUITACAO_FIADO', 'CREDITO_CLIENTE'].includes(type);
+    return businessDate >= from && businessDate <= to && ['QUITACAO_FIADO', 'CREDITO_CLIENTE', 'ENCOMENDA_SINAL'].includes(type);
   });
 
   let salesMinor = 0;
@@ -102,7 +102,7 @@ function summarizePeriod({ from, to, orders = [], settlements = [], catalog = []
   for (const settlement of validSettlements) {
     const amountMinor = cents(settlement.amount);
     const type = settlement.entryType || settlement.type || 'QUITACAO_FIADO';
-    if (type === 'CREDITO_CLIENTE') { advanceCreditMinor += amountMinor; }
+    if (['CREDITO_CLIENTE', 'ENCOMENDA_SINAL'].includes(type)) { advanceCreditMinor += amountMinor; }
     else { receivedDebtMinor += amountMinor; }
     for (const part of settlement.paymentParts || [{ method: settlement.paymentMethod, amount: settlement.amount }]) {
       const methodName = String(part.method || 'OUTROS').toUpperCase();

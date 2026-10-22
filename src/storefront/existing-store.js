@@ -199,7 +199,29 @@ function existingConfig(products, saved, settings = { stockControlEnabled: true 
   config.checkout.pickup.label = "Retirada";
   return config;
 }
-function installExistingStore(app, { repository, assistant, catalog }) {
+function installExistingStore(app, { repository, assistant, catalog, getOrderIntake = () => null }) {
+  const { createPublicSnapshot } = require('./public-snapshot');
+  const publicSnapshot = createPublicSnapshot(async () => {
+    const [settings, saved] = await Promise.all([
+      repository.getInventorySettings ? repository.getInventorySettings() : { stockControlEnabled: true },
+      readSettings(),
+    ]);
+    const items = await products({ settings, saved });
+    const config = existingConfig(items, saved, settings);
+    const visibleCategories = new Set(items.flatMap(item => item.categories));
+    config.categories = config.categories.filter(category => category.isActive && visibleCategories.has(category.id));
+    return { config, products: items };
+  });
+  if (app.locals) app.locals.publicCatalogCache = publicSnapshot;
+  app.use((req, res, next) => {
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) &&
+        /(?:product|stock|inventory|order|config|sale|reservation|webhook|tasks)/i.test(req.path)) {
+      // Invalidating before AND after commit also covers a read racing the write.
+      publicSnapshot.invalidate();
+      res.once('finish', () => publicSnapshot.invalidate());
+    }
+    next();
+  });
   const readSettings = async () => (await readStoreSettings(repository)) ?? null;
   const admin = (req) =>
     ensure(
@@ -316,27 +338,9 @@ function installExistingStore(app, { repository, assistant, catalog }) {
   }
   app.get("/api/storefront/catalog", async (_req, res, next) => {
     try {
-      let settings = { stockControlEnabled: true };
-      if (repository.getInventorySettings) {
-        try {
-          settings = await repository.getInventorySettings();
-        } catch {
-          settings = { stockControlEnabled: true };
-        }
-      }
-      const saved = await readSettings();
-      const items = await products({ settings, saved });
-      const config = existingConfig(items, saved, settings);
-      const visibleCategories = new Set(items.flatMap((item) => item.categories));
-      config.categories = config.categories.filter(
-        (category) => category.isActive && visibleCategories.has(category.id),
-      );
       res
         .set("Cache-Control", "no-store")
-        .json({
-          config,
-          products: items,
-        });
+        .json(await publicSnapshot.read());
     } catch (error) {
       next(error);
     }
@@ -362,6 +366,14 @@ function installExistingStore(app, { repository, assistant, catalog }) {
         "Use o guia de categorias: a consultoria por IA está desativada nesta loja.",
         409,
       );
+      const intake = getOrderIntake();
+      if (intake && req.user?.phone) {
+        const result = await intake.handle({ phone: req.user.phone, customerName: req.user.name,
+          message: req.body?.message, messageId: req.body?.requestId || '' });
+        if (result) return res.json(req.path === '/api/chat' ? { reply: result.reply } : {
+          message: result.reply, products: [], sources: [], mode: 'ORDER_REQUEST', needsConfirmation: result.intent !== 'ORDER_INTAKE_REGISTERED',
+        });
+      }
       const result = await assistant.recommend(
           config,
           saved?.assistant || {

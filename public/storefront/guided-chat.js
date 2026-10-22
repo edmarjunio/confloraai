@@ -164,7 +164,7 @@ export function createGuidedChat(state, catalog) {
     );
     if (!matches.length) {
       say(
-        "Não encontrei produtos com essas informações no cadastro. Tente o nome do item ou escolha uma categoria abaixo.",
+        "Podemos encomendar! Fale com a Conflora pelo WhatsApp para registrar.",
       );
       clearResults();
       const fallbackChoices = element("div", { class: "suggestions guided-choices" }, [

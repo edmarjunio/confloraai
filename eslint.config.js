@@ -1,5 +1,5 @@
 module.exports = [
-  { ignores: ["public/pdv/vendor/**", "public/pdv/dist/**", "public/storefront/dist/**", "src/dataconnect-admin-generated/**", "functions/lib/**", "test-results/**", "playwright-report/**"] },
+  { ignores: ["public/pdv/vendor/**", "public/pdv/dist/**", "public/storefront/dist/**", "public/storefront/sw-built.js", "src/dataconnect-admin-generated/**", "functions/lib/**", "test-results/**", "playwright-report/**"] },
   {
     files: ["**/*.js"],
     ignores: ["node_modules/**"],
@@ -8,6 +8,10 @@ module.exports = [
       sourceType: "commonjs",
       globals: {
         Buffer: "readonly",
+        Headers: "readonly",
+        Response: "readonly",
+        ReadableStream: "readonly",
+        queueMicrotask: "readonly",
         console: "readonly",
         FormData: "readonly",
         Blob: "readonly",
@@ -16,6 +20,8 @@ module.exports = [
         process: "readonly",
         setTimeout: "readonly",
         clearTimeout: "readonly",
+        setInterval: "readonly",
+        clearInterval: "readonly",
         setImmediate: "readonly",
         performance: "readonly",
         __dirname: "readonly",
@@ -101,12 +107,17 @@ module.exports = [
     },
   },
   {
-    files: ["test/browser/**/*.js"],
+    files: ['scripts/benchmark-loading.js'],
+    languageOptions: { globals: { window: 'readonly', document: 'readonly', PerformanceObserver: 'readonly', MutationObserver: 'readonly' } },
+  },
+  {
+    files: ["test/browser/**/*.js", "test/loading/**/*.js"],
     languageOptions: {
       globals: {
         window: "readonly",
         document: "readonly",
         getComputedStyle: "readonly",
+        localStorage: "readonly",
         innerWidth: "readonly",
       },
     },

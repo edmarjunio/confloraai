@@ -93,6 +93,19 @@ class MessageService {
     if (!whatsappConfig.assistantEnabled) return { reply: '', intent: 'AUTOMATION_DISABLED', imagesSent: 0, latencyMs: 0 };
     if (whatsappConfig.agentOwner !== 'cloud_api') return { reply: '', intent: 'AUTOMATION_DISABLED', imagesSent: 0, latencyMs: 0 };
 
+    if (!interactiveId && this.firestoreRepo.getAllProducts && this.firestoreRepo.getInventorySettings) {
+      this.orderIntake ||= new (require('./order-intake.service').OrderIntakeService)(this.firestoreRepo, {
+        catalog: this.catalogRepo,
+        notify: id => this.orderService?.commerce?.pdv?.deliver(id),
+      });
+      const intake = await this.orderIntake.handle({ phone, message, messageId, customerName });
+      if (intake) {
+        await this.firestoreRepo.appendMessage(phone, 'assistant', intake.reply, { requirePersistence: true, messageId });
+        if (whatsapp) await whatsapp.sendTextMessage(phone, intake.reply);
+        return { ...intake, imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
+      }
+    }
+
     const isAgentSelection = interactiveId === 'btn_atendente';
     const isCartSelection = ['montar_sacola', 'btn_sacola'].includes(interactiveId) ||
       /^(cat_|sub_|add_|order_|pay_)/.test(interactiveId);
@@ -108,7 +121,7 @@ class MessageService {
     }
 
     if (isAgentSelection) {
-      const reply = 'Claro! Sou o atendente virtual da Conflora e posso ajudar com produtos, preços e pedidos. O que você procura?';
+      const reply = 'Qual produto você procura?';
       if (whatsapp) await whatsapp.sendTextMessage(phone, reply);
       await this.firestoreRepo.appendMessage(phone, 'assistant', reply);
       return { reply, intent: 'AGENT_ASSISTANCE', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
@@ -117,9 +130,10 @@ class MessageService {
     const isReceiptPayload = String(message || '') === '[COMPROVANTE_ENVIADO]';
     const isActiveAgent = conversation.channel === 'agent';
     const isActiveCart = conversation.channel === 'cart';
-    if (!interactiveId && !isReceiptPayload && !isActiveAgent && !isActiveCart) {
+    const wantsMenu = /^(?:oi+|ol[aá]+|bom dia|boa tarde|boa noite|opa|menu|quero ver as op[cç][oõ]es)[!,.?\s]*$/i.test(String(message || '').trim());
+    if (!interactiveId && !isReceiptPayload && !isActiveAgent && !isActiveCart && wantsMenu) {
       await setConversationChannel(this.firestoreRepo, phone, 'menu');
-      const reply = 'Como você quer continuar? Escolha uma opção:';
+      const reply = 'Como prefere continuar?';
       if (whatsapp) {
         await whatsapp.sendInteractiveButtons(phone, {
           bodyText: reply,
@@ -142,6 +156,12 @@ class MessageService {
     if (this.metaAgentService && !nativeCommerce && !draftAction && !isActiveAgent) {
       const envelope = await this.metaAgentService.execute('atender_mensagem', { customer_phone: phone, message_id: messageId || require('node:crypto').randomUUID(), message });
       if (!envelope.next_action.send_customer_message) return { reply: '', intent: 'HUMAN_HANDOFF', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
+      if (envelope.data.kind === 'ORDER_INTAKE') {
+        const reply = envelope.data.customer_message;
+        await this.firestoreRepo.appendMessage(phone, 'assistant', reply, { requirePersistence: true, messageId });
+        if (whatsapp) await whatsapp.sendTextMessage(phone, reply);
+        return { reply, intent: 'ORDER_INTAKE', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
+      }
       const { runTransaction } = require('../database/transactions');
       const id = 'catalog-' + require('node:crypto').createHash('sha256').update(messageId || require('node:crypto').randomUUID()).digest('hex');
       await runTransaction(this.firestoreRepo, async tx => {
@@ -158,7 +178,7 @@ class MessageService {
 
     if (isNegativeResponse && !isActiveAgent) {
       await conversationAutomation(this.firestoreRepo, phone, { pauseReason: 'customer_declined_bot', messageId });
-      const reply = 'Entendido perfeitamente! Já avisei a nossa equipe da loja e um de nossos atendentes vai te responder por aqui em instantes. Um momento, por favor!';
+      const reply = 'Vou encaminhar seu atendimento à equipe.';
       await this.firestoreRepo.appendMessage(phone, 'assistant', reply);
       if (whatsapp) {
         await whatsapp.sendTextMessage(phone, reply);
@@ -291,6 +311,16 @@ class MessageService {
         this.catalogRepo.findProductByName(message);
 
       if (product) {
+        this.orderIntake ||= new (require('./order-intake.service').OrderIntakeService)(this.firestoreRepo, {
+          catalog: this.catalogRepo,
+          notify: id => this.orderService?.commerce?.pdv?.deliver(id),
+        });
+        const intake = await this.orderIntake.handle({ phone, message: `Quero 1 ${product.name}`, messageId, customerName });
+        if (intake) {
+          await this.firestoreRepo.appendMessage(phone, 'assistant', intake.reply, { requirePersistence: true, messageId });
+          if (whatsapp) await whatsapp.sendTextMessage(phone, intake.reply);
+          return { ...intake, imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
+        }
         const pendingOrder = await this.orderService.addProductToDraft(phone, product.id, messageId);
         const existingItems = pendingOrder.items;
         const total = existingItems.reduce((acc, it) => acc + (it.price || 0) * (it.quantity || 1), 0);
@@ -402,7 +432,7 @@ class MessageService {
     // Comprovantes enviados por conversa não confirmam pagamentos.
     const pendingPixSale = await this.firestoreRepo.findPendingPixOrderByPhone(phone);
     if (pendingPixSale?.pixMode === 'MANUAL' && /comprovante|pago|pix|transfer[eê]ncia|\[COMPROVANTE_ENVIADO\]/i.test(message)) {
-      const reply = 'Para confirmar seu Pix, envie o comprovante na página do seu pedido no site. O caixa ou administrador confere o recebimento na conta bancária antes de aprovar. Esta mensagem não confirma o pagamento.';
+      const reply = 'Envie o comprovante na página do pedido. O caixa confere o Pix antes de confirmar.';
       if (whatsapp) await whatsapp.sendTextMessage(phone, reply);
       return { reply, intent: 'MANUAL_PIX_AWAITING_REVIEW', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
     }
@@ -497,7 +527,7 @@ class MessageService {
       }
 
       if (imagesSentCount > 0) {
-        reply = `Enviei as fotos acima para você conferir! O que achou? Se quiser mais detalhes ou reservar alguma unidade, estou à disposição!`;
+        reply = 'Enviei as fotos. Qual você prefere?';
       }
     }
 
@@ -534,7 +564,7 @@ class MessageService {
 
   async sendNativeProductsList(phone, title, products, startTime, whatsapp = this.whatsappClient) {
     if (!products || products.length === 0) {
-      const reply = `Não encontrei produtos cadastrados no momento para *${title}*. Gostaria de escolher outra categoria?`;
+      const reply = 'Podemos encomendar! Qual produto você procura?';
       if (whatsapp) await whatsapp.sendTextMessage(phone, reply);
       return { reply, intent: 'NATIVE_PRODUCTS_EMPTY', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
     }

@@ -664,11 +664,23 @@ test('cashier order stream emits a change immediately after a new command is cre
   const reader = stream.body.getReader();
   await reader.read();
   const order = await app.locals.pdv.service.create({ ...s.input }, seller);
-  const event = await Promise.race([
-    reader.read(),
-    new Promise((_, reject) => setTimeout(() => reject(new Error('Comanda não apareceu no stream em tempo hábil.')), 5000)),
-  ]);
-  assert.match(new TextDecoder().decode(event.value), new RegExp(order.id));
+  const readChange = async () => {
+    let text = '';
+    while (!text.includes(order.id)) {
+      const event = await reader.read();
+      if (event.done) break;
+      text += new TextDecoder().decode(event.value);
+    }
+    return text;
+  };
+  let timeout;
+  try {
+    const event = await Promise.race([
+      readChange(),
+      new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('Comanda não apareceu no stream em tempo hábil.')), 5000); }),
+    ]);
+    assert.match(event, new RegExp(order.id));
+  } finally { clearTimeout(timeout); }
   await reader.cancel();
 });
 
