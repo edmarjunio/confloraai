@@ -32,17 +32,17 @@ function installStorefront(app, { express, firestore, repository, assistant }) {
         const sharp = require("sharp");
         const buffer = await sharp(path.join(assets, "brands", req.params.file))
           .resize({
-            width: 360,
-            height: 128,
+            width: 480,
+            height: 168,
             fit: "inside",
             withoutEnlargement: true,
           })
-          .webp({ quality: 85 })
+          .webp({ quality: 92 })
           .toBuffer();
         brandImages.set(req.params.file, buffer);
       }
       res
-        .set("Cache-Control", "public, max-age=3600")
+        .set("Cache-Control", "no-cache, must-revalidate")
         .type("image/webp")
         .send(brandImages.get(req.params.file));
     } catch (error) {

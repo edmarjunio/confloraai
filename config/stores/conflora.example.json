@@ -38,7 +38,7 @@
     },
     "pickup": {
       "enabled": true,
-      "label": "Retirada no local",
+      "label": "Retirada",
       "address": ""
     }
   },

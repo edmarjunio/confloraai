@@ -810,6 +810,9 @@ function renderAdminHtml(storeConfig) {
           <div id="adminCategoryChips" style="display:flex; flex-wrap:wrap; gap:6px; max-height:160px; overflow-y:auto; padding:2px 0;">
             <!-- Gerado dinamicamente -->
           </div>
+          <div id="adminSubcategoryChips" hidden style="display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:8px; padding:6px 10px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:999px;">
+            <!-- Subcategorias geradas dinamicamente -->
+          </div>
         </div>
       </div>
 
@@ -2338,6 +2341,8 @@ function renderAdminHtml(storeConfig) {
     let productSearchQuery = '';
     let productSortOrder = 'az'; // Padrão: A a Z
     let productCategoryFilter = '';
+    let selectedAdminCategories = [];
+    let selectedAdminSubcategories = [];
 
     function productIsInactive(product) {
       return String(product.status || product.STATUS || 'ATIVO').trim().toUpperCase() !== 'ATIVO';
@@ -2373,7 +2378,32 @@ function renderAdminHtml(storeConfig) {
     }
 
     function setAdminCategoryFilter(cat) {
-      productCategoryFilter = (productCategoryFilter === cat) ? '' : cat;
+      if (!cat) {
+        selectedAdminCategories = [];
+        selectedAdminSubcategories = [];
+      } else if (window.ConfloraCategoryUi?.toggleSelection) {
+        selectedAdminCategories = window.ConfloraCategoryUi.toggleSelection(selectedAdminCategories, cat);
+      } else {
+        selectedAdminCategories = selectedAdminCategories.includes(cat)
+          ? selectedAdminCategories.filter(item => item !== cat)
+          : [...selectedAdminCategories, cat];
+      }
+      productCategoryFilter = selectedAdminCategories.join(', ');
+      updateClearFiltersBtnVisibility();
+      renderAdminCategoryChips();
+      renderAdminProducts();
+    }
+
+    function toggleAdminSubcategoryFilter(subKey) {
+      if (!subKey) {
+        selectedAdminSubcategories = [];
+      } else if (window.ConfloraCategoryUi?.toggleSelection) {
+        selectedAdminSubcategories = window.ConfloraCategoryUi.toggleSelection(selectedAdminSubcategories, subKey);
+      } else {
+        selectedAdminSubcategories = selectedAdminSubcategories.includes(subKey)
+          ? selectedAdminSubcategories.filter(item => item !== subKey)
+          : [...selectedAdminSubcategories, subKey];
+      }
       updateClearFiltersBtnVisibility();
       renderAdminCategoryChips();
       renderAdminProducts();
@@ -2381,6 +2411,8 @@ function renderAdminHtml(storeConfig) {
 
     function clearAllAdminFilters() {
       productCategoryFilter = '';
+      selectedAdminCategories = [];
+      selectedAdminSubcategories = [];
       productSearchQuery = '';
       const input = document.getElementById('adminProductSearch');
       if (input) input.value = '';
@@ -2396,11 +2428,12 @@ function renderAdminHtml(storeConfig) {
 
     function updateClearFiltersBtnVisibility() {
       const btn = document.getElementById('adminClearFiltersBtn');
-      if (btn) btn.style.display = (productCategoryFilter || productSearchQuery) ? 'inline-block' : 'none';
+      if (btn) btn.style.display = (selectedAdminCategories.length || selectedAdminSubcategories.length || productSearchQuery) ? 'inline-block' : 'none';
     }
 
     function renderAdminCategoryChips() {
       const container = document.getElementById('adminCategoryChips');
+      const subContainer = document.getElementById('adminSubcategoryChips');
       if (!container) return;
 
       const categoriesMap = new Map();
@@ -2415,27 +2448,57 @@ function renderAdminHtml(storeConfig) {
 
       container.replaceChildren();
 
-      // Botão "Todas"
-      const allBtn = document.createElement('button');
-      allBtn.type = 'button';
-      const isAllActive = !productCategoryFilter;
-      allBtn.className = 'action-btn ' + (isAllActive ? 'btn-green' : 'btn-gray');
-      allBtn.style.cssText = 'border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;';
-      allBtn.innerHTML = '<span>🌿</span><span>Todas</span> <span style="font-size: 11px; opacity: 0.85; font-weight: 500;">(' + allProducts.length + ')</span>';
-      allBtn.onclick = () => setAdminCategoryFilter('');
-      container.appendChild(allBtn);
+      const makeTag = (label, selected, kind, colorCategory, onClick) => {
+        const tag = document.createElement('render-category-tag');
+        tag.setAttribute('category', label);
+        tag.setAttribute('variant', kind === 'action' ? 'action' : 'filter');
+        if (kind && kind !== 'action') tag.setAttribute('kind', kind);
+        if (kind === 'action') tag.setAttribute('kind', 'all');
+        if (colorCategory) tag.setAttribute('color-category', colorCategory);
+        tag.setAttribute('selected', String(Boolean(selected)));
+        tag.onclick = onClick;
+        return tag;
+      };
 
-      sortedCats.forEach(([catName, count]) => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        const isActive = productCategoryFilter === catName;
-        btn.className = 'action-btn ' + (isActive ? 'btn-green' : 'btn-gray');
-        btn.style.cssText = 'border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;';
-        const icon = window.ConfloraProductUi?.categoryIcon ? window.ConfloraProductUi.categoryIcon(catName) : '🌱';
-        btn.innerHTML = '<span>' + icon + '</span><span>' + catName + '</span> <span style="font-size: 11px; opacity: 0.85; font-weight: 500;">(' + count + ')</span>';
-        btn.onclick = () => setAdminCategoryFilter(catName);
-        container.appendChild(btn);
+      container.appendChild(makeTag('Todas', selectedAdminCategories.length === 0, 'all', '', () => setAdminCategoryFilter('')));
+
+      sortedCats.forEach(([catName]) => {
+        const isActive = selectedAdminCategories.includes(catName);
+        container.appendChild(makeTag(catName, isActive, '', catName, () => setAdminCategoryFilter(catName)));
       });
+
+      if (selectedAdminCategories.length > 0) {
+        container.appendChild(makeTag('Limpar categorias', false, 'action', '', () => setAdminCategoryFilter('')));
+      }
+
+      if (subContainer) {
+        const subMap = new Map();
+        if (selectedAdminCategories.length > 0) {
+          allProducts.forEach(p => {
+            const cat = String(p.category || p.categoria || p.CATEGORIA || '').trim();
+            if (!selectedAdminCategories.includes(cat)) return;
+            const sub = String(p.subcategory || p.subcategoria || p.SUBCATEGORIA || '').trim();
+            const key = window.ConfloraCategoryUi?.normalize ? window.ConfloraCategoryUi.normalize(sub) : sub.toLowerCase();
+            if (key && !subMap.has(key)) subMap.set(key, { name: sub, parent: cat });
+          });
+        }
+        selectedAdminSubcategories = selectedAdminSubcategories.filter(k => subMap.has(k));
+        subContainer.hidden = subMap.size === 0;
+        subContainer.style.display = subMap.size === 0 ? 'none' : 'flex';
+        subContainer.replaceChildren();
+        if (subMap.size > 0) {
+          const badge = document.createElement('span');
+          badge.style.cssText = 'font-size:11px; font-weight:800; color:#14532d; text-transform:uppercase; padding:0 6px;';
+          badge.textContent = 'Subcategorias:';
+          subContainer.appendChild(badge);
+          Array.from(subMap.entries()).sort((a, b) => a[1].name.localeCompare(b[1].name, 'pt-BR')).forEach(([key, sub]) => {
+            subContainer.appendChild(makeTag(sub.name, selectedAdminSubcategories.includes(key), '', sub.parent, () => toggleAdminSubcategoryFilter(key)));
+          });
+          if (selectedAdminSubcategories.length > 0) {
+            subContainer.appendChild(makeTag('Limpar subcategorias', false, 'action', '', () => toggleAdminSubcategoryFilter('')));
+          }
+        }
+      }
     }
 
     async function loadAdminProducts() {
@@ -2469,12 +2532,18 @@ function renderAdminHtml(storeConfig) {
         return productStatusFilter === 'INATIVO' ? inactive : !inactive;
       });
 
-      // 2. Filtragem por Categoria
-      if (productCategoryFilter) {
+      // 2. Filtragem por Categoria e Subcategoria
+      if (selectedAdminCategories.length > 0) {
         visible = visible.filter(p => {
           const cat = String(p.category || p.categoria || p.CATEGORIA || '').trim();
+          return selectedAdminCategories.includes(cat);
+        });
+      }
+      if (selectedAdminSubcategories.length > 0) {
+        visible = visible.filter(p => {
           const sub = String(p.subcategory || p.subcategoria || p.SUBCATEGORIA || '').trim();
-          return cat === productCategoryFilter || sub === productCategoryFilter || (cat + ' / ' + sub) === productCategoryFilter;
+          const key = window.ConfloraCategoryUi?.normalize ? window.ConfloraCategoryUi.normalize(sub) : sub.toLowerCase();
+          return selectedAdminSubcategories.includes(key);
         });
       }
 

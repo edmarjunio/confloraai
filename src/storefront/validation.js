@@ -152,7 +152,7 @@ function validateConfig(input, tenantId) {
       },
       pickup: {
         enabled: !!checkout.pickup?.enabled,
-        label: text(checkout.pickup?.label, 100) || "Retirada no local",
+        label: text(checkout.pickup?.label, 100) || "Retirada",
         address: text(checkout.pickup?.address, 300),
       },
     },

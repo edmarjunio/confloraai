@@ -213,7 +213,10 @@ export function createCart(state) {
               pickup: "store",
               PIX: "pix",
               CARD: "card",
+              CREDITO: "card",
+              DEBITO: "card",
               CASH: "cash",
+              DINHEIRO: "cash",
             }[option.value],
           ),
           element("span", { text: option.label }),
@@ -234,15 +237,18 @@ export function createCart(state) {
         .filter((type) => checkout[type]?.enabled)
         .map((type) => ({
           value: type,
-          label: type === "delivery" ? "cart.delivery_option".tr : "cart.pickup_option".tr,
+          label: type === "delivery" ? "Entrega" : "Retirada",
         })),
     );
     choices(
       $("#paymentOptions"),
       "payment",
-      window.ConfloraOrderDisplay.customerPaymentMethods(checkout.enabledPayments).map(value => ({
-        value, label: window.ConfloraOrderDisplay.payment(value).tr,
-      })),
+      window.ConfloraOrderDisplay.customerPaymentMethods(checkout.enabledPayments)
+        .filter((value) => String(value).toUpperCase() !== "FIADO")
+        .map((value) => ({
+          value,
+          label: window.ConfloraOrderDisplay.payment(value),
+        })),
     );
     const area = form.elements.serviceArea;
     if (area && checkout.delivery?.serviceAreas) {

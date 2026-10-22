@@ -11,31 +11,98 @@
     rose: ['#be123c', '#fff1f2', '#ffffff'],
     slate: ['#475569', '#f1f5f9', '#ffffff'],
   });
-  const paths = {
-    grid: ['M3 3h7v7H3ZM14 3h7v7h-7ZM3 14h7v7H3ZM14 14h7v7h-7Z'],
-    fruit: ['M12 8c-8-5-12 5-6 12 2 2 4 1 6 1s4 1 6-1c6-7 2-17-6-12Z', 'M12 8V5m0 0c0-3 3-4 6-3 0 3-3 5-6 3Z'],
-    sprout: ['M12 22V12', 'M12 15C4 15 2 10 3 5c6 0 9 4 9 10Z', 'M12 12c0-6 3-9 9-9 1 5-2 9-9 9Z'],
-    paw: ['M8 14c-2 3-3 7 0 7 2 0 2-1 4-1s2 1 4 1c3 0 2-4 0-7-2-3-6-3-8 0Z', 'M6 10a2 3 0 1 0-4 0 2 3 0 0 0 4 0M22 10a2 3 0 1 0-4 0 2 3 0 0 0 4 0', 'M11 5a2 3 0 1 0-4 0 2 3 0 0 0 4 0M17 5a2 3 0 1 0-4 0 2 3 0 0 0 4 0'],
-    leaf: ['M20 3C8 2 2 8 5 16c8 5 16-1 15-13Z', 'M4 21 16 8'],
-    heart: ['M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z'],
-    box: ['m12 3 9 5-9 5-9-5 9-5Z', 'M3 8v9l9 5 9-5V8', 'M12 13v9'],
-  };
+  const cartoonIcons = Object.freeze({
+    grid: `
+      <rect x="2.5" y="2.5" width="8" height="8" rx="2.5" fill="#22c55e" stroke="#0f172a" stroke-width="1.6"/>
+      <path d="M4.2 4.5h3.5" stroke="#ffffff" stroke-width="1.4" stroke-linecap="round"/>
+      <rect x="13.5" y="2.5" width="8" height="8" rx="2.5" fill="#facc15" stroke="#0f172a" stroke-width="1.6"/>
+      <path d="M15.2 4.5h3.5" stroke="#ffffff" stroke-width="1.4" stroke-linecap="round"/>
+      <rect x="2.5" y="13.5" width="8" height="8" rx="2.5" fill="#fb923c" stroke="#0f172a" stroke-width="1.6"/>
+      <path d="M4.2 15.5h3.5" stroke="#ffffff" stroke-width="1.4" stroke-linecap="round"/>
+      <rect x="13.5" y="13.5" width="8" height="8" rx="2.5" fill="#38bdf8" stroke="#0f172a" stroke-width="1.6"/>
+      <path d="M15.2 15.5h3.5" stroke="#ffffff" stroke-width="1.4" stroke-linecap="round"/>
+    `,
+    clear: `
+      <circle cx="12" cy="12" r="9.5" fill="#fca5a5" stroke="#0f172a" stroke-width="1.6"/>
+      <circle cx="12" cy="11.3" r="8.2" fill="#ef4444"/>
+      <path d="M6.8 6.5a6.5 6.5 0 0 1 6.5-1.5" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+      <path d="M9 9l6 6M15 9l-6 6" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/>
+    `,
+    heart: `
+      <path d="M12 20.8C12 20.8 3.5 15.2 3.5 8.9A4.9 4.9 0 0 1 12 5.8a4.9 4.9 0 0 1 8.5 3.1c0 6.3-8.5 11.9-8.5 11.9Z" fill="#fb7185" stroke="#0f172a" stroke-width="1.7" stroke-linejoin="round"/>
+      <path d="M12 19.3C12 19.3 5 14.4 5 8.9a3.5 3.5 0 0 1 6.2-2.2L12 7.6l.8-.9A3.5 3.5 0 0 1 19 8.9c0 5.5-7 10.4-7 10.4Z" fill="#f43f5e"/>
+      <path d="M6.8 8.2a2.2 2.2 0 0 1 2.4-1.6" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" fill="none"/>
+    `,
+    fruit: `
+      <path d="M12 6.5V3.2" stroke="#78350f" stroke-width="2" stroke-linecap="round"/>
+      <path d="M12.2 4.2c2.2-2.2 5.5-1.8 6.3.6-2.2 1.8-4.8 1.4-6.3-.6Z" fill="#22c55e" stroke="#0f172a" stroke-width="1.5" stroke-linejoin="round"/>
+      <circle cx="12" cy="13.5" r="7.5" fill="#facc15" stroke="#0f172a" stroke-width="1.7"/>
+      <path d="M12 6a7.5 7.5 0 0 1 6.2 11.7A7.5 7.5 0 1 1 6.5 8.4" fill="#eab308"/>
+      <path d="M8.2 10.2a4.5 4.5 0 0 1 3.2-2.2" stroke="#ffffff" stroke-width="1.7" stroke-linecap="round" fill="none"/>
+    `,
+    veggie: `
+      <path d="M9.5 5.5c-.8-2.2.5-3.5 2.5-3 1.5-1.2 3.5 0 2.5 2.2 2 .4 2.2 2.4.2 3.1" fill="#22c55e" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M8.2 7.5h7.6c1.6 0 2.6 1.8 1.9 3.4l-4.2 9.2c-.6 1.3-2.4 1.3-3 0L6.3 10.9c-.7-1.6.3-3.4 1.9-3.4Z" fill="#fb923c" stroke="#0f172a" stroke-width="1.7" stroke-linejoin="round"/>
+      <path d="M9.2 10.2h2.6M11.5 13.5h2.4M10.2 16.5h1.8" stroke="#ffffff" stroke-width="1.4" stroke-linecap="round"/>
+    `,
+    sprout: `
+      <path d="M7 15.5h10l-1.3 5.2a1.5 1.5 0 0 1-1.4 1.1H9.7a1.5 1.5 0 0 1-1.4-1.1L7 15.5Z" fill="#d97706" stroke="#0f172a" stroke-width="1.6" stroke-linejoin="round"/>
+      <rect x="5.8" y="13.2" width="12.4" height="3" rx="1.4" fill="#f59e0b" stroke="#0f172a" stroke-width="1.6"/>
+      <path d="M12 13.2V7.5" stroke="#15803d" stroke-width="2.2" stroke-linecap="round"/>
+      <path d="M12 10.5C6.8 10.5 4.5 7 5.5 3.5c4.2 0 6.5 2.5 6.5 7Z" fill="#4ade80" stroke="#0f172a" stroke-width="1.6" stroke-linejoin="round"/>
+      <path d="M12 9.2c0-4.2 2.3-6.5 6.5-6.5 1 3.5-1.3 6.5-6.5 6.5Z" fill="#22c55e" stroke="#0f172a" stroke-width="1.6" stroke-linejoin="round"/>
+      <path d="M7.4 5.5c1.2.2 2.2.8 2.8 1.8" stroke="#ffffff" stroke-width="1.3" stroke-linecap="round" fill="none"/>
+    `,
+    paw: `
+      <ellipse cx="6" cy="9.5" rx="2.2" ry="2.8" fill="#38bdf8" stroke="#0f172a" stroke-width="1.6"/>
+      <ellipse cx="18" cy="9.5" rx="2.2" ry="2.8" fill="#38bdf8" stroke="#0f172a" stroke-width="1.6"/>
+      <ellipse cx="9.6" cy="5.5" rx="2.2" ry="2.8" fill="#38bdf8" stroke="#0f172a" stroke-width="1.6"/>
+      <ellipse cx="14.4" cy="5.5" rx="2.2" ry="2.8" fill="#38bdf8" stroke="#0f172a" stroke-width="1.6"/>
+      <path d="M7.5 15c-1.8 2.4-2.2 5.5.8 5.5 1.8 0 2.1-.8 3.7-.8s1.9.8 3.7.8c3 0 2.6-3.1.8-5.5-2.1-2.8-6.9-2.8-9 0Z" fill="#0ea5e9" stroke="#0f172a" stroke-width="1.7" stroke-linejoin="round"/>
+      <path d="M9.5 14.5a3.5 2.2 0 0 1 4.2 0" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+    `,
+    flower: `
+      <circle cx="12" cy="6" r="3.4" fill="#fb7185" stroke="#0f172a" stroke-width="1.5"/>
+      <circle cx="17.5" cy="10" r="3.4" fill="#f43f5e" stroke="#0f172a" stroke-width="1.5"/>
+      <circle cx="15.5" cy="16.5" r="3.4" fill="#fb7185" stroke="#0f172a" stroke-width="1.5"/>
+      <circle cx="8.5" cy="16.5" r="3.4" fill="#f43f5e" stroke="#0f172a" stroke-width="1.5"/>
+      <circle cx="6.5" cy="10" r="3.4" fill="#fb7185" stroke="#0f172a" stroke-width="1.5"/>
+      <circle cx="12" cy="11.5" r="3.6" fill="#facc15" stroke="#0f172a" stroke-width="1.6"/>
+      <path d="M10.8 10.2a1.6 1.6 0 0 1 2-.4" stroke="#ffffff" stroke-width="1.4" stroke-linecap="round" fill="none"/>
+    `,
+    leaf: `
+      <path d="M19.5 3.5C9 2.5 3.5 8 5.5 16.5c7.5 4.5 15-1 14-13Z" fill="#22c55e" stroke="#0f172a" stroke-width="1.7" stroke-linejoin="round"/>
+      <path d="M19.5 3.5C13 9 9.5 13 5.5 16.5c7.5 4.5 15-1 14-13Z" fill="#16a34a"/>
+      <path d="M4.5 20.5 15.5 8.5" stroke="#0f172a" stroke-width="1.8" stroke-linecap="round"/>
+      <path d="M8.5 8.5c2-1.8 4.8-2.6 7.5-2.6" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+    `,
+    box: `
+      <path d="M12 2.8 20.5 7.5v9L12 21.2 3.5 16.5v-9L12 2.8Z" fill="#fbbf24" stroke="#0f172a" stroke-width="1.7" stroke-linejoin="round"/>
+      <path d="M3.5 7.5 12 12.2l8.5-4.7" stroke="#0f172a" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
+      <path d="M12 12.2v9L20.5 16.5v-9L12 12.2Z" fill="#f59e0b" stroke="#0f172a" stroke-width="1.6" stroke-linejoin="round"/>
+      <path d="M7.5 6.2 12 3.8l4.5 2.4" stroke="#ffffff" stroke-width="1.4" stroke-linecap="round" fill="none"/>
+    `,
+  });
   function appearance(name, kind) {
     const value = normalize(name);
     let tone, symbol;
     if (kind === 'favorites') [tone, symbol] = ['rose', 'heart'];
     else if (kind === 'purchases') [tone, symbol] = ['green', 'box'];
     else if (kind === 'all') [tone, symbol] = ['slate', 'grid'];
-    else if (value.includes('frutifer')) [tone, symbol] = ['yellow', 'fruit'];
-    else if (value.includes('hortifrut')) [tone, symbol] = ['orange', 'fruit'];
-    else if (value.includes('horta')) [tone, symbol] = ['green', 'sprout'];
-    else if (value.includes('pet') || value.includes('animal')) [tone, symbol] = ['blue', 'paw'];
-    else if (value.includes('planta') || value.includes('muda')) [tone, symbol] = ['forest', 'leaf'];
+    else if (value.includes('limpar')) [tone, symbol] = ['rose', 'clear'];
+    else if (value.includes('frutifer') || value.includes('citric')) [tone, symbol] = ['yellow', 'fruit'];
+    else if (value.includes('hortifrut') || value.includes('legum') || value.includes('verdur')) [tone, symbol] = ['orange', 'veggie'];
+    else if (value.includes('horta') || value.includes('temper') || value.includes('erva')) [tone, symbol] = ['green', 'sprout'];
+    else if (value.includes('pet') || value.includes('animal') || value.includes('raco') || value.includes('racao')) [tone, symbol] = ['blue', 'paw'];
+    else if (value.includes('flor') || value.includes('ornament') || value.includes('orquid') || value.includes('rosa')) [tone, symbol] = ['rose', 'flower'];
+    else if (value.includes('planta') || value.includes('muda') || value.includes('folha') || value.includes('palmeir') || value.includes('sombra') || value.includes('sol') || value.includes('suculent') || value.includes('cact')) [tone, symbol] = ['forest', 'leaf'];
     else if (value.includes('outro')) [tone, symbol] = ['slate', 'box'];
     else {
       const tones = ['green', 'yellow', 'orange', 'blue', 'rose', 'forest'];
+      const symbols = ['sprout', 'fruit', 'veggie', 'paw', 'flower', 'leaf'];
       const hash = Array.from(value).reduce((sum, char) => (sum * 31 + char.codePointAt(0)) >>> 0, 0);
-      [tone, symbol] = [tones[hash % tones.length], 'box'];
+      const idx = hash % tones.length;
+      [tone, symbol] = [tones[idx], symbols[idx]];
     }
     const [strong, soft, foreground] = palette[tone];
     return { tone, symbol, strong, soft, foreground };
@@ -54,15 +121,15 @@
       border:1.5px solid var(--category-strong); border-radius:999px;
     }
     .cf-category-chip.category-chip {
-      display:inline-flex; align-items:center; justify-content:center; gap:7px;
-      flex-shrink:0; min-height:38px; padding:7px 13px; font:inherit;
+      display:inline-flex; align-items:center; justify-content:center; gap:6px;
+      flex-shrink:0; min-height:38px; padding:6px 12px; font:inherit;
       font-size:12px; font-weight:800; cursor:pointer;
-      box-shadow:0 2px 0 var(--category-strong);
-      transition:background-color 150ms ease,color 150ms ease,transform 150ms ease;
+      box-shadow:0 3px 0 var(--category-strong), 0 3px 6px rgba(15, 23, 42, 0.12);
+      transition:background-color 150ms ease,color 150ms ease,transform 150ms ease,box-shadow 150ms ease;
     }
     .cf-category-chip.category-chip:hover:not(:disabled) {
       background:var(--category-soft); border-color:var(--category-strong);
-      box-shadow:0 3px 0 var(--category-strong); transform:translateY(-1px);
+      box-shadow:0 4px 0 var(--category-strong), 0 5px 10px rgba(15, 23, 42, 0.16); transform:translateY(-1px);
     }
     .cf-category-chip.category-chip[aria-pressed="true"],
     .cf-category-chip.category-chip[aria-pressed="true"]:hover,
@@ -74,9 +141,9 @@
     .cf-category-chip.category-chip:focus-visible { outline:3px solid var(--category-strong); outline-offset:3px; }
     .cf-category-chip.category-chip.cf-category-clear { width:38px; min-width:38px; padding:7px; gap:0; }
     .cf-category-tag.cf-product-category-tag { gap:4px; }
-    .cf-category-icon { display:inline-flex; align-items:center; justify-content:center; flex:none; line-height:0; }
-    .cf-category-icon > svg { display:block; width:16px; height:16px; flex:none; }
-    .cf-category-tag .cf-category-icon > svg { width:11px; height:11px; }
+    .cf-category-icon { display:inline-flex; align-items:center; justify-content:center; flex:none; line-height:0; filter:drop-shadow(0 1.5px 0 rgba(15, 23, 42, 0.28)); }
+    .cf-category-icon > svg { display:block; width:18px; height:18px; flex:none; overflow:visible; }
+    .cf-category-tag .cf-category-icon > svg { width:12px; height:12px; }
     @media(prefers-reduced-motion:reduce) { .cf-category-chip.category-chip { transition:none; } }
   `;
   document.head.append(style);
@@ -121,8 +188,13 @@
       icon.setAttribute('aria-hidden', 'true');
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       svg.setAttribute('class', 'cf-category-svg');
+<<<<<<< HEAD
       for (const [key, value] of Object.entries({ viewBox:'0 0 24 24', width:'16', height:'16', fill:'none', stroke:'currentColor', 'stroke-width':'1.8', 'stroke-linecap':'round', 'stroke-linejoin':'round' })) svg.setAttribute(key, value);
       for (const d of action ? ['M6 6l12 12M18 6 6 18'] : paths[theme.symbol]) { const path = document.createElementNS(svg.namespaceURI, 'path'); path.setAttribute('d', d); svg.append(path); }
+=======
+      for (const [key, value] of Object.entries({ viewBox:'0 0 24 24', width:'18', height:'18', fill:'none' })) svg.setAttribute(key, value);
+      svg.innerHTML = cartoonIcons[theme.symbol] || cartoonIcons.box;
+>>>>>>> dd4104423355911e21f0665f6497473356e449b7
       icon.append(svg);
       const label = document.createElement('span');
       label.className = filter ? 'category-chip-label' : 'cf-product-category-tag-label';
@@ -134,3 +206,4 @@
   customElements.define('render-category-tag', RenderCategoryTag);
   window.ConfloraCategoryUi = Object.freeze({ appearance, normalize, toggleSelection, matchesAny });
 })();
+

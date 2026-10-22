@@ -42,7 +42,7 @@ test('caixa divide pagamento e pode encaminhar uma comanda Pix sem emitir cobran
   await search.fill('Planta Teste');
   await page.getByText('Planta Teste', { exact: true }).click();
   await page.getByRole('button', { name: /PAGAR - F1/ }).click();
-  await page.getByRole('button', { name: 'Pix · QR Code / Copia e Cola', exact: true }).click();
+  await page.getByRole('button', { name: 'PIX', exact: true }).click();
   await page.getByLabel('Somente criar comanda e encaminhar ao caixa (inclusive Pix)').check();
   const result = page.waitForResponse((response) => response.url().endsWith('/api/caixa/orders') && response.request().method() === 'POST');
   await page.getByRole('button', { name: 'Enviar comanda ao caixa', exact: true }).click();
@@ -141,7 +141,7 @@ test('comanda recebe por botões e Pix manual exige arquivo antes de finalizar',
   await open.click(); const dialog = page.getByRole('dialog', { name: `Comanda #${order.ticketNumber}` });
   await expect(dialog.getByRole('combobox')).toHaveCount(0);
   await page.mouse.click(2, 2); await expect(dialog).toBeHidden(); await open.click();
-  await dialog.getByRole('button', { name: 'Pix · QR Code / Copia e Cola', exact: true }).click();
+  await dialog.getByRole('button', { name: 'PIX', exact: true }).click();
   await dialog.getByRole('checkbox', { name: 'Pix já recebido: confirmar manualmente', exact: true }).check();
   await dialog.getByRole('checkbox', { name: /Conferi o valor do Pix/ }).check();
   await dialog.getByLabel('Observação do comprovante').fill('Comprovante conferido na conta');

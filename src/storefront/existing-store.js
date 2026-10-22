@@ -160,6 +160,8 @@ function existingConfig(products, saved, settings = { stockControlEnabled: true 
       }
     }
     result.checkout.enabledPayments = ["PIX", "CASH", "CREDITO", "DEBITO"];
+    if (result.checkout.delivery) result.checkout.delivery.label = "Entrega";
+    if (result.checkout.pickup) result.checkout.pickup.label = "Retirada";
     result.inventory = {
       stockControlEnabled: settings?.stockControlEnabled !== false,
     };
@@ -190,7 +192,7 @@ function existingConfig(products, saved, settings = { stockControlEnabled: true 
   };
   config.checkout.contactPhone =
     process.env.STORE_NOTIFICATION_PHONE || process.env.OWNER_WHATSAPP_NUMBER || "5564999351616";
-  config.checkout.enabledPayments = [...(config.checkout.pix.configured ? ["PIX"] : []), "CASH", "CREDITO", "DEBITO"];
+  config.checkout.enabledPayments = ["PIX", "CASH", "CREDITO", "DEBITO"];
   config.checkout.delivery = {
     enabled: true,
     label: "Entrega",

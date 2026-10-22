@@ -36,10 +36,11 @@ const basePath = existingStore ? "" : `/shop/${slug}`;
 try {
   localStorage.removeItem("conflora:public-catalog:v1:main:conflora");
   localStorage.removeItem("conflora:public-catalog:v1:tenant:conflora");
+  localStorage.removeItem("conflora:public-catalog:v1:main:conflora:v3");
   localStorage.removeItem("conflora_catalog_cache");
   localStorage.removeItem("conflora_catalog_cache_v2");
 } catch {}
-const publicCache = createPublicCache(existingStore ? "main:conflora:v3" : `tenant:${slug}:v3`);
+const publicCache = createPublicCache(existingStore ? "main:conflora:v4" : `tenant:${slug}:v4`);
 
 const state = {
   existingStore,

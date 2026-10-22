@@ -1,7 +1,7 @@
 /* One safe, structured receipt and one set of labels for storefront and PDV. */
 (() => {
   const money = value => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  const payment = method => ({ PIX: 'PIX', CASH: 'Dinheiro', DINHEIRO: 'Dinheiro', CREDITO: 'Cartão de crédito', DEBITO: 'Cartão de débito', FIADO: 'Fiado', CARD: 'Cartão', CARTAO: 'Cartão', MISTO: 'Pagamento dividido', SALDO_CLIENTE: 'Crédito do cliente' }[method] || 'Pagamento a combinar');
+  const payment = method => ({ PIX: 'PIX', PIX_MANUAL: 'PIX', CASH: 'Dinheiro', DINHEIRO: 'Dinheiro', CREDITO: 'Cartão de crédito', CARTAO_CREDITO: 'Cartão de crédito', CARD: 'Cartão de crédito', CARTAO: 'Cartão de crédito', DEBITO: 'Cartão de débito', CARTAO_DEBITO: 'Cartão de débito', FIADO: 'Fiado', MISTO: 'Pagamento dividido', SALDO_CLIENTE: 'Crédito do cliente' }[String(method || '').trim().toUpperCase()] || 'Pagamento a combinar');
   function status(order) {
     if (order.status === 'CANCELLED') return 'Cancelado';
     if (order.creditApprovalStatus === 'PENDING') return 'Fiado: aguardando aprovação do Admin';
@@ -64,7 +64,15 @@
     section.append(details); return section;
   }
   const customerPaymentMethods = enabled => {
-    const available = new Set((enabled || []).flatMap(method => method === 'CARD' ? ['CREDITO', 'DEBITO'] : [method]));
+    const available = new Set((enabled || []).flatMap(method => {
+      const code = String(method || '').trim().toUpperCase();
+      if (code === 'CARD' || code === 'CARTAO') return ['CREDITO', 'DEBITO'];
+      if (code === 'DINHEIRO') return ['CASH'];
+      if (code === 'CARTAO_CREDITO') return ['CREDITO'];
+      if (code === 'CARTAO_DEBITO') return ['DEBITO'];
+      return [code];
+    }));
+    available.delete('FIADO');
     return ['PIX', 'CASH', 'CREDITO', 'DEBITO'].filter(method => available.has(method));
   };
   window.ConfloraOrderDisplay = { money, payment, customerPaymentMethods, status, renderReceipt, renderText };
