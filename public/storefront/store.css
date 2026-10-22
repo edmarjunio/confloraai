@@ -4136,43 +4136,38 @@ body {
   text-align: left !important;
 }
 
-/* Tipografia e logo oficial do PIX */
-/* Botão Pix sem escrita, centralizado e perfeitamente alinhado */
+/* Marca Pix oficial do Banco Central, preservada em suas cores originais. */
 .cart-drawer .choices label.is-choice-pix,
 #checkoutForm .choices label.is-choice-pix {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
   min-height: 48px !important;
-  padding: 10px 12px !important;
+  padding: 8px 10px !important;
 }
 
+/* O fundo branco permite exibir a marca original até no estado selecionado. */
 .cart-drawer .choices label.is-choice-pix .choice-icon-slot,
 #checkoutForm .choices label.is-choice-pix .choice-icon-slot {
-  width: auto !important;
-  height: 28px !important;
   display: flex !important;
+  width: auto !important;
+  height: 36px !important;
   align-items: center !important;
   justify-content: center !important;
+  flex-shrink: 0 !important;
   margin: 0 auto !important;
+  padding: 1px 4px !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
 }
 
-.cart-drawer .choices label.is-choice-pix .cf-pix-svg,
-#checkoutForm .choices label.is-choice-pix .cf-pix-svg {
-  width: 26px !important;
-  height: 26px !important;
-}
-
-.cart-drawer .choices label .cf-pix-svg .pix-glyph,
-#checkoutForm .choices label .cf-pix-svg .pix-glyph {
-  fill: #32bcad !important;
-  transition: fill 0.15s ease !important;
-}
-
-/* Ícone fica branco quando selecionado (fundo do botão verde) */
-.cart-drawer .choices label:has(input:checked) .cf-pix-svg .pix-glyph,
-#checkoutForm .choices label:has(input:checked) .cf-pix-svg .pix-glyph {
-  fill: #ffffff !important;
+.cart-drawer .choices label.is-choice-pix .cart-pix-official-logo,
+#checkoutForm .choices label.is-choice-pix .cart-pix-official-logo {
+  display: block !important;
+  width: 96px !important;
+  max-width: 100% !important;
+  height: 34px !important;
+  object-fit: contain !important;
 }
 
 .cart-drawer #pixBox {
