@@ -2052,9 +2052,16 @@ dialog .toast,
   body:has(#cartDialog[open]) #cartFab { display: none; }
 }
 @media (max-width: 768px) {
+  html:has(#cartDialog[open]),
   body:has(#cartDialog[open]),
-  body:has(#chatDialog[open]) {
-    overflow: hidden;
+  html:has(#chatDialog[open]),
+  body:has(#chatDialog[open]),
+  html:has(#filterDialog[open]),
+  body:has(#filterDialog[open]) {
+    overflow: hidden !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    touch-action: none !important;
   }
   body:has(#cartDialog[open]) .floating-actions,
   body:has(#chatDialog[open]) .floating-actions,
@@ -3840,7 +3847,7 @@ body {
   .catalog-category-filter {
     gap: 8px;
     margin-bottom: 10px;
-    margin-right: -12px;
+    margin-right: 0;
     padding-bottom: 8px;
   }
   .category-chip {
@@ -4629,11 +4636,20 @@ body {
   }
 }
 
-/* Cart feedback respects the customer's motion preference. */
-.cart-drawer[open] { animation: cart-drawer-slide-in 260ms cubic-bezier(.2,.8,.2,1); }
+/* Cart drawer animation: slide from right on desktop, slide from bottom on mobile */
+@media (min-width: 769px) {
+  .cart-drawer[open] { animation: cart-drawer-slide-in 260ms cubic-bezier(.2,.8,.2,1); }
+}
 @keyframes cart-drawer-slide-in {
-  from { translate: 100% 0; opacity: .5; }
-  to { translate: 0 0; opacity: 1; }
+  from { transform: translateX(100%); opacity: .5; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@media (max-width: 768px) {
+  .cart-drawer[open] { animation: cart-drawer-bottomsheet-in 260ms cubic-bezier(.2,.8,.2,1); }
+}
+@keyframes cart-drawer-bottomsheet-in {
+  from { transform: translateY(100%); opacity: .6; }
+  to { transform: translateY(0); opacity: 1; }
 }
 .spending-trends { min-width: 0; padding: 16px; border: 1px solid #e3ebe4; border-radius: 16px; background: #fff; }
 .spending-trends h3 { margin: 0 0 8px; }
@@ -4889,14 +4905,33 @@ body {
   .cart-drawer,
   .chat-drawer,
   .chat-drawer[open],
-  .chat-drawer.has-product-results[open] {
-    width: 100vw !important;
-    max-width: 100vw !important;
+  .chat-drawer.has-product-results[open],
+  .filter-drawer {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
     left: 0 !important;
     right: 0 !important;
+    bottom: 0 !important;
+    top: auto !important;
     margin: 0 !important;
     box-sizing: border-box !important;
+    border: none !important;
+    outline: none !important;
+    border-radius: 22px 22px 0 0 !important;
     overflow-x: hidden !important;
+    overscroll-behavior-y: contain !important;
+  }
+  .bottomsheet-handle,
+  .bottomsheet-handle * {
+    border: 0 !important;
+    outline: 0 !important;
+    box-shadow: none !important;
+  }
+  .bottomsheet-handle::before,
+  .bottomsheet-handle::after {
+    display: none !important;
+    content: none !important;
   }
   .chat-drawer .dialog-header,
   .chat-drawer .messages,

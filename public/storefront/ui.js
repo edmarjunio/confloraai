@@ -46,7 +46,42 @@ export function notify(message) {
     $("#toast").hidden = true;
   }, 4000);
 }
+export function lockBodyScroll() {
+  if (typeof document === "undefined" || document.body.dataset.scrollLocked) return;
+  const scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+  document.body.dataset.scrollLocked = String(scrollY);
+  document.documentElement.style.overflow = "hidden";
+  document.body.style.overflow = "hidden";
+  document.body.style.position = "fixed";
+  document.body.style.top = `-${scrollY}px`;
+  document.body.style.left = "0";
+  document.body.style.right = "0";
+  document.body.style.width = "100%";
+}
+
+export function unlockBodyScroll() {
+  if (typeof document === "undefined" || !document.body.dataset.scrollLocked) return;
+  const scrollY = Number(document.body.dataset.scrollLocked || 0);
+  delete document.body.dataset.scrollLocked;
+  document.documentElement.style.overflow = "";
+  document.body.style.overflow = "";
+  document.body.style.position = "";
+  document.body.style.top = "";
+  document.body.style.left = "";
+  document.body.style.right = "";
+  document.body.style.width = "";
+  window.scrollTo(0, scrollY);
+}
+
 export function openDialog(dialog) {
+  if (window.innerWidth <= 768) {
+    lockBodyScroll();
+  }
+  dialog.addEventListener("close", () => {
+    if (window.innerWidth <= 768) {
+      unlockBodyScroll();
+    }
+  }, { once: true });
   if (!dialog.open) {
     dialog.showModal();
   }

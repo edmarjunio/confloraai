@@ -886,22 +886,61 @@ for (const dialog of document.querySelectorAll("dialog")) {
     }
   });
 
-  // Gesto de puxar para baixo no topo do bottomsheet para abaixar/fechar
+  // Gesto interativo de puxar o bottomsheet inteiro para baixo e abaixar/fechar
   let touchStartY = 0;
+  let isDraggingSheet = false;
+
   dialog.addEventListener("touchstart", (e) => {
+    if (window.innerWidth > 768) return;
     const touch = e.touches[0];
+    if (!touch) return;
     const box = dialog.getBoundingClientRect();
-    if (touch && touch.clientY <= box.top + 60) {
+    const fromHandle = Boolean(e.target.closest(".bottomsheet-handle"));
+    const fromHeader = Boolean(e.target.closest(".dialog-header")) && !e.target.closest("button, input, select, textarea");
+    const atTop = dialog.scrollTop <= 0 && touch.clientY <= box.top + 70;
+
+    if (fromHandle || fromHeader || atTop) {
       touchStartY = touch.clientY;
+      isDraggingSheet = true;
+      dialog.style.transition = "none";
     } else {
+      isDraggingSheet = false;
       touchStartY = 0;
     }
   }, { passive: true });
-  dialog.addEventListener("touchend", (e) => {
-    const touch = e.changedTouches[0];
-    if (touchStartY > 0 && touch && touch.clientY - touchStartY > 50) {
-      dialog.close();
+
+  dialog.addEventListener("touchmove", (e) => {
+    if (!isDraggingSheet || touchStartY === 0) return;
+    const touch = e.touches[0];
+    if (!touch) return;
+    const deltaY = touch.clientY - touchStartY;
+    if (deltaY > 0 && dialog.scrollTop <= 0) {
+      // Arrastando para baixo: o card inteiro desce em sincronia com o dedo, sem deixar fundo branco estático
+      dialog.style.transform = `translateY(${deltaY}px)`;
+      if (e.cancelable) e.preventDefault();
     }
+  }, { passive: false });
+
+  dialog.addEventListener("touchend", (e) => {
+    if (!isDraggingSheet) return;
+    const touch = e.changedTouches[0];
+    const deltaY = touch ? touch.clientY - touchStartY : 0;
+    dialog.style.transition = "transform 0.22s cubic-bezier(0.16, 1, 0.3, 1)";
+    if (deltaY > 70) {
+      dialog.style.transform = "translateY(100%)";
+      setTimeout(() => {
+        dialog.close();
+        dialog.style.transform = "";
+        dialog.style.transition = "";
+      }, 200);
+    } else {
+      dialog.style.transform = "translateY(0)";
+      setTimeout(() => {
+        dialog.style.transform = "";
+        dialog.style.transition = "";
+      }, 220);
+    }
+    isDraggingSheet = false;
     touchStartY = 0;
   }, { passive: true });
 }

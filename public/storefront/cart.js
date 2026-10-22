@@ -6,6 +6,8 @@ import {
   storageGet,
   storageSet,
   openDialog,
+  lockBodyScroll,
+  unlockBodyScroll,
   quantityControl,
 } from "./ui.js";
 import { icon } from "./icons.js";
@@ -566,12 +568,20 @@ export function createCart(state) {
   $("#orderReviewClose").addEventListener("click", () => $("#orderConfirmDialog").close());
 
   function open() {
+    window.scrollTo({ left: 0 });
+    document.documentElement.scrollLeft = 0;
     const dialog = $("#cartDialog");
     const receipt = $("#receipt");
     if (items.length > 0 && receipt && !receipt.hidden) {
       resetCartView();
     }
+    dialog.style.transform = "";
+    dialog.style.transition = "";
+    if (window.innerWidth <= 768) {
+      lockBodyScroll();
+    }
     if (!dialog.open) dialog.show();
+    dialog.scrollTop = 0;
     if (!state.existingStore) return;
     const customerSessionId = state.user?.id;
     const before = Object.fromEntries(['name', 'phone', 'address'].map((field) => [field, form.elements[field]?.value || '']));
@@ -590,6 +600,7 @@ export function createCart(state) {
 
   function close() {
     $("#cartDialog").close();
+    unlockBodyScroll();
   }
 
   function clear() {
@@ -612,6 +623,7 @@ export function createCart(state) {
     close();
   });
   $("#cartDialog")?.addEventListener("close", () => {
+    unlockBodyScroll();
     const receipt = $("#receipt");
     if (receipt && !receipt.hidden) {
       resetCartView();
