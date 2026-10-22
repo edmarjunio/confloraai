@@ -6,3 +6,52 @@
   --color-brand-green: #109e46;
   --color-brand-light: #f4f6f5;
 }
+
+@keyframes cfOrderToastEnter {
+  0% {
+    opacity: 0;
+    transform: translate3d(-32px, 40px, 0) scale(0.92);
+  }
+  70% {
+    opacity: 1;
+    transform: translate3d(4px, -4px, 0) scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.cf-order-notification {
+  --cf-fly-x: 260px;
+  --cf-fly-y: -220px;
+  will-change: transform, opacity;
+}
+
+.cf-order-notification--idle {
+  animation: cfOrderToastEnter 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.cf-order-notification--flying {
+  transform: translate3d(var(--cf-fly-x), var(--cf-fly-y), 0) scale(0.86);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform 0.68s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.62s cubic-bezier(0.4, 0, 0.2, 1) 0.06s;
+}
+
+.cf-order-column--target-glow {
+  box-shadow: 0 0 0 3px rgb(16 158 70 / 38%), 0 16px 32px -12px rgb(15 56 30 / 22%);
+  border-color: #109e46;
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cf-order-notification--idle,
+  .cf-order-notification--flying {
+    animation: none;
+    transition: opacity 0.2s ease;
+  }
+}
+

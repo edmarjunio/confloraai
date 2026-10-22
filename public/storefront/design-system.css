@@ -273,20 +273,51 @@ render-product-card.cf-pdv-product-card {
   -webkit-line-clamp: 2;
 }
 .cf-pdv-inline-category {
-  display: block !important;
+  display: flex !important;
+  align-items: center;
+  align-self: flex-start;
   min-width: 0;
   max-width: 100%;
   line-height: 1;
+  margin: 2px 0 1px;
 }
+.cf-pdv-inline-category.cf-product-category-tag,
 .cf-pdv-inline-category .cf-product-category-tag {
-  display: inline-flex;
-  height: 16px;
-  min-width: 0;
-  max-width: 100%;
-  min-height: 16px;
-  padding: 0 6px;
-  font-size: 8px;
-  line-height: 16px;
+  display: inline-flex !important;
+  align-items: center !important;
+  vertical-align: middle !important;
+  height: 18px !important;
+  min-height: 18px !important;
+  padding: 0 6px !important;
+  font-size: 9px !important;
+  font-weight: 700 !important;
+  line-height: 1 !important;
+  gap: 3px !important;
+  border-radius: 999px !important;
+  box-sizing: border-box !important;
+}
+.cf-pdv-inline-category .cf-category-icon,
+.cf-pdv-inline-category.cf-product-category-tag .cf-category-icon {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 0 !important;
+  flex-shrink: 0 !important;
+}
+.cf-pdv-inline-category .cf-category-icon > svg,
+.cf-pdv-inline-category.cf-product-category-tag .cf-category-icon > svg {
+  width: 11px !important;
+  height: 11px !important;
+  display: block !important;
+}
+.cf-pdv-inline-category .cf-product-category-tag-label,
+.cf-pdv-inline-category.cf-product-category-tag .cf-product-category-tag-label {
+  display: inline-block !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  line-height: 1 !important;
+  vertical-align: middle !important;
 }
 .cf-shared-pdv-price-row {
   display: flex;

@@ -335,11 +335,43 @@ class PdvService {
       throw new Error('Sem permissão para concluir entrega.');
     }
     const existing = await this.repository.read('orders', orderId);
-    if (!existing) throw new Error('Pedido não encontrado.');
-    if (existing.deliveryStatus === 'DELIVERED') return { order: await this.repository.markDelivered(orderId, actor(user)) };
+    const completedJobId = `${orderId}-order-completed`;
+    const now = new Date().toISOString();
+    if (existing.deliveryStatus === 'DELIVERED') {
+      const delivered = await this.repository.markDelivered(orderId, actor(user));
+      await this.repository.transaction(async tx => {
+        if (!(await tx.get('pdv_outbox', completedJobId))) {
+          tx.set('pdv_outbox', completedJobId, {
+            id: completedJobId,
+            orderId: delivered.id,
+            recipient: delivered.customerPhone,
+            kind: 'order-completed',
+            status: 'PENDING',
+            attempts: 0,
+            createdAt: now
+          });
+        }
+      });
+      await this.deliver(completedJobId);
+      return { order: delivered };
+    }
     assertAssignedDelivery(existing, user);
     if (!isDeliverySettled(existing)) throw new Error('Registre o recebimento antes de concluir a entrega.');
     const delivered = await this.repository.markDelivered(orderId, actor(user), payload.notes || '', payload.actualDistanceKm);
+    await this.repository.transaction(async tx => {
+      if (!(await tx.get('pdv_outbox', completedJobId))) {
+        tx.set('pdv_outbox', completedJobId, {
+          id: completedJobId,
+          orderId: delivered.id,
+          recipient: delivered.customerPhone,
+          kind: 'order-completed',
+          status: 'PENDING',
+          attempts: 0,
+          createdAt: now
+        });
+      }
+    });
+    await this.deliver(completedJobId);
     return { order: { ...delivered, receiptText: formatOrderReceipt(delivered) } };
   }
 
@@ -484,6 +516,11 @@ class PdvService {
       else if (job.kind === 'driver-assigned') text = `CONFLORA — ENTREGA ATRIBUÍDA\nPedido #${order.ticketNumber || order.id}\nConsulte os detalhes na aba Entregas.`;
       else if (job.kind === 'delivery-departure') { text = `Seu pedido #${order.ticketNumber || order.id.slice(-6)} saiu para entrega! Responsável: ${order.assignedDriver?.name || 'Equipe Conflora'}. ${isDeliverySettled(order) ? 'Pagamento já registrado.' : 'Pagamento será recebido na entrega.'}`; }
       else if (job.kind === 'delivery-arriving') { text = `🛵 CONFLORA — O ENTREGADOR ESTÁ CHEGANDO NO SEU ENDEREÇO!\nPedido #${order.ticketNumber || order.id.slice(-6)}\nFavor aguardar para receber seu pedido.`; }
+      else if (job.kind === 'order-completed') {
+        const storeUrl = process.env.STORE_URL || 'https://conflora.izibola.com.br';
+        const feedbackUrl = `${storeUrl}#feedback-${order.id}`;
+        text = `🎉 *CONFLORA — PEDIDO CONCLUÍDO!*\n\nPedido #${order.ticketNumber || order.id.slice(-6)}\n\nMuito obrigado pela sua preferência e confiança na Conflora Horta e Viveiro!\n\nSua avaliação é muito importante para nós:\n⭐ Avalie o nosso atendimento acessando:\n${feedbackUrl}\n\nEsperamos você novamente em breve! 🌱`;
+      }
       else if (job.kind === 'receipt' || job.kind === 'customer-paid' || job.kind === 'pix-charge') {
         text = !order.completedAt && !order.paidAt && job.kind !== 'customer-paid' ? formatCustomerOrderMessage(order) : formatOrderReceipt(order);
       }

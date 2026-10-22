@@ -141,7 +141,13 @@
     }
     .cf-category-chip.category-chip:active { transform:translateY(1px); box-shadow:0 1px 0 var(--category-strong); }
     .cf-category-chip.category-chip:focus-visible { outline:3px solid var(--category-strong); outline-offset:3px; }
-    .cf-category-chip.category-chip.cf-category-clear,
+    .cf-category-chip.category-chip.cf-category-clear {
+      padding: 6px 14px;
+      gap: 7px;
+      border-radius: 999px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
     .cf-category-chip.category-chip.cf-category-icon-only { width:38px; min-width:38px; height:38px; min-height:38px; padding:0; gap:0; border-radius:999px; }
     .cf-category-tag.cf-product-category-tag { gap:4px; }
     .cf-category-icon { display:inline-flex; align-items:center; justify-content:center; flex:none; line-height:0; filter:drop-shadow(0 1.5px 0 rgba(15, 23, 42, 0.28)); }
@@ -196,8 +202,8 @@
       tag.className = filter ? `category-chip cf-category-chip${selected ? ' is-active' : ''}`
         : `cf-product-category-tag cf-category-tag ${this.getAttribute('class') || ''}`.trim();
       tag.classList.toggle('cf-category-clear', action);
-      tag.classList.toggle('cf-category-icon-only', hideLabel || action);
-      const accessibleLabel = labelText || (kind === 'all' ? 'Todas as categorias'.tr : 'Filtro');
+      tag.classList.toggle('cf-category-icon-only', hideLabel && !action);
+      const accessibleLabel = labelText || (kind === 'all' ? 'Todas as categorias'.tr : (action ? 'Limpar filtros'.tr || 'Limpar filtros' : 'Filtro'));
       tag.setAttribute('aria-label', accessibleLabel);
       tag.dataset.categoryTone = theme.tone;
       tag.style.setProperty('--category-strong', theme.strong);
@@ -216,12 +222,12 @@
       for (const [key, value] of Object.entries({ viewBox:'0 0 24 24', width:'18', height:'18', fill:'none' })) svg.setAttribute(key, value);
       svg.innerHTML = cartoonIcons[theme.symbol] || cartoonIcons.box;
       icon.append(svg);
-      if (hideLabel || action) {
+      if (hideLabel && !action) {
         tag.replaceChildren(icon);
       } else {
         const label = document.createElement('span');
         label.className = filter ? 'category-chip-label' : 'cf-product-category-tag-label';
-        label.textContent = labelText;
+        label.textContent = labelText || (action ? 'Limpar filtros' : '');
         tag.replaceChildren(icon, label);
       }
       this.style.display = 'contents';

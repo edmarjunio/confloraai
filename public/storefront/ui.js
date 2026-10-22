@@ -51,12 +51,14 @@ export function lockBodyScroll() {
   const scrollY = window.scrollY || document.documentElement.scrollTop || 0;
   document.body.dataset.scrollLocked = String(scrollY);
   document.documentElement.style.overflow = "hidden";
+  document.documentElement.style.height = "100%";
   document.body.style.overflow = "hidden";
   document.body.style.position = "fixed";
   document.body.style.top = `-${scrollY}px`;
   document.body.style.left = "0";
   document.body.style.right = "0";
   document.body.style.width = "100%";
+  document.body.style.touchAction = "none";
 }
 
 export function unlockBodyScroll() {
@@ -64,26 +66,29 @@ export function unlockBodyScroll() {
   const scrollY = Number(document.body.dataset.scrollLocked || 0);
   delete document.body.dataset.scrollLocked;
   document.documentElement.style.overflow = "";
+  document.documentElement.style.height = "";
   document.body.style.overflow = "";
   document.body.style.position = "";
   document.body.style.top = "";
   document.body.style.left = "";
   document.body.style.right = "";
   document.body.style.width = "";
+  document.body.style.touchAction = "";
   window.scrollTo(0, scrollY);
 }
 
 export function openDialog(dialog) {
-  if (window.innerWidth <= 768) {
-    lockBodyScroll();
-  }
+  if (!dialog) return;
+  lockBodyScroll();
   dialog.addEventListener("close", () => {
-    if (window.innerWidth <= 768) {
-      unlockBodyScroll();
-    }
+    unlockBodyScroll();
   }, { once: true });
   if (!dialog.open) {
-    dialog.showModal();
+    try {
+      dialog.showModal();
+    } catch {
+      dialog.show();
+    }
   }
 }
 export function storageGet(key, fallback) {

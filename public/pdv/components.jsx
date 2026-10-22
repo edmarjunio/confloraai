@@ -60,7 +60,7 @@ window.PdvComponents = (() => {
   function PaymentMethodButtons({ value, onChange, labels, disabledMethods = [], suffix = '' }) {
     return <div role="group" aria-label="Formas de pagamento" className="my-2 grid grid-cols-2 gap-2">{Object.entries(labels).map(([method, label]) => <button type="button" key={method} aria-pressed={value === method} disabled={disabledMethods.includes(method)} className={'cf-btn-3d cf-btn-3d--sm !py-2.5 !px-3 text-xs flex items-center justify-center ' + (value === method ? 'cf-btn-3d--primary' : 'cf-btn-3d--secondary')} onClick={() => onChange(method)}>{label}{suffix}</button>)}</div>;
   }
-  function PixProofUpload({ targetType, targetId, onChange }) {
+  function PixProofUpload({ targetType, targetId, onChange, label, hint }) {
     const [fileName, setFileName] = useState(''); const [error, setError] = useState(''); const [uploading, setUploading] = useState(false);
     const upload = async (file) => {
       onChange(''); setFileName(''); setError('');
@@ -74,7 +74,7 @@ window.PdvComponents = (() => {
       } catch (err) { setError(err.message); }
       finally { setUploading(false); }
     };
-    return <div className="my-3 rounded-xl border border-sky-200 bg-white p-3"><label className="block text-xs font-bold">Foto ou PDF do comprovante Pix (obrigatório)<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="mt-2 block w-full text-xs" onChange={(event) => upload(event.target.files[0])} disabled={uploading} /></label><p className="mt-2 text-xs text-slate-500">{uploading ? 'Enviando comprovante…' : fileName ? '✓ Comprovante anexado: ' + fileName : 'JPG, PNG, WebP ou PDF • até 3 MB'}</p>{error && <p role="alert" className="mt-2 text-xs text-red-700">{error}</p>}</div>;
+    return <div className="my-3 rounded-xl border border-sky-200 bg-white p-3"><label className="block text-xs font-bold">{label || 'Foto ou PDF do comprovante Pix (obrigatório)'}<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="mt-2 block w-full text-xs" onChange={(event) => upload(event.target.files[0])} disabled={uploading} /></label><p className="mt-2 text-xs text-slate-500">{uploading ? 'Enviando comprovante…' : fileName ? '✓ Comprovante anexado: ' + fileName : (hint || 'JPG, PNG, WebP ou PDF • até 3 MB')}</p>{error && <p role="alert" className="mt-2 text-xs text-red-700">{error}</p>}</div>;
   }
   function CustomerSearch({ onClose, onSelect }) {
     const [query, setQuery] = useState(''); const [rows, setRows] = useState([]); const [loading, setLoading] = useState(false); const [error, setError] = useState('');
@@ -1515,7 +1515,203 @@ window.PdvComponents = (() => {
       {description && <p className="mt-1 text-[10px] text-slate-500">{description}</p>}
     </cf-card>;
   }
-  function CashierColumn({ title, hint, orders, tone, selectedOrderId, pulsedOrderIds, onDetails, stage, canMove, dragFrom, onMove, onDragStart, onDragEnd }) {
+  function FecharCaixaModal({ status, onClose, onClosed, user }) {
+    const [counted, setCounted] = useState({ cash: '', pix: '', credit: '', debit: '' });
+    const [proofId, setProofId] = useState('');
+    const [notes, setNotes] = useState('');
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState('');
+    const [showConfirm, setShowConfirm] = useState(false);
+
+    const expected = status?.myExpected || { cash: 0, pix: 0, credit: 0, debit: 0, total: 0 };
+    const num = (v) => Number(String(v || '0').replace(',', '.')) || 0;
+    const cashVal = num(counted.cash);
+    const pixVal = num(counted.pix);
+    const creditVal = num(counted.credit);
+    const debitVal = num(counted.debit);
+    const totalCounted = Math.round((cashVal + pixVal + creditVal + debitVal) * 100) / 100;
+
+    const diffs = {
+      cash: Math.round((cashVal - expected.cash) * 100) / 100,
+      pix: Math.round((pixVal - expected.pix) * 100) / 100,
+      credit: Math.round((creditVal - expected.credit) * 100) / 100,
+      debit: Math.round((debitVal - expected.debit) * 100) / 100,
+      total: Math.round((totalCounted - expected.total) * 100) / 100,
+    };
+
+    const diffBadge = (diff) => {
+      if (diff === 0) return <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800">✓ Exato</span>;
+      if (diff > 0) return <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-[11px] font-bold text-blue-800">+{money(diff)} (Sobra)</span>;
+      return <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-[11px] font-bold text-rose-800">{money(diff)} (Falta)</span>;
+    };
+
+    const handleConfirmFinal = async () => {
+      setBusy(true);
+      setError('');
+      try {
+        const response = await api('/api/caixa/close-my-cashier', {
+          date: status.date,
+          counted: { cash: cashVal, pix: pixVal, credit: creditVal, debit: debitVal },
+          proofId,
+          notes,
+        });
+        onClosed(response);
+      } catch (err) {
+        setError(err.message);
+        setShowConfirm(false);
+      } finally {
+        setBusy(false);
+      }
+    };
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+        <div className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6">
+          <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+            <div>
+              <span className="text-xs font-black uppercase tracking-wider text-emerald-800">Conferência de Fechamento</span>
+              <h3 className="text-lg font-black text-[#0F381E]">🔒 Fechar Caixa — {user.name || user.email}</h3>
+              <p className="text-xs text-slate-500">Data: {status.date} · Registros do seu turno</p>
+            </div>
+            <button onClick={onClose} disabled={busy} className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600">✕</button>
+          </div>
+
+          {error && <p role="alert" className="mt-3 rounded-xl bg-rose-50 p-3 text-xs font-bold text-rose-800 border border-rose-200">{error}</p>}
+
+          <div className="mt-4 space-y-3">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5">
+              <h4 className="text-xs font-black uppercase text-slate-700">Informe os valores contados fisicamente:</h4>
+              <div className="mt-3 space-y-2.5">
+                {[
+                  { key: 'cash', label: '💵 Dinheiro em Espécie (Gaveta)', exp: expected.cash, hint: 'Notas e moedas' },
+                  { key: 'pix', label: '⚡ PIX Recebido (Extrato)', exp: expected.pix, hint: 'Sicredi / comprovantes' },
+                  { key: 'debit', label: '💳 Cartão Débito (Maquininha)', exp: expected.debit, hint: 'Relatório diário POS' },
+                  { key: 'credit', label: '💳 Cartão Crédito (Maquininha)', exp: expected.credit, hint: 'Relatório diário POS' },
+                ].map((item) => (
+                  <div key={item.key} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl bg-white p-2.5 border border-slate-200 shadow-sm">
+                    <div className="min-w-0">
+                      <span className="block text-xs font-bold text-slate-800">{item.label}</span>
+                      <span className="text-[11px] text-slate-400">Apurado Sistema: <strong>{money(item.exp)}</strong></span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="relative w-32">
+                        <span className="absolute left-2.5 top-1.5 text-xs text-slate-400">R$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="0,00"
+                          value={counted[item.key]}
+                          onChange={(e) => setCounted({ ...counted, [item.key]: e.target.value })}
+                          className="w-full rounded-lg border border-slate-300 py-1 pl-8 pr-2 text-right text-xs font-bold text-slate-800 focus:border-emerald-600 focus:outline-none"
+                        />
+                      </div>
+                      <div className="min-w-[85px] text-right">
+                        {diffBadge(diffs[item.key])}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* TOTAL CONSOLIDADO */}
+            <div className="rounded-2xl border-2 border-emerald-500/30 bg-emerald-50/50 p-3.5">
+              <div className="flex items-center justify-between text-xs font-bold text-emerald-950">
+                <span>Total Apurado pelo Sistema:</span>
+                <span>{money(expected.total)}</span>
+              </div>
+              <div className="mt-1 flex items-center justify-between text-base font-black text-[#0F381E]">
+                <span>Total Contado no Caixa:</span>
+                <span>{money(totalCounted)}</span>
+              </div>
+              <div className="mt-2 flex items-center justify-between border-t border-emerald-200 pt-2 text-xs">
+                <span className="font-bold text-slate-700">Diferença Geral:</span>
+                {diffBadge(diffs.total)}
+              </div>
+            </div>
+
+            {/* FOTO DO COMPROVANTE DA MAQUININHA */}
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              <span className="block text-xs font-black text-slate-700">📸 Foto do Relatório da Maquininha de Cartão</span>
+              <p className="text-[11px] text-slate-500 mb-2">Tire uma foto da tela ou do papel impresso do fechamento da maquininha</p>
+              <PixProofUpload
+                targetType="CLOSING"
+                targetId={'closing_' + status.date}
+                label="Anexar foto ou PDF do relatório da maquininha"
+                hint="Tire foto da maquininha • até 3 MB"
+                onChange={setProofId}
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Observações do Caixa (opcional)</label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Ex: Diferença de R$ 0,50 por falta de moedas no troco, gaveta conferida."
+                rows={2}
+                className="w-full rounded-xl border border-slate-300 p-2 text-xs focus:border-emerald-600 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          {/* CONFIRM DIALOG OR BUTTON */}
+          <div className="mt-5 border-t border-slate-100 pt-4">
+            {!showConfirm ? (
+              <div className="flex gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  disabled={busy}
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowConfirm(true)}
+                  disabled={busy}
+                  className="cf-btn-3d cf-btn-3d--primary px-5 py-2.5 text-xs font-black"
+                >
+                  🔒 CONFERIR & FECHAR CAIXA
+                </button>
+              </div>
+            ) : (
+              <div className="rounded-2xl border-2 border-red-500 bg-red-50 p-4">
+                <p className="text-xs font-black text-red-900">
+                  ⚠️ ATENÇÃO: Esta operação é definitiva e NÃO poderá ser desfeita!
+                </p>
+                <p className="mt-1 text-[11px] text-red-700">
+                  Ao confirmar, seu caixa do dia será encerrado. Se todos os operadores do dia tiverem fechado, o resumo consolidado será enviado diretamente para o WhatsApp do Júnior.
+                </p>
+                <div className="mt-3 flex gap-2 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirm(false)}
+                    disabled={busy}
+                    className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                  >
+                    Voltar e revisar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmFinal}
+                    disabled={busy}
+                    className="rounded-xl bg-red-600 px-4 py-2 text-xs font-black text-white shadow-md hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {busy ? 'Fechando caixa…' : 'Sim, Fechar Definitivamente'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function CashierColumn({ title, hint, orders, tone, selectedOrderId, pulsedOrderIds, onDetails, stage, canMove, dragFrom, onMove, onDragStart, onDragEnd, isTargetGlow }) {
     const themes = {
       amber: 'border-amber-300 bg-amber-50 text-amber-950',
       blue: 'border-sky-300 bg-sky-50 text-sky-950',
@@ -1523,7 +1719,7 @@ window.PdvComponents = (() => {
       red: 'border-red-300 bg-red-50 text-red-950',
     };
     const acceptsDrop = canMove && ((dragFrom === 'confirmation' && stage === 'payment') || (dragFrom === 'payment' && stage === 'paid'));
-    return <section onDragOver={(event) => { if (acceptsDrop) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; } }} onDrop={(event) => { event.preventDefault(); if (!acceptsDrop) return; try { const payload = JSON.parse(event.dataTransfer.getData('application/x-conflora-order')); onMove(payload.id, payload.from, stage); } catch { /* Ignore unrelated drag payloads. */ } onDragEnd(); }} className={`min-w-0 w-full rounded-2xl border border-slate-200 bg-slate-100 p-3 ${acceptsDrop ? 'cf-order-column--drop' : ''}`} aria-label={title}>
+    return <section data-column-stage={stage} data-column-title={title} onDragOver={(event) => { if (acceptsDrop) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; } }} onDrop={(event) => { event.preventDefault(); if (!acceptsDrop) return; try { const payload = JSON.parse(event.dataTransfer.getData('application/x-conflora-order')); onMove(payload.id, payload.from, stage); } catch { /* Ignore unrelated drag payloads. */ } onDragEnd(); }} className={`w-[340px] min-w-[340px] shrink-0 snap-start flex flex-col rounded-2xl border border-slate-200 bg-slate-100 p-3 ${acceptsDrop ? 'cf-order-column--drop' : ''} ${isTargetGlow ? 'cf-order-column--target-glow' : ''}`} aria-label={title}>
       <header className={`mb-3 rounded-xl border px-3 py-2 ${themes[tone]}`}>
         <div className="flex items-center justify-between gap-2"><h3 className="text-xs font-black tracking-wide">{title}</h3><span className="rounded-full bg-white/80 px-2 py-0.5 text-xs font-extrabold">{orders.length}</span></div>
         <p className="mt-1 text-[10px] opacity-75">{hint}</p>
@@ -1534,6 +1730,23 @@ window.PdvComponents = (() => {
       </div>
     </section>;
   }
+
+  function resolveOrderTargetColumn(order, explicitStage) {
+    const isPaidStage = explicitStage === 'paid' || Boolean(
+      order && (
+        order.paidAt ||
+        order.completedAt ||
+        order.paymentStatus === 'APPROVED' ||
+        order.status === 'PAID' ||
+        order.status === 'COMPLETED'
+      )
+    );
+    if (isPaidStage) {
+      return { stage: 'paid', title: 'PAGOS / FINALIZADOS', tone: 'green' };
+    }
+    return { stage: 'payment', title: 'ESPERANDO PAGAMENTO', tone: 'blue' };
+  }
+
   function CashierQueue({ user, view, onBack, onDebt, initialOrderId, onInitialOrderOpened }) {
     const today = dateInSaoPaulo();
     const [dateFrom, setDateFrom] = useState(today);
@@ -1546,13 +1759,129 @@ window.PdvComponents = (() => {
     const [refreshing, setRefreshing] = useState(false);
     const [pulsedOrderIds, setPulsedOrderIds] = useState(() => new Set());
     const [newOrderNotice, setNewOrderNotice] = useState('');
+    const [floatingOrder, setFloatingOrder] = useState(null);
+    const [floatingTarget, setFloatingTarget] = useState(() => ({ stage: 'payment', title: 'ESPERANDO PAGAMENTO', tone: 'blue' }));
+    const [isFlying, setIsFlying] = useState(false);
+    const [flyingToStage, setFlyingToStage] = useState(null);
+    const [closingStatus, setClosingStatus] = useState(null);
+    const [showClosingModal, setShowClosingModal] = useState(false);
+    const [closingNotice, setClosingNotice] = useState('');
     const dataRef = useRef(null);
+    const floatingCardRef = useRef(null);
+    const flyTimerRef = useRef(null);
+    const autoFlyTimerRef = useRef(null);
+
+    const loadClosingStatus = async () => {
+      if (!['ADMIN', 'CAIXA'].includes(user.role)) return;
+      try {
+        const res = await api('/api/caixa/closing-status');
+        setClosingStatus(res);
+      } catch { /* Ignore */ }
+    };
+
+    useEffect(() => {
+      loadClosingStatus();
+    }, [dateFrom, dateTo, view]);
+
+    useEffect(() => () => {
+      if (flyTimerRef.current) clearTimeout(flyTimerRef.current);
+      if (autoFlyTimerRef.current) clearTimeout(autoFlyTimerRef.current);
+    }, []);
+
     useEffect(() => {
       if (!initialOrderId) return;
       let active = true;
       api('/api/caixa/orders/' + encodeURIComponent(initialOrderId)).then(order => { if (active) { setSelectedOrder(order); onInitialOrderOpened?.(); } }).catch(error => { if (active) setError(error.message); });
       return () => { active = false; };
     }, [initialOrderId, user.id]);
+
+    const applySlideCoordinates = (target) => {
+      const cardEl = floatingCardRef.current;
+      const boardEl = document.querySelector('.cf-cashier-board');
+      const columnEl = document.querySelector(`[data-column-stage="${target.stage}"]`) || document.querySelector(`[data-column-title="${target.title}"]`);
+      const startLeft = 24;
+      const startTop = Math.max(120, (typeof window !== 'undefined' ? window.innerHeight : 768) - 230);
+      const startRect = cardEl ? cardEl.getBoundingClientRect() : { left: startLeft, top: startTop, width: 340, height: 190 };
+      let deltaX = target.stage === 'paid' ? 680 : 340;
+      let deltaY = -240;
+
+      if (columnEl) {
+        let scrollShiftX = 0;
+        if (boardEl && typeof boardEl.getBoundingClientRect === 'function') {
+          const boardRect = boardEl.getBoundingClientRect();
+          const colRectBefore = columnEl.getBoundingClientRect();
+          if (colRectBefore.right > boardRect.right || colRectBefore.left < boardRect.left) {
+            const desiredLeft = Math.max(0, columnEl.offsetLeft - Math.max(16, (boardRect.width - colRectBefore.width) / 2));
+            scrollShiftX = boardEl.scrollLeft - desiredLeft;
+            if (typeof boardEl.scrollTo === 'function') {
+              boardEl.scrollTo({ left: desiredLeft, behavior: 'smooth' });
+            } else {
+              boardEl.scrollLeft = desiredLeft;
+            }
+          }
+        }
+        const listEl = columnEl.querySelector('.cf-order-card-list') || columnEl;
+        const destRect = listEl.getBoundingClientRect();
+        deltaX = Math.round((destRect.left + scrollShiftX) - startRect.left);
+        deltaY = Math.round(Math.max(76, destRect.top + 8) - startRect.top);
+      }
+
+      if (cardEl && cardEl.style) {
+        cardEl.style.setProperty('--cf-fly-x', `${deltaX}px`);
+        cardEl.style.setProperty('--cf-fly-y', `${deltaY}px`);
+      }
+    };
+
+    const triggerFly = (order, options = {}) => {
+      const targetOrder = order || floatingOrder;
+      if (!targetOrder) return;
+      if (autoFlyTimerRef.current) clearTimeout(autoFlyTimerRef.current);
+      if (flyTimerRef.current) clearTimeout(flyTimerRef.current);
+
+      const target = resolveOrderTargetColumn(targetOrder, options.targetStage);
+      setFloatingOrder(targetOrder);
+      setFloatingTarget(target);
+      setFlyingToStage(target.stage);
+
+      const startSlide = () => {
+        applySlideCoordinates(target);
+        setIsFlying(true);
+        setPulsedOrderIds((current) => new Set([...current, targetOrder.id]));
+        flyTimerRef.current = setTimeout(() => {
+          setIsFlying(false);
+          setFloatingOrder(null);
+          setFlyingToStage(null);
+          if (options.openDetailsAfter) {
+            setSelectedOrder(targetOrder);
+          }
+        }, 680);
+      };
+
+      if (options.delayMs && options.delayMs > 0) {
+        setIsFlying(false);
+        flyTimerRef.current = setTimeout(startSlide, options.delayMs);
+      } else {
+        requestAnimationFrame(startSlide);
+      }
+    };
+
+    const showOrderNotification = (order, options = {}) => {
+      if (!order) return;
+      if (autoFlyTimerRef.current) clearTimeout(autoFlyTimerRef.current);
+      if (flyTimerRef.current) clearTimeout(flyTimerRef.current);
+      const target = resolveOrderTargetColumn(order, options.targetStage);
+      setFloatingOrder(order);
+      setFloatingTarget(target);
+      setIsFlying(false);
+      setFlyingToStage(null);
+
+      const autoSlideMs = options.autoSlideMs ?? 5500;
+      if (autoSlideMs > 0) {
+        autoFlyTimerRef.current = setTimeout(() => {
+          triggerFly(order, { targetStage: target.stage, openDetailsAfter: false });
+        }, autoSlideMs);
+      }
+    };
 
     const refresh = async (silent = false) => {
       if (!silent) setRefreshing(true);
@@ -1562,14 +1891,29 @@ window.PdvComponents = (() => {
         const nextData = await api('/api/caixa/orders?' + query.toString());
         const previous = dataRef.current;
         if (silent && previous) {
-          const previousIds = new Set([...(previous.pendingConfirmation || []), ...(previous.pendingPayment || []), ...(previous.awaitingDriver || []), ...(previous.outForDelivery || [])].map((order) => order.id));
-          const incoming = [...(nextData.pendingConfirmation || []), ...(nextData.pendingPayment || []), ...(nextData.awaitingDriver || []), ...(nextData.outForDelivery || [])].filter((order) => !previousIds.has(order.id));
+          const previousActiveIds = new Set([...(previous.pendingConfirmation || []), ...(previous.pendingPayment || []), ...(previous.awaitingDriver || []), ...(previous.outForDelivery || [])].map((order) => order.id));
+          const previousPaymentIds = new Set((previous.pendingPayment || []).map((order) => order.id));
+          const previousPaidIds = new Set((previous.paid || []).map((order) => order.id));
+
+          const incoming = [...(nextData.pendingConfirmation || []), ...(nextData.pendingPayment || []), ...(nextData.awaitingDriver || []), ...(nextData.outForDelivery || [])].filter((order) => !previousActiveIds.has(order.id));
+          const movedToPayment = (nextData.pendingPayment || []).filter((order) => !previousPaymentIds.has(order.id) && previousActiveIds.has(order.id));
+          const movedToPaid = (nextData.paid || []).filter((order) => !previousPaidIds.has(order.id));
+
           if (incoming.length) {
             const ids = new Set(incoming.map((order) => order.id));
             setPulsedOrderIds((current) => new Set([...current, ...ids]));
-            setNewOrderNotice(incoming.length === 1 ? `Nova comanda aguardando ${incoming[0].deliveryStatus ? 'entrega' : incoming[0].status === 'AWAITING_CONFIRMATION' ? 'confirmação' : 'pagamento'}: #${incoming[0].ticketNumber}` : `${incoming.length} novas comandas aguardando atendimento`);
+            const firstIncoming = incoming[0];
+            const target = resolveOrderTargetColumn(firstIncoming);
+            setNewOrderNotice(incoming.length === 1 ? `Nova comanda #${firstIncoming.ticketNumber} → ${target.title}` : `${incoming.length} novas comandas aguardando atendimento`);
+            showOrderNotification(firstIncoming, { targetStage: target.stage, autoSlideMs: 5200 });
             setTimeout(() => setPulsedOrderIds((current) => new Set([...current].filter((id) => !ids.has(id)))), 9000);
             setTimeout(() => setNewOrderNotice(''), 9000);
+          } else if (movedToPaid.length) {
+            const paidOrder = movedToPaid[0];
+            triggerFly(paidOrder, { targetStage: 'paid', delayMs: floatingOrder?.id === paidOrder.id ? 0 : 220 });
+          } else if (movedToPayment.length) {
+            const paymentOrder = movedToPayment[0];
+            triggerFly(paymentOrder, { targetStage: 'payment', delayMs: floatingOrder?.id === paymentOrder.id ? 0 : 220 });
           }
         }
         dataRef.current = nextData;
@@ -1584,7 +1928,10 @@ window.PdvComponents = (() => {
     };
     useEffect(() => {
       refresh();
-      return window.ConfloraSession.watchOrderUpdates(() => refresh(true));
+      return window.ConfloraSession.watchOrderUpdates(() => {
+        refresh(true);
+        loadClosingStatus();
+      });
     }, [dateFrom, dateTo]);
 
     const setPeriod = (days) => {
@@ -1601,8 +1948,10 @@ window.PdvComponents = (() => {
           ...verification,
           ...(receivedAmount !== null && receivedAmount !== undefined && receivedAmount !== '' ? { receivedAmount: Number(String(receivedAmount).replace(',', '.')) } : {})
         });
-        setSelectedOrder(response.order || order);
+        const updatedOrder = response.order || order;
+        setSelectedOrder(updatedOrder);
         await refresh(true);
+        triggerFly(updatedOrder, { targetStage: 'paid', delayMs: floatingOrder?.id === updatedOrder.id ? 0 : 220 });
       } catch (err) { setError(err.message); }
       finally { setBusy(false); }
     };
@@ -1612,7 +1961,12 @@ window.PdvComponents = (() => {
       setBusy(true); setError('');
       try {
         const response = await api('/api/caixa/orders/' + encodeURIComponent(id) + '/move', { from, to });
-        setSelectedOrder(response.order); await refresh(true);
+        const movedOrder = response.order;
+        setSelectedOrder(movedOrder);
+        await refresh(true);
+        if (movedOrder && (to === 'payment' || to === 'paid')) {
+          triggerFly(movedOrder, { targetStage: to, delayMs: floatingOrder?.id === movedOrder.id ? 0 : 220 });
+        }
       } catch (err) { setError(err.message); }
       finally { setBusy(false); setDragFrom(null); }
     };
@@ -1693,8 +2047,8 @@ window.PdvComponents = (() => {
                 <MetricCard label="Fiados quitados por mim" value={money(data.metrics.debtReceipts)} description="Recebimentos no período" />
               </div>
               {newOrderNotice && <div role="status" className="mb-3 rounded-xl border border-amber-300 bg-amber-100 px-4 py-3 text-sm font-extrabold text-amber-950 shadow-sm" aria-live="polite">🔔 {newOrderNotice}</div>}
-              <div className="cf-cashier-board grid w-full grid-cols-1 gap-3 pb-3 sm:grid-cols-2 lg:grid-cols-6">
-                {columns.map((column) => <CashierColumn key={column.title} {...column} canMove={['ADMIN', 'CAIXA'].includes(user.role) && !busy} dragFrom={dragFrom} onMove={moveOrder} onDragStart={setDragFrom} onDragEnd={() => setDragFrom(null)} pulsedOrderIds={pulsedOrderIds} selectedOrderId={selectedOrder?.id} onDetails={setSelectedOrder} />)}
+              <div className="cf-cashier-board flex w-full gap-4 overflow-x-auto pb-4 pt-1 snap-x select-none">
+                {columns.map((column) => <CashierColumn key={column.title} {...column} isTargetGlow={flyingToStage === column.stage} canMove={['ADMIN', 'CAIXA'].includes(user.role) && !busy} dragFrom={dragFrom} onMove={moveOrder} onDragStart={setDragFrom} onDragEnd={() => setDragFrom(null)} pulsedOrderIds={pulsedOrderIds} selectedOrderId={selectedOrder?.id} onDetails={setSelectedOrder} />)}
               </div>
             </>}
 
@@ -1710,11 +2064,90 @@ window.PdvComponents = (() => {
             </>}
 
             {view === 'report' && <>
+              {closingNotice && (
+                <div role="status" className="mb-4 rounded-2xl border-2 border-emerald-500 bg-emerald-50 p-4 text-xs font-black text-emerald-950 shadow-md">
+                  {closingNotice}
+                </div>
+              )}
+
+              {/* HERO CARD DE FECHAMENTO DE CAIXA */}
+              {['ADMIN', 'CAIXA'].includes(user.role) && closingStatus && (
+                <div className="mb-6 overflow-hidden rounded-3xl border-2 border-emerald-700/30 bg-gradient-to-br from-[#0F381E] via-[#14532D] to-[#0A2614] p-5 text-white shadow-xl sm:p-6">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full bg-emerald-400/20 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-emerald-300">
+                          {closingStatus.myClosing ? '✅ Caixa Encerrado' : '⚡ Ação Obrigatória do Turno'}
+                        </span>
+                        {closingStatus.allClosed && (
+                          <span className="rounded-full bg-amber-400/20 px-3 py-1 text-[11px] font-black text-amber-300">
+                            👑 Todos os Caixas do Dia Fechados
+                          </span>
+                        )}
+                      </div>
+                      <h2 className="mt-2 text-xl font-black text-white sm:text-2xl">
+                        {closingStatus.myClosing
+                          ? `Caixa de ${user.name || 'Operador'} Fechado com Sucesso!`
+                          : `Fechamento do Caixa Diário — ${user.name || user.email}`}
+                      </h2>
+                      <p className="mt-1 max-w-xl text-xs text-emerald-100/80">
+                        {closingStatus.myClosing
+                          ? `Fechamento registrado em ${dateTime(closingStatus.myClosing.closedAt)}. Comprovante da maquininha anexado e valores conciliados.`
+                          : 'Confira os valores em dinheiro na gaveta, PIX e relatórios da máquina de cartão. O resumo consolidado é enviado ao Júnior no WhatsApp quando todos os operadores encerrarem o turno.'}
+                      </p>
+                    </div>
+
+                    <div className="shrink-0">
+                      {closingStatus.myClosing ? (
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="rounded-2xl border border-emerald-400/40 bg-emerald-500/20 px-5 py-2.5 text-xs font-black text-emerald-200">
+                            🔒 CAIXA FECHADO
+                          </span>
+                          <span className="text-[10px] text-emerald-300/70">Operação irreversível concluída</span>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setShowClosingModal(true)}
+                          className="cf-btn-3d cf-btn-3d--primary !bg-emerald-400 !text-slate-950 px-6 py-3.5 text-sm font-black shadow-2xl hover:scale-105 active:scale-95 transition-transform"
+                        >
+                          🔒 FECHAR MEU CAIXA AGORA
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* STATUS DOS DEMAIS OPERADORES DO DIA */}
+                  {closingStatus.activeOperators && closingStatus.activeOperators.length > 0 && (
+                    <div className="mt-5 border-t border-emerald-800/60 pt-3">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-300">
+                        Status dos Caixas Hoje ({closingStatus.activeOperators.filter(o => o.closed).length}/{closingStatus.activeOperators.length} Fechados):
+                      </span>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {closingStatus.activeOperators.map((op) => (
+                          <span
+                            key={op.id}
+                            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${
+                              op.closed
+                                ? 'bg-emerald-950/80 border border-emerald-400/30 text-emerald-300'
+                                : 'bg-amber-950/80 border border-amber-400/30 text-amber-300'
+                            }`}
+                          >
+                            <span>{op.closed ? '✅' : '⏳'}</span>
+                            <span>{op.name} ({op.role}): {op.closed ? 'Fechado' : 'Pendente'}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {['ADMIN', 'CAIXA'].includes(user.role) && <cashier-report-actions scope-label={user.role === 'ADMIN' ? 'Caixa geral da loja · período selecionado' : 'Somente o seu caixa · período selecionado'} from={dateFrom} to={dateTo}></cashier-report-actions>}
               
               <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-black text-[#0F381E]">Fechamento & Conferência do Caixa</h3>
+                  <h3 className="text-lg font-black text-[#0F381E]">Conferência Geral dos Valores</h3>
                   <p className="text-xs text-slate-500">Período: {dateFrom === dateTo ? dateFrom : `${dateFrom} a ${dateTo}`}</p>
                 </div>
                 <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">
@@ -1807,12 +2240,93 @@ window.PdvComponents = (() => {
         setBusy(true); setError('');
         try {
           const response = await api('/api/caixa/orders/' + order.id + '/confirm-manual-pix', { proofSeen: true, note, proofId });
-          setSelectedOrder(response.order || order); await refresh(true);
+          const updatedOrder = response.order || order;
+          setSelectedOrder(updatedOrder);
+          await refresh(true);
+          triggerFly(updatedOrder, { targetStage: 'paid', delayMs: floatingOrder?.id === updatedOrder.id ? 0 : 220 });
         } catch (err) { setError(err.message); }
         finally { setBusy(false); }
       }} onReviewed={async (reviewedOrder) => {
         setSelectedOrder(reviewedOrder || selectedOrder); await refresh(true);
       }} onClose={() => setSelectedOrder(null)} />}
+
+      {/* NOTIFICAÇÃO FLUTUANTE DE PEDIDO NO CANTO INFERIOR ESQUERDO COM DESLIZE PARA A COLUNA CORRETA */}
+      {floatingOrder && (
+        <div
+          ref={floatingCardRef}
+          role="status"
+          aria-live="polite"
+          data-target-column={floatingTarget.title}
+          data-target-stage={floatingTarget.stage}
+          className={`cf-order-notification fixed bottom-6 left-6 z-50 w-[340px] ${
+            isFlying
+              ? 'cf-order-notification--flying'
+              : 'cf-order-notification--idle shadow-2xl'
+          }`}
+        >
+          <div className="rounded-3xl border-2 border-emerald-500 bg-white p-3.5 shadow-2xl ring-4 ring-emerald-500/20 backdrop-blur-md">
+            <div className="mb-2 flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
+              <div className="min-w-0">
+                <span className="flex items-center gap-1.5 text-xs font-black text-emerald-800">
+                  <span className="inline-block animate-bounce">🔔</span> Comanda #{floatingOrder.ticketNumber}
+                </span>
+                <span className="mt-0.5 block truncate text-[10px] font-extrabold uppercase tracking-wide text-slate-500">
+                  Destino: {floatingTarget.title}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => triggerFly(floatingOrder, { targetStage: floatingTarget.stage, openDetailsAfter: false })}
+                className="rounded-lg p-1 text-sm font-black leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                title={`Deslizar para ${floatingTarget.title}`}
+                aria-label={`Deslizar para ${floatingTarget.title}`}
+              >
+                ✕
+              </button>
+            </div>
+            <OrderCard
+              order={floatingOrder}
+              tone={floatingTarget.tone || (floatingOrder.status === 'AWAITING_CONFIRMATION' ? 'amber' : 'blue')}
+              attention={true}
+              onDetails={(o) => triggerFly(o, { targetStage: floatingTarget.stage, openDetailsAfter: true })}
+            />
+            <div className="mt-2.5 flex items-center justify-between gap-2 pt-1">
+              {user.role !== 'VENDEDOR' && floatingOrder.status === 'AWAITING_CONFIRMATION' && floatingOrder.creditApprovalStatus !== 'PENDING' ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => moveOrder(floatingOrder.id, 'confirmation', 'payment')}
+                  className="w-full rounded-xl bg-emerald-700 px-3 py-2 text-xs font-extrabold text-white shadow-sm transition hover:bg-emerald-800 disabled:opacity-50"
+                >
+                  Processar → ESPERANDO PAGAMENTO
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => triggerFly(floatingOrder, { targetStage: floatingTarget.stage, openDetailsAfter: true })}
+                  className="w-full rounded-xl bg-emerald-50 px-3 py-2 text-xs font-extrabold text-emerald-900 transition hover:bg-emerald-100"
+                >
+                  Ir para {floatingTarget.title} →
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showClosingModal && closingStatus && (
+        <FecharCaixaModal
+          status={closingStatus}
+          user={user}
+          onClose={() => setShowClosingModal(false)}
+          onClosed={(res) => {
+            setShowClosingModal(false);
+            setClosingStatus((curr) => ({ ...curr, myClosing: res.closing, allClosed: res.allClosed }));
+            setClosingNotice(res.allClosed ? '🎉 Todos os caixas do dia foram encerrados e o resumo consolidado foi enviado ao WhatsApp do Júnior!' : '✅ Seu caixa foi fechado com sucesso com comprovante arquivado!');
+            refresh(true);
+          }}
+        />
+      )}
     </div>;
   }
   function DebtSettlement({ onClose }) {

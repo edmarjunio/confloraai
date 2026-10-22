@@ -129,7 +129,9 @@ class PdvRepository {
     const repo = this.repository;
     if (repo.firestore && !repo._firestoreClientDisabled) {
       try {
-        const result = await repo.firestore.collection(collection).where(field, '==', value).get();
+        let query = repo.firestore.collection(collection);
+        if (field) query = query.where(field, '==', value);
+        const result = await query.get();
         return result.docs.map((doc) => ({ ...doc.data(), id: doc.id }));
       } catch (err) {
         if (err.code === 7 || String(err.message || '').includes('PERMISSION_DENIED')) {
@@ -140,7 +142,9 @@ class PdvRepository {
     }
     if (!repo.isInMemory || repo.firestore) { throw new Error('Firestore indisponível.'); }
     const map = collection === 'orders' ? repo.inMemoryOrders : this.memory.get(collection);
-    return [...(map?.values() || [])].filter((row) => field.split('.').reduce((current, key) => current?.[key], row) === value);
+    const rows = [...(map?.values() || [])];
+    if (!field) return rows;
+    return rows.filter((row) => field.split('.').reduce((current, key) => current?.[key], row) === value);
   }
 
   watchOpenOrders(onChange, onError = () => {}) {

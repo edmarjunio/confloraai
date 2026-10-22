@@ -2810,9 +2810,21 @@ dialog .toast,
     border-right: 0;
     border-bottom: 0;
     box-shadow: 0 -10px 34px rgb(15 23 42 / 22%), 0 0 0 100vmax rgb(15 23 42 / 48%);
+    overflow-y: auto;
+    overscroll-behavior: contain !important;
+    touch-action: pan-y !important;
+    -webkit-overflow-scrolling: touch;
   }
   .cart-drawer {
     padding: 0 16px calc(20px + env(safe-area-inset-bottom));
+    overscroll-behavior: contain !important;
+    touch-action: pan-y !important;
+  }
+  .cart-drawer::backdrop,
+  #cartDialog::backdrop {
+    background: rgba(15, 23, 42, 0.55) !important;
+    backdrop-filter: blur(4px) !important;
+    touch-action: none !important;
   }
   .cart-drawer::before {
     display: none !important;

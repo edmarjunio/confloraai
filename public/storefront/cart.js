@@ -577,10 +577,7 @@ export function createCart(state) {
     }
     dialog.style.transform = "";
     dialog.style.transition = "";
-    if (window.innerWidth <= 768) {
-      lockBodyScroll();
-    }
-    if (!dialog.open) dialog.show();
+    openDialog(dialog);
     dialog.scrollTop = 0;
     if (!state.existingStore) return;
     const customerSessionId = state.user?.id;
