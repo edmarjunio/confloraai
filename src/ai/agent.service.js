@@ -46,7 +46,7 @@ class AgentService {
           this.aiClient = new GenAI.GoogleGenAI({ apiKey });
         } else {
           this.aiClient = new GenAI.GoogleGenAI({
-            vertexAI: true,
+            vertexai: true,
             project: config.gcp.projectId,
             location: config.gemini.location || 'southamerica-east1',
           });
