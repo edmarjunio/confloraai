@@ -144,9 +144,9 @@ class WhatsAppClient {
     const templateName = process.env.WHATSAPP_WELCOME_TEMPLATE || 'boas_vindas_conflora';
     const language = config.whatsapp.templates.language || 'pt_BR';
     const cleanName = customerName?.trim?.() || '';
-    // Se tiver nome: "Olá" + " João! S" + "eja..." -> "Olá João! Seja muito bem-vindo..."
-    // Se não tiver nome: "Olá" + ", s" + "eja..." -> "Olá, seja muito bem-vindo..."
-    const greetingText = cleanName ? ` ${cleanName}! S` : ', s';
+    // Se tiver nome: "Olá" + " João, s" + "eja..." -> "Olá João, seja muito bem-vindo..."
+    // Se não tiver nome: "Olá" + "! S" + "eja..." -> "Olá! Seja muito bem-vindo..."
+    const greetingText = cleanName ? ` ${cleanName}, s` : '! S';
     const components = [
       {
         type: 'body',
