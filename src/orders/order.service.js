@@ -242,7 +242,8 @@ class OrderService {
     }
     if (this.commerce) await this.commerce.pdv.queueOperationalNotifications(order);
     // Receipt intent was committed atomically with the order; the worker handles delivery.
-    return { order, reply: formatOrderReceipt(order) + '\n\nPedido registrado. O pagamento permanece pendente até a confirmação financeira da loja.' };
+    return { order, reply: formatOrderReceipt(order) + (!order.completedAt && !order.paidAt
+      ? '\n\nPedido registrado. O pagamento permanece pendente até a confirmação financeira da loja.' : '') };
   }
 
   /**

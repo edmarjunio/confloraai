@@ -1,0 +1,38 @@
+{
+  "environment": "SERIAL_TRANSACTION_MOCK_NOT_FIRESTORE_BENCHMARK",
+  "assumptions": {
+    "productsInCatalog": 1000,
+    "itemsPerSale": 3,
+    "concurrentRequests": 20,
+    "replaysPerSale": 1
+  },
+  "scenarios": [
+    {
+      "salesEquivalent": 100,
+      "durationMs": 52,
+      "p95ServiceMs": 14.14,
+      "documentReads": 1133,
+      "documentWrites": 1433,
+      "transactions": 300,
+      "note": "Local simulated operations, excludes SDK retries, regional latency, indexes, quotas and provider traffic"
+    },
+    {
+      "salesEquivalent": 500,
+      "durationMs": 200,
+      "p95ServiceMs": 8.88,
+      "documentReads": 5666,
+      "documentWrites": 7166,
+      "transactions": 1500,
+      "note": "Local simulated operations, excludes SDK retries, regional latency, indexes, quotas and provider traffic"
+    },
+    {
+      "salesEquivalent": 1000,
+      "durationMs": 273,
+      "p95ServiceMs": 7.6,
+      "documentReads": 11333,
+      "documentWrites": 14333,
+      "transactions": 3000,
+      "note": "Local simulated operations, excludes SDK retries, regional latency, indexes, quotas and provider traffic"
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+const fs=require('node:fs');const all=fs.readFileSync('tmp/architecture-export.json','utf8');const offset=Number(process.argv[2]||0);const chunk=all.slice(offset,offset+18000);console.log(JSON.stringify({total:all.length,chunk}).replace(/[^\x00-\x7f]/g,c=>'\\u'+c.charCodeAt(0).toString(16).padStart(4,'0')));

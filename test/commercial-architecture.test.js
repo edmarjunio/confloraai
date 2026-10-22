@@ -126,7 +126,8 @@ test('WhatsApp confirmation creates an official pending order; cashier payment d
   await store.receive(first.order.id, cashier, null, 50);
   assert.equal(db.data.get('products/plant').stockQuantity, 8);
   assert.equal(db.data.get(`orders/${first.order.id}`).changeGiven, 30);
-  await service.confirmOrder(phone, 'Cliente');
+  const paidReplay = await service.confirmOrder(phone, 'Cliente');
+  assert.doesNotMatch(paidReplay.reply, /pagamento permanece pendente/);
   assert.equal(db.data.get('products/plant').stockQuantity, 8);
 });
 

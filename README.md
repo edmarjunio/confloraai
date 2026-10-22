@@ -1,5 +1,7 @@
 # Conflora AI
 
+Refatoração arquitetural de 22/10/2026: [arquitetura](docs/ARCHITECTURE.md), [implementação e pendências](docs/IMPLEMENTATION_STATUS.md), [evidências de testes](docs/TEST_REPORT.md) e [preparação de publicação](docs/DEPLOYMENT_GUIDE.md). Publicação e migração dependem de autorização explícita.
+
 Aplicativo da Conflora Horta e Viveiro: catálogo, Caixa, comandas, estoque, equipe, entregas e painel gerencial.
 
 ## Operação

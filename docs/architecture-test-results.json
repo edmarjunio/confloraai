@@ -1,0 +1,229 @@
+{
+  "date": "2026-10-22",
+  "broad": {
+    "tests": 362,
+    "pass": 309,
+    "fail": 52,
+    "skipped": 1,
+    "failures": [
+      {
+        "test": "test\\admin-sale-notifications.test.js:61:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\admin-sale-notifications.test.js:106:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\admin-sale-notifications.test.js:178:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\admin-sale-notifications.test.js:278:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\app.test.js:493:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\botanical-ai-layout.test.js:12:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\cashier-operator-closing.test.js:42:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\cashier-operator-closing.test.js:188:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\catalog-cache.test.js:44:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\error-history.test.js:48:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\existing-store.test.js:9:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\image-compression.test.js:153:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\image-compression.test.js:197:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\import-auth.test.js:44:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\import-auth.test.js:69:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\import-auth.test.js:93:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\import-auth.test.js:112:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\import-auth.test.js:147:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\import-auth.test.js:172:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\import-auth.test.js:213:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\import-auth.test.js:254:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\import-auth.test.js:290:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\import-auth.test.js:314:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\import-auth.test.js:394:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\manual-pix.test.js:30:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\manual-pix.test.js:45:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\manual-pix.test.js:56:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\manual-pix.test.js:65:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\manual-pix.test.js:93:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\meta-agent.test.js:408:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\pdv.test.js:149:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\pdv.test.js:444:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\pdv.test.js:464:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\pdv.test.js:482:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\pdv.test.js:576:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\pdv.test.js:611:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\pdv.test.js:652:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\pdv.test.js:675:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\pdv.test.js:785:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\pdv.test.js:852:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\pdv.test.js:903:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\pdv.test.js:932:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\pdv.test.js:990:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\pdv.test.js:1110:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\pdv.test.js:1181:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\pdv.test.js:1259:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\pdv.test.js:1327:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\photo-carousel-zoom.test.js:134:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\product-import.test.js:42:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\site-feedback.test.js:5:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\storefront.test.js:259:1",
+        "category": "LOOPBACK_EACCES"
+      },
+      {
+        "test": "test\\whatsapp-flow.test.js:16:1",
+        "category": "LOOPBACK_EACCES"
+      }
+    ]
+  },
+  "finalFocused": {
+    "tests": 118,
+    "pass": 118,
+    "fail": 0
+  },
+  "build": "PASS",
+  "lint": "PASS",
+  "emulator": "NOT_AVAILABLE",
+  "remote": "NOT_VALIDATED_EXPIRED_FIREBASE_CREDENTIALS",
+  "productionWrites": 0
+}

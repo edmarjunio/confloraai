@@ -893,40 +893,40 @@
       "collection": "orders",
       "access": "get",
       "file": "src/orders/commercial-order.js",
-      "line": 20
+      "line": 21
+    },
+    {
+      "collection": "sessions",
+      "access": "get",
+      "file": "src/orders/commercial-order.js",
+      "line": 30
     },
     {
       "collection": "products",
       "access": "get",
       "file": "src/orders/commercial-order.js",
-      "line": 35
+      "line": 40
     },
     {
       "collection": "customers",
       "access": "get",
       "file": "src/orders/commercial-order.js",
-      "line": 44
+      "line": 49
     },
     {
       "collection": "orders",
       "access": "set",
       "file": "src/orders/commercial-order.js",
-      "line": 49
+      "line": 54
+    },
+    {
+      "collection": "sessions",
+      "access": "set",
+      "file": "src/orders/commercial-order.js",
+      "line": 55
     },
     {
       "collection": "customers",
-      "access": "set",
-      "file": "src/orders/commercial-order.js",
-      "line": 53
-    },
-    {
-      "collection": "pdv_outbox",
-      "access": "set",
-      "file": "src/orders/commercial-order.js",
-      "line": 59
-    },
-    {
-      "collection": "pdv_outbox",
       "access": "set",
       "file": "src/orders/commercial-order.js",
       "line": 62
@@ -935,7 +935,19 @@
       "collection": "pdv_outbox",
       "access": "set",
       "file": "src/orders/commercial-order.js",
-      "line": 64
+      "line": 68
+    },
+    {
+      "collection": "pdv_outbox",
+      "access": "set",
+      "file": "src/orders/commercial-order.js",
+      "line": 71
+    },
+    {
+      "collection": "pdv_outbox",
+      "access": "set",
+      "file": "src/orders/commercial-order.js",
+      "line": 73
     },
     {
       "collection": "customer_debt_pix",
