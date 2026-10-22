@@ -513,6 +513,12 @@
 
       const actionTarget = event.target.closest("[data-action]");
       if (actionTarget) {
+        if (actionTarget.dataset.action === "add") {
+          actionTarget.classList.remove("cf-btn-kick");
+          void actionTarget.offsetWidth;
+          actionTarget.classList.add("cf-btn-kick");
+          setTimeout(() => actionTarget.classList.remove("cf-btn-kick"), 450);
+        }
         this.emit(actionTarget.dataset.action, event);
         return;
       }

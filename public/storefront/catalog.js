@@ -8,6 +8,16 @@ import { icon } from "./icons.js";
 import { searchProducts, normalize as normalizeProductText } from "./guided-search.mjs";
 import { buildProductInfoContent } from "./product-info-content.js";
 
+function triggerButtonKick(btn) {
+  if (!btn) return;
+  btn.classList.remove("cf-btn-kick");
+  void btn.offsetWidth;
+  btn.classList.add("cf-btn-kick");
+  setTimeout(() => {
+    btn?.classList?.remove("cf-btn-kick");
+  }, 450);
+}
+
 export function createCatalog(state, add, navigate) {
   let pageSize = 24;
   let renderedItems = [];
@@ -75,6 +85,7 @@ export function createCatalog(state, add, navigate) {
       if (!input.reportValidity()) return;
       const quantity = Number(String(input.value).replace(",", "."));
       if (!Number.isFinite(quantity) || quantity < minimum || quantity > maxStock) return;
+      triggerButtonKick(confirm);
       add(product, quantity);
       dialog.close();
       onAdded?.();
@@ -241,6 +252,7 @@ export function createCatalog(state, add, navigate) {
     const unavailable = product.status === "INATIVO" || product.isAvailable === false
       || (product.stock?.tracked && product.stock.quantity < minimumQuantity);
     const addButton = element("button", { type: "button", class: "cf-button product-info-add", text: unavailable ? "Indisponível".tr : isSoldByKg(product) ? "Escolher peso".tr : "Adicionar".tr, disabled: unavailable, onclick: () => {
+      triggerButtonKick(addButton);
       dialog.close();
       addFromCard(product, minimumQuantity);
     } }, unavailable ? [] : [icon("cart")]);
@@ -382,9 +394,27 @@ export function createCatalog(state, add, navigate) {
       "product-data": JSON.stringify(cardProduct),
     });
     card.addEventListener("cf-product-card-action", (event) => {
-      const { action } = event.detail || {};
+      const { action, nativeEvent } = event.detail || {};
       if (action === "open") open();
-      if (action === "add" && !unavailable) addFromCard(product, product.saleUnit?.minimum || 1, chat ? () => card.dispatchEvent(new CustomEvent('chat-product-added', { bubbles: true, detail: { product } })) : null);
+      if (action === "add" && !unavailable) {
+          const btn = nativeEvent?.target?.closest('button') || card.querySelector('.product-card-add-button') || card.querySelector('.chat-mini-add') || card.querySelector('.product-add-quick-button');
+          if (btn) triggerButtonKick(btn);
+          const addBtn = card.querySelector('.chat-mini-add');
+          if (addBtn && !addBtn.dataset.animating) {
+            addBtn.dataset.animating = 'true';
+            const originalText = addBtn.innerHTML;
+            addBtn.innerHTML = '<span>✓ Adicionado</span>';
+            addBtn.style.backgroundColor = '#059669';
+            addBtn.style.borderColor = '#047857';
+            setTimeout(() => {
+              addBtn.innerHTML = originalText;
+              addBtn.style.backgroundColor = '';
+              addBtn.style.borderColor = '';
+              delete addBtn.dataset.animating;
+            }, 1000);
+          }
+          addFromCard(product, product.saleUnit?.minimum || 1, chat ? () => card.dispatchEvent(new CustomEvent('chat-product-added', { bubbles: true, detail: { product, card } })) : null);
+        }
       if (action === "info") openProductInformation(product);
     });
     return card;
@@ -648,7 +678,10 @@ export function createCatalog(state, add, navigate) {
       {
         class: "primary",
         text: isInactive ? "Item Inativo".tr : unavailable ? "Indisponível".tr : "Adicionar".tr,
-        onclick: () => addFromCard(product, Number(quantity.value)),
+        onclick: () => {
+          triggerButtonKick(buyButton);
+          addFromCard(product, Number(quantity.value));
+        },
         ...(unavailable ? { disabled: "" } : {}),
       },
       [!isInactive ? icon("cart") : null].filter(Boolean),

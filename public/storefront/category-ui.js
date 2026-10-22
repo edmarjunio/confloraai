@@ -147,6 +147,26 @@
     .cf-category-icon { display:inline-flex; align-items:center; justify-content:center; flex:none; line-height:0; filter:drop-shadow(0 1.5px 0 rgba(15, 23, 42, 0.28)); }
     .cf-category-icon > svg { display:block; width:18px; height:18px; flex:none; overflow:visible; }
     .cf-category-tag .cf-category-icon > svg { width:12px; height:12px; }
+    .cf-drag-scroll, .catalog-category-filter {
+      cursor: grab;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .cf-drag-scroll.is-dragging, .catalog-category-filter.is-dragging {
+      cursor: grabbing !important;
+      scroll-behavior: auto !important;
+    }
+    .cf-drag-scroll.is-dragging *, .catalog-category-filter.is-dragging * {
+      cursor: grabbing !important;
+      user-select: none !important;
+      -webkit-user-select: none !important;
+      pointer-events: none !important;
+    }
+    body.cf-dragging-active {
+      cursor: grabbing !important;
+      user-select: none !important;
+      -webkit-user-select: none !important;
+    }
     @media(prefers-reduced-motion:reduce) { .cf-category-chip.category-chip { transition:none; } }
   `;
   document.head.append(style);
@@ -208,6 +228,153 @@
     }
   }
   customElements.define('render-category-tag', RenderCategoryTag);
-  window.ConfloraCategoryUi = Object.freeze({ appearance, normalize, toggleSelection, matchesAny });
+  
+  function attachDragScroll(container) {
+    if (!container || container.__cfDragScrollBound) return () => {};
+    container.__cfDragScrollBound = true;
+    container.classList.add('cf-drag-scroll');
+
+    let isDown = false;
+    let startX = 0;
+    let startScrollLeft = 0;
+    let hasDragged = false;
+    let momentumAnimId = null;
+    let lastMoveTime = 0;
+    let lastMoveX = 0;
+    let velocity = 0;
+
+    const cancelMomentum = () => {
+      if (momentumAnimId) {
+        cancelAnimationFrame(momentumAnimId);
+        momentumAnimId = null;
+      }
+    };
+
+    const onPointerDown = (e) => {
+      if (e.pointerType && e.pointerType !== 'mouse') return;
+      if (e.button !== 0) return;
+
+      cancelMomentum();
+      isDown = true;
+      hasDragged = false;
+      startX = e.clientX;
+      lastMoveX = e.clientX;
+      lastMoveTime = performance.now();
+      startScrollLeft = container.scrollLeft;
+      velocity = 0;
+
+      const onPointerMove = (moveEvent) => {
+        if (!isDown) return;
+        const currentX = moveEvent.clientX;
+        const deltaX = currentX - startX;
+
+        if (!hasDragged && Math.abs(deltaX) > 5) {
+          hasDragged = true;
+          container.classList.add('is-dragging');
+          document.body.classList.add('cf-dragging-active');
+        }
+
+        if (hasDragged) {
+          moveEvent.preventDefault();
+          container.scrollLeft = startScrollLeft - deltaX;
+
+          const now = performance.now();
+          const dt = now - lastMoveTime;
+          if (dt > 8) {
+            velocity = (currentX - lastMoveX) / dt;
+            lastMoveTime = now;
+            lastMoveX = currentX;
+          }
+        }
+      };
+
+      const onPointerUp = () => {
+        window.removeEventListener('pointermove', onPointerMove);
+        window.removeEventListener('pointerup', onPointerUp);
+        window.removeEventListener('pointercancel', onPointerUp);
+
+        if (!isDown) return;
+        isDown = false;
+        container.classList.remove('is-dragging');
+        document.body.classList.remove('cf-dragging-active');
+
+        if (hasDragged) {
+          const preventClick = (clickEvent) => {
+            clickEvent.preventDefault();
+            clickEvent.stopPropagation();
+            clickEvent.stopImmediatePropagation();
+          };
+          window.addEventListener('click', preventClick, { capture: true, once: true });
+          setTimeout(() => {
+            window.removeEventListener('click', preventClick, { capture: true });
+          }, 120);
+
+          const now = performance.now();
+          if (now - lastMoveTime < 100 && Math.abs(velocity) > 0.15) {
+            let momentumVelocity = velocity * 16;
+            const decay = () => {
+              momentumVelocity *= 0.92;
+              if (Math.abs(momentumVelocity) > 0.5) {
+                container.scrollLeft -= momentumVelocity;
+                momentumAnimId = requestAnimationFrame(decay);
+              } else {
+                momentumAnimId = null;
+              }
+            };
+            momentumAnimId = requestAnimationFrame(decay);
+          }
+        }
+      };
+
+      window.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', onPointerUp);
+      window.addEventListener('pointercancel', onPointerUp);
+    };
+
+    const onWheel = (e) => {
+      if (e.shiftKey) return;
+      if (e.deltaY !== 0 && e.deltaX === 0 && container.scrollWidth > container.clientWidth) {
+        const atLeft = container.scrollLeft <= 0 && e.deltaY < 0;
+        const atRight = container.scrollLeft + container.clientWidth >= container.scrollWidth - 1 && e.deltaY > 0;
+        if (!atLeft && !atRight) {
+          container.scrollLeft += e.deltaY;
+          e.preventDefault();
+        }
+      }
+    };
+
+    const onDragStart = (e) => e.preventDefault();
+
+    container.addEventListener('pointerdown', onPointerDown);
+    container.addEventListener('wheel', onWheel, { passive: false });
+    container.addEventListener('dragstart', onDragStart);
+
+    return () => {
+      cancelMomentum();
+      container.removeEventListener('pointerdown', onPointerDown);
+      container.removeEventListener('wheel', onWheel);
+      container.removeEventListener('dragstart', onDragStart);
+      delete container.__cfDragScrollBound;
+    };
+  }
+
+  function autoInitDragScroll() {
+    const selectors = '.cf-drag-scroll, [data-drag-scroll="true"], .catalog-category-filter, .catalog-subcategory-filter';
+    document.querySelectorAll(selectors).forEach(attachDragScroll);
+  }
+
+  if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', autoInitDragScroll);
+    } else {
+      autoInitDragScroll();
+    }
+    if (typeof MutationObserver !== 'undefined') {
+      const observer = new MutationObserver(() => autoInitDragScroll());
+      observer.observe(document.documentElement, { childList: true, subtree: true });
+    }
+  }
+
+  window.ConfloraCategoryUi = Object.freeze({ appearance, normalize, toggleSelection, matchesAny, attachDragScroll, enableDragScroll: attachDragScroll });
 })();
 

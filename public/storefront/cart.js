@@ -57,6 +57,10 @@ export function createCart(state) {
   }
 
   function add(product, quantity) {
+    const receipt = $("#receipt");
+    if (receipt && !receipt.hidden) {
+      resetCartView();
+    }
     const min = product.saleUnit?.minimum || 1;
     const inc = product.saleUnit?.increment || 1;
     const steps = (quantity - min) / inc;
@@ -96,11 +100,50 @@ export function createCart(state) {
 
   }
 
+  function triggerCartWiggle() {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const targets = [
+      $("#cartFab"),
+      $("#cartFab")?.querySelector('[data-icon="cart"]'),
+      $("#cartButton")?.querySelector('[data-icon="cart"]'),
+      $("#cartButton"),
+      $("#mobileCart"),
+    ].filter(Boolean);
+
+    targets.forEach((el) => {
+      el.classList.remove("cf-cart-wiggle");
+      void el.offsetWidth;
+      el.classList.add("cf-cart-wiggle");
+      setTimeout(() => {
+        el.classList.remove("cf-cart-wiggle");
+      }, 700);
+    });
+  }
+
+  function resetCartView() {
+    const receipt = $("#receipt");
+    if (receipt) {
+      receipt.hidden = true;
+      receipt.replaceChildren();
+    }
+    form.hidden = false;
+    const checkoutCustomer = $("#checkoutCustomer");
+    if (checkoutCustomer) {
+      checkoutCustomer.hidden = false;
+    }
+    if (form.elements.cash) form.elements.cash.value = "";
+    if (form.elements.note) form.elements.note.value = "";
+    $("#checkoutError").textContent = "";
+    confirmationAccepted = false;
+    updateCheckout();
+  }
+
   function render() {
     const count = items.reduce((sum, item) => sum + item.quantity, 0);
     if (count > previousCount && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       fabAnimation?.cancel();
       fabAnimation = $("#cartFab").animate([{ scale: '1' }, { scale: '1.08', offset: 0.45 }, { scale: '1' }], { duration: 300, easing: 'ease-out' });
+      triggerCartWiggle();
     }
     previousCount = count;
     $("#cartCount").textContent = $("#mobileCount").textContent = Number(
@@ -198,7 +241,7 @@ export function createCart(state) {
   const cartoonChoiceIcons = {
     delivery: `<svg viewBox="0 0 28 28" width="24" height="24" class="cart-choice-svg" aria-hidden="true"><rect x="2" y="7" width="14" height="12" rx="2.5" fill="#22c55e" stroke="#0f172a" stroke-width="1.8"/><path d="M16 10h5.5l3.5 4.5v4.5H16z" fill="#4ade80" stroke="#0f172a" stroke-width="1.8" stroke-linejoin="round"/><circle cx="7" cy="20" r="3" fill="#f8fafc" stroke="#0f172a" stroke-width="1.8"/><circle cx="7" cy="20" r="1.2" fill="#0f172a"/><circle cx="20" cy="20" r="3" fill="#f8fafc" stroke="#0f172a" stroke-width="1.8"/><circle cx="20" cy="20" r="1.2" fill="#0f172a"/><rect x="18" y="11.5" width="4" height="3" rx="1" fill="#38bdf8" stroke="#0f172a" stroke-width="1.2"/></svg>`,
     pickup: `<svg viewBox="0 0 28 28" width="24" height="24" class="cart-choice-svg" aria-hidden="true"><path d="M4 11v11h20V11" fill="#f8fafc" stroke="#0f172a" stroke-width="1.8" stroke-linejoin="round"/><path d="M2.5 11 5.5 5h17l3 6z" fill="#facc15" stroke="#0f172a" stroke-width="1.8" stroke-linejoin="round"/><path d="M2.5 11c0 1.5 1.2 2.5 2.5 2.5s2.5-1 2.5-2.5c0 1.5 1.2 2.5 2.5 2.5s2.5-1 2.5-2.5c0 1.5 1.2 2.5 2.5 2.5s2.5-1 2.5-2.5c0 1.5 1.2 2.5 2.5 2.5s2.5-1 2.5-2.5" fill="none" stroke="#0f172a" stroke-width="1.6"/><rect x="11" y="15" width="6" height="7" rx="1.5" fill="#22c55e" stroke="#0f172a" stroke-width="1.6"/></svg>`,
-    pix: `<svg viewBox="0 0 512 512" width="24" height="24" class="cart-choice-svg cf-pix-svg" aria-hidden="true"><path class="pix-glyph" fill="#32bcad" d="M112.5 124.1c13.7-13.7 32-21.3 51.3-21.3h58.8l-52.7 52.7c-9.4 9.4-9.4 24.6 0 33.9l75.4 75.4-75.4 75.4c-9.4 9.4-9.4 24.6 0 33.9l52.7 52.7h-58.8c-19.3 0-37.6-7.6-51.3-21.3l-64.8-64.8c-28.3-28.3-28.3-74.3 0-102.6l64.8-64.8zm287 0c13.7 13.7 21.3 32 21.3 51.3v58.8l-52.7-52.7c-9.4-9.4-24.6-9.4-33.9 0l-75.4 75.4 75.4 75.4c9.4 9.4 24.6 9.4 33.9 0l52.7-52.7v58.8c0 19.3-7.6 37.6-21.3 51.3l-64.8 64.8c-28.3 28.3-74.3 28.3-102.6 0l-64.8-64.8 75.4-75.4-75.4-75.4 64.8-64.8c28.3-28.3 74.3-28.3 102.6 0l64.8 64.8z"/></svg>`,
+    pix: `<svg viewBox="535 24 80 80" width="26" height="26" class="cart-choice-svg cf-pix-svg" aria-hidden="true"><path class="pix-glyph" fill="#32bcad" d="M 596.82737,86.620206 c -3.08045,0 -5.97782,-1.19944 -8.15622,-3.37679 l -11.77678,-11.77713 c -0.82691,-0.82903 -2.26801,-0.82656 -3.09456,0 l -11.81982,11.82017 c -2.17841,2.17734 -5.07577,3.37679 -8.15623,3.37679 h -2.32092 l 14.9158,14.915444 c 4.65807,4.65808 12.21069,4.65808 16.86912,0 l 14.95813,-14.958484 z"/><path class="pix-glyph" fill="#32bcad" d="M 553.82362,44.963326 c 3.08046,0 5.97782,1.19944 8.15622,3.37679 l 11.81982,11.82193 c 0.85125,0.85161 2.2412,0.85479 3.09457,-10e-4 l 11.77678,-11.77784 c 2.1784,-2.17735 5.07576,-3.37679 8.15622,-3.37679 h 1.41852 l -14.95778,-14.95813 c -4.65878,-4.658432 -12.2114,-4.658432 -16.86948,0 l -14.91509,14.91509 z"/><path class="pix-glyph" fill="#32bcad" d="M 610.61844,57.378776 -9.03922,-9.03922 c -0.19897,0.0797 -0.41452,0.12946 -0.64206,0.12946 h -4.10986 c -2.12478,0 -4.20476,0.86184 -5.70618,2.36432 l -11.77643,11.77678 c -1.10207,1.10208 -2.55022,1.65347 -3.99697,1.65347 -1.44815,0 -2.89524,-0.55139 -3.99697,-1.65241 l -11.82088,-11.82088 c -1.50142,-1.50283 -3.5814,-2.36431 -5.70618,-2.36431 h -5.05354 c -0.21555,0 -0.41698,-0.0508 -0.60713,-0.12242 l -9.07521,9.07521 c -4.65843,4.65843 -4.65843,12.2107 0,16.86913 l 9.07486,9.07485 c 0.1905,-0.0716 0.39193,-0.12241 0.60748,-0.12241 h 5.05354 c 2.12478,0 4.20476,-0.86148 5.70618,-2.36396 l 11.81982,-11.81982 c 2.13643,-2.13466 5.8607,-2.13537 7.995,0.001 l 11.77643,11.77573 c 1.50142,1.50248 3.5814,2.36431 5.70618,2.36431 h 4.10986 c 0.22754,0 0.44309,0.0497 0.64206,0.12947 l 9.03922,-9.03922 c 4.65808,-4.65843 4.65808,-12.2107 0,-16.86913 z"/></svg>`,
     cash: `<svg viewBox="0 0 28 28" width="24" height="24" class="cart-choice-svg" aria-hidden="true"><rect x="2.5" y="6" width="23" height="16" rx="3.5" fill="#4ade80" stroke="#0f172a" stroke-width="1.8"/><rect x="4.5" y="8" width="19" height="12" rx="2.5" fill="#22c55e"/><circle cx="14" cy="14" r="4" fill="#dcfce7" stroke="#0f172a" stroke-width="1.6"/><path d="M14 11.8v4.4M12.6 13c.4-.7 2.2-.8 2.8.2.5 1-2.2 1.2-2.2 2 .1.7 1.4.8 2.2.3" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round"/><circle cx="6" cy="14" r="1.5" fill="#dcfce7"/><circle cx="22" cy="14" r="1.5" fill="#dcfce7"/></svg>`,
     credit: `<svg viewBox="0 0 28 28" width="24" height="24" class="cart-choice-svg" aria-hidden="true"><rect x="2.5" y="5" width="23" height="18" rx="4" fill="#38bdf8" stroke="#0f172a" stroke-width="1.8"/><rect x="2.5" y="9.5" width="23" height="3.8" fill="#0f172a"/><rect x="5.5" y="15.5" width="5.5" height="4.5" rx="1.2" fill="#facc15" stroke="#0f172a" stroke-width="1.4"/><path d="M14 17.5h8" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/></svg>`,
     debit: `<svg viewBox="0 0 28 28" width="24" height="24" class="cart-choice-svg" aria-hidden="true"><rect x="2.5" y="5" width="23" height="18" rx="4" fill="#c084fc" stroke="#0f172a" stroke-width="1.8"/><rect x="2.5" y="9.5" width="23" height="3.8" fill="#0f172a"/><rect x="5.5" y="15.5" width="5.5" height="4.5" rx="1.2" fill="#facc15" stroke="#0f172a" stroke-width="1.4"/><circle cx="17.5" cy="17.5" r="2.5" fill="#fb7185"/><circle cx="21" cy="17.5" r="2.5" fill="#facc15"/></svg>`,
@@ -234,22 +277,25 @@ export function createCart(state) {
           DINHEIRO: "cash",
         }[option.value] || "delivery";
         const isPix = String(option.value).toUpperCase() === "PIX";
-        let labelSlot;
-        if (isPix) {
-          labelSlot = document.createElement("span");
-          labelSlot.className = "choice-label-slot is-pix-brand";
-          labelSlot.innerHTML = `<svg viewBox="0 0 110 44" width="56" height="22" class="pix-brand-svg" aria-label="pix"><path d="M10 40V12h16c6.6 0 11.5 4.8 11.5 11s-4.9 11-11.5 11H18" fill="none" stroke="currentColor" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M48 13v27" fill="none" stroke="currentColor" stroke-width="4.2" stroke-linecap="round"/><polygon points="48,3 52.5,7.5 48,12 43.5,7.5" fill="#32bcad"/><path d="M59 13c7 9 14 18 22 27m0-27c-7 9-14 18-22 27" fill="none" stroke="currentColor" stroke-width="4.2" stroke-linecap="round"/></svg>`;
-        } else {
-          labelSlot = element("span", {
+        const iconSlot = createChoiceCartoonIcon(iconKey);
+        const children = [input, iconSlot];
+        if (!isPix) {
+          children.push(element("span", {
             class: "choice-label-slot",
             text: option.label,
-          });
+          }));
+        } else {
+          // Sem escrita visível, com acessibilidade para leitores de tela
+          children.push(element("span", {
+            class: "sr-only",
+            text: "Pix",
+          }));
         }
-        return element("label", { class: `choice-card${isPix ? " is-choice-pix" : ""}` }, [
-          input,
-          createChoiceCartoonIcon(iconKey),
-          labelSlot,
-        ]);
+        return element("label", {
+          class: `choice-card${isPix ? " is-choice-pix" : ""}`,
+          title: option.label,
+          "aria-label": isPix ? "Pagar com Pix" : undefined,
+        }, children);
       }),
     );
   }
@@ -493,9 +539,7 @@ export function createCart(state) {
           style: "margin-top: 16px; width: 100%;",
           text: "cart.new_order".tr,
           onclick: () => {
-            receipt.hidden = true;
-            form.hidden = false;
-            $("#checkoutCustomer").hidden = false;
+            resetCartView();
             close();
           },
         }),
@@ -523,6 +567,10 @@ export function createCart(state) {
 
   function open() {
     const dialog = $("#cartDialog");
+    const receipt = $("#receipt");
+    if (items.length > 0 && receipt && !receipt.hidden) {
+      resetCartView();
+    }
     if (!dialog.open) dialog.show();
     if (!state.existingStore) return;
     const customerSessionId = state.user?.id;
@@ -549,14 +597,26 @@ export function createCart(state) {
     items = [];
     confirmationAccepted = false;
     persist();
-
+    resetCartView();
     render();
   }
 
   $("#cartButton").addEventListener("click", open);
   $("#mobileCart").addEventListener("click", open);
   $("#cartFab").addEventListener("click", open);
-  $("#cartCloseButton").addEventListener("click", close);
+  $("#cartCloseButton").addEventListener("click", () => {
+    const receipt = $("#receipt");
+    if (receipt && !receipt.hidden) {
+      resetCartView();
+    }
+    close();
+  });
+  $("#cartDialog")?.addEventListener("close", () => {
+    const receipt = $("#receipt");
+    if (receipt && !receipt.hidden) {
+      resetCartView();
+    }
+  });
   $("#cartClearButton").addEventListener("click", clear);
 
   function setOwner(user) {

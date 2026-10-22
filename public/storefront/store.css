@@ -1539,9 +1539,15 @@ body:has(dialog:modal) {
   z-index: 100;
   font-size: 13px;
 }
-dialog .toast {
-  position: static;
-  transform: none;
+dialog .toast,
+.chat-drawer .toast {
+  position: absolute !important;
+  bottom: 72px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  margin: 0 !important;
+  z-index: 100 !important;
+  pointer-events: none !important;
 }
 .main:has(+ .mobile-cart) {
   min-height: 60vh;
@@ -3992,7 +3998,7 @@ body {
 }
 .cart-drawer #checkoutForm fieldset {
   min-width: 0;
-  padding: 6px 0 2px 0 !important;
+  padding: 8px 0 16px 0 !important;
   margin: 0 !important;
   border: 0 !important;
   border-top: 1px solid #e5ece7 !important;
@@ -4005,7 +4011,14 @@ body {
   gap: 8px !important;
   width: 100% !important;
   box-sizing: border-box !important;
-  margin: 4px 0 4px 0 !important;
+  margin: 6px 0 18px 0 !important;
+  padding-bottom: 6px !important;
+}
+
+#fulfillmentOptions,
+#paymentOptions {
+  margin-bottom: 18px !important;
+  padding-bottom: 6px !important;
 }
 
 .cart-drawer .choices label,
@@ -4105,17 +4118,41 @@ body {
 }
 
 /* Tipografia e logo oficial do PIX */
-.pix-brand-svg {
-  display: block !important;
-  overflow: visible !important;
+/* Botão Pix sem escrita, centralizado e perfeitamente alinhado */
+.cart-drawer .choices label.is-choice-pix,
+#checkoutForm .choices label.is-choice-pix {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 48px !important;
+  padding: 10px 12px !important;
 }
-.cart-drawer .choices label:has(input:checked) .pix-brand-svg path {
-  stroke: #ffffff !important;
+
+.cart-drawer .choices label.is-choice-pix .choice-icon-slot,
+#checkoutForm .choices label.is-choice-pix .choice-icon-slot {
+  width: auto !important;
+  height: 28px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 auto !important;
 }
-.cart-drawer .choices label:has(input:checked) .pix-brand-svg polygon {
-  fill: #ffffff !important;
+
+.cart-drawer .choices label.is-choice-pix .cf-pix-svg,
+#checkoutForm .choices label.is-choice-pix .cf-pix-svg {
+  width: 26px !important;
+  height: 26px !important;
 }
-.cart-drawer .choices label:has(input:checked) .cf-pix-svg .pix-glyph {
+
+.cart-drawer .choices label .cf-pix-svg .pix-glyph,
+#checkoutForm .choices label .cf-pix-svg .pix-glyph {
+  fill: #32bcad !important;
+  transition: fill 0.15s ease !important;
+}
+
+/* Ícone fica branco quando selecionado (fundo do botão verde) */
+.cart-drawer .choices label:has(input:checked) .cf-pix-svg .pix-glyph,
+#checkoutForm .choices label:has(input:checked) .cf-pix-svg .pix-glyph {
   fill: #ffffff !important;
 }
 
@@ -4693,11 +4730,67 @@ body {
 .guided-results-grid,
 .chat-product-grid {
   display: grid !important;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-  gap: 6px !important;
   width: 100% !important;
   box-sizing: border-box !important;
   padding: 4px 0 !important;
+}
+
+/* Celular: 3 por linha */
+@media (max-width: 767px) {
+  .guided-results-grid,
+  .chat-product-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 6px !important;
+  }
+}
+
+/* Computador / Desktop: mais itens por linha (5 a 7), cards menores */
+@media (min-width: 768px) {
+  .guided-results-grid,
+  .chat-product-grid {
+    grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)) !important;
+    gap: 10px !important;
+    justify-content: start !important;
+  }
+  .chat-mini-card {
+    max-width: 175px !important;
+    padding: 6px !important;
+    border-radius: 10px !important;
+    margin: 0 !important;
+  }
+  .chat-mini-photo {
+    width: 100% !important;
+    height: 105px !important;
+    max-height: 105px !important;
+    aspect-ratio: auto !important;
+    border-radius: 8px !important;
+  }
+  .chat-mini-photo img,
+  .chat-mini-photo render-image,
+  .chat-mini-photo render-image img {
+    height: 105px !important;
+    max-height: 105px !important;
+    object-fit: cover !important;
+  }
+  .chat-mini-body {
+    padding-top: 4px !important;
+    gap: 2px !important;
+  }
+  .chat-mini-name {
+    font-size: 11px !important;
+    min-height: 26px !important;
+    line-height: 1.2 !important;
+  }
+  .chat-mini-price {
+    font-size: 12px !important;
+    margin: 1px 0 3px !important;
+  }
+  .chat-mini-add {
+    min-height: 26px !important;
+    padding: 4px 6px !important;
+    font-size: 10.5px !important;
+    border-radius: 7px !important;
+  }
 }
 
 .chat-mini-card {
@@ -5075,3 +5168,76 @@ html, body {
 }
 
 
+
+/* ==========================================================================
+   Add-to-cart Kick & Cart Icon Wiggle Animations
+   ========================================================================== */
+
+#cartButton [data-icon="cart"],
+.cart-fab [data-icon="cart"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: center center;
+}
+
+@keyframes cfBtnKick {
+  0% {
+    transform: scale(1);
+  }
+  20% {
+    transform: scale(0.86);
+  }
+  50% {
+    transform: translateY(-3px) scale(1.14);
+  }
+  75% {
+    transform: translateY(1px) scale(0.97);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+.cf-btn-kick,
+.btn-kick {
+  animation: cfBtnKick 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+@keyframes cfCartWiggle {
+  0% {
+    transform: scale(1) rotate(0deg);
+  }
+  15% {
+    transform: scale(1.24) rotate(-16deg);
+  }
+  30% {
+    transform: scale(1.24) rotate(14deg);
+  }
+  45% {
+    transform: scale(1.16) rotate(-10deg);
+  }
+  60% {
+    transform: scale(1.08) rotate(6deg);
+  }
+  75% {
+    transform: scale(1.03) rotate(-2deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.cf-cart-wiggle {
+  animation: cfCartWiggle 0.65s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+  transform-origin: center center !important;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cf-btn-kick,
+  .btn-kick,
+  .cf-cart-wiggle {
+    animation: none !important;
+  }
+}

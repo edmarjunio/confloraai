@@ -100,7 +100,8 @@ export function createChat(state, catalog) {
       const products = response.products || [];
       if (products.length) {
         const grid = element("div", { class: "guided-results-grid chat-product-grid" });
-        for (const product of products.slice(0, 9)) {
+        const limit = typeof window !== "undefined" && window.innerWidth >= 768 ? 12 : 9;
+        for (const product of products.slice(0, limit)) {
           if (!state.products.some((p) => p.id === product.id)) {
             state.products.push(product);
           }

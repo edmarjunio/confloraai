@@ -75,7 +75,7 @@ export function createGuidedChat(state, catalog) {
     let visibleCount = 0;
     const renderProducts = () => {
       matchingProducts = availableProducts;
-      visibleCount = Math.min(9, matchingProducts.length);
+      visibleCount = Math.min(typeof window !== "undefined" && window.innerWidth >= 768 ? 12 : 9, matchingProducts.length);
       grid.replaceChildren(
         ...matchingProducts.slice(0, visibleCount).map((product) => catalog.card(product, { chat: true })),
       );
@@ -86,7 +86,8 @@ export function createGuidedChat(state, catalog) {
     };
     more.addEventListener("click", () => {
       const previousCount = visibleCount;
-      visibleCount = Math.min(visibleCount + 9, matchingProducts.length);
+      const step = typeof window !== "undefined" && window.innerWidth >= 768 ? 12 : 9;
+      visibleCount = Math.min(visibleCount + step, matchingProducts.length);
       grid.append(
         ...matchingProducts.slice(previousCount, visibleCount).map((product) => catalog.card(product, { chat: true })),
       );
@@ -97,6 +98,7 @@ export function createGuidedChat(state, catalog) {
     panel.scrollIntoView({ block: 'start' });
   }
   messages.addEventListener('chat-product-added', (event) => {
+    const prevScrollTop = messages.scrollTop;
     messages.querySelector('.chat-next-search')?.remove();
     const actions = element('div', { class: 'suggestions chat-next-search' }, [
       element('p', { text: `${event.detail.product.name} adicionado. Quer pesquisar outro produto ou manter esta seleção?` }),
@@ -106,7 +108,8 @@ export function createGuidedChat(state, catalog) {
       element('button', { text: 'Manter filtro atual', onclick: () => { actions.remove(); } }),
     ]);
     messages.append(actions);
-    messages.scrollTop = messages.scrollHeight;
+    // Mantém a tela 100% estática ao adicionar produto
+    messages.scrollTop = prevScrollTop;
   });
   function browse() {
     clearResults();
