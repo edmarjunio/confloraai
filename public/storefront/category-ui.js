@@ -376,7 +376,7 @@
       autoInitDragScroll();
     }
     if (typeof MutationObserver !== 'undefined') {
-      const observer = new MutationObserver(() => autoInitDragScroll());
+      const observer = new window.MutationObserver(() => autoInitDragScroll());
       observer.observe(document.documentElement, { childList: true, subtree: true });
     }
   }

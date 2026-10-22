@@ -1,20 +1,11 @@
 function normalizeCatalogItem(it) {
-  const name = it.name || it.descricao || '';
-  const category = it.category || it.categoria || 'Conflora';
-  const subcategory = it.subcategory || it.subcategoria || '';
-  const savedUnit = it.saleUnit?.code || it.unit || it.unidade || '';
-  const isKg = savedUnit.toUpperCase() === 'KG' || /\bkg\b/i.test(name);
-  const unit = (savedUnit || (isKg ? 'KG' : 'UN')).toUpperCase();
-  const price = typeof it.price === 'number'
-    ? it.price
-    : typeof it.valor_num === 'number'
-    ? it.valor_num
-    : parseFloat(String(it.valor || it.price || 0).replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
-  const stockQuantity = typeof it.stockQuantity === 'number'
-    ? it.stockQuantity
-    : typeof it.estoque === 'number'
-    ? it.estoque
-    : 0;
+  const view = require('./commercial-product').commercialProduct(it);
+  const name = view.name;
+  const category = it.category || it.categoria || it.CATEGORIA || 'Conflora';
+  const subcategory = it.subcategory || it.subcategoria || it.SUBCATEGORIA || '';
+  const unit = view.unit;
+  const price = Number.isFinite(view.price) ? view.price : 0;
+  const stockQuantity = Number.isFinite(view.stockQuantity) ? view.stockQuantity : 0;
   const imageCandidates = [
     ...(Array.isArray(it.images) ? it.images : []),
     it.imageUrl,
@@ -41,7 +32,7 @@ function normalizeCatalogItem(it) {
     stockQuantity,
     estoque: stockQuantity,
     salesCount: it.salesCount || 0,
-    status: (it.status || 'ATIVO').toUpperCase(),
+    status: require('./product-status').productStatus(it),
     images: images.length > 0 ? images : (imageUrl ? [imageUrl] : []),
     imageUrl,
     imageurl: imageUrl,

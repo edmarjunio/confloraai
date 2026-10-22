@@ -3,7 +3,6 @@
  * Script de Reset Completo de Histórico/Credenciais + Importação Real da Planilha LISTA DE PRODUTOS.
  */
 const fs = require('node:fs');
-const path = require('node:path');
 const zlib = require('node:zlib');
 const { Firestore } = require('@google-cloud/firestore');
 const { resolveHdProductImage, isKgProduct } = require('../src/catalog/image-resolver');

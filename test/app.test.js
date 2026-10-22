@@ -1,4 +1,6 @@
 process.env.NODE_ENV = 'test';
+process.env.WHATSAPP_AI_ENABLED = 'true';
+process.env.WHATSAPP_AGENT_OWNER = 'cloud_api';
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -137,6 +139,7 @@ function createTestMessageService(aiMock = null, captures = {}) {
   captures.messages = captures.messages || [];
 
   const firestoreRepo = new FirestoreRepository({ isInMemory: true });
+  for (const product of mockProducts) firestoreRepo.inMemoryProducts.set(product.id, { ...product, stockQuantity: 100 });
   const catalogRepo = new CatalogRepository({ mockData: mockProducts, firestoreRepo });
   const router = new MessageRouter(catalogRepo);
   const directPriceService = new DirectPriceService();
@@ -145,17 +148,21 @@ function createTestMessageService(aiMock = null, captures = {}) {
   const mockWhatsapp = {
     async sendTextMessage(to, text) {
       captures.messages.push({ to, text });
-      return { success: true };
+      return { messages: [{ id: 'wamid.fixture-' + captures.messages.length + '-' + captures.images.length }] };
     },
     async sendImageMessage(to, url, caption) {
       captures.images.push({ to, url, caption });
-      return { success: true };
+      return { messages: [{ id: 'wamid.fixture-' + captures.messages.length + '-' + captures.images.length }] };
+    },
+    async sendWelcomeTemplate(to) {
+      captures.messages.push({ to, text: 'welcome' });
+      return { messages: [{ id: 'wamid.welcome' }] };
     },
     async markAsRead(id) {
       if (!id || !id.startsWith('wamid.')) {
         return { mock: true, skippedNonMetaId: true };
       }
-      return { success: true };
+      return { messages: [{ id: 'wamid.fixture-' + captures.messages.length + '-' + captures.images.length }] };
     },
   };
 
@@ -333,7 +340,9 @@ test('8. Alteração de forma de pagamento ("Hoje vai ser no débito") e reenvio
   assert.match(updateResult.reply, /Poderia me confirmar para finalizarmos\?/);
 });
 
-test('9. Confirmação do pedido: Envio ao dono e fechamento com cliente', async () => {
+test('9. Confirmação do pedido: Envio ao dono e fechamento com cliente', async (t) => {
+  const previousMode = process.env.PIX_MODE; process.env.PIX_MODE = 'MANUAL';
+  t.after(() => { if (previousMode === undefined) delete process.env.PIX_MODE; else process.env.PIX_MODE = previousMode; });
   const captures = { messages: [] };
   const service = createTestMessageService(null, captures);
   const phone = '5564999990009';
@@ -360,8 +369,8 @@ test('9. Confirmação do pedido: Envio ao dono e fechamento com cliente', async
   });
 
   assert.strictEqual(confirmResult.intent, INTENTS.ORDER_CONFIRMATION);
-  assert.match(confirmResult.reply, /✅ \*Pedido Confirmado com Sucesso!\*/);
-  assert.match(confirmResult.reply, /R\$ 88,00/);
+  assert.match(confirmResult.reply, /Pedido registrado/);
+  assert.match(confirmResult.reply, /88,00/);
   assert.match(confirmResult.reply, /Chave PIX/);
 
   // Valida que o perfil foi salvo para compras futuras

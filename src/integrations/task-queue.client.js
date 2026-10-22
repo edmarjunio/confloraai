@@ -54,7 +54,7 @@ class TaskQueueClient {
         'Content-Type': 'application/json',
         'X-Conflora-Task-Secret': config.tasks.taskSecret,
       },
-      body: Buffer.from(JSON.stringify(payload)).toString('base64'),
+      body: Buffer.from(JSON.stringify({ messageId: payload.messageId })).toString('base64'),
     };
 
     try {

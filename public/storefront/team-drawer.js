@@ -144,10 +144,10 @@ export function initTeamDrawer() {
             };
             updateDrawerUI();
           } else {
-            alert(data.error || 'Não foi possível alternar o perfil.');
+            window.alert(data.error || 'Não foi possível alternar o perfil.');
           }
         } catch {
-          alert('Erro de conexão ao alternar perfil.');
+          window.alert('Erro de conexão ao alternar perfil.');
         }
       });
     });
@@ -226,7 +226,7 @@ export function initTeamDrawer() {
       const id = selectUser.value;
       const pin = pinInput ? pinInput.value.trim() : '';
       if (!pin) {
-        alert('Digite seu PIN de segurança para confirmar o operador.');
+        window.alert('Digite seu PIN de segurança para confirmar o operador.');
         return;
       }
 
@@ -238,7 +238,7 @@ export function initTeamDrawer() {
         });
         const data = await res.json();
         if (!res.ok || !data.success) {
-          alert(data.error || 'PIN incorreto.');
+          window.alert(data.error || 'PIN incorreto.');
           return;
         }
         currentOperator = {
@@ -251,7 +251,7 @@ export function initTeamDrawer() {
         updateDrawerUI();
         opSelectorBox.classList.add('hidden');
       } catch {
-        alert('Erro ao validar PIN no servidor.');
+        window.alert('Erro ao validar PIN no servidor.');
       }
     });
   }

@@ -1839,7 +1839,7 @@ class FirestoreRepository {
     return { success: true, duplicate: false, ...movement };
   }
 
-  async createDirectOrder(orderData, { requirePersistence = false, reserveInventory = false } = {}) {
+  async createDirectOrder(orderData, { requirePersistence = false, reserveInventory = false, conversationDraft = null } = {}) {
     const now = new Date().toISOString();
     const pixTtlSeconds = Math.min(86400, Math.max(300, Number(orderData.pixTtlSeconds || process.env.PIX_PAYMENT_TTL_SECONDS) || 3600));
 
@@ -1856,68 +1856,9 @@ class FirestoreRepository {
     }
 
     if (reserveInventory) {
-      const orderId = String(dataWithTs.id || randomUUID());
-      dataWithTs.id = orderId;
-      if (!this.firestore && this.inMemoryOrders.has(orderId)) return this.inMemoryOrders.get(orderId);
-      const quantities = new Map();
-      for (const item of dataWithTs.items || []) {
-        const productId = String(item.productId || item.id || '');
-        const quantity = Number(item.quantity);
-        if (!productId || !Number.isFinite(quantity) || quantity <= 0) throw new Error('Produto ou quantidade inválida para reservar o estoque.');
-        quantities.set(productId, Number(((quantities.get(productId) || 0) + quantity).toFixed(3)));
-      }
-      if (this.firestore && !this._firestoreClientDisabled) {
-        const ordersCollection = this.firestore.collection('orders');
-        const orderRef = ordersCollection.doc(orderId);
-        const productRefs = [...quantities.keys()].map((productId) => this.firestore.collection('products').doc(productId));
-        const saved = await this.firestore.runTransaction(async (transaction) => {
-          const existingSnapshot = await transaction.get(orderRef);
-          if (existingSnapshot.exists) return { id: orderId, ...existingSnapshot.data() };
-          const settingsSnapshot = await transaction.get(this.firestore.collection('store_settings').doc('inventory'));
-          const enabled = settingsSnapshot.data()?.stockControlEnabled ?? process.env.STORE_STOCK_CONTROL_ENABLED !== 'false';
-          if (!enabled) {
-            const untrackedOrder = { ...dataWithTs, inventoryReserved: false, reservedItems: [] };
-            transaction.create(orderRef, untrackedOrder);
-            return untrackedOrder;
-          }
-          const productSnapshots = await Promise.all(productRefs.map((ref) => transaction.get(ref)));
-          const updates = [];
-          productSnapshots.forEach((snapshot, index) => {
-            const productId = productRefs[index].id;
-            if (!snapshot.exists) throw new Error(`Produto não encontrado para reservar: ${productId}.`);
-            const product = snapshot.data();
-            const quantity = quantities.get(productId);
-            const stock = Number(product.stockQuantity ?? product.estoque ?? 0);
-            const reserved = Number(product.reservedQuantity || 0);
-            if (stock - reserved < quantity) throw new Error(`Estoque disponível insuficiente para ${product.name || productId}.`);
-            updates.push({ ref: productRefs[index], reservedQuantity: Number((reserved + quantity).toFixed(3)) });
-          });
-          for (const update of updates) transaction.update(update.ref, { reservedQuantity: update.reservedQuantity, updatedAt: now });
-          const savedOrder = { ...dataWithTs, inventoryReserved: true, reservedItems: [...quantities].map(([productId, quantity]) => ({ productId, quantity })) };
-          transaction.create(orderRef, savedOrder);
-          return savedOrder;
-        });
-        this.inMemoryOrders.set(orderId, saved);
-        return saved;
-      }
-      if (requirePersistence || !this.isInMemory) throw new Error('Não foi possível reservar o estoque com segurança.');
-      if (!(await this.getInventorySettings()).stockControlEnabled) {
-        const untrackedOrder = { ...dataWithTs, inventoryReserved: false, reservedItems: [] };
-        this.inMemoryOrders.set(orderId, untrackedOrder);
-        return untrackedOrder;
-      }
-      const products = [...quantities].map(([productId, quantity]) => {
-        const product = this.inMemoryProducts.get(productId);
-        if (!product) throw new Error(`Produto não encontrado para reservar: ${productId}.`);
-        if (Number(product.stockQuantity ?? product.estoque ?? 0) - Number(product.reservedQuantity || 0) < quantity) {
-          throw new Error(`Estoque disponível insuficiente para ${product.name || productId}.`);
-        }
-        return { productId, quantity, product };
+      return require('../orders/commercial-order').createCommercialOrder(this, { ...dataWithTs, id: String(dataWithTs.id || randomUUID()) }, {
+        reserveInventory: true, receipt: dataWithTs.status !== 'CREATING_PIX', conversationDraft,
       });
-      for (const { quantity, product } of products) product.reservedQuantity = Number((Number(product.reservedQuantity || 0) + quantity).toFixed(3));
-      const reservedOrder = { ...dataWithTs, inventoryReserved: true, reservedItems: [...quantities].map(([productId, quantity]) => ({ productId, quantity })) };
-      this.inMemoryOrders.set(orderId, reservedOrder);
-      return reservedOrder;
     }
 
     if (this.firestore && !this._firestoreClientDisabled) {
@@ -2208,30 +2149,11 @@ class FirestoreRepository {
   }
 
   async saveOrder(phone, orderData) {
-    const dataWithTs = {
-      ...orderData,
-      phone,
-      updatedAt: new Date().toISOString(),
-    };
+    return this.mutateConversationOrder(phone, current => ({ ...current, ...orderData }));
+  }
 
-    if (this.firestore) {
-      try {
-        await this.firestore
-          .collection('orders')
-          .doc(phone)
-          .set(dataWithTs, { merge: true });
-
-        return;
-      } catch (err) {
-        Logger.warn(
-          'Erro ao salvar pedido no Firestore; usando fallback',
-          { error: err.message }
-        );
-      }
-    }
-
-    const existing = this.inMemoryOrders.get(phone) || {};
-    this.inMemoryOrders.set(phone, { ...existing, ...dataWithTs });
+  async mutateConversationOrder(phone, apply) {
+    return require('./repositories/conversation-orders').mutateConversationOrder(this, phone, apply);
   }
 
   async updateOrder(phone, orderData) {
@@ -2239,27 +2161,7 @@ class FirestoreRepository {
   }
 
   async getOrder(phone) {
-    if (!phone) {
-      return null;
-    }
-
-    if (this.firestore) {
-      try {
-        const doc = await this.firestore
-          .collection('orders')
-          .doc(phone)
-          .get();
-
-        return doc.exists ? doc.data() : null;
-      } catch (err) {
-        Logger.warn(
-          'Erro ao buscar pedido no Firestore; usando fallback',
-          { error: err.message }
-        );
-      }
-    }
-
-    return this.inMemoryOrders.get(phone) || null;
+    return require('./repositories/conversation-orders').getConversationOrder(this, phone);
   }
 
   async getCustomerProfile(phone) {
@@ -3539,6 +3441,7 @@ class FirestoreRepository {
 
     for (const admin of adminUsers) {
       const notif = await this.createNotification({
+        id: 'sale-' + createHash('sha256').update(`${admin.id}:${orderId}`).digest('hex'),
         toUserId: admin.id,
         toUserName: admin.name,
         targetRole: 'ADMIN',
@@ -3597,6 +3500,17 @@ class FirestoreRepository {
       read: false,
       createdAt: now,
     };
+
+    if (notifData.id) {
+      const saved = await require('./transactions').runTransaction(this, async tx => {
+        const previous = await tx.get('notifications', notif.id);
+        if (previous) return previous;
+        tx.set('notifications', notif.id, notif);
+        return notif;
+      });
+      if (!this.inMemoryNotifications.some(entry => entry.id === saved.id)) this.inMemoryNotifications.unshift(saved);
+      return saved;
+    }
 
     if (this.firestore) {
       try {

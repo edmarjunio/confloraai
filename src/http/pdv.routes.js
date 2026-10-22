@@ -1,3 +1,4 @@
+const { COMMERCIAL_SOURCES } = require('../orders/commercial-order');
 const { financialReceiver, isDelivery, isDeliverySettled, assertAssignedDelivery, canConfirmManualPix } = require('../orders/delivery-policy');
 const { PaymentProofStorage } = require('../orders/payment-proof');
 const { timingSafeEqual, randomUUID } = require('node:crypto');
@@ -208,7 +209,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     heartbeat.unref?.();
     const unsubscribe = store.watchOpenOrders((orders) => {
       if (closed) return;
-      const visibleOrders = orders.filter((order) => (order.source === 'PDV' || order.source === 'WEB_CATALOG') && (req.user.role !== 'ENTREGADOR' || isDelivery(order)) && (req.user.role !== 'VENDEDOR' || order.createdBy?.id === req.user.id));
+      const visibleOrders = orders.filter((order) => COMMERCIAL_SOURCES.has(order.source) && (req.user.role !== 'ENTREGADOR' || isDelivery(order)) && (req.user.role !== 'VENDEDOR' || order.createdBy?.id === req.user.id));
       send('orders-changed', { orderIds: visibleOrders.map((order) => order.id), updatedAt: new Date().toISOString() });
     }, () => {
       if (!closed) send('stream-fallback', { updatedAt: new Date().toISOString() });
@@ -225,8 +226,9 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     res.json(approval);
   }));
   const cashierSnapshot = async (user, query = {}) => {
-    const orders = (await repository.getAllOrders(10000)).filter((order) => ['PDV', 'WEB_CATALOG'].includes(order.source));
     const range = reportRange(query);
+    const snapshot = await require('../database/repositories/cashier-snapshot').cashierSnapshotRecords(repository, range);
+    const orders = snapshot.orders.filter(order => COMMERCIAL_SOURCES.has(order.source));
     const isAdmin = user.role === 'ADMIN';
     const canViewPersonalOrder = (order) => isAdmin || order.createdBy?.id === user.id || financialReceiver(order)?.id === user.id;
     const canViewOpenOrder = (order) => canViewPersonalOrder(order) || (user.role === 'CAIXA' && !order.completedAt && order.status !== 'CANCELLED');
@@ -246,11 +248,7 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     const completed = history.filter((order) => order.completedAt && order.status !== 'CANCELLED');
     const confirmed = completed.filter((order) => order.paymentStatus === 'ON_ACCOUNT');
     const paid = completed.filter((order) => order.paymentStatus === 'APPROVED' && (order.paidAt || order.completedAt));
-    const settlementGroups = await Promise.all([
-      store.list('debt_settlements', 'type', 'QUITACAO_FIADO'),
-      store.list('debt_settlements', 'type', 'CREDITO_CLIENTE'),
-    ]);
-    const allSettlements = [...new Map(settlementGroups.flat().map((row) => [row.id, row])).values()];
+    const allSettlements = snapshot.settlements;
     const debtHistory = allSettlements.filter((row) => ['QUITACAO_FIADO', 'CREDITO_CLIENTE'].includes(row.entryType || row.type || 'QUITACAO_FIADO') && (isAdmin || row.receivedBy?.id === user.id) && isWithinRange(row.createdAt, range));
     const mySales = completed.filter((order) => order.createdBy?.id === user.id);
     const myReceipts = completed.filter((order) => financialReceiver(order)?.id === user.id);
@@ -528,7 +526,7 @@ Operação diária Conflora finalizada.`;
       req.user.role === 'ADMIN' || order.createdBy?.id === req.user.id || financialReceiver(order)?.id === req.user.id ||
       (req.user.role === 'CAIXA' && (!order.completedAt || isDelivery(order) && order.deliveryStatus !== 'DELIVERED') && order.status !== 'CANCELLED')
     );
-    if (!order || !['PDV', 'WEB_CATALOG'].includes(order.source) || !canViewOrder) { throw new Error('Comanda não encontrada para este usuário.'); }
+    if (!order || !COMMERCIAL_SOURCES.has(order.source) || !canViewOrder) { throw new Error('Comanda não encontrada para este usuário.'); }
     return order;
   };
   app.get('/api/caixa/orders/:id', route(async (req, res) => res.json(await findOrder(req))));

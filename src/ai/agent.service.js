@@ -14,7 +14,6 @@ function getGenAI() {
   return genAiModule;
 }
 
-const { getProductCareDetails } = require('../catalog/product-care');
 
 class AgentService {
   /**

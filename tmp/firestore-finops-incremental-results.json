@@ -19,8 +19,8 @@
           "writes": 0,
           "deletes": 0,
           "queries": 100,
-          "measuredQueryMs": 113.78,
-          "durationMs": 9010
+          "measuredQueryMs": 118.26,
+          "durationMs": 8589
         },
         "after": {
           "reads": 500,
@@ -28,7 +28,7 @@
           "deletes": 0,
           "queries": 0,
           "measuredQueryMs": 0,
-          "durationMs": 34
+          "durationMs": 29
         },
         "savedReads": 99700
       },
@@ -66,8 +66,8 @@
           "writes": 0,
           "deletes": 0,
           "queries": 500,
-          "measuredQueryMs": 347.63,
-          "durationMs": 38263
+          "measuredQueryMs": 314.3,
+          "durationMs": 37906
         },
         "after": {
           "reads": 2500,
@@ -75,7 +75,7 @@
           "deletes": 0,
           "queries": 0,
           "measuredQueryMs": 0,
-          "durationMs": 141
+          "durationMs": 139
         },
         "savedReads": 498500
       },
@@ -113,8 +113,8 @@
           "writes": 0,
           "deletes": 0,
           "queries": 1000,
-          "measuredQueryMs": 691.65,
-          "durationMs": 76131
+          "measuredQueryMs": 635.09,
+          "durationMs": 75110
         },
         "after": {
           "reads": 5000,
@@ -122,7 +122,7 @@
           "deletes": 0,
           "queries": 0,
           "measuredQueryMs": 0,
-          "durationMs": 268
+          "durationMs": 276
         },
         "savedReads": 997000
       },

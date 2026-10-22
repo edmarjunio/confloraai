@@ -7,6 +7,8 @@ const { remainingStock, validateStockQuantity } = require('./order-integrity');
 const { normalizePaymentParts, partAmount } = require('./payment-parts');
 const { prepareStockReservation, applyStockReservation } = require('./stock-reservation');
 const { setInterval, clearInterval } = require('node:timers');
+const { runTransaction } = require('../database/transactions');
+const { createCommercialOrder, COMMERCIAL_SOURCES } = require('./commercial-order');
 
 /** PDV writes never fall back to process memory when Firestore fails. */
 class PdvRepository {
@@ -18,47 +20,7 @@ class PdvRepository {
   }
 
   async transaction(work) {
-    const repo = this.repository;
-    if (repo.firestore && !repo._firestoreClientDisabled) {
-      return repo.firestore.runTransaction(async (tx) => work({
-        get: async (collection, id) => {
-          const doc = await tx.get(repo.firestore.collection(collection).doc(id));
-          return doc.exists ? { ...doc.data(), id: doc.id || id } : null;
-        },
-        set: (collection, id, value) => tx.set(repo.firestore.collection(collection).doc(id), value),
-      }));
-    }
-    if (!repo.isInMemory || repo.firestore) { throw new Error('Firestore indisponível. Operação não registrada.'); }
-    const operation = (repo.pdvQueue || this.queue).then(async () => {
-      const collections = { orders: repo.inMemoryOrders, products: repo.inMemoryProducts, customers: repo.inMemoryCustomers, users: repo.inMemoryUsers, discount_approvals: repo.inMemoryDiscountApprovals };
-      const writes = [];
-      const mapFor = (collection) => {
-        if (collections[collection]) { return collections[collection]; }
-        if (!this.memory.has(collection)) { this.memory.set(collection, new Map()); }
-        return this.memory.get(collection);
-      };
-      const result = await work({
-        get: async (collection, id) => collection === 'store_settings' && id === 'inventory'
-          ? this.repository.getInventorySettings() : structuredClone(mapFor(collection).get(id) || null),
-        set: (collection, id, value) => writes.push([collection, id, structuredClone(value)]),
-      });
-      for (const [collection, id, value] of writes) {
-        mapFor(collection).set(id, value);
-        const mirrorField = collection === 'customer_debts'
-          ? 'inMemoryCustomerDebts'
-          : collection === 'debt_settlements' ? 'inMemoryDebtSettlements' : '';
-        if (mirrorField) {
-          const entries = repo[mirrorField] || (repo[mirrorField] = []);
-          const existingIndex = entries.findIndex((entry) => String(entry.id) === String(id));
-          if (existingIndex >= 0) { entries[existingIndex] = structuredClone(value); }
-          else { entries.push(structuredClone(value)); }
-        }
-      }
-      return result;
-    });
-    this.queue = operation.catch(() => {});
-    repo.pdvQueue = this.queue;
-    return operation;
+    return runTransaction(this.repository, work);
   }
 
   async read(collection, id) {
@@ -68,6 +30,10 @@ class PdvRepository {
       return doc.exists ? { ...doc.data(), id: doc.id } : null;
     }
     return this.transaction((tx) => tx.get(collection, id));
+  }
+
+  async recordWhatsAppStatus(callback) {
+    return require('../database/repositories/whatsapp-delivery').recordWhatsAppStatus(this.repository, callback);
   }
 
   // Cursor rotation prevents delayed/leased jobs at the beginning from starving later jobs.
@@ -80,7 +46,7 @@ class PdvRepository {
     let rows;
     if (repo.firestore && !repo._firestoreClientDisabled) {
       try {
-        let query = repo.firestore.collection(collection).where(field, '==', value).orderBy('__name__').limit(size);
+        let query = repo.firestore.collection(collection).where(field, Array.isArray(value) ? 'in' : '==', value).orderBy('__name__').limit(size);
         if (cursor) query = query.startAfter(cursor);
         rows = (await query.get()).docs.map(doc => ({ ...doc.data(), id: doc.id }));
       } catch (err) {
@@ -212,23 +178,9 @@ class PdvRepository {
   }
 
   async create(order) {
-    return this.transaction(async (tx) => {
-      const previous = await tx.get('orders', order.id);
-      if (previous) {
-        if (previous.requestHash !== order.requestHash || previous.createdBy.id !== order.createdBy.id) { throw new Error('Identificador já utilizado por outra venda.'); }
-        return previous;
-      }
-      let savedOrder = order;
-      if (order.status === 'AWAITING_PAYMENT' || (String(order.paymentMethod || '').toUpperCase() === 'PIX' && order.pixData)) {
-        const reservation = await prepareStockReservation(tx, order.items);
-        applyStockReservation(tx, reservation, new Date().toISOString());
-        savedOrder = { ...order, inventoryReserved: !reservation.trackingDisabled, reservedItems: reservation.reservedItems };
-      }
-      tx.set('orders', savedOrder.id, savedOrder);
-      if (savedOrder.status !== 'CREATING_PIX') {
-        tx.set('pdv_outbox', `${savedOrder.id}-receipt`, { id: `${savedOrder.id}-receipt`, orderId: savedOrder.id, kind: 'receipt', status: 'PENDING', attempts: 0 });
-      }
-      return savedOrder;
+    return createCommercialOrder(this.repository, order, {
+      reserveInventory: order.status === 'AWAITING_PAYMENT' || (String(order.paymentMethod || '').toUpperCase() === 'PIX' && Boolean(order.pixData)),
+      receipt: order.status !== 'CREATING_PIX',
     });
   }
 
@@ -357,7 +309,7 @@ class PdvRepository {
     if (!['ADMIN', 'CAIXA'].includes(receiver?.role)) throw new Error('Somente Caixa/Admin podem confirmar comandas.');
     return this.transaction(async (tx) => {
       const order = await tx.get('orders', orderId);
-      if (!order || !['PDV', 'WEB_CATALOG'].includes(order.source)) throw new Error('Comanda não encontrada.');
+      if (!order || !COMMERCIAL_SOURCES.has(order.source)) throw new Error('Comanda não encontrada.');
       if (order.status === 'AWAITING_PAYMENT' && !order.completedAt) return order;
       if (order.completedAt || !['AWAITING_CONFIRMATION', 'AWAITING_CASHIER', 'PENDING'].includes(order.status) || order.pixData?.txid) {
         throw new Error('Só é possível mover de esperando confirmação para esperando pagamento.');
@@ -392,7 +344,7 @@ class PdvRepository {
   async requestPixAtCashier(orderId, receiver, requestedParts) {
     return this.transaction(async (tx) => {
       const order = await tx.get('orders', orderId);
-      if (!order || !['PDV', 'WEB_CATALOG'].includes(order.source)) { throw new Error('Comanda não encontrada.'); }
+      if (!order || !COMMERCIAL_SOURCES.has(order.source)) { throw new Error('Comanda não encontrada.'); }
       if (order.completedAt || order.status === 'CANCELLED') { throw new Error('Esta comanda já foi finalizada ou cancelada.'); }
       if (!canReceiveOrder(order, receiver)) { throw new Error('Sem permissão para gerar Pix deste pedido.'); }
       if (Date.parse(order.pixExpiresAt || order.paymentExpiresAt || '') <= Date.now()) throw new Error('O prazo de pagamento venceu. Inicie uma nova comanda.');
@@ -421,7 +373,7 @@ class PdvRepository {
   async receive(orderId, receiver, verification = null, cashReceived = null, paymentMethodOverride = null, { sendFinalReceipt = false, requestedParts, finishDelivery = false, actualDistanceKm } = {}) {
     return this.transaction(async (tx) => {
       const order = await tx.get('orders', orderId);
-      if (!order || !['PDV', 'WEB_CATALOG'].includes(order.source)) { throw new Error('Comanda não encontrada.'); }
+      if (!order || !COMMERCIAL_SOURCES.has(order.source)) { throw new Error('Comanda não encontrada.'); }
       if (order.status === 'CANCELLED') { throw new Error('Comanda cancelada.'); }
       if (finishDelivery && order.deliveryStatus === 'DELIVERED' && order.deliveredBy?.id === receiver?.id) return { ...order, alreadyConfirmed: true };
       if (finishDelivery) assertAssignedDelivery(order, receiver);

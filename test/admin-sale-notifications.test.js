@@ -150,28 +150,29 @@ test('ADMIN NOTIFICATIONS: POST /api/admin/orders/manual dispara notificação p
   }
 });
 
-test('ADMIN NOTIFICATIONS: OrderService.confirmOrder dispara notificação para todos os administradores', async () => {
+test('WHATSAPP: OrderService.confirmOrder registra pedido pendente e recibo durável', async () => {
   const repo = new FirestoreRepository({ isInMemory: true });
   const { OrderService } = require('../src/orders/order.service');
   const catalogRepo = { items: [] };
   const orderService = new OrderService({ firestoreRepo: repo, catalogRepo });
 
+  await repo.saveProduct({ id: 'ipe', name: 'Ipê Amarelo', price: 45, stockQuantity: 10, status: 'ATIVO' });
   const pendingOrder = await orderService.createPendingOrder('5564999112233', [
-    { product: { canonicalName: 'Ipê Amarelo', prices: [45.0] }, quantity: 2 },
+    { product: { id: 'ipe' }, quantity: 2 },
   ], {
     deliveryAddress: 'Rua das Flores, 123',
-    paymentMethod: 'PIX',
+    paymentMethod: 'DINHEIRO',
   });
   assert.ok(pendingOrder);
 
   const confirmResult = await orderService.confirmOrder('5564999112233', 'Dona Florinda');
   assert.ok(confirmResult);
 
-  const edmarNotifs = await repo.getUserNotifications('usr-edmar');
-  const whatsappSaleNotif = edmarNotifs.find(n => n.type === 'SALE_COMPLETED' && n.source === 'WHATSAPP_BOT');
-  assert.ok(whatsappSaleNotif, 'Admin deve receber notificação de pedido confirmado no WhatsApp');
-  assert.equal(whatsappSaleNotif.customerName, 'Dona Florinda');
-  assert.equal(whatsappSaleNotif.orderTotal, 90);
+  assert.equal(confirmResult.order.source, 'WHATSAPP_BOT');
+  assert.equal(confirmResult.order.customerName, 'Dona Florinda');
+  assert.equal(confirmResult.order.total, 90);
+  assert.equal(confirmResult.order.paymentStatus, 'PENDING');
+  assert.ok(repo.pdvMemory.get('pdv_outbox').has(confirmResult.order.id + '-receipt'));
 });
 
 test('CAIXA DISCOUNTS: desconto acima de 5% aguarda Admin e só vira pedido após aceite', async (t) => {

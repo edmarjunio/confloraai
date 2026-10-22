@@ -150,7 +150,7 @@ test('Smart Receipt & Financial Security - 14 Mandatory Scenarios', async (t) =>
     const total = 50.00;
     
     // RECEBI is 60, 100, or 200 - registered amount stays strictly 50.00
-    [60.00, 100.00, 200.00].forEach(recebi => {
+    [60.00, 100.00, 200.00].forEach(_recebi => {
       const parts = [{ method: 'DINHEIRO', amount: registeredCash }];
       const normalized = normalizePaymentParts(parts, total);
       assert.equal(normalized[0].amount, 50.00);

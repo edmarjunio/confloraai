@@ -147,7 +147,7 @@ for (const mode of ['memory', 'transaction']) {
 test('web Pix reservation is idempotent, protects stock until payment, then deducts exactly once with cashier audit', async () => {
   const repository = new FirestoreRepository({ isInMemory: true });
   await repository.saveInventorySettings({ stockControlEnabled: true });
-  repository.inMemoryProducts.set('plant', { id: 'plant', name: 'Muda', stockQuantity: 3, reservedQuantity: 0 });
+  repository.inMemoryProducts.set('plant', { id: 'plant', name: 'Muda', price: 10, stockQuantity: 3, reservedQuantity: 0 });
   const order = await repository.createDirectOrder({
     id: 'web-pix-reserved', source: 'WEB_CATALOG', status: 'AWAITING_PIX', paymentMethod: 'PIX',
     total: 20, pixData: { txid: '0123456789ABCDEF0123456789ABCDEF' },
@@ -262,12 +262,12 @@ test('Firestore transaction: competing drivers claim one delivery and receipt co
 
 for (const mode of ['memory', 'transaction']) {
   test(`${mode}: disabled stock permits a zero-stock web Pix without reserving or deducting inventory`, async () => {
-    const initial = { 'products/plant': { id: 'plant', name: 'Planta', stockQuantity: 0 }, 'store_settings/inventory': { stockControlEnabled: false } };
+    const initial = { 'products/plant': { id: 'plant', name: 'Planta', price: 10, stockQuantity: 0 }, 'store_settings/inventory': { stockControlEnabled: false } };
     const store = mode === 'transaction' ? transactionalStore(initial) : null;
     const repo = new FirestoreRepository({ isInMemory: true, firestoreInstance: store });
     if (!store) { await repo.saveInventorySettings({ stockControlEnabled: false }); repo.inMemoryProducts.set('plant', initial['products/plant']); }
     const order = await repo.createDirectOrder({ id: 'untracked-pix', source: 'WEB_CATALOG', status: 'AWAITING_PIX', paymentMethod: 'PIX', total: 20,
-      pixData: { txid: '0123456789ABCDEF0123456789ABCDEF' }, items: [{ productId: 'plant', quantity: 2, price: 10 }] }, { reserveInventory: true });
+      pixData: { txid: '0123456789ABCDEF0123456789ABCDEF' }, items: [{ productId: 'plant', name: 'Planta', quantity: 2, price: 10 }] }, { reserveInventory: true });
     assert.equal(order.inventoryReserved, false);
     await repo.confirmOrderPayment(order.id, { verifiedVia: 'SICREDI_PIX_WEBHOOK', pixTxid: order.pixData.txid, paymentTransactionId: 'E' + '4'.repeat(31), paymentAmount: 20 });
     const product = store ? store.read('products/plant') : repo.inMemoryProducts.get('plant');

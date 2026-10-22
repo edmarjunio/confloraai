@@ -674,33 +674,7 @@ function createApp({
   }
 
   // Cloud Tasks Processing Endpoint
-  app.post('/tasks/processar-mensagem', async (req, res) => {
-    if (!config.whatsapp.assistantEnabled) {
-      return res.status(410).json({ error: 'Atendimento automático desativado.' });
-    }
-    const secret = req.headers['x-conflora-task-secret'];
-    if (!config.tasks.taskSecret || secret !== config.tasks.taskSecret) {
-      return res.sendStatus(401);
-    }
-
-    const { phone, message, customerName, messageId } = req.body;
-    if (!phone || !message) {
-      return res.status(400).send('Dados inválidos');
-    }
-
-    try {
-      const result = await messageService.handleCustomerMessage({
-        phone,
-        message,
-        customerName,
-        messageId,
-      });
-      res.status(200).json(result);
-    } catch (error) {
-      Logger.error('Erro ao processar mensagem via Cloud Tasks', error);
-      res.status(500).send('Erro interno');
-    }
-  });
+  app.post('/tasks/processar-mensagem', require('./incoming-task').incomingTaskHandler({ incoming, messageService, config }));
 
   // Live Inventory & Stock Movements API (somente Firestore)
   const handleInventoryRequest = async (_req, res) => {
@@ -817,7 +791,6 @@ function createApp({
         discount,
         subtotal,
         cashTendered,
-        changeDue,
       } = req.body;
 
       if (!customerName || !customerPhone || !Array.isArray(items) || items.length === 0) {
@@ -832,7 +805,7 @@ function createApp({
         if (items.length > 100) {
           return res.status(400).json({ error: 'O pedido excede o limite de itens.' });
         }
-        const products = await messageService.firestoreRepo.getAllProducts();
+        const products = await messageService.firestoreRepo.getProductsByIds(items.map(item => item.productId));
         const productsById = new Map(products.map((product) => [String(product.id), product]));
         orderItems = [];
         for (const item of items) {
@@ -847,13 +820,7 @@ function createApp({
           ) {
             return res.status(400).json({ error: 'Produto ou quantidade inválida no pedido.' });
           }
-          orderItems.push({
-            productId: String(product.id),
-            name: product.name || product.descricao || 'Produto',
-            price: Number(product.price || product.valor_num || 0),
-            quantity,
-            unit: item.unit || product.unit || product.unidade || 'UN',
-          });
+          orderItems.push(require('../catalog/commercial-product').commercialLine(product, quantity));
         }
         calculatedSubtotal = Number(
           orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0).toFixed(2),
@@ -884,8 +851,9 @@ function createApp({
         calculatedSubtotal = Number(subtotal) || items.reduce((acc, it) => acc + (Number(it.price || 0) * Number(it.quantity || 1)), 0);
         appliedDiscount = Math.max(0, Number(discount) || 0);
       }
-      const finalTotal = Math.max(0, calculatedSubtotal - appliedDiscount);
+      const finalTotal = Math.max(0, Math.round((calculatedSubtotal - appliedDiscount) * 100) / 100);
       const resolvedPaymentMethod = String(paymentMethod || 'PIX').toUpperCase();
+      if (!['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO', 'CARTAO', 'FIADO'].includes(resolvedPaymentMethod)) return res.status(400).json({ error: 'Forma de pagamento inválida para compra pelo cliente.' });
       if (orderType === 'DELIVERY' && (!String(customerName || '').trim() || !/^\d{10,13}$/.test(String(customerPhone || '').replace(/\D/g, '')) || String(deliveryAddress || '').trim().length < 8)) return res.status(400).json({ error: 'Entrega exige nome, WhatsApp com DDD e endereço completo (rua, número, bairro e cidade).' });
       const normalizedLocation = normalizeDeliveryLocation(deliveryLocation);
       const checkoutFingerprint = idempotencyKey
@@ -963,7 +931,7 @@ function createApp({
         discount: appliedDiscount,
         total: finalTotal,
         cashTendered: Number(cashTendered) || 0,
-        changeDue: Number(changeDue) || 0,
+        changeDue: resolvedPaymentMethod === 'DINHEIRO' ? Math.max(0, Math.round((Number(cashTendered || 0) - finalTotal) * 100) / 100) : 0,
         ...(idempotencyKey ? { idempotencyFingerprint: checkoutFingerprint } : {}),
         status: resolvedPaymentMethod === 'PIX' && !manualPix ? 'CREATING_PIX' : resolvedPaymentMethod === 'FIADO' ? 'AWAITING_CONFIRMATION' : 'AWAITING_PAYMENT',
         ...(resolvedPaymentMethod === 'FIADO' ? { creditApprovalStatus: 'PENDING' } : {}),
@@ -1462,6 +1430,9 @@ function createApp({
     taskQueueClient,
     ownerPhone: process.env.OWNER_WHATSAPP_NUMBER || config.whatsapp?.ownerNumber || '',
   });
+  if (messageService.orderService) {
+    messageService.orderService.commerce = { pdv: app.locals.pdv.service, pix: sicrediPixClient };
+  }
   app.use('/pdv-assets/dist', express.static(require('node:path').resolve(__dirname, '../../public/pdv/dist')));
   app.use('/guias', express.static(require('node:path').resolve(__dirname, '../../public/guias')));
 

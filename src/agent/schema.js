@@ -27,7 +27,6 @@ function text(raw, field, { required = false, max = MAX_TEXT } = {}) {
   const value = raw.trim();
   if (!value && required) throw new InputError('required', field);
   if (value.length > max) throw new InputError('too_long', field);
-  // eslint-disable-next-line no-control-regex
   if (/[\u0000-\u001f\u007f]/.test(value)) throw new InputError('control_characters', field);
   return value || undefined;
 }

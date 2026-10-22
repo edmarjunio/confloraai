@@ -6,7 +6,6 @@ import {
   storageGet,
   storageSet,
   openDialog,
-  lockBodyScroll,
   unlockBodyScroll,
   quantityControl,
 } from "./ui.js";

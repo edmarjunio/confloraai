@@ -215,313 +215,355 @@
       "collection": "orders",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 1870
-    },
-    {
-      "collection": "products",
-      "access": "collection",
-      "file": "src/database/firestore.repository.js",
-      "line": 1872
-    },
-    {
-      "collection": "store_settings",
-      "access": "collection",
-      "file": "src/database/firestore.repository.js",
-      "line": 1876
+      "line": 1866
     },
     {
       "collection": "orders",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 1925
+      "line": 1930
     },
     {
       "collection": "orders",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 1989
-    },
-    {
-      "collection": "orders",
-      "access": "collection",
-      "file": "src/database/firestore.repository.js",
-      "line": 2023
+      "line": 1964
     },
     {
       "collection": "processed_messages",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 2096
+      "line": 2037
     },
     {
       "collection": "processed_messages",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 2120
+      "line": 2061
     },
     {
       "collection": "sessions",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 2146
+      "line": 2087
     },
     {
       "collection": "messages",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 2148
+      "line": 2089
     },
     {
       "collection": "sessions",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 2184
+      "line": 2125
     },
     {
       "collection": "messages",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 2186
-    },
-    {
-      "collection": "orders",
-      "access": "collection",
-      "file": "src/database/firestore.repository.js",
-      "line": 2220
-    },
-    {
-      "collection": "orders",
-      "access": "collection",
-      "file": "src/database/firestore.repository.js",
-      "line": 2244
+      "line": 2127
     },
     {
       "collection": "customers",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 2268
+      "line": 2175
     },
     {
       "collection": "customers",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 2324
+      "line": 2231
     },
     {
       "collection": "customers",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 2357
+      "line": 2264
     },
     {
       "collection": "customers",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 2392
+      "line": 2299
     },
     {
       "collection": "customer_debts",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 2436
+      "line": 2343
     },
     {
       "collection": "customers",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 2437
+      "line": 2344
     },
     {
       "collection": "debt_settlements",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 2478
+      "line": 2385
     },
     {
       "collection": "customers",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 2479
+      "line": 2386
     },
     {
       "collection": "customers",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 2518
+      "line": 2425
     },
     {
       "collection": "customer_debts",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 2522
+      "line": 2429
     },
     {
       "collection": "debt_settlements",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 2524
+      "line": 2431
     },
     {
       "collection": "users",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 2549
+      "line": 2456
     },
     {
       "collection": "user_emails",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 2595
+      "line": 2502
     },
     {
       "collection": "user_emails",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 2598
+      "line": 2505
     },
     {
       "collection": "users",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 2600
+      "line": 2507
     },
     {
       "collection": "users",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 2626
+      "line": 2533
     },
     {
       "collection": "users",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 2637
+      "line": 2544
     },
     {
       "collection": "users",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 2650
+      "line": 2557
     },
     {
       "collection": "users",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 2668
+      "line": 2575
     },
     {
       "collection": "users",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 2889
+      "line": 2796
     },
     {
       "collection": "order_alterations",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 3194
+      "line": 3101
     },
     {
       "collection": "orders",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 3199
+      "line": 3106
     },
     {
       "collection": "order_alterations",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 3225
+      "line": 3132
     },
     {
       "collection": "order_alterations",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 3262
+      "line": 3169
     },
     {
       "collection": "orders",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 3317
+      "line": 3224
     },
     {
       "collection": "order_alterations",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 3325
+      "line": 3232
     },
     {
       "collection": "order_alterations",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 3374
+      "line": 3281
     },
     {
       "collection": "orders",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 3384
+      "line": 3291
     },
     {
       "collection": "discount_approvals",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 3431
+      "line": 3338
     },
     {
       "collection": "discount_approvals",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 3462
+      "line": 3369
     },
     {
       "collection": "discount_approvals",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 3478
+      "line": 3385
     },
     {
       "collection": "discount_approvals",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 3496
+      "line": 3403
+    },
+    {
+      "collection": "notifications",
+      "access": "get",
+      "file": "src/database/firestore.repository.js",
+      "line": 3506
+    },
+    {
+      "collection": "notifications",
+      "access": "set",
+      "file": "src/database/firestore.repository.js",
+      "line": 3508
     },
     {
       "collection": "notifications",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 3599
+      "line": 3518
     },
     {
       "collection": "notifications",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 3631
+      "line": 3550
     },
     {
       "collection": "notifications",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 3678
+      "line": 3597
     },
     {
       "collection": "storefront_events",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 3788
+      "line": 3707
     },
     {
       "collection": "storefront_events",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 3807
+      "line": 3726
     },
     {
       "collection": "orders",
       "access": "collection",
       "file": "src/database/firestore.repository.js",
-      "line": 3882
+      "line": 3801
+    },
+    {
+      "collection": "orders",
+      "access": "collection",
+      "file": "src/database/repositories/cashier-snapshot.js",
+      "line": 21
+    },
+    {
+      "collection": "sessions",
+      "access": "get",
+      "file": "src/database/repositories/conversation-orders.js",
+      "line": 12
+    },
+    {
+      "collection": "orders",
+      "access": "get",
+      "file": "src/database/repositories/conversation-orders.js",
+      "line": 15
+    },
+    {
+      "collection": "sessions",
+      "access": "set",
+      "file": "src/database/repositories/conversation-orders.js",
+      "line": 21
+    },
+    {
+      "collection": "pdv_outbox",
+      "access": "collection",
+      "file": "src/database/repositories/whatsapp-delivery.js",
+      "line": 12
+    },
+    {
+      "collection": "pdv_outbox",
+      "access": "get",
+      "file": "src/database/repositories/whatsapp-delivery.js",
+      "line": 15
+    },
+    {
+      "collection": "whatsapp_delivery_events",
+      "access": "get",
+      "file": "src/database/repositories/whatsapp-delivery.js",
+      "line": 19
+    },
+    {
+      "collection": "pdv_outbox",
+      "access": "get",
+      "file": "src/database/repositories/whatsapp-delivery.js",
+      "line": 21
+    },
+    {
+      "collection": "pdv_outbox",
+      "access": "set",
+      "file": "src/database/repositories/whatsapp-delivery.js",
+      "line": 25
+    },
+    {
+      "collection": "whatsapp_delivery_events",
+      "access": "set",
+      "file": "src/database/repositories/whatsapp-delivery.js",
+      "line": 27
     },
     {
       "collection": "pdv_outbox",
@@ -551,25 +593,37 @@
       "collection": "customers",
       "access": "get",
       "file": "src/http/app.js",
-      "line": 942
+      "line": 912
     },
     {
       "collection": "customers",
       "access": "set",
       "file": "src/http/app.js",
-      "line": 944
+      "line": 914
+    },
+    {
+      "collection": "orders",
+      "access": "read",
+      "file": "src/http/app.js",
+      "line": 1041
+    },
+    {
+      "collection": "site_feedbacks",
+      "access": "set",
+      "file": "src/http/app.js",
+      "line": 1095
     },
     {
       "collection": "pdv_outbox",
       "access": "get",
       "file": "src/http/app.js",
-      "line": 2106
+      "line": 2225
     },
     {
       "collection": "pdv_outbox",
       "access": "set",
       "file": "src/http/app.js",
-      "line": 2107
+      "line": 2226
     },
     {
       "collection": "host",
@@ -578,178 +632,226 @@
       "line": 27
     },
     {
+      "collection": "incoming_messages",
+      "access": "read",
+      "file": "src/http/incoming-task.js",
+      "line": 15
+    },
+    {
       "collection": "orders",
       "access": "read",
       "file": "src/http/pdv.routes.js",
-      "line": 110
+      "line": 136
     },
     {
       "collection": "users",
-      "access": "read",
-      "file": "src/http/pdv.routes.js",
-      "line": 124
-    },
-    {
-      "collection": "users",
-      "access": "get",
-      "file": "src/http/pdv.routes.js",
-      "line": 134
-    },
-    {
-      "collection": "users",
-      "access": "set",
-      "file": "src/http/pdv.routes.js",
-      "line": 137
-    },
-    {
-      "collection": "customers",
       "access": "read",
       "file": "src/http/pdv.routes.js",
       "line": 150
     },
     {
-      "collection": "customers",
+      "collection": "users",
       "access": "get",
       "file": "src/http/pdv.routes.js",
-      "line": 157
+      "line": 160
     },
     {
-      "collection": "customer_emails",
-      "access": "get",
-      "file": "src/http/pdv.routes.js",
-      "line": 159
-    },
-    {
-      "collection": "customers",
+      "collection": "users",
       "access": "set",
       "file": "src/http/pdv.routes.js",
       "line": 163
     },
     {
+      "collection": "customers",
+      "access": "read",
+      "file": "src/http/pdv.routes.js",
+      "line": 176
+    },
+    {
+      "collection": "customers",
+      "access": "get",
+      "file": "src/http/pdv.routes.js",
+      "line": 183
+    },
+    {
+      "collection": "customer_emails",
+      "access": "get",
+      "file": "src/http/pdv.routes.js",
+      "line": 185
+    },
+    {
+      "collection": "customers",
+      "access": "set",
+      "file": "src/http/pdv.routes.js",
+      "line": 189
+    },
+    {
       "collection": "customer_emails",
       "access": "set",
       "file": "src/http/pdv.routes.js",
-      "line": 164
+      "line": 190
     },
     {
       "collection": "discount_approvals",
       "access": "read",
       "file": "src/http/pdv.routes.js",
-      "line": 198
+      "line": 224
+    },
+    {
+      "collection": "cashier_closings",
+      "access": "list",
+      "file": "src/http/pdv.routes.js",
+      "line": 319
+    },
+    {
+      "collection": "orders",
+      "access": "list",
+      "file": "src/http/pdv.routes.js",
+      "line": 322
     },
     {
       "collection": "debt_settlements",
       "access": "list",
       "file": "src/http/pdv.routes.js",
-      "line": 225
+      "line": 324
+    },
+    {
+      "collection": "cashier_closings",
+      "access": "read",
+      "file": "src/http/pdv.routes.js",
+      "line": 382
+    },
+    {
+      "collection": "orders",
+      "access": "list",
+      "file": "src/http/pdv.routes.js",
+      "line": 387
     },
     {
       "collection": "debt_settlements",
       "access": "list",
       "file": "src/http/pdv.routes.js",
-      "line": 226
+      "line": 389
+    },
+    {
+      "collection": "cashier_closings",
+      "access": "set",
+      "file": "src/http/pdv.routes.js",
+      "line": 438
+    },
+    {
+      "collection": "cashier_closings",
+      "access": "list",
+      "file": "src/http/pdv.routes.js",
+      "line": 441
+    },
+    {
+      "collection": "pdv_outbox",
+      "access": "set",
+      "file": "src/http/pdv.routes.js",
+      "line": 501
     },
     {
       "collection": "orders",
       "access": "read",
       "file": "src/http/pdv.routes.js",
-      "line": 294
+      "line": 524
     },
     {
       "collection": "orders",
       "access": "read",
       "file": "src/http/pdv.routes.js",
-      "line": 307
+      "line": 537
     },
     {
       "collection": "payment_proofs",
       "access": "set",
       "file": "src/http/pdv.routes.js",
-      "line": 313
+      "line": 543
     },
     {
       "collection": "payment_proofs",
       "access": "read",
       "file": "src/http/pdv.routes.js",
-      "line": 317
+      "line": 547
     },
     {
       "collection": "orders",
       "access": "read",
       "file": "src/http/pdv.routes.js",
-      "line": 320
+      "line": 550
     },
     {
       "collection": "pdv_outbox",
       "access": "read",
       "file": "src/http/pdv.routes.js",
-      "line": 361
+      "line": 591
     },
     {
       "collection": "pdv_outbox",
       "access": "read",
       "file": "src/http/pdv.routes.js",
-      "line": 388
+      "line": 618
     },
     {
       "collection": "orders",
       "access": "read",
       "file": "src/http/pdv.routes.js",
-      "line": 401
+      "line": 631
     },
     {
       "collection": "customers",
       "access": "read",
       "file": "src/http/pdv.routes.js",
-      "line": 413
+      "line": 643
     },
     {
       "collection": "customer_debts",
       "access": "list",
       "file": "src/http/pdv.routes.js",
-      "line": 415
+      "line": 645
     },
     {
       "collection": "debt_settlements",
       "access": "list",
       "file": "src/http/pdv.routes.js",
-      "line": 416
+      "line": 646
     },
     {
       "collection": "pdv_pix_events",
       "access": "get",
       "file": "src/http/pdv.routes.js",
-      "line": 452
+      "line": 682
     },
     {
       "collection": "pdv_pix_events",
       "access": "set",
       "file": "src/http/pdv.routes.js",
-      "line": 453
+      "line": 683
     },
     {
       "collection": "pdv_outbox",
       "access": "list",
       "file": "src/http/pdv.routes.js",
-      "line": 461
+      "line": 691
     },
     {
       "collection": "tab",
       "access": "get",
       "file": "src/http/views-admin.js",
-      "line": 1151
+      "line": 1155
     },
     {
       "collection": "tab",
       "access": "get",
       "file": "src/http/views-admin.js",
-      "line": 1156
+      "line": 1160
     },
     {
       "collection": "tab",
       "access": "set",
       "file": "src/http/views-admin.js",
-      "line": 1164
+      "line": 1168
     },
     {
       "collection": "measurement_id",
@@ -786,6 +888,54 @@
       "access": "set",
       "file": "src/integrations/whatsapp.client.js",
       "line": 77
+    },
+    {
+      "collection": "orders",
+      "access": "get",
+      "file": "src/orders/commercial-order.js",
+      "line": 20
+    },
+    {
+      "collection": "products",
+      "access": "get",
+      "file": "src/orders/commercial-order.js",
+      "line": 35
+    },
+    {
+      "collection": "customers",
+      "access": "get",
+      "file": "src/orders/commercial-order.js",
+      "line": 44
+    },
+    {
+      "collection": "orders",
+      "access": "set",
+      "file": "src/orders/commercial-order.js",
+      "line": 49
+    },
+    {
+      "collection": "customers",
+      "access": "set",
+      "file": "src/orders/commercial-order.js",
+      "line": 53
+    },
+    {
+      "collection": "pdv_outbox",
+      "access": "set",
+      "file": "src/orders/commercial-order.js",
+      "line": 59
+    },
+    {
+      "collection": "pdv_outbox",
+      "access": "set",
+      "file": "src/orders/commercial-order.js",
+      "line": 62
+    },
+    {
+      "collection": "pdv_outbox",
+      "access": "set",
+      "file": "src/orders/commercial-order.js",
+      "line": 64
     },
     {
       "collection": "customer_debt_pix",
@@ -959,46 +1109,58 @@
       "collection": "orders",
       "access": "scanPage",
       "file": "src/orders/pdv.repository.js",
-      "line": 106
+      "line": 79
     },
     {
       "collection": "orders",
       "access": "collection",
       "file": "src/orders/pdv.repository.js",
-      "line": 176
+      "line": 153
     },
     {
       "collection": "orders",
       "access": "collection",
       "file": "src/orders/pdv.repository.js",
-      "line": 177
+      "line": 154
     },
     {
       "collection": "orders",
       "access": "get",
       "file": "src/orders/pdv.repository.js",
-      "line": 205
-    },
-    {
-      "collection": "orders",
-      "access": "set",
-      "file": "src/orders/pdv.repository.js",
-      "line": 216
+      "line": 189
     },
     {
       "collection": "pdv_outbox",
-      "access": "set",
-      "file": "src/orders/pdv.repository.js",
-      "line": 218
-    },
-    {
-      "collection": "orders",
       "access": "get",
       "file": "src/orders/pdv.repository.js",
-      "line": 226
+      "line": 191
+    },
+    {
+      "collection": "orders",
+      "access": "set",
+      "file": "src/orders/pdv.repository.js",
+      "line": 198
     },
     {
       "collection": "pdv_outbox",
+      "access": "set",
+      "file": "src/orders/pdv.repository.js",
+      "line": 199
+    },
+    {
+      "collection": "orders",
+      "access": "collection",
+      "file": "src/orders/pdv.repository.js",
+      "line": 211
+    },
+    {
+      "collection": "orders",
+      "access": "list",
+      "file": "src/orders/pdv.repository.js",
+      "line": 222
+    },
+    {
+      "collection": "orders",
       "access": "get",
       "file": "src/orders/pdv.repository.js",
       "line": 228
@@ -1007,31 +1169,25 @@
       "collection": "orders",
       "access": "set",
       "file": "src/orders/pdv.repository.js",
-      "line": 235
-    },
-    {
-      "collection": "pdv_outbox",
-      "access": "set",
-      "file": "src/orders/pdv.repository.js",
-      "line": 236
-    },
-    {
-      "collection": "orders",
-      "access": "collection",
-      "file": "src/orders/pdv.repository.js",
-      "line": 248
-    },
-    {
-      "collection": "orders",
-      "access": "list",
-      "file": "src/orders/pdv.repository.js",
-      "line": 259
+      "line": 237
     },
     {
       "collection": "orders",
       "access": "get",
       "file": "src/orders/pdv.repository.js",
-      "line": 265
+      "line": 244
+    },
+    {
+      "collection": "orders",
+      "access": "set",
+      "file": "src/orders/pdv.repository.js",
+      "line": 254
+    },
+    {
+      "collection": "orders",
+      "access": "get",
+      "file": "src/orders/pdv.repository.js",
+      "line": 262
     },
     {
       "collection": "orders",
@@ -1040,115 +1196,97 @@
       "line": 274
     },
     {
-      "collection": "orders",
-      "access": "get",
-      "file": "src/orders/pdv.repository.js",
-      "line": 281
-    },
-    {
-      "collection": "orders",
+      "collection": "pdv_outbox",
       "access": "set",
       "file": "src/orders/pdv.repository.js",
-      "line": 291
+      "line": 276
     },
     {
       "collection": "orders",
       "access": "get",
       "file": "src/orders/pdv.repository.js",
-      "line": 299
+      "line": 283
     },
     {
       "collection": "orders",
       "access": "set",
+      "file": "src/orders/pdv.repository.js",
+      "line": 287
+    },
+    {
+      "collection": "orders",
+      "access": "get",
+      "file": "src/orders/pdv.repository.js",
+      "line": 293
+    },
+    {
+      "collection": "delivery_driver_metrics",
+      "access": "get",
+      "file": "src/orders/pdv.repository.js",
+      "line": 300
+    },
+    {
+      "collection": "delivery_driver_metrics",
+      "access": "set",
+      "file": "src/orders/pdv.repository.js",
+      "line": 302
+    },
+    {
+      "collection": "orders",
+      "access": "set",
+      "file": "src/orders/pdv.repository.js",
+      "line": 304
+    },
+    {
+      "collection": "orders",
+      "access": "get",
       "file": "src/orders/pdv.repository.js",
       "line": 311
     },
     {
-      "collection": "pdv_outbox",
-      "access": "set",
-      "file": "src/orders/pdv.repository.js",
-      "line": 313
-    },
-    {
-      "collection": "orders",
-      "access": "get",
-      "file": "src/orders/pdv.repository.js",
-      "line": 320
-    },
-    {
       "collection": "orders",
       "access": "set",
       "file": "src/orders/pdv.repository.js",
-      "line": 324
-    },
-    {
-      "collection": "orders",
-      "access": "get",
-      "file": "src/orders/pdv.repository.js",
-      "line": 330
-    },
-    {
-      "collection": "delivery_driver_metrics",
-      "access": "get",
-      "file": "src/orders/pdv.repository.js",
-      "line": 337
-    },
-    {
-      "collection": "delivery_driver_metrics",
-      "access": "set",
-      "file": "src/orders/pdv.repository.js",
-      "line": 339
-    },
-    {
-      "collection": "orders",
-      "access": "set",
-      "file": "src/orders/pdv.repository.js",
-      "line": 341
-    },
-    {
-      "collection": "orders",
-      "access": "get",
-      "file": "src/orders/pdv.repository.js",
-      "line": 348
-    },
-    {
-      "collection": "orders",
-      "access": "set",
-      "file": "src/orders/pdv.repository.js",
-      "line": 362
+      "line": 325
     },
     {
       "collection": "pdv_outbox",
       "access": "get",
       "file": "src/orders/pdv.repository.js",
-      "line": 371
+      "line": 334
     },
     {
       "collection": "pdv_outbox",
       "access": "set",
+      "file": "src/orders/pdv.repository.js",
+      "line": 338
+    },
+    {
+      "collection": "orders",
+      "access": "get",
+      "file": "src/orders/pdv.repository.js",
+      "line": 346
+    },
+    {
+      "collection": "orders",
+      "access": "set",
+      "file": "src/orders/pdv.repository.js",
+      "line": 367
+    },
+    {
+      "collection": "orders",
+      "access": "get",
       "file": "src/orders/pdv.repository.js",
       "line": 375
     },
     {
-      "collection": "orders",
-      "access": "get",
-      "file": "src/orders/pdv.repository.js",
-      "line": 383
-    },
-    {
-      "collection": "orders",
-      "access": "set",
-      "file": "src/orders/pdv.repository.js",
-      "line": 404
-    },
-    {
-      "collection": "orders",
-      "access": "get",
-      "file": "src/orders/pdv.repository.js",
-      "line": 412
-    },
-    {
       "collection": "store_settings",
+      "access": "get",
+      "file": "src/orders/pdv.repository.js",
+      "line": 382
+    },
+    {
+      "collection": "products",
       "access": "get",
       "file": "src/orders/pdv.repository.js",
       "line": 419
@@ -1157,373 +1295,391 @@
       "collection": "products",
       "access": "get",
       "file": "src/orders/pdv.repository.js",
-      "line": 456
-    },
-    {
-      "collection": "products",
-      "access": "get",
-      "file": "src/orders/pdv.repository.js",
-      "line": 463
+      "line": 426
     },
     {
       "collection": "customers",
       "access": "get",
       "file": "src/orders/pdv.repository.js",
-      "line": 476
+      "line": 439
     },
     {
       "collection": "delivery_driver_metrics",
       "access": "get",
       "file": "src/orders/pdv.repository.js",
-      "line": 484
+      "line": 447
     },
     {
       "collection": "products",
       "access": "set",
       "file": "src/orders/pdv.repository.js",
-      "line": 487
+      "line": 450
     },
     {
       "collection": "stock_movements",
       "access": "set",
       "file": "src/orders/pdv.repository.js",
-      "line": 489
+      "line": 452
     },
     {
       "collection": "customers",
       "access": "set",
       "file": "src/orders/pdv.repository.js",
-      "line": 509
+      "line": 472
     },
     {
       "collection": "customer_debts",
       "access": "set",
       "file": "src/orders/pdv.repository.js",
-      "line": 510
+      "line": 473
     },
     {
       "collection": "customers",
       "access": "set",
       "file": "src/orders/pdv.repository.js",
-      "line": 514
+      "line": 477
     },
     {
       "collection": "debt_settlements",
       "access": "set",
       "file": "src/orders/pdv.repository.js",
-      "line": 515
+      "line": 478
     },
     {
       "collection": "delivery_driver_metrics",
       "access": "set",
       "file": "src/orders/pdv.repository.js",
-      "line": 524
+      "line": 487
     },
     {
       "collection": "orders",
       "access": "set",
       "file": "src/orders/pdv.repository.js",
-      "line": 526
+      "line": 489
     },
     {
       "collection": "pdv_outbox",
       "access": "set",
       "file": "src/orders/pdv.repository.js",
-      "line": 529
+      "line": 492
     },
     {
       "collection": "pdv_outbox",
       "access": "set",
       "file": "src/orders/pdv.repository.js",
-      "line": 534
+      "line": 497
     },
     {
       "collection": "pdv_outbox",
       "access": "set",
       "file": "src/orders/pdv.repository.js",
-      "line": 539
+      "line": 502
     },
     {
       "collection": "debt_settlements",
       "access": "get",
       "file": "src/orders/pdv.repository.js",
-      "line": 553
+      "line": 516
     },
     {
       "collection": "customers",
+      "access": "get",
+      "file": "src/orders/pdv.repository.js",
+      "line": 523
+    },
+    {
+      "collection": "customers",
+      "access": "set",
+      "file": "src/orders/pdv.repository.js",
+      "line": 536
+    },
+    {
+      "collection": "debt_settlements",
+      "access": "set",
+      "file": "src/orders/pdv.repository.js",
+      "line": 537
+    },
+    {
+      "collection": "pdv_outbox",
+      "access": "set",
+      "file": "src/orders/pdv.repository.js",
+      "line": 538
+    },
+    {
+      "collection": "pdv_outbox",
+      "access": "get",
+      "file": "src/orders/pdv.repository.js",
+      "line": 545
+    },
+    {
+      "collection": "pdv_outbox",
+      "access": "set",
+      "file": "src/orders/pdv.repository.js",
+      "line": 549
+    },
+    {
+      "collection": "pdv_outbox",
+      "access": "set",
+      "file": "src/orders/pdv.repository.js",
+      "line": 553
+    },
+    {
+      "collection": "pdv_outbox",
       "access": "get",
       "file": "src/orders/pdv.repository.js",
       "line": 560
     },
     {
-      "collection": "customers",
-      "access": "set",
-      "file": "src/orders/pdv.repository.js",
-      "line": 573
-    },
-    {
-      "collection": "debt_settlements",
-      "access": "set",
-      "file": "src/orders/pdv.repository.js",
-      "line": 574
-    },
-    {
       "collection": "pdv_outbox",
       "access": "set",
       "file": "src/orders/pdv.repository.js",
-      "line": 575
+      "line": 567
     },
     {
-      "collection": "pdv_outbox",
+      "collection": "orders",
       "access": "get",
       "file": "src/orders/pdv.repository.js",
-      "line": 582
+      "line": 587
     },
     {
-      "collection": "pdv_outbox",
+      "collection": "orders",
       "access": "set",
       "file": "src/orders/pdv.repository.js",
-      "line": 586
+      "line": 609
     },
     {
-      "collection": "pdv_outbox",
+      "collection": "order_feedback",
       "access": "set",
       "file": "src/orders/pdv.repository.js",
-      "line": 590
-    },
-    {
-      "collection": "pdv_outbox",
-      "access": "get",
-      "file": "src/orders/pdv.repository.js",
-      "line": 597
-    },
-    {
-      "collection": "pdv_outbox",
-      "access": "set",
-      "file": "src/orders/pdv.repository.js",
-      "line": 604
-    },
-    {
-      "collection": "pdv_outbox",
-      "access": "list",
-      "file": "src/orders/pdv.repository.js",
-      "line": 612
-    },
-    {
-      "collection": "whatsapp_delivery_events",
-      "access": "get",
-      "file": "src/orders/pdv.repository.js",
-      "line": 614
-    },
-    {
-      "collection": "pdv_outbox",
-      "access": "get",
-      "file": "src/orders/pdv.repository.js",
-      "line": 615
-    },
-    {
-      "collection": "whatsapp_delivery_events",
-      "access": "set",
-      "file": "src/orders/pdv.repository.js",
-      "line": 617
-    },
-    {
-      "collection": "pdv_outbox",
-      "access": "set",
-      "file": "src/orders/pdv.repository.js",
-      "line": 620
+      "line": 610
     },
     {
       "collection": "orders",
       "access": "read",
       "file": "src/orders/pdv.service.js",
-      "line": 88
+      "line": 90
     },
     {
       "collection": "customers",
       "access": "read",
+      "file": "src/orders/pdv.service.js",
+      "line": 135
+    },
+    {
+      "collection": "discount_approvals",
+      "access": "get",
       "file": "src/orders/pdv.service.js",
       "line": 143
     },
     {
       "collection": "discount_approvals",
-      "access": "get",
-      "file": "src/orders/pdv.service.js",
-      "line": 151
-    },
-    {
-      "collection": "discount_approvals",
       "access": "set",
       "file": "src/orders/pdv.service.js",
-      "line": 157
+      "line": 149
     },
     {
       "collection": "orders",
       "access": "read",
       "file": "src/orders/pdv.service.js",
-      "line": 208
+      "line": 200
     },
     {
       "collection": "orders",
       "access": "get",
       "file": "src/orders/pdv.service.js",
-      "line": 242
+      "line": 234
     },
     {
       "collection": "orders",
       "access": "set",
       "file": "src/orders/pdv.service.js",
-      "line": 245
+      "line": 237
     },
     {
       "collection": "pdv_outbox",
       "access": "read",
       "file": "src/orders/pdv.service.js",
-      "line": 259
+      "line": 251
     },
     {
       "collection": "delivery_driver_metrics",
       "access": "list",
       "file": "src/orders/pdv.service.js",
-      "line": 269
+      "line": 261
     },
     {
       "collection": "pdv_outbox",
       "access": "set",
       "file": "src/orders/pdv.service.js",
-      "line": 302
+      "line": 294
     },
     {
       "collection": "pdv_outbox",
       "access": "get",
       "file": "src/orders/pdv.service.js",
-      "line": 314
+      "line": 306
     },
     {
       "collection": "pdv_outbox",
       "access": "set",
       "file": "src/orders/pdv.service.js",
-      "line": 315
+      "line": 307
     },
     {
       "collection": "pdv_outbox",
       "access": "list",
       "file": "src/orders/pdv.service.js",
-      "line": 321
+      "line": 313
     },
     {
       "collection": "orders",
       "access": "read",
       "file": "src/orders/pdv.service.js",
-      "line": 337
+      "line": 329
     },
     {
-      "collection": "orders",
-      "access": "read",
+      "collection": "pdv_outbox",
+      "access": "get",
       "file": "src/orders/pdv.service.js",
-      "line": 350
+      "line": 335
     },
     {
       "collection": "pdv_outbox",
       "access": "set",
       "file": "src/orders/pdv.service.js",
-      "line": 362
+      "line": 336
+    },
+    {
+      "collection": "pdv_outbox",
+      "access": "get",
+      "file": "src/orders/pdv.service.js",
+      "line": 354
+    },
+    {
+      "collection": "pdv_outbox",
+      "access": "set",
+      "file": "src/orders/pdv.service.js",
+      "line": 355
+    },
+    {
+      "collection": "orders",
+      "access": "read",
+      "file": "src/orders/pdv.service.js",
+      "line": 374
+    },
+    {
+      "collection": "pdv_outbox",
+      "access": "set",
+      "file": "src/orders/pdv.service.js",
+      "line": 386
     },
     {
       "collection": "orders",
       "access": "set",
       "file": "src/orders/pdv.service.js",
-      "line": 376
+      "line": 400
     },
     {
       "collection": "orders",
       "access": "list",
       "file": "src/orders/pdv.service.js",
-      "line": 385
+      "line": 409
     },
     {
       "collection": "pdv_pix_late_payments",
       "access": "get",
       "file": "src/orders/pdv.service.js",
-      "line": 397
+      "line": 421
     },
     {
       "collection": "pdv_pix_late_payments",
       "access": "set",
       "file": "src/orders/pdv.service.js",
-      "line": 398
+      "line": 422
     },
     {
       "collection": "pdv_pix_events",
       "access": "get",
       "file": "src/orders/pdv.service.js",
-      "line": 415
+      "line": 439
     },
     {
       "collection": "pdv_pix_events",
       "access": "set",
       "file": "src/orders/pdv.service.js",
-      "line": 416
+      "line": 440
     },
     {
       "collection": "orders",
       "access": "read",
       "file": "src/orders/pdv.service.js",
-      "line": 444
+      "line": 468
     },
     {
       "collection": "orders",
       "access": "read",
       "file": "src/orders/pdv.service.js",
-      "line": 462
+      "line": 474
+    },
+    {
+      "collection": "orders",
+      "access": "read",
+      "file": "src/orders/pdv.service.js",
+      "line": 492
     },
     {
       "collection": "debt_settlements",
       "access": "read",
       "file": "src/orders/pdv.service.js",
-      "line": 470
+      "line": 500
+    },
+    {
+      "collection": "whatsapp_delivery_events",
+      "access": "scanPage",
+      "file": "src/orders/pdv.service.js",
+      "line": 602
     },
     {
       "collection": "pdv_outbox",
       "access": "scanPage",
       "file": "src/orders/pdv.service.js",
-      "line": 567
+      "line": 604
     },
     {
       "collection": "pdv_outbox",
       "access": "get",
       "file": "src/orders/pdv.service.js",
-      "line": 570
+      "line": 607
     },
     {
       "collection": "pdv_outbox",
       "access": "set",
       "file": "src/orders/pdv.service.js",
-      "line": 571
+      "line": 608
     },
     {
       "collection": "pdv_pix_events",
       "access": "scanPage",
       "file": "src/orders/pdv.service.js",
-      "line": 586
+      "line": 623
     },
     {
       "collection": "pdv_pix_events",
       "access": "get",
       "file": "src/orders/pdv.service.js",
-      "line": 591
+      "line": 628
     },
     {
       "collection": "pdv_pix_events",
       "access": "set",
       "file": "src/orders/pdv.service.js",
-      "line": 592
+      "line": 629
     },
     {
       "collection": "pdv_outbox",
       "access": "scanPage",
       "file": "src/orders/pdv.service.js",
-      "line": 596
+      "line": 633
     },
     {
       "collection": "store_settings",
@@ -1580,6 +1736,24 @@
       "line": 123
     },
     {
+      "collection": "agent_conversations",
+      "access": "get",
+      "file": "src/services/conversation-automation.js",
+      "line": 10
+    },
+    {
+      "collection": "agent_handoffs",
+      "access": "set",
+      "file": "src/services/conversation-automation.js",
+      "line": 16
+    },
+    {
+      "collection": "agent_conversations",
+      "access": "set",
+      "file": "src/services/conversation-automation.js",
+      "line": 17
+    },
+    {
       "collection": "pdv_outbox",
       "access": "get",
       "file": "src/services/conversation-outbox.js",
@@ -1590,6 +1764,42 @@
       "access": "set",
       "file": "src/services/conversation-outbox.js",
       "line": 18
+    },
+    {
+      "collection": "pdv_outbox",
+      "access": "get",
+      "file": "src/services/durable-conversation-transport.js",
+      "line": 19
+    },
+    {
+      "collection": "pdv_outbox",
+      "access": "set",
+      "file": "src/services/durable-conversation-transport.js",
+      "line": 26
+    },
+    {
+      "collection": "pdv_outbox",
+      "access": "get",
+      "file": "src/services/durable-conversation-transport.js",
+      "line": 42
+    },
+    {
+      "collection": "pdv_outbox",
+      "access": "set",
+      "file": "src/services/durable-conversation-transport.js",
+      "line": 44
+    },
+    {
+      "collection": "pdv_outbox",
+      "access": "get",
+      "file": "src/services/durable-conversation-transport.js",
+      "line": 50
+    },
+    {
+      "collection": "pdv_outbox",
+      "access": "set",
+      "file": "src/services/durable-conversation-transport.js",
+      "line": 51
     },
     {
       "collection": "application_errors",
@@ -1661,13 +1871,13 @@
       "collection": "pdv_outbox",
       "access": "get",
       "file": "src/services/message.service.js",
-      "line": 89
+      "line": 98
     },
     {
       "collection": "pdv_outbox",
       "access": "set",
       "file": "src/services/message.service.js",
-      "line": 90
+      "line": 99
     },
     {
       "collection": "products",
@@ -1685,13 +1895,13 @@
       "collection": "store_settings",
       "access": "collection",
       "file": "src/storefront/existing-store.js",
-      "line": 253
+      "line": 252
     },
     {
       "collection": "store_settings",
       "access": "collection",
       "file": "src/storefront/existing-store.js",
-      "line": 650
+      "line": 652
     },
     {
       "collection": "outbox",
@@ -1709,25 +1919,25 @@
       "collection": "orders",
       "access": "get",
       "file": "src/storefront/repository.js",
-      "line": 97
+      "line": 98
     },
     {
       "collection": "products",
       "access": "get",
       "file": "src/storefront/repository.js",
-      "line": 128
+      "line": 130
     },
     {
       "collection": "orders",
       "access": "get",
       "file": "src/storefront/repository.js",
-      "line": 226
+      "line": 228
     },
     {
       "collection": "products",
       "access": "get",
       "file": "src/storefront/repository.js",
-      "line": 244
+      "line": 246
     },
     {
       "collection": "products",

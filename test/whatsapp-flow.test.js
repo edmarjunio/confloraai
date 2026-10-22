@@ -158,12 +158,14 @@ test('MessageService handles WhatsApp native flow: Atendente, Montar Sacola, and
     findProductByName: () => null,
   };
 
+  let mockMessageId = 0;
+  const sendMock = async () => ({ messages: [{ id: `wamid.mock-${++mockMessageId}` }] });
   const clientMock = {
     markAsRead: async () => {},
-    sendTextMessage: async () => ({ success: true }),
-    sendInteractiveList: async () => ({ success: true }),
-    sendInteractiveButtons: async () => ({ success: true }),
-    sendWelcomeTemplate: async () => ({ success: true }),
+    sendTextMessage: sendMock,
+    sendInteractiveList: sendMock,
+    sendInteractiveButtons: sendMock,
+    sendWelcomeTemplate: sendMock,
     formatRecipient: (r) => r,
   };
 
@@ -173,17 +175,32 @@ test('MessageService handles WhatsApp native flow: Atendente, Montar Sacola, and
     agentService: {},
     catalogRepo: mockCatalog,
     firestoreRepo,
-    orderService: {},
+    orderService: {
+      addProductToDraft: async (phone, productId) => ({
+        phone,
+        items: [{ id: productId, name: 'Muda de Palmeira', price: 5000, quantity: 1 }],
+      }),
+      updateOrderDetails: async () => ({}),
+      confirmOrder: async () => ({ reply: 'Chave PIX: pix-teste' }),
+    },
     whatsappClient: clientMock,
   });
 
+  // 0. SaudaÃ§Ã£o isolada envia o template da loja.
+  const greetingRes = await service.handleCustomerMessage({
+    phone: '5564999990002',
+    message: 'OI',
+    customerName: 'Cliente Teste',
+  });
+  assert.equal(greetingRes.intent, 'WELCOME_TEMPLATE_SENT');
+
   // 1. Falar com atendente
   const atendenteRes = await service.handleCustomerMessage({
-    phone: '5564999990000',
+    phone: '5564999990001',
     message: 'falar com atendente',
   });
   assert.equal(atendenteRes.intent, 'HUMAN_HANDOFF');
-  assert.match(atendenteRes.reply, /estamos à disposição/i);
+  assert.match(atendenteRes.reply, /encaminhar.*atendente/i);
 
   // 2. Montar Sacola
   const sacolaRes = await service.handleCustomerMessage({

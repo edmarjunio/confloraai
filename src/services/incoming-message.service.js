@@ -30,7 +30,7 @@ class IncomingMessageService {
       if (current?.owner !== claim.owner) throw new Error('A posse do processamento mudou.');
       const maximum = Math.max(1, Number(process.env.INCOMING_MAX_ATTEMPTS) || 12);
       tx.set('incoming_messages', claim.id, { ...current,
-        status: error ? (current.attempts >= maximum ? 'NEEDS_RECONCILIATION' : 'PENDING') : 'COMPLETED',
+        status: error ? (error.requiresReconciliation === true || current.attempts >= maximum ? 'NEEDS_RECONCILIATION' : 'PENDING') : 'COMPLETED',
         leaseUntil: 0, lastError: error ? 'PROCESSING_FAILED' : '',
         nextAttemptAt: error ? this.now() + Math.min(3600000, 15000 * 2 ** Math.min(current.attempts, 8)) : 0,
         ...(error ? {} : { completedAt: new Date(this.now()).toISOString(), compactAfter: new Date(this.now() + 30 * 86400000) }),

@@ -5,6 +5,8 @@ const { formatOrderReceipt, money } = require('./receipt.util');
 const { normalizePaymentParts, partAmount } = require('./payment-parts');
 const { formatCustomerOrderMessage } = require('./customer-order-message');
 const { pixMode, manualPixSettings } = require('./pix-mode');
+const { commercialLine } = require('../catalog/commercial-product');
+const { COMMERCIAL_SOURCES } = require('./commercial-order');
 
 const ORDER_PAYMENT_METHODS = new Set(['DINHEIRO', 'DEBITO', 'CREDITO', 'FIADO', 'SALDO_CLIENTE']);
 function actor(user) {
@@ -97,20 +99,10 @@ class PdvService {
     if (paymentMethod === 'SALDO_CLIENTE' && !['ADMIN', 'CAIXA'].includes(user.role)) { throw new Error('Somente o caixa pode usar o crédito disponível do cliente.'); }
     if (!Array.isArray(input.items) || !input.items.length || input.items.length > 150) { throw new Error('Adicione os produtos à comanda.'); }
     const products = new Map((await this.repository.repository.getProductsByIds(input.items.map(item => item.productId))).map((product) => [String(product.id), product]));
-    const items = input.items.map((item) => {
+    const items = input.items.map(item => {
       const product = products.get(String(item.productId));
-      const quantity = Number(item.quantity);
-      const price = Number(product?.price ?? product?.valor_num);
-      const name = product?.name || product?.descricao || 'Produto';
-      const savedUnit = String(product?.saleUnit?.code || product?.unit || product?.unidade || '').trim().toUpperCase();
-      const unit = savedUnit || (/(^|[^A-Z])KG([^A-Z]|$)/i.test(name) ? 'KG' : 'UN');
-      const minimum = Number(product?.saleUnit?.minimum) || (unit === 'KG' ? 0.1 : 1);
-      const increment = Number(product?.saleUnit?.increment) || (unit === 'KG' ? 0.1 : 1);
-      const quantityMatchesUnit = Number.isFinite(quantity)
-        && quantity >= minimum
-        && Math.abs(quantity / increment - Math.round(quantity / increment)) < 0.00001;
-      if (!product || product.status === 'INATIVO' || product.isAvailable === false || !quantityMatchesUnit || !Number.isFinite(price) || price < 0) { throw new Error('Produto ou quantidade inválida para a unidade de venda.'); }
-      return { productId: String(product.id), name, quantity, price, unit, subtotalMinor: Math.round(price * quantity * 100) };
+      if (!product) throw new Error('Produto não encontrado.');
+      return commercialLine(product, item.quantity);
     });
     const inventory = await this.repository.repository.getInventorySettings();
     if (inventory.stockControlEnabled) {
@@ -417,7 +409,7 @@ class PdvService {
     const orders = await this.repository.list('orders', 'pixData.txid', txid);
     // Memory collections use flat filtering; production query targets the exact txid.
     const order = orders[0];
-    if (!order || !['PDV', 'WEB_CATALOG'].includes(order.source) || order.paymentMethod !== 'PIX') { return true; }
+    if (!order || !COMMERCIAL_SOURCES.has(order.source) || order.paymentMethod !== 'PIX') { return true; }
     if (!order.completedAt) {
       const status = await this.pix.checkReceivedPayment(endToEndId);
       if (!status.isPaid) { return false; }
@@ -472,6 +464,12 @@ class PdvService {
       return result;
     };
     try {
+      if (job.kind === 'admin-new') {
+        const order = await this.repository.read('orders', job.orderId);
+        if (order && order.status !== 'CANCELLED') await this.repository.repository.notifyAllAdminUsersOfSale(order);
+        await update({ status: 'SENT', leaseUntil: 0, sentAt: new Date().toISOString(), lastError: '' });
+        return;
+      }
       if (job.kind === 'ga4-purchase') {
         const order = await this.repository.read('orders', job.orderId);
         const client = new (require('../integrations/ga4-purchase.client').Ga4PurchaseClient)();
@@ -573,7 +571,7 @@ class PdvService {
     };
     try {
       if (Date.now() - Date.parse(job.createdAt) > 10 * 60_000) return handoff('outgoing_expired');
-      if ((await agent.handoffStore.getConversation(agent.tenantId, customerKey)).automation === 'paused' && process.env.NODE_ENV === 'production') return skip('HUMAN_HANDOFF');
+      if ((await agent.handoffStore.getConversation(agent.tenantId, customerKey)).automation === 'paused') return skip('HUMAN_HANDOFF');
       const envelope = await agent.execute('consultar_produto', {
         customer_phone: job.recipient, queries_json: JSON.stringify(job.productIds),
         intent: job.photoRequested ? 'foto' : 'preco', criteria_query: job.criteriaQuery || undefined,
@@ -601,6 +599,8 @@ class PdvService {
   }
 
   async retryPendingMessages() {
+    const receipts = await this.repository.scanPage('whatsapp_delivery_events', 'status', 'PENDING', 100);
+    for (const receipt of receipts) await this.repository.recordWhatsAppStatus({ id: receipt.providerMessageId, status: receipt.providerStatus, timestamp: receipt.timestamp });
     const inFlight = await this.repository.scanPage('pdv_outbox', 'status', 'SENDING');
     for (const job of inFlight.filter(row => row.kind !== 'conversation-catalog' && !(row.leaseUntil > Date.now()) && Date.now() - Date.parse(row.sendingAt || '') > 120000)) {
       await this.repository.transaction(async tx => {

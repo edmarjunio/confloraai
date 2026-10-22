@@ -71,11 +71,37 @@ class MessageService {
     verifyOnly = false,
   }) {
     const startTime = performance.now();
+    const whatsapp = require('./durable-conversation-transport').durableConversationTransport(this.firestoreRepo, this.whatsappClient, { phone, messageId });
     // 1. Marcar como lida e salvar mensagem
-    if (messageId && this.whatsappClient) {
-      this.whatsappClient.markAsRead(messageId).catch(() => {});
+    if (messageId && whatsapp) {
+      whatsapp.markAsRead?.(messageId)?.catch(() => {});
     }
     await this.firestoreRepo.appendMessage(phone, 'user', message, { requirePersistence: true, messageId });
+
+    const { conversationAutomation } = require('./conversation-automation');
+    const conversation = await conversationAutomation(this.firestoreRepo, phone);
+    if (conversation.automation === 'paused') return { reply: '', intent: 'HUMAN_HANDOFF_ACTIVE', imagesSent: 0, latencyMs: 0 };
+    if (verifyOnly) return { reply: '', intent: 'AUTOMATION_DISABLED', imagesSent: 0, latencyMs: 0 };
+    const whatsappConfig = require('../config/env').whatsapp;
+    if (whatsappConfig.agentOwner !== 'cloud_api') return { reply: '', intent: 'AUTOMATION_DISABLED', imagesSent: 0, latencyMs: 0 };
+    const nativeCommerce = /^(add_|cat_|sub_|pay_|order_)/.test(interactiveId) || ['montar_sacola', 'btn_sacola'].includes(interactiveId) ||
+      /^(montar sacola|fazer pedido|comprar|fazer compras|abrir sacola|entrega|retirada|quero entrega|quero retirar|pix|cartao|cartão)$/i.test(String(message || '').trim());
+    const activeDraft = this.metaAgentService && !nativeCommerce ? await this.firestoreRepo.getOrder(phone) : null;
+    const draftIntent = activeDraft?.status === 'AWAITING_CONFIRMATION' ? this.router?.route(message, { pendingOrder: activeDraft })?.intent : null;
+    const draftAction = [INTENTS.ORDER_CONFIRMATION, INTENTS.UPDATE_ORDER_DETAILS, INTENTS.PLACE_ORDER, INTENTS.ASK_SIZE_CONFIRMATION].includes(draftIntent);
+    if (this.metaAgentService && !nativeCommerce && !draftAction) {
+      const envelope = await this.metaAgentService.execute('atender_mensagem', { customer_phone: phone, message_id: messageId || require('node:crypto').randomUUID(), message });
+      if (!envelope.next_action.send_customer_message) return { reply: '', intent: 'HUMAN_HANDOFF', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
+      const { runTransaction } = require('../database/transactions');
+      const id = 'catalog-' + require('node:crypto').createHash('sha256').update(messageId || require('node:crypto').randomUUID()).digest('hex');
+      await runTransaction(this.firestoreRepo, async tx => {
+        if (await tx.get('pdv_outbox', id)) return;
+        tx.set('pdv_outbox', id, { id, kind: 'conversation-catalog', recipient: phone,
+          productIds: envelope.data.products.map(product => product.id), photoRequested: Boolean(envelope.data.photo_requested),
+          criteriaQuery: message, status: 'PENDING', attempts: 0, createdAt: new Date().toISOString() });
+      });
+      return { reply: '', intent: 'VERIFIED_CATALOG_QUEUED', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
+    }
 
     const { normalizeText } = require('../shared/string.util');
     const trimmed = String(message || '').trim().toLowerCase();
@@ -86,16 +112,17 @@ class MessageService {
     const isNegativeResponse = /^(n[aã]o|nao era|não era|nenhum|nenhuma|errado|outro|outra|nada disso|queria outr[oa])\b/i.test(trimmed);
 
     if (isHumanRequest || isNegativeResponse) {
+      await conversationAutomation(this.firestoreRepo, phone, { pauseReason: isNegativeResponse ? 'customer_declined_bot' : 'human_requested', messageId });
       const reply = isHumanRequest
-        ? 'Claro, estamos à disposição! Como posso te ajudar hoje? Pode me dizer qual produto você procura ou como podemos te ajudar?'
+        ? 'Vou encaminhar sua conversa para a equipe da loja. Um atendente continuará o atendimento por aqui.'
         : 'Entendido perfeitamente! Já avisei a nossa equipe da loja e um de nossos atendentes vai te responder por aqui em instantes. Um momento, por favor!';
       await this.firestoreRepo.appendMessage(phone, 'assistant', reply);
-      if (this.whatsappClient) {
-        await this.whatsappClient.sendTextMessage(phone, reply);
+      if (whatsapp) {
+        await whatsapp.sendTextMessage(phone, reply);
 
         const ownerPhone = process.env.OWNER_WHATSAPP_NUMBER || process.env.STORE_NOTIFICATION_PHONE;
         if (ownerPhone) {
-          const formattedCustomerPhone = this.whatsappClient.formatRecipient(phone);
+          const formattedCustomerPhone = whatsapp.formatRecipient(phone);
           const reasonText = isNegativeResponse
             ? 'Cliente informou que NÃO era o produto/informação desejada'
             : 'Cliente solicitou falar com atendente';
@@ -108,27 +135,12 @@ class MessageService {
             '',
             `👉 *Clique para responder agora:* https://wa.me/${formattedCustomerPhone}`
           ].join('\n');
-          await this.whatsappClient.sendTextMessage(ownerPhone, alertMessage).catch(err => {
+          await whatsapp.sendTextMessage(ownerPhone, alertMessage).catch(err => {
             Logger.warn('Aviso: falha ao notificar telefone do dono', { error: err.message });
           });
         }
       }
 
-      try {
-        if (this.firestoreRepo?.firestore) {
-          const { customerKeyFor } = require('../agent/agent-store');
-          const customerKey = customerKeyFor('conflora', phone);
-          await this.firestoreRepo.firestore.collection('agent_conversations').doc('conflora__' + customerKey).set({
-            tenantId: 'conflora',
-            customerKey,
-            automation: 'paused',
-            updatedAt: new Date().toISOString(),
-            reason: isNegativeResponse ? 'customer_declined_bot' : 'human_requested'
-          }, { merge: true });
-        }
-      } catch (err) {
-        Logger.warn('Aviso ao registrar pausa de automação', { error: err.message });
-      }
 
       return {
         reply,
@@ -158,8 +170,8 @@ class MessageService {
       ];
 
       const bodyText = '🛍️ *Montar sua Sacola*\n\nEscolha uma das categorias abaixo para ver os produtos disponíveis na Conflora:';
-      if (this.whatsappClient) {
-        await this.whatsappClient.sendInteractiveList(phone, {
+      if (whatsapp) {
+        await whatsapp.sendInteractiveList(phone, {
           headerText: '🌿 Conflora Garden',
           bodyText,
           footerText: 'Toque para abrir a lista',
@@ -196,8 +208,8 @@ class MessageService {
         ];
 
         const bodyText = `📁 *${categoryName}*\n\nSelecione o tipo que você procura:`;
-        if (this.whatsappClient) {
-          await this.whatsappClient.sendInteractiveList(phone, {
+        if (whatsapp) {
+          await whatsapp.sendInteractiveList(phone, {
             headerText: `🌿 ${categoryName}`.slice(0, 60),
             bodyText,
             footerText: 'Toque para abrir as opções',
@@ -214,7 +226,7 @@ class MessageService {
         };
       } else {
         const products = this.catalogRepo.getProductsBySubcategory(categoryName);
-        return this.sendNativeProductsList(phone, categoryName, products, startTime);
+        return this.sendNativeProductsList(phone, categoryName, products, startTime, whatsapp);
       }
     }
 
@@ -224,7 +236,7 @@ class MessageService {
       await this.catalogRepo.refreshCatalog().catch(() => {});
       const subcategoryName = interactiveId.replace('sub_', '');
       const products = this.catalogRepo.getProductsBySubcategory(subcategoryName);
-      return this.sendNativeProductsList(phone, subcategoryName, products, startTime);
+      return this.sendNativeProductsList(phone, subcategoryName, products, startTime, whatsapp);
     }
 
     // 6. Opção 2 — 100% Nativo no WhatsApp: Adicionar Produto à Sacola
@@ -236,21 +248,8 @@ class MessageService {
         this.catalogRepo.findProductByName(message);
 
       if (product) {
-        const pendingOrder = (await this.firestoreRepo.getOrder(phone)) || { items: [] };
-        const existingItems = Array.isArray(pendingOrder.items) ? [...pendingOrder.items] : [];
-        const existingIdx = existingItems.findIndex((it) => it.id === product.id || it.name === product.name);
-        if (existingIdx >= 0) {
-          existingItems[existingIdx].quantity = (existingItems[existingIdx].quantity || 1) + 1;
-        } else {
-          existingItems.push({
-            id: product.id,
-            name: product.name,
-            price: product.price || 0,
-            quantity: 1,
-          });
-        }
-        await this.firestoreRepo.saveOrder(phone, { items: existingItems }).catch(() => {});
-
+        const pendingOrder = await this.orderService.addProductToDraft(phone, product.id, messageId);
+        const existingItems = pendingOrder.items;
         const total = existingItems.reduce((acc, it) => acc + (it.price || 0) * (it.quantity || 1), 0);
         const itemsList = existingItems.map((it) => `• ${it.quantity}x ${it.name} — ${formatCurrency(it.price * it.quantity)}`).join('\n');
         const bodyText = [
@@ -270,8 +269,8 @@ class MessageService {
           { id: 'order_retirada', title: '🏪 Retirada' },
         ];
 
-        if (this.whatsappClient) {
-          await this.whatsappClient.sendInteractiveButtons(phone, {
+        if (whatsapp) {
+          await whatsapp.sendInteractiveButtons(phone, {
             bodyText,
             buttons,
           });
@@ -292,7 +291,7 @@ class MessageService {
       const isDelivery = interactiveId === 'order_entrega' || /entrega/i.test(trimmed);
       const deliveryMethod = isDelivery ? 'Entrega a Domicílio' : 'Retirada na Loja';
 
-      await this.firestoreRepo.updateOrder(phone, { deliveryMethod }).catch(() => {});
+      await this.orderService.updateOrderDetails(phone, { orderType: isDelivery ? 'DELIVERY' : 'PICKUP' });
 
       const bodyText = [
         `Você escolheu: *${deliveryMethod}*! 📦`,
@@ -305,8 +304,8 @@ class MessageService {
         { id: 'pay_cartao', title: '💳 Cartão' },
       ];
 
-      if (this.whatsappClient) {
-        await this.whatsappClient.sendInteractiveButtons(phone, {
+      if (whatsapp) {
+        await whatsapp.sendInteractiveButtons(phone, {
           bodyText,
           buttons,
         });
@@ -326,37 +325,12 @@ class MessageService {
       const isPix = interactiveId === 'pay_pix' || /pix/i.test(trimmed);
       const paymentMethod = isPix ? 'PIX' : 'Cartão';
 
-      const pendingOrder = await this.firestoreRepo.getOrder(phone);
-      const total = pendingOrder?.items?.reduce((acc, it) => acc + (it.price || 0) * (it.quantity || 1), 0) || 0;
+      await this.orderService.updateOrderDetails(phone, { paymentMethod });
+      const confirmation = await this.orderService.confirmOrder(phone, customerName);
+      const reply = confirmation?.reply || 'Sua sacola está vazia. Escolha um produto antes de finalizar.';
 
-      let reply;
-      if (isPix) {
-        const pixKey = process.env.PIX_KEY || '64999990000';
-        reply = [
-          '🎉 *Pedido realizado com sucesso!*',
-          '',
-          `💳 *Forma de Pagamento:* PIX`,
-          `💰 *Total a pagar:* ${formatCurrency(total)}`,
-          '',
-          `🔑 *Chave PIX:* \`${pixKey}\``,
-          '',
-          'Por favor, envie o comprovante por aqui assim que efetuar o pagamento. Já estamos separando seu pedido com muito carinho! 🌿'
-        ].join('\n');
-      } else {
-        reply = [
-          '🎉 *Pedido realizado com sucesso!*',
-          '',
-          `💳 *Forma de Pagamento:* Cartão (Débito/Crédito)`,
-          `💰 *Total:* ${formatCurrency(total)}`,
-          '',
-          'A maquininha de cartão será levada na entrega ou disponibilizada na retirada.',
-          'Nossa equipe entrará em contato em instantes para confirmar os detalhes! 🌿'
-        ].join('\n');
-      }
-
-      await this.firestoreRepo.updateOrder(phone, { paymentMethod, status: 'CONFIRMADO' }).catch(() => {});
-      if (this.whatsappClient) {
-        await this.whatsappClient.sendTextMessage(phone, reply);
+      if (whatsapp) {
+        await whatsapp.sendTextMessage(phone, reply);
       }
       await this.firestoreRepo.appendMessage(phone, 'assistant', reply);
       return {
@@ -376,8 +350,8 @@ class MessageService {
         const profile = await this.firestoreRepo.getCustomerProfile(phone).catch(() => null);
         resolvedName = profile?.name || profile?.customerName || '';
       }
-      if (this.whatsappClient) {
-        await this.whatsappClient.sendWelcomeTemplate(phone, resolvedName).catch((err) => {
+      if (whatsapp) {
+        await whatsapp.sendWelcomeTemplate(phone, resolvedName).catch((err) => {
           Logger.warn('Aviso: template de boas-vindas ainda não aprovado na Meta ou token pendente', { error: err.message });
         });
       }
@@ -389,28 +363,12 @@ class MessageService {
       };
     }
 
-    // 3. Verificação de conversa já em atendimento humano
-    try {
-      const { customerKeyFor } = require('../agent/agent-store');
-      const customerKey = customerKeyFor('conflora', phone);
-      const convSnap = await this.firestoreRepo.firestore.collection('agent_conversations').doc('conflora__' + customerKey).get();
-      if (convSnap.exists && convSnap.data()?.automation === 'paused' && process.env.NODE_ENV === 'production') {
-        Logger.info('Conversa em atendimento humano. Automação silenciada.', { phone });
-        return { reply: '', intent: 'HUMAN_HANDOFF_ACTIVE', imagesSent: 0, latencyMs: 0 };
-      }
-    } catch {}
-
     if (verifyOnly || !require('../config/env').whatsapp.assistantEnabled) {
       return { reply: '', intent: 'AUTOMATION_DISABLED', imagesSent: 0, latencyMs: 0 };
     }
 
     // 1. Prevenção de duplicidade (Idempotência da Meta)
     // The public entry point owns the durable claim and marks completion only on success.
-
-    // 2. Marcar mensagem como lida no WhatsApp (apenas para IDs válidos da Meta)
-    if (messageId && this.whatsappClient) {
-      this.whatsappClient.markAsRead(messageId).catch(() => {});
-    }
 
     // 3. Garantir catálogo atualizado em memória
     if (!verifyOnly) {
@@ -419,8 +377,6 @@ class MessageService {
       });
     }
 
-    // 4. Salvar mensagem do cliente no histórico da conversa
-    await this.firestoreRepo.appendMessage(phone, 'user', message);
 
     // 5. Contexto do cliente (Perfil salvo e Pedido Pendente)
     const customerProfile = await this.firestoreRepo.getCustomerProfile(phone);
@@ -430,7 +386,7 @@ class MessageService {
     const pendingPixSale = await this.firestoreRepo.findPendingPixOrderByPhone(phone);
     if (pendingPixSale?.pixMode === 'MANUAL' && /comprovante|pago|pix|transfer[eê]ncia|\[COMPROVANTE_ENVIADO\]/i.test(message)) {
       const reply = 'Para confirmar seu Pix, envie o comprovante na página do seu pedido no site. O caixa ou administrador confere o recebimento na conta bancária antes de aprovar. Esta mensagem não confirma o pagamento.';
-      if (this.whatsappClient) await this.whatsappClient.sendTextMessage(phone, reply);
+      if (whatsapp) await whatsapp.sendTextMessage(phone, reply);
       return { reply, intent: 'MANUAL_PIX_AWAITING_REVIEW', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
     }
     if (verifyOnly) {
@@ -457,7 +413,7 @@ class MessageService {
 
     // CENÁRIO 2: Criação de Pedido Pendente com Recibo Estruturado
     if (!reply && routingResult.intent === INTENTS.PLACE_ORDER && routingResult.orderItems) {
-      const order = await this.orderService.createPendingOrder(phone, routingResult.orderItems, customerProfile);
+      const order = await this.orderService.createPendingOrder(phone, routingResult.orderItems, customerProfile, messageId);
       const isVip = Boolean(customerProfile?.deliveryAddress && customerProfile?.paymentMethod);
       reply = this.orderService.formatCustomerReceipt(order, { isVipProposal: isVip });
     }
@@ -507,7 +463,7 @@ class MessageService {
 
       // Envia as imagens com a legenda identificando produto e valores
       for (const prod of targetProducts) {
-        if (prod.images && prod.images.length > 0 && this.whatsappClient) {
+        if (prod.images && prod.images.length > 0 && whatsapp) {
           const priceText = prod.prices.map((p) => formatCurrency(p)).join(' e ');
           const caption = (
             `🌿 *${prod.canonicalName}*\n` +
@@ -515,7 +471,7 @@ class MessageService {
           );
 
           for (const imgUrl of prod.images.slice(0, 2)) {
-            await this.whatsappClient.sendImageMessage(phone, imgUrl, caption).catch((err) => {
+            await whatsapp.sendImageMessage(phone, imgUrl, caption).catch((err) => {
               Logger.warn('Falha ao enviar imagem do WhatsApp', { error: err.message });
             });
             imagesSentCount++;
@@ -544,8 +500,8 @@ class MessageService {
     await this.firestoreRepo.appendMessage(phone, 'assistant', reply);
 
     // 8. Envio via WhatsApp Cloud API
-    if (phone && this.whatsappClient && reply) {
-      await this.whatsappClient.sendTextMessage(phone, reply);
+    if (phone && whatsapp && reply) {
+      await whatsapp.sendTextMessage(phone, reply);
     }
 
     const latencyMs = Math.round((performance.now() - startTime) * 100) / 100;
@@ -559,10 +515,10 @@ class MessageService {
     };
   }
 
-  async sendNativeProductsList(phone, title, products, startTime) {
+  async sendNativeProductsList(phone, title, products, startTime, whatsapp = this.whatsappClient) {
     if (!products || products.length === 0) {
       const reply = `Não encontrei produtos cadastrados no momento para *${title}*. Gostaria de escolher outra categoria?`;
-      if (this.whatsappClient) await this.whatsappClient.sendTextMessage(phone, reply);
+      if (whatsapp) await whatsapp.sendTextMessage(phone, reply);
       return { reply, intent: 'NATIVE_PRODUCTS_EMPTY', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
     }
 
@@ -578,8 +534,8 @@ class MessageService {
     ];
 
     const bodyText = `🌿 *${title}*\n\nToque no botão abaixo e escolha o item para adicionar à sua sacola:`;
-    if (this.whatsappClient) {
-      await this.whatsappClient.sendInteractiveList(phone, {
+    if (whatsapp) {
+      await whatsapp.sendInteractiveList(phone, {
         headerText: `Conflora · ${title}`.slice(0, 60),
         bodyText,
         footerText: 'Toque para escolher o produto',

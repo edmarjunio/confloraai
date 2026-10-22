@@ -91,7 +91,7 @@ class ConfloraAgentService {
       return await this._runWithTimeout(async () => {
         // 1. Checagem de conversa pausada (Atendimento Humano Ativo)
         const conv = await this.handoffStore.getConversation(this.tenantId, customerKey);
-        if (conv.automation === 'paused' && process.env.NODE_ENV === 'production') {
+        if (conv.automation === 'paused') {
           return this._buildHandoffEnvelope(scope, 'conversation_already_paused', {
             detail: 'Conversa em atendimento humano. Automação pausada silenciosamente.',
           });
@@ -398,6 +398,8 @@ class ConfloraAgentService {
         const resIdx = this.productIndex.resolve(query);
         if (resIdx.outcome === 'found') {
           result = await this._consultarProduto({ ...scope, parsed: { ...scope.parsed, refs: [{ query }], intent: photo ? 'foto' : 'preco' } });
+        } else if (resIdx.outcome === 'ambiguous') {
+          return this._triggerSilentHandoff(scope, 'ambiguous_product', { query });
         } else {
           result = await this._buscarProdutos({ ...scope, parsed: { ...scope.parsed, query, limit: 3 } });
         }

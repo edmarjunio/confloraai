@@ -3,6 +3,7 @@ import {
   element,
   money,
   quantityControl,
+  openDialog,
 } from "./ui.js";
 import { icon } from "./icons.js";
 import { searchProducts, normalize as normalizeProductText } from "./guided-search.mjs";

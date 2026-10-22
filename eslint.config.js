@@ -106,6 +106,8 @@ module.exports = [
       globals: {
         window: "readonly",
         document: "readonly",
+        getComputedStyle: "readonly",
+        innerWidth: "readonly",
       },
     },
   },

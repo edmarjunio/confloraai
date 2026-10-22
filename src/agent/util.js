@@ -101,7 +101,6 @@ function toIso(value) {
 /** Texto seguro para exibir ao cliente: remove formatação do WhatsApp, controles e limita o tamanho. */
 function safeDisplayText(value, max = 120) {
   return String(value ?? '')
-    // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u001f\u007f]/g, ' ')
     .replace(/[*_~`]/g, '')
     .replace(/\s+/g, ' ')

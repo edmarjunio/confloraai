@@ -12,11 +12,11 @@ const {
 
 // Compatibility boundary for the existing store. SaaS tenants never use these collections.
 function toProduct(item, { stockControlEnabled = true } = {}) {
-  const category = String(item.category || item.categoria || "Geral");
-  const name = item.name || item.descricao || "Produto";
-  const subcategory = String(item.subcategory || item.subcategoria || "");
-  const savedUnit = String(item.saleUnit?.code || item.unit || item.unidade || "").trim().toUpperCase();
-  const unit = savedUnit || (/(^|[^A-Z])KG([^A-Z]|$)/i.test(name) ? "KG" : "UN");
+  const commercial = require('../catalog/commercial-product').commercialProduct(item);
+  const category = String(item.category || item.categoria || item.CATEGORIA || "Geral");
+  const name = commercial.name || "Produto";
+  const subcategory = String(item.subcategory || item.subcategoria || item.SUBCATEGORIA || "");
+  const unit = commercial.unit;
   const photo = (value) =>
     typeof value === "string" &&
     (/^https:\/\/(?:firebasestorage|storage)\.googleapis\.com\//.test(value) ||
@@ -51,7 +51,7 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
     variation: item.variation || item.variacao || item.variationLabel || item.apresentacao || "",
     description: item.description || item.descriptionAi || "",
     price: {
-      amountMinor: Math.round(Number(item.price ?? item.valor_num ?? 0) * 100),
+      amountMinor: commercial.priceMinor,
       currency: "BRL",
     },
     imageUrl: imageCandidates[0] || resolveHdProductImage(name, category, subcategory),
@@ -92,20 +92,17 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
         typeof section.title === "string" &&
         typeof section.body === "string",
     ),
-    isAvailable: productStatus(item) === "ATIVO",
-    status:
-      String(item.status || "ATIVO").trim().toUpperCase() === "INATIVO"
-        ? "INATIVO"
-        : "ATIVO",
+    isAvailable: commercial.active,
+    status: productStatus(item),
     stock: {
       tracked: stockControlEnabled,
-      quantity: Math.max(0, Number(item.stockQuantity ?? item.estoque ?? 0)),
+      quantity: Math.max(0, commercial.stockQuantity - commercial.reservedQuantity),
     },
     saleUnit: {
       code: unit,
       label: item.saleUnit?.label || (unit === "UN" ? "unidade" : unit),
-      minimum: Number(item.saleUnit?.minimum) || (unit === "KG" ? 0.1 : 1),
-      increment: Number(item.saleUnit?.increment) || (unit === "KG" ? 0.1 : 1),
+      minimum: commercial.saleUnit.minimum,
+      increment: commercial.saleUnit.increment,
     },
     salesCount: Number(item.salesCount) || 0,
     descriptionAi: item.descriptionAi || item.descricao_ia || "",
@@ -646,6 +643,9 @@ async function normalizeExistingCheckout(req, repository) {
   };
 }
 async function readStoreSettings(repository) {
+  if (repository.firestore && repository._firestoreClientDisabled) {
+    throw Object.assign(new Error('Configurações da loja indisponíveis.'), { status: 503 });
+  }
   if (repository.firestore && !repository._firestoreClientDisabled) {
     try {
       const snap = await repository.firestore
@@ -654,14 +654,7 @@ async function readStoreSettings(repository) {
         .get();
       return snap.data();
     } catch (err) {
-      if (
-        err.code === 7 ||
-        err.code === "permission-denied" ||
-        err.message?.includes("PERMISSION_DENIED") ||
-        err.message?.includes("Missing or insufficient")
-      ) {
-        throw Object.assign(new Error("Configurações da loja indisponíveis."), { status: 503 });
-      }
+      throw Object.assign(new Error('Configurações da loja indisponíveis.', { cause: err }), { status: 503 });
     }
   }
   return repository.storefrontSettings;

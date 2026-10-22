@@ -67,7 +67,7 @@
       iconSpan.setAttribute('aria-hidden', 'true');
       if (typeof icon === 'string') {
         iconSpan.textContent = icon;
-      } else if (icon instanceof Node) {
+      } else if (icon instanceof window.Node) {
         iconSpan.appendChild(icon);
       }
       btn.appendChild(iconSpan);
@@ -200,7 +200,7 @@
     ...rest
   }) {
     const fullClass = buildButton3DClass({ variant, size, shape, block, className });
-    return React.createElement(
+    return window.React.createElement(
       'button',
       {
         type,
@@ -211,8 +211,8 @@
         title,
         ...rest
       },
-      icon ? React.createElement('span', { className: 'cf-btn-3d__icon', 'aria-hidden': 'true' }, icon) : null,
-      React.createElement('span', { className: 'cf-btn-3d__text' }, children)
+      icon ? window.React.createElement('span', { className: 'cf-btn-3d__icon', 'aria-hidden': 'true' }, icon) : null,
+      window.React.createElement('span', { className: 'cf-btn-3d__text' }, children)
     );
   }
 

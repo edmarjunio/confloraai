@@ -16,7 +16,7 @@
       let t = typeof window.tr === 'function' ? window.tr(s) : (typeof s.tr === 'string' ? s.tr : s);
       if (typeof t !== 'string' || !t || t === 'undefined') t = s;
       return t;
-    } catch (_) {
+    } catch {
       return s;
     }
   };
@@ -84,7 +84,7 @@
         try {
           const l = window.localStorage.getItem('conflora_lang') || 'pt';
           if (language && language.value !== l) language.value = l;
-        } catch (_) {}
+        } catch {}
         this.updateIdentity();
       };
       window.addEventListener('conflora-lang-change', this.onLangChange);
