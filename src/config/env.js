@@ -77,6 +77,7 @@ const config = Object.freeze({
     agentOwner: process.env.WHATSAPP_AGENT_OWNER || 'cloud_api',
     verifyToken: process.env.WHATSAPP_VERIFY_TOKEN || '',
     metaAppSecret: process.env.META_APP_SECRET || '',
+    catalogUrl: process.env.WHATSAPP_CATALOG_URL || process.env.STORE_URL || process.env.SERVICE_URL || 'https://confloraai.web.app',
     ownerNumber: process.env.OWNER_WHATSAPP_NUMBER || '',
     templates: {
       orderNotification: process.env.OWNER_ORDER_TEMPLATE || 'nova_venda_conflora',

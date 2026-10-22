@@ -53,4 +53,26 @@ async function resumeAgentRequestedConversation(repo, phone) {
   });
 }
 
-module.exports = { conversationAutomation, resumeAgentRequestedConversation };
+async function setConversationChannel(repo, phone, channel) {
+  const tenantId = 'conflora';
+  const customerKey = customerKeyFor(tenantId, phone);
+  const conversationId = scopedId(tenantId, customerKey);
+  const allowedChannels = new Set(['menu', 'catalog', 'cart', 'agent']);
+  if (!allowedChannels.has(channel)) throw new Error('INVALID_CONVERSATION_CHANNEL');
+
+  return runTransaction(repo, async tx => {
+    const current = await tx.get('agent_conversations', conversationId) || {
+      tenantId,
+      customerKey,
+      automation: 'active',
+    };
+    if (current.tenantId !== tenantId || current.customerKey !== customerKey) throw new Error('CONVERSATION_ISOLATION');
+    if (current.automation === 'paused') return current;
+
+    const updated = { ...current, channel, updatedAt: new Date().toISOString() };
+    tx.set('agent_conversations', conversationId, updated);
+    return updated;
+  });
+}
+
+module.exports = { conversationAutomation, resumeAgentRequestedConversation, setConversationChannel };

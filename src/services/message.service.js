@@ -78,35 +78,68 @@ class MessageService {
     }
     await this.firestoreRepo.appendMessage(phone, 'user', message, { requirePersistence: true, messageId });
 
-    const { conversationAutomation } = require('./conversation-automation');
+    const { conversationAutomation, setConversationChannel } = require('./conversation-automation');
     let conversation = await conversationAutomation(this.firestoreRepo, phone);
-    const { normalizeText } = require('../shared/string.util');
     const trimmed = String(message || '').trim().toLowerCase();
-    const normalizedMessage = normalizeText(trimmed);
-    const isGreetingOnly = /^(oi|ola|opa|bom dia|boa tarde|boa noite|e ai|eai|tudo bem|tudo bom|como vai|salve|fala|oie|oii|oiii)(\s+(tudo bem|tudo bom|amigo|amiga|equipe|conflora|pessoal))?[!?.]*$/i.test(normalizedMessage);
-    const isAgentRequest = interactiveId === 'btn_atendente' ||
-      /\b(atendente|humano|pessoa|vendedor|falar com (um |uma )?(atendente|humano|pessoa|vendedor)|alguem ai|alguem a[ií])\b/i.test(normalizedMessage);
 
     if (conversation.automation === 'paused' && conversation.reason === 'human_requested') {
       const { resumeAgentRequestedConversation } = require('./conversation-automation');
       conversation = await resumeAgentRequestedConversation(this.firestoreRepo, phone);
+      conversation = await setConversationChannel(this.firestoreRepo, phone, 'agent');
     }
     if (conversation.automation === 'paused') return { reply: '', intent: 'HUMAN_HANDOFF_ACTIVE', imagesSent: 0, latencyMs: 0 };
     if (verifyOnly) return { reply: '', intent: 'AUTOMATION_DISABLED', imagesSent: 0, latencyMs: 0 };
     const whatsappConfig = require('../config/env').whatsapp;
+    if (!whatsappConfig.assistantEnabled) return { reply: '', intent: 'AUTOMATION_DISABLED', imagesSent: 0, latencyMs: 0 };
     if (whatsappConfig.agentOwner !== 'cloud_api') return { reply: '', intent: 'AUTOMATION_DISABLED', imagesSent: 0, latencyMs: 0 };
-    if (isAgentRequest) {
+
+    const isAgentSelection = interactiveId === 'btn_atendente';
+    const isCartSelection = ['montar_sacola', 'btn_sacola'].includes(interactiveId) ||
+      /^(cat_|sub_|add_|order_|pay_)/.test(interactiveId);
+    if (isAgentSelection) conversation = await setConversationChannel(this.firestoreRepo, phone, 'agent');
+    if (isCartSelection) conversation = await setConversationChannel(this.firestoreRepo, phone, 'cart');
+
+    if (interactiveId === 'catalogo_virtual') {
+      const catalogUrl = whatsappConfig.catalogUrl;
+      const reply = `Acesse o Catálogo Virtual da Conflora: ${catalogUrl}`;
+      if (whatsapp) await whatsapp.sendTextMessage(phone, reply);
+      await this.firestoreRepo.appendMessage(phone, 'assistant', reply);
+      return { reply, intent: 'VIRTUAL_CATALOG_LINK', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
+    }
+
+    if (isAgentSelection) {
       const reply = 'Claro! Sou o atendente virtual da Conflora e posso ajudar com produtos, preços e pedidos. O que você procura?';
       if (whatsapp) await whatsapp.sendTextMessage(phone, reply);
       await this.firestoreRepo.appendMessage(phone, 'assistant', reply);
       return { reply, intent: 'AGENT_ASSISTANCE', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
     }
+
+    const isReceiptPayload = String(message || '') === '[COMPROVANTE_ENVIADO]';
+    const isActiveAgent = conversation.channel === 'agent';
+    const isActiveCart = conversation.channel === 'cart';
+    if (!interactiveId && !isReceiptPayload && !isActiveAgent && !isActiveCart) {
+      await setConversationChannel(this.firestoreRepo, phone, 'menu');
+      const reply = 'Como você quer continuar? Escolha uma opção:';
+      if (whatsapp) {
+        await whatsapp.sendInteractiveButtons(phone, {
+          bodyText: reply,
+          buttons: [
+            { id: 'catalogo_virtual', title: 'Catálogo virtual' },
+            { id: 'montar_sacola', title: 'Montar minha sacola' },
+            { id: 'btn_atendente', title: 'Falar com atendente' },
+          ],
+        });
+      }
+      await this.firestoreRepo.appendMessage(phone, 'assistant', reply);
+      return { reply, intent: 'MAIN_MENU_SENT', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
+    }
+
     const nativeCommerce = /^(add_|cat_|sub_|pay_|order_)/.test(interactiveId) || ['montar_sacola', 'btn_sacola'].includes(interactiveId) ||
       /^(montar sacola|fazer pedido|comprar|fazer compras|abrir sacola|entrega|retirada|quero entrega|quero retirar|pix|cartao|cartão)$/i.test(String(message || '').trim());
     const activeDraft = this.metaAgentService && !nativeCommerce ? await this.firestoreRepo.getOrder(phone) : null;
     const draftIntent = activeDraft?.status === 'AWAITING_CONFIRMATION' ? this.router?.route(message, { pendingOrder: activeDraft })?.intent : null;
     const draftAction = [INTENTS.ORDER_CONFIRMATION, INTENTS.UPDATE_ORDER_DETAILS, INTENTS.PLACE_ORDER, INTENTS.ASK_SIZE_CONFIRMATION].includes(draftIntent);
-    if (this.metaAgentService && !nativeCommerce && !draftAction && !isGreetingOnly) {
+    if (this.metaAgentService && !nativeCommerce && !draftAction && !isActiveAgent) {
       const envelope = await this.metaAgentService.execute('atender_mensagem', { customer_phone: phone, message_id: messageId || require('node:crypto').randomUUID(), message });
       if (!envelope.next_action.send_customer_message) return { reply: '', intent: 'HUMAN_HANDOFF', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
       const { runTransaction } = require('../database/transactions');
@@ -123,7 +156,7 @@ class MessageService {
     // 2. Opção 2 — 100% Nativo no WhatsApp: Falar com atendente
     const isNegativeResponse = /^(n[aã]o|nao era|não era|nenhum|nenhuma|errado|outro|outra|nada disso|queria outr[oa])\b/i.test(trimmed);
 
-    if (isNegativeResponse) {
+    if (isNegativeResponse && !isActiveAgent) {
       await conversationAutomation(this.firestoreRepo, phone, { pauseReason: 'customer_declined_bot', messageId });
       const reply = 'Entendido perfeitamente! Já avisei a nossa equipe da loja e um de nossos atendentes vai te responder por aqui em instantes. Um momento, por favor!';
       await this.firestoreRepo.appendMessage(phone, 'assistant', reply);
@@ -349,38 +382,6 @@ class MessageService {
         imagesSent: 0,
         latencyMs: Math.round(performance.now() - startTime),
       };
-    }
-
-    // 9. Saudação isolada envia o template aprovado com fallback para texto em falha definitiva.
-    if (isGreetingOnly) {
-      Logger.info('Saudação isolada recebida. Disparando modelo de boas-vindas com botões da loja...', { phone, message });
-      let resolvedName = customerName?.trim?.() || '';
-      if (!resolvedName && this.firestoreRepo?.getCustomerProfile) {
-        const profile = await this.firestoreRepo.getCustomerProfile(phone).catch(() => null);
-        resolvedName = profile?.name || profile?.customerName || '';
-      }
-      if (whatsapp) {
-        try {
-          await whatsapp.sendWelcomeTemplate(phone, resolvedName);
-        } catch (error) {
-          Logger.warn('Falha ao enviar o template de boas-vindas', { error: error.message });
-          if (!error.definitelyNotSent) throw error;
-          const fallbackReply = 'Olá! Sou o atendente virtual da Conflora. Posso ajudar com produtos, preços e pedidos. O que você procura?';
-          await whatsapp.sendTextMessage(phone, fallbackReply);
-          await this.firestoreRepo.appendMessage(phone, 'assistant', fallbackReply);
-          return { reply: fallbackReply, intent: 'WELCOME_TEXT_FALLBACK', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
-        }
-      }
-      return {
-        reply: 'Modelo de boas-vindas enviado',
-        intent: 'WELCOME_TEMPLATE_SENT',
-        imagesSent: 0,
-        latencyMs: Math.round(performance.now() - startTime)
-      };
-    }
-
-    if (verifyOnly || !require('../config/env').whatsapp.assistantEnabled) {
-      return { reply: '', intent: 'AUTOMATION_DISABLED', imagesSent: 0, latencyMs: 0 };
     }
 
     // 1. Prevenção de duplicidade (Idempotência da Meta)

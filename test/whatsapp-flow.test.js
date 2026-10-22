@@ -161,13 +161,13 @@ test('MessageService handles WhatsApp native flow: Atendente, Montar Sacola, and
   let mockMessageId = 0;
   const sendMock = async () => ({ messages: [{ id: `wamid.mock-${++mockMessageId}` }] });
   const sentTexts = [];
-  const sentWelcomeTemplates = [];
+  const sentMenus = [];
   const clientMock = {
     markAsRead: async () => {},
     sendTextMessage: async (...args) => { sentTexts.push(args); return sendMock(); },
     sendInteractiveList: sendMock,
-    sendInteractiveButtons: sendMock,
-    sendWelcomeTemplate: async (...args) => { sentWelcomeTemplates.push(args); return sendMock(); },
+    sendInteractiveButtons: async (...args) => { sentMenus.push(args); return sendMock(); },
+    sendWelcomeTemplate: sendMock,
     formatRecipient: (r) => r,
   };
 
@@ -191,11 +191,20 @@ test('MessageService handles WhatsApp native flow: Atendente, Montar Sacola, and
   // 0. SaudaÃ§Ã£o isolada envia o template da loja.
   const greetingRes = await service.handleCustomerMessage({
     phone: '5564999990002',
-    message: 'OI',
+    message: 'Quero ver as opções',
     customerName: 'Cliente Teste',
   });
-  assert.equal(greetingRes.intent, 'WELCOME_TEMPLATE_SENT');
-  assert.deepEqual(sentWelcomeTemplates[0], ['5564999990002', 'Cliente Teste']);
+  assert.equal(greetingRes.intent, 'MAIN_MENU_SENT');
+  assert.deepEqual(sentMenus[0][1].buttons.map(button => button.id), ['catalogo_virtual', 'montar_sacola', 'btn_atendente']);
+
+  const catalogRes = await service.handleCustomerMessage({
+    phone: '5564999990002', message: 'Catálogo virtual', interactiveId: 'catalogo_virtual',
+  });
+  assert.equal(catalogRes.intent, 'VIRTUAL_CATALOG_LINK');
+  assert.ok(catalogRes.reply.includes(require('../src/config/env').whatsapp.catalogUrl));
+
+  const repeatedMenuRes = await service.handleCustomerMessage({ phone: '5564999990005', message: 'Olaaa' });
+  assert.equal(repeatedMenuRes.intent, 'MAIN_MENU_SENT');
 
   // 1. O botão de atendente conversa com o agente virtual, sem abrir handoff humano.
   const atendenteRes = await service.handleCustomerMessage({
@@ -209,14 +218,10 @@ test('MessageService handles WhatsApp native flow: Atendente, Montar Sacola, and
 
   // Conversas antigas pausadas por pedido de atendente voltam ao agente no próximo contato.
   const { conversationAutomation } = require('../src/services/conversation-automation');
-  const resumedGreeting = await service.handleCustomerMessage({ phone: '5564999990003', message: 'Oi' });
-  assert.equal(resumedGreeting.intent, 'WELCOME_TEMPLATE_SENT');
+  await conversationAutomation(firestoreRepo, '5564999990003', { pauseReason: 'human_requested', messageId: 'old-handoff' });
+  const resumedGreeting = await service.handleCustomerMessage({ phone: '5564999990003', message: '', interactiveId: 'btn_atendente' });
+  assert.equal(resumedGreeting.intent, 'AGENT_ASSISTANCE');
   assert.equal((await conversationAutomation(firestoreRepo, '5564999990003')).automation, 'active');
-
-  clientMock.sendWelcomeTemplate = async () => { throw Object.assign(new Error('TEMPLATE_NOT_APPROVED'), { definitelyNotSent: true }); };
-  const fallbackGreeting = await service.handleCustomerMessage({ phone: '5564999990004', message: 'Oi' });
-  assert.equal(fallbackGreeting.intent, 'WELCOME_TEXT_FALLBACK');
-  assert.match(fallbackGreeting.reply, /atendente virtual da Conflora/i);
 
   // 2. Montar Sacola
   const sacolaRes = await service.handleCustomerMessage({
