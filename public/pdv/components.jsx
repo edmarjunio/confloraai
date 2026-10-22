@@ -1731,6 +1731,207 @@ window.PdvComponents = (() => {
     </section>;
   }
 
+  const SOUND_SETTINGS_STORAGE_KEY = 'conflora:pdv:sound-settings:v1';
+  const DEFAULT_SOUND_SETTINGS = Object.freeze({
+    muted: false,
+    tone: 'chime',
+    volume: 0.45,
+  });
+
+  function readSoundSettings() {
+    try {
+      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(SOUND_SETTINGS_STORAGE_KEY) : null;
+      if (!raw) return { ...DEFAULT_SOUND_SETTINGS };
+      const parsed = JSON.parse(raw);
+      return {
+        muted: Boolean(parsed.muted),
+        tone: ['chime', 'soft', 'bell'].includes(parsed.tone) ? parsed.tone : 'chime',
+        volume: Number.isFinite(Number(parsed.volume)) ? Math.min(1, Math.max(0.05, Number(parsed.volume))) : 0.45,
+      };
+    } catch {
+      return { ...DEFAULT_SOUND_SETTINGS };
+    }
+  }
+
+  function saveSoundSettings(next) {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(SOUND_SETTINGS_STORAGE_KEY, JSON.stringify(next));
+      }
+    } catch { /* Ignore storage quota errors */ }
+  }
+
+  let sharedAudioCtx = null;
+  function playOrderAlertSound(settings = readSoundSettings(), isBatch = false) {
+    if (!settings || settings.muted) return false;
+    try {
+      const AudioCtx = typeof window !== 'undefined' ? (window.AudioContext || window.webkitAudioContext) : null;
+      if (!AudioCtx) return false;
+      if (!sharedAudioCtx || sharedAudioCtx.state === 'closed') {
+        sharedAudioCtx = new AudioCtx();
+      }
+      if (sharedAudioCtx.state === 'suspended' && typeof sharedAudioCtx.resume === 'function') {
+        sharedAudioCtx.resume().catch(() => {});
+      }
+
+      const now = sharedAudioCtx.currentTime;
+      const gainLevel = Math.min(1, Math.max(0.05, Number(settings.volume || 0.45))) * 0.18;
+      const profiles = {
+        chime: isBatch ? [587.33, 783.99, 1046.5] : [659.25, 880],
+        soft: isBatch ? [440, 554.37, 659.25] : [523.25, 659.25],
+        bell: isBatch ? [783.99, 987.77, 1174.66] : [783.99, 1174.66],
+      };
+      const notes = profiles[settings.tone] || profiles.chime;
+
+      notes.forEach((freq, idx) => {
+        const osc = sharedAudioCtx.createOscillator();
+        const gain = sharedAudioCtx.createGain();
+        osc.type = settings.tone === 'bell' ? 'triangle' : 'sine';
+        const startAt = now + idx * 0.11;
+        const duration = 0.28;
+        osc.frequency.setValueAtTime(freq, startAt);
+        gain.gain.setValueAtTime(0.0001, startAt);
+        gain.gain.exponentialRampToValueAtTime(gainLevel, startAt + 0.025);
+        gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
+        osc.connect(gain);
+        gain.connect(sharedAudioCtx.destination);
+        osc.start(startAt);
+        osc.stop(startAt + duration + 0.02);
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function OrderSoundAlert({ settings, onChange }) {
+    const [open, setOpen] = useState(false);
+    const containerRef = useRef(null);
+
+    useEffect(() => {
+      if (!open) return undefined;
+      const onDocClick = (event) => {
+        if (containerRef.current && !containerRef.current.contains(event.target)) {
+          setOpen(false);
+        }
+      };
+      document.addEventListener('mousedown', onDocClick);
+      return () => document.removeEventListener('mousedown', onDocClick);
+    }, [open]);
+
+    const update = (patch) => {
+      const next = { ...settings, ...patch };
+      saveSoundSettings(next);
+      onChange(next);
+    };
+
+    return (
+      <div ref={containerRef} className="relative inline-flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => update({ muted: !settings.muted })}
+          aria-pressed={!settings.muted}
+          aria-label={settings.muted ? 'Ativar som de novas comandas' : 'Silenciar som de novas comandas'}
+          title={settings.muted ? 'Som de notificações silenciado (clique para ativar)' : 'Som de notificações ativo (clique para silenciar)'}
+          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-extrabold transition ${
+            settings.muted
+              ? 'border-slate-300 bg-slate-100 text-slate-600 hover:bg-slate-200'
+              : 'border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100'
+          }`}
+        >
+          <span aria-hidden="true">{settings.muted ? '🔇' : '🔊'}</span>
+          <span className="hidden sm:inline">{settings.muted ? 'Silenciado' : 'Alerta sonoro'}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setOpen((curr) => !curr)}
+          aria-expanded={open}
+          aria-label="Configurações de som de notificações"
+          title="Configurar alerta sonoro de pedidos"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-xs text-slate-600 shadow-2xs transition hover:border-emerald-400 hover:text-emerald-900"
+        >
+          ⚙️
+        </button>
+
+        {open && (
+          <div
+            role="dialog"
+            aria-label="Configurações de som das notificações"
+            className="absolute right-0 top-full z-50 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-xl"
+          >
+            <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2">
+              <strong className="text-xs font-black uppercase tracking-wide text-[#0F381E]">
+                🔔 Som de Notificações
+              </strong>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="rounded-lg px-1.5 py-0.5 text-xs font-bold text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                aria-label="Fechar configurações de som"
+              >
+                ✕
+              </button>
+            </div>
+
+            <label className="mb-3 flex cursor-pointer items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">
+              <span>Silenciar alertas (Mudo)</span>
+              <input
+                type="checkbox"
+                checked={settings.muted}
+                onChange={(e) => update({ muted: e.target.checked })}
+                className="h-4 w-4 accent-emerald-700"
+              />
+            </label>
+
+            <label className="mb-3 block text-xs font-bold text-slate-700">
+              Timbre do alerta
+              <select
+                value={settings.tone}
+                disabled={settings.muted}
+                onChange={(e) => {
+                  const next = { ...settings, tone: e.target.value };
+                  saveSoundSettings(next);
+                  onChange(next);
+                  playOrderAlertSound(next, false);
+                }}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-800 disabled:opacity-50"
+              >
+                <option value="chime">Cristal Suave (Padrão)</option>
+                <option value="soft">Acorde Discreto</option>
+                <option value="bell">Sino de Balcão</option>
+              </select>
+            </label>
+
+            <label className="mb-3 block text-xs font-bold text-slate-700">
+              <span className="flex justify-between">
+                <span>Volume</span>
+                <span className="text-emerald-800">{Math.round((settings.volume || 0.45) * 100)}%</span>
+              </span>
+              <input
+                type="range"
+                min="0.1"
+                max="1"
+                step="0.05"
+                disabled={settings.muted}
+                value={settings.volume}
+                onChange={(e) => update({ volume: Number(e.target.value) })}
+                className="mt-1 block w-full accent-emerald-700 disabled:opacity-50"
+              />
+            </label>
+
+            <button
+              type="button"
+              onClick={() => playOrderAlertSound({ ...settings, muted: false }, false)}
+              className="w-full rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-extrabold text-emerald-900 transition hover:bg-emerald-100"
+            >
+              🔊 Testar som agora
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   function resolveOrderTargetColumn(order, explicitStage) {
     const isPaidStage = explicitStage === 'paid' || Boolean(
       order && (
@@ -1760,6 +1961,9 @@ window.PdvComponents = (() => {
     const [pulsedOrderIds, setPulsedOrderIds] = useState(() => new Set());
     const [newOrderNotice, setNewOrderNotice] = useState('');
     const [floatingOrder, setFloatingOrder] = useState(null);
+    const [floatingBatch, setFloatingBatch] = useState([]);
+    const [digestExpanded, setDigestExpanded] = useState(false);
+    const [soundSettings, setSoundSettings] = useState(() => readSoundSettings());
     const [floatingTarget, setFloatingTarget] = useState(() => ({ stage: 'payment', title: 'ESPERANDO PAGAMENTO', tone: 'blue' }));
     const [isFlying, setIsFlying] = useState(false);
     const [flyingToStage, setFlyingToStage] = useState(null);
@@ -1767,6 +1971,9 @@ window.PdvComponents = (() => {
     const [showClosingModal, setShowClosingModal] = useState(false);
     const [closingNotice, setClosingNotice] = useState('');
     const dataRef = useRef(null);
+    const soundSettingsRef = useRef(soundSettings);
+    soundSettingsRef.current = soundSettings;
+    const lastBatchTimestampRef = useRef(0);
     const floatingCardRef = useRef(null);
     const flyTimerRef = useRef(null);
     const autoFlyTimerRef = useRef(null);
@@ -1832,27 +2039,39 @@ window.PdvComponents = (() => {
       }
     };
 
-    const triggerFly = (order, options = {}) => {
-      const targetOrder = order || floatingOrder;
-      if (!targetOrder) return;
+    const triggerFly = (orderOrOrders, options = {}) => {
+      const ordersList = Array.isArray(orderOrOrders)
+        ? orderOrOrders.filter(Boolean)
+        : [orderOrOrders || floatingOrder].filter(Boolean);
+      if (!ordersList.length) return;
+      const primaryOrder = ordersList[0];
       if (autoFlyTimerRef.current) clearTimeout(autoFlyTimerRef.current);
       if (flyTimerRef.current) clearTimeout(flyTimerRef.current);
 
-      const target = resolveOrderTargetColumn(targetOrder, options.targetStage);
-      setFloatingOrder(targetOrder);
+      const paidCount = ordersList.filter((o) => resolveOrderTargetColumn(o).stage === 'paid').length;
+      const dominantStage = options.targetStage || (paidCount > ordersList.length / 2 ? 'paid' : resolveOrderTargetColumn(primaryOrder).stage);
+      const target = resolveOrderTargetColumn(primaryOrder, dominantStage);
+
+      setFloatingOrder(primaryOrder);
+      if (ordersList.length > 1) {
+        setFloatingBatch(ordersList);
+      }
       setFloatingTarget(target);
       setFlyingToStage(target.stage);
 
       const startSlide = () => {
         applySlideCoordinates(target);
         setIsFlying(true);
-        setPulsedOrderIds((current) => new Set([...current, targetOrder.id]));
+        const idsToPulse = ordersList.map((o) => o.id);
+        setPulsedOrderIds((current) => new Set([...current, ...idsToPulse]));
         flyTimerRef.current = setTimeout(() => {
           setIsFlying(false);
           setFloatingOrder(null);
+          setFloatingBatch([]);
+          setDigestExpanded(false);
           setFlyingToStage(null);
           if (options.openDetailsAfter) {
-            setSelectedOrder(targetOrder);
+            setSelectedOrder(primaryOrder);
           }
         }, 680);
       };
@@ -1865,22 +2084,46 @@ window.PdvComponents = (() => {
       }
     };
 
-    const showOrderNotification = (order, options = {}) => {
-      if (!order) return;
+    const enqueueOrderNotifications = (incomingOrders, options = {}) => {
+      const list = (Array.isArray(incomingOrders) ? incomingOrders : [incomingOrders]).filter(Boolean);
+      if (!list.length) return;
       if (autoFlyTimerRef.current) clearTimeout(autoFlyTimerRef.current);
       if (flyTimerRef.current) clearTimeout(flyTimerRef.current);
-      const target = resolveOrderTargetColumn(order, options.targetStage);
-      setFloatingOrder(order);
-      setFloatingTarget(target);
-      setIsFlying(false);
-      setFlyingToStage(null);
 
-      const autoSlideMs = options.autoSlideMs ?? 5500;
-      if (autoSlideMs > 0) {
-        autoFlyTimerRef.current = setTimeout(() => {
-          triggerFly(order, { targetStage: target.stage, openDetailsAfter: false });
-        }, autoSlideMs);
-      }
+      const now = Date.now();
+      const withinRapidWindow = (now - lastBatchTimestampRef.current) < 12000;
+      lastBatchTimestampRef.current = now;
+
+      setFloatingBatch((currentBatch) => {
+        const shouldMerge = !isFlying && (currentBatch.length > 0 || Boolean(floatingOrder) || withinRapidWindow);
+        const baseList = shouldMerge ? (currentBatch.length ? currentBatch : (floatingOrder ? [floatingOrder] : [])) : [];
+        const mergedMap = new Map();
+        [...baseList, ...list].forEach((item) => {
+          if (item && item.id) mergedMap.set(item.id, item);
+        });
+        const nextBatch = [...mergedMap.values()];
+        const primary = nextBatch[nextBatch.length - 1] || list[0];
+        const paidCount = nextBatch.filter((o) => resolveOrderTargetColumn(o).stage === 'paid').length;
+        const dominantStage = options.targetStage || (paidCount > nextBatch.length / 2 ? 'paid' : resolveOrderTargetColumn(primary).stage);
+        const target = resolveOrderTargetColumn(primary, dominantStage);
+
+        setFloatingOrder(primary);
+        setFloatingTarget(target);
+        setIsFlying(false);
+        setFlyingToStage(null);
+
+        if (options.playSound !== false) {
+          playOrderAlertSound(soundSettingsRef.current, nextBatch.length > 1);
+        }
+
+        const autoSlideMs = options.autoSlideMs ?? (nextBatch.length > 1 ? 7500 : 5500);
+        if (autoSlideMs > 0) {
+          autoFlyTimerRef.current = setTimeout(() => {
+            triggerFly(nextBatch, { targetStage: target.stage, openDetailsAfter: false });
+          }, autoSlideMs);
+        }
+        return nextBatch;
+      });
     };
 
     const refresh = async (silent = false) => {
@@ -1904,16 +2147,14 @@ window.PdvComponents = (() => {
             setPulsedOrderIds((current) => new Set([...current, ...ids]));
             const firstIncoming = incoming[0];
             const target = resolveOrderTargetColumn(firstIncoming);
-            setNewOrderNotice(incoming.length === 1 ? `Nova comanda #${firstIncoming.ticketNumber} → ${target.title}` : `${incoming.length} novas comandas aguardando atendimento`);
-            showOrderNotification(firstIncoming, { targetStage: target.stage, autoSlideMs: 5200 });
+            setNewOrderNotice(incoming.length === 1 ? `Nova comanda #${firstIncoming.ticketNumber} → ${target.title}` : `${incoming.length} novas comandas agrupadas no resumo`);
+            enqueueOrderNotifications(incoming, { targetStage: target.stage, playSound: true });
             setTimeout(() => setPulsedOrderIds((current) => new Set([...current].filter((id) => !ids.has(id)))), 9000);
             setTimeout(() => setNewOrderNotice(''), 9000);
           } else if (movedToPaid.length) {
-            const paidOrder = movedToPaid[0];
-            triggerFly(paidOrder, { targetStage: 'paid', delayMs: floatingOrder?.id === paidOrder.id ? 0 : 220 });
+            triggerFly(movedToPaid, { targetStage: 'paid', delayMs: floatingOrder && movedToPaid.some((o) => o.id === floatingOrder.id) ? 0 : 220 });
           } else if (movedToPayment.length) {
-            const paymentOrder = movedToPayment[0];
-            triggerFly(paymentOrder, { targetStage: 'payment', delayMs: floatingOrder?.id === paymentOrder.id ? 0 : 220 });
+            triggerFly(movedToPayment, { targetStage: 'payment', delayMs: floatingOrder && movedToPayment.some((o) => o.id === floatingOrder.id) ? 0 : 220 });
           }
         }
         dataRef.current = nextData;
@@ -2016,7 +2257,7 @@ window.PdvComponents = (() => {
       <div className="bg-white"><Topbar user={user} onCashier={onBack} />
         <div className="cf-page-toolbar">
           <div className="flex flex-col items-start gap-2"><button type="button" onClick={onBack} className="cf-back-button">← Voltar</button></div>
-          <div className="flex items-center gap-2"><h1 className="mr-2 text-lg font-black text-[#0F381E]">{title}</h1>{view === 'report' && user.role !== 'VENDEDOR' && <button className={button} onClick={onDebt}>Receber pagamento</button>}<button className={button} disabled={refreshing} onClick={() => refresh()} aria-label="Atualizar">{refreshing ? 'Atualizando…' : '↻ Atualizar'}</button></div>
+          <div className="flex flex-wrap items-center gap-2"><h1 className="mr-2 text-lg font-black text-[#0F381E]">{title}</h1><OrderSoundAlert settings={soundSettings} onChange={setSoundSettings} />{view === 'report' && user.role !== 'VENDEDOR' && <button className={button} onClick={onDebt}>Receber pagamento</button>}<button className={button} disabled={refreshing} onClick={() => refresh()} aria-label="Atualizar">{refreshing ? 'Atualizando…' : '↻ Atualizar'}</button></div>
         </div>
         </div>
 
@@ -2250,69 +2491,180 @@ window.PdvComponents = (() => {
         setSelectedOrder(reviewedOrder || selectedOrder); await refresh(true);
       }} onClose={() => setSelectedOrder(null)} />}
 
-      {/* NOTIFICAÇÃO FLUTUANTE DE PEDIDO NO CANTO INFERIOR ESQUERDO COM DESLIZE PARA A COLUNA CORRETA */}
-      {floatingOrder && (
-        <div
-          ref={floatingCardRef}
-          role="status"
-          aria-live="polite"
-          data-target-column={floatingTarget.title}
-          data-target-stage={floatingTarget.stage}
-          className={`cf-order-notification fixed bottom-6 left-6 z-50 w-[340px] ${
-            isFlying
-              ? 'cf-order-notification--flying'
-              : 'cf-order-notification--idle shadow-2xl'
-          }`}
-        >
-          <div className="rounded-3xl border-2 border-emerald-500 bg-white p-3.5 shadow-2xl ring-4 ring-emerald-500/20 backdrop-blur-md">
-            <div className="mb-2 flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
-              <div className="min-w-0">
-                <span className="flex items-center gap-1.5 text-xs font-black text-emerald-800">
-                  <span className="inline-block animate-bounce">🔔</span> Comanda #{floatingOrder.ticketNumber}
-                </span>
-                <span className="mt-0.5 block truncate text-[10px] font-extrabold uppercase tracking-wide text-slate-500">
-                  Destino: {floatingTarget.title}
-                </span>
+      {/* NOTIFICAÇÃO FLUTUANTE DE PEDIDO OU RESUMO EM LOTE (DIGEST) NO CANTO INFERIOR ESQUERDO */}
+      {floatingOrder && (() => {
+        const activeBatch = floatingBatch.length > 1 ? floatingBatch : [floatingOrder];
+        const isDigest = activeBatch.length > 1;
+        const batchTotal = activeBatch.reduce((sum, item) => sum + Number(item.total || 0), 0);
+        const paymentCount = activeBatch.filter((item) => resolveOrderTargetColumn(item).stage === 'payment').length;
+        const paidCount = activeBatch.filter((item) => resolveOrderTargetColumn(item).stage === 'paid').length;
+        const confirmableOrders = activeBatch.filter((item) => item.status === 'AWAITING_CONFIRMATION' && item.creditApprovalStatus !== 'PENDING');
+        const visibleDigestOrders = digestExpanded ? activeBatch : activeBatch.slice(0, 3);
+
+        return (
+          <div
+            ref={floatingCardRef}
+            role="status"
+            aria-live="polite"
+            data-target-column={floatingTarget.title}
+            data-target-stage={floatingTarget.stage}
+            data-notification-mode={isDigest ? 'digest' : 'single'}
+            className={`cf-order-notification fixed bottom-6 left-6 z-50 w-[348px] ${
+              isFlying
+                ? 'cf-order-notification--flying'
+                : 'cf-order-notification--idle shadow-2xl'
+            }`}
+          >
+            <div className="rounded-3xl border-2 border-emerald-500 bg-white p-3.5 shadow-2xl ring-4 ring-emerald-500/20 backdrop-blur-md">
+              <div className="mb-2 flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                <div className="min-w-0">
+                  <span className="flex items-center gap-1.5 text-xs font-black text-emerald-800">
+                    <span className="inline-block animate-bounce">{isDigest ? '📦' : '🔔'}</span>
+                    {isDigest ? `${activeBatch.length} Novas Comandas (Resumo)` : `Comanda #${floatingOrder.ticketNumber}`}
+                  </span>
+                  <span className="mt-0.5 block truncate text-[10px] font-extrabold uppercase tracking-wide text-slate-500">
+                    {isDigest
+                      ? `Total: ${money(batchTotal)} · Destino: ${floatingTarget.title}`
+                      : `Destino: ${floatingTarget.title}`}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => triggerFly(activeBatch, { targetStage: floatingTarget.stage, openDetailsAfter: false })}
+                  className="rounded-lg p-1 text-sm font-black leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  title={`Deslizar para ${floatingTarget.title}`}
+                  aria-label={`Deslizar para ${floatingTarget.title}`}
+                >
+                  ✕
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => triggerFly(floatingOrder, { targetStage: floatingTarget.stage, openDetailsAfter: false })}
-                className="rounded-lg p-1 text-sm font-black leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                title={`Deslizar para ${floatingTarget.title}`}
-                aria-label={`Deslizar para ${floatingTarget.title}`}
-              >
-                ✕
-              </button>
-            </div>
-            <OrderCard
-              order={floatingOrder}
-              tone={floatingTarget.tone || (floatingOrder.status === 'AWAITING_CONFIRMATION' ? 'amber' : 'blue')}
-              attention={true}
-              onDetails={(o) => triggerFly(o, { targetStage: floatingTarget.stage, openDetailsAfter: true })}
-            />
-            <div className="mt-2.5 flex items-center justify-between gap-2 pt-1">
-              {user.role !== 'VENDEDOR' && floatingOrder.status === 'AWAITING_CONFIRMATION' && floatingOrder.creditApprovalStatus !== 'PENDING' ? (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => moveOrder(floatingOrder.id, 'confirmation', 'payment')}
-                  className="w-full rounded-xl bg-emerald-700 px-3 py-2 text-xs font-extrabold text-white shadow-sm transition hover:bg-emerald-800 disabled:opacity-50"
-                >
-                  Processar → ESPERANDO PAGAMENTO
-                </button>
+
+              {isDigest ? (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-1.5 text-[10px] font-extrabold">
+                    {paymentCount > 0 && (
+                      <span className="rounded-full border border-sky-300 bg-sky-50 px-2.5 py-0.5 text-sky-900">
+                        {paymentCount} → ESPERANDO PAGAMENTO
+                      </span>
+                    )}
+                    {paidCount > 0 && (
+                      <span className="rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-emerald-900">
+                        {paidCount} → PAGOS / FINALIZADOS
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="max-h-48 space-y-1.5 overflow-y-auto pr-1">
+                    {visibleDigestOrders.map((item) => {
+                      const itemTarget = resolveOrderTargetColumn(item);
+                      return (
+                        <div
+                          key={item.id}
+                          className="flex items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-slate-50/90 px-3 py-2 text-xs transition hover:border-emerald-300 hover:bg-emerald-50/40"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => triggerFly(item, { targetStage: itemTarget.stage, openDetailsAfter: true })}
+                            className="min-w-0 flex-1 text-left"
+                          >
+                            <strong className="block truncate font-black text-slate-900">
+                              #{item.ticketNumber} · {item.customerName || 'Cliente Balcão'}
+                            </strong>
+                            <span className="block truncate text-[10px] font-bold text-slate-500">
+                              {money(item.total)} · {itemTarget.title}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => triggerFly(item, { targetStage: itemTarget.stage, openDetailsAfter: true })}
+                            className="shrink-0 rounded-lg bg-white px-2 py-1 text-[10px] font-extrabold text-emerald-800 shadow-2xs hover:bg-emerald-100"
+                          >
+                            Abrir
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {activeBatch.length > 3 && (
+                    <button
+                      type="button"
+                      onClick={() => setDigestExpanded((curr) => !curr)}
+                      className="w-full rounded-lg py-1 text-center text-[11px] font-extrabold text-emerald-800 hover:underline"
+                    >
+                      {digestExpanded ? 'Mostrar menos' : `Ver todas as ${activeBatch.length} comandas (+${activeBatch.length - 3})`}
+                    </button>
+                  )}
+
+                  <div className="mt-2 flex items-center justify-between gap-2 pt-1">
+                    {user.role !== 'VENDEDOR' && confirmableOrders.length > 0 ? (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={async () => {
+                          setBusy(true);
+                          setError('');
+                          try {
+                            for (const item of confirmableOrders) {
+                              await api('/api/caixa/orders/' + encodeURIComponent(item.id) + '/move', { from: 'confirmation', to: 'payment' });
+                            }
+                            await refresh(true);
+                            triggerFly(activeBatch, { targetStage: 'payment', openDetailsAfter: false });
+                          } catch (err) {
+                            setError(err.message);
+                          } finally {
+                            setBusy(false);
+                          }
+                        }}
+                        className="w-full rounded-xl bg-emerald-700 px-3 py-2 text-xs font-extrabold text-white shadow-sm transition hover:bg-emerald-800 disabled:opacity-50"
+                      >
+                        Processar Lote ({confirmableOrders.length}) → ESPERANDO PAGAMENTO
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => triggerFly(activeBatch, { targetStage: floatingTarget.stage, openDetailsAfter: false })}
+                        className="w-full rounded-xl bg-emerald-50 px-3 py-2 text-xs font-extrabold text-emerald-900 transition hover:bg-emerald-100"
+                      >
+                        Deslizar Lote para {floatingTarget.title} →
+                      </button>
+                    )}
+                  </div>
+                </div>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => triggerFly(floatingOrder, { targetStage: floatingTarget.stage, openDetailsAfter: true })}
-                  className="w-full rounded-xl bg-emerald-50 px-3 py-2 text-xs font-extrabold text-emerald-900 transition hover:bg-emerald-100"
-                >
-                  Ir para {floatingTarget.title} →
-                </button>
+                <>
+                  <OrderCard
+                    order={floatingOrder}
+                    tone={floatingTarget.tone || (floatingOrder.status === 'AWAITING_CONFIRMATION' ? 'amber' : 'blue')}
+                    attention={true}
+                    onDetails={(o) => triggerFly(o, { targetStage: floatingTarget.stage, openDetailsAfter: true })}
+                  />
+                  <div className="mt-2.5 flex items-center justify-between gap-2 pt-1">
+                    {user.role !== 'VENDEDOR' && floatingOrder.status === 'AWAITING_CONFIRMATION' && floatingOrder.creditApprovalStatus !== 'PENDING' ? (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => moveOrder(floatingOrder.id, 'confirmation', 'payment')}
+                        className="w-full rounded-xl bg-emerald-700 px-3 py-2 text-xs font-extrabold text-white shadow-sm transition hover:bg-emerald-800 disabled:opacity-50"
+                      >
+                        Processar → ESPERANDO PAGAMENTO
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => triggerFly(floatingOrder, { targetStage: floatingTarget.stage, openDetailsAfter: true })}
+                        className="w-full rounded-xl bg-emerald-50 px-3 py-2 text-xs font-extrabold text-emerald-900 transition hover:bg-emerald-100"
+                      >
+                        Ir para {floatingTarget.title} →
+                      </button>
+                    )}
+                  </div>
+                </>
               )}
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {showClosingModal && closingStatus && (
         <FecharCaixaModal
@@ -2345,5 +2697,5 @@ window.PdvComponents = (() => {
     const amountInvalid = !Number.isFinite(Number(amount)) || Number(amount) <= 0 || (!isCreditEntry && Number(amount) > balance);
     return <Panel title="Receber pagamento do cliente" onClose={onClose}>{error && <p role="alert" className="text-red-700">{error}</p>}{result ? <div><p>Recebimento registrado: {money(result.amount)}</p><p>Saldo devedor: {money(result.newBalance)}</p><p>Crédito disponível: {money(result.newCreditBalance)}</p>{result.newBalance > 0 && <button className={button + ' mt-4'} onClick={() => { setBalance(result.newBalance); setCreditBalance(result.newCreditBalance || 0); setAmount(Number(result.newBalance).toFixed(2)); setId(crypto.randomUUID()); setResult(null); setSplitPayment(false); setProofSeen(false); setNote(''); setProofId(''); }}>Receber valor restante</button>}</div> : <><label>Buscar cliente cadastrado<input className={field} value={query} onChange={(e) => setQuery(e.target.value)} /></label><div className="max-h-36 overflow-auto">{customers.map((row) => <button className="block w-full border-b p-2 text-left" key={row.id} onClick={() => select(row)}>{row.name} · {row.phone || 'Sem telefone'}</button>)}</div>{customer && <><p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm font-bold">{customer.name}<span className="mt-1 block text-xs font-medium text-amber-800">Saldo devedor: {money(balance)}</span><span className="block text-xs font-medium text-emerald-800">Crédito disponível: {money(creditBalance)}</span></p><label>Tipo de lançamento<select className={field} value={entryType} onChange={(event) => setEntryType(event.target.value)}><option value="QUITACAO_FIADO">Receber pagamento de dívida</option><option value="CREDITO_CLIENTE">Adicionar crédito antecipado</option></select></label><label>Valor recebido<input className={field} type="number" min="0.01" max={isCreditEntry ? undefined : balance} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></label><PaymentMethodButtons value={method} onChange={setMethod} labels={{ DINHEIRO: 'Dinheiro', DEBITO: 'Cartão de débito', CREDITO: 'Cartão de crédito', PIX: 'Pix já recebido' }} /><label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={splitPayment} onChange={(event) => setSplitPayment(event.target.checked)} />Usar mais de uma forma de pagamento</label>{splitPayment && <PaymentPartsEditor parts={parts} onChange={setParts} total={Number(amount || 0)} allowedMethods={['DINHEIRO', 'DEBITO', 'CREDITO', 'PIX']} />}{hasPix && <div className="my-3 space-y-2"><PixProofUpload key={id} targetType="DEBT" targetId={id} onChange={setProofId} /><label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={proofSeen} onChange={(event) => setProofSeen(event.target.checked)} />Conferi o Pix recebido na conta da Conflora.</label><label className="block text-xs">Observação do comprovante<textarea className={field} value={note} onChange={(event) => setNote(event.target.value)} /></label></div>}{!isCreditEntry && <p className="my-3 text-sm font-bold">Saldo após recebimento: {money(Math.max(0, balance - Number(amount || 0)))}</p>}<button className={button} disabled={busy || (hasPix && (!proofId || !proofSeen || note.trim().length < 8)) || amountInvalid || (!isCreditEntry && balance <= 0)} onClick={submit}>{busy ? 'Registrando…' : isCreditEntry ? 'Registrar crédito recebido' : 'Confirmar recebimento'}</button></>}</>}</Panel>;
   }
-  return { Topbar, Loading, Login, Receipt, CashierQueue, DebtSettlement, DiscountApproval, ProductInformation, WeightPrompt, handleProductImageError, PaymentPartsEditor, PaymentMethodButtons, CustomerSearch, LocationPicker, OrderDetails, CashierColumn, SeparationModal, Button3D };
+  return { Topbar, Loading, Login, Receipt, CashierQueue, DebtSettlement, DiscountApproval, ProductInformation, WeightPrompt, handleProductImageError, PaymentPartsEditor, PaymentMethodButtons, CustomerSearch, LocationPicker, OrderDetails, CashierColumn, SeparationModal, Button3D, OrderSoundAlert, playOrderAlertSound };
 })();
