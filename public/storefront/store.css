@@ -150,7 +150,10 @@ input[type="radio"] {
   font-size: 13px;
 }
 .empty {
-  padding: 30px;
+  grid-column: 1 / -1 !important;
+  width: 100% !important;
+  box-sizing: border-box;
+  padding: 30px 16px;
   color: #626b65;
   text-align: center;
 }
@@ -498,12 +501,12 @@ input[type="radio"] {
 }
 .catalog-category-filter {
   position: relative;
-  padding: 6px 8px 14px;
+  padding: 10px 8px 14px;
   isolation: isolate;
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 0 14px;
+  margin: 12px 0 14px;
   color: #526071;
   font-size: 13px;
 }
@@ -1041,19 +1044,24 @@ dialog:not([open]) { display: none; }
   transform: translateY(3px);
   box-shadow: 0 1px 0 #0f381e !important;
 }
-.cart-fab > [data-icon="cart"] {
-  display: flex;
+.floating-actions :is(.ai-fab, .cart-fab) {
+  padding: 0;
+  gap: 0;
   align-items: center;
   justify-content: center;
-  flex: 0 0 24px;
-  width: 24px;
-  height: 24px;
+}
+.floating-actions :is(.ai-fab, .cart-fab) > [data-icon] {
+  display: grid;
+  place-items: center;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
   line-height: 0;
 }
-.cart-fab > [data-icon="cart"] > .icon {
+.floating-actions :is(.ai-fab, .cart-fab) > [data-icon] > .icon {
   display: block;
-  width: 24px;
-  height: 24px;
+  width: 30px;
+  height: 30px;
   max-width: 100%;
   max-height: 100%;
   flex: none;
@@ -1897,14 +1905,9 @@ dialog .toast {
   max-width: none;
 }
 
-#logo,
 .brand img {
-  width: auto !important;
-  max-width: 160px !important;
-  height: 42px !important;
-  max-height: 42px !important;
-  object-fit: contain !important;
-  display: block !important;
+  object-fit: contain;
+  display: block;
 }
 
 /* Shared purchase controls and the compact storefront composition. */
@@ -2053,10 +2056,6 @@ dialog .toast {
   body:has(#chatDialog[open]) .mobile-bottom-bar {
     display: none !important;
   }
-}
-.ai-fab > [data-icon] .icon {
-  width: 26px;
-  height: 26px;
 }
 .detail-hero {
   position: relative;
@@ -2365,35 +2364,39 @@ dialog .toast {
   transform: none !important;
 }
 .cart-drawer #cartCloseButton {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  min-width: 38px;
-  min-height: 38px;
-  max-width: 38px;
-  max-height: 38px;
-  padding: 0;
-  border: 1px solid #dbe5df;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  max-width: 36px !important;
+  max-height: 36px !important;
+  padding: 0 !important;
+  border: 2px solid #bbf7d0 !important;
   border-radius: 50% !important;
-  background: #fff;
-  color: #15803d;
-  font-size: 20px;
-  font-weight: 800;
-  line-height: 1;
-  text-align: center;
-  cursor: pointer;
-  box-shadow: 0 2px 5px rgba(20, 44, 28, 0.1);
-  transition: transform 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
-  flex-shrink: 0;
+  background: #ffffff !important;
+  color: #15803d !important;
+  font-size: 15px !important;
+  font-weight: 900 !important;
+  line-height: 1 !important;
+  text-align: center !important;
+  cursor: pointer !important;
+  box-shadow: 0 3px 0 #86efac, 0 3px 6px rgba(20, 83, 45, 0.08) !important;
+  transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.12s ease, background-color 0.15s ease !important;
+  flex-shrink: 0 !important;
+  margin: 0 0 0 auto !important;
 }
 .cart-drawer #cartCloseButton:hover:not(:disabled) {
-  transform: scale(1.08);
-  background: #f0fdf4;
-  border-color: #86efac;
-  color: #166534;
-  box-shadow: 0 4px 10px rgba(20, 44, 28, 0.16);
+  transform: translateY(-2px) !important;
+  background: #f0fdf4 !important;
+  border-color: #4ade80 !important;
+  box-shadow: 0 5px 0 #4ade80, 0 4px 10px rgba(20, 83, 45, 0.15) !important;
+}
+.cart-drawer #cartCloseButton:active {
+  transform: translateY(2px) !important;
+  box-shadow: 0 1px 0 #4ade80 !important;
 }
 .cart-drawer h2 {
   flex: 1 1 auto;
@@ -2799,13 +2802,7 @@ dialog .toast {
     padding: 0 16px calc(20px + env(safe-area-inset-bottom));
   }
   .cart-drawer::before {
-    content: "";
-    display: block;
-    width: 38px;
-    height: 4px;
-    background: #d5d9de;
-    border-radius: 4px;
-    margin: 10px auto 4px;
+    display: none !important;
   }
   .cart-drawer .dialog-header {
     top: 0;
@@ -2830,9 +2827,9 @@ dialog .toast {
     font-size: 16px;
   }
   #checkoutForm .choices {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-    gap: 8px;
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
   }
   #checkoutForm .choices label {
     min-width: 0;
@@ -3525,8 +3522,8 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 6px 0 12px;
-  padding: 4px 4px 10px;
+  margin: 14px 0 14px;
+  padding: 10px 6px 14px;
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scrollbar-width: none;
@@ -3559,7 +3556,7 @@ body {
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
-.category-chip:hover:not(:disabled) {
+.category-chip:not(.is-active):hover:not(:disabled) {
   transform: translateY(-2px);
   background: #f0fdf4;
   border-color: #4ade80;
@@ -3953,7 +3950,102 @@ body {
 .cart-drawer #checkoutCustomer label, .cart-drawer #checkoutForm > label, .cart-drawer #deliveryFields > label { display: grid; gap: 7px; margin-bottom: 13px; font-size: 13px; line-height: 1.45; font-weight: 750; color: #263e2e; }
 .cart-drawer #checkoutCustomer input, .cart-drawer #checkoutForm input:not([type=radio]), .cart-drawer #checkoutForm textarea, .cart-drawer #checkoutForm select { min-height: 44px; padding: 11px 12px; border: 1px solid #cbdacf; border-radius: 11px; background: #fff; font-size: 14px; font-weight: 400; }
 .cart-drawer #checkoutForm fieldset { min-width: 0; padding: 16px 0; margin: 0; border: 0; border-top: 1px solid #e5ece7; }
-.cart-drawer .choices label { font-size: 12px; font-weight: 650; padding: 12px; min-height: 50px; border-radius: 12px; }
+/* 3D Cartoon Choices Grid (Entrega / Retirada & Formas de Pagamento) */
+.cart-drawer .choices,
+#checkoutForm .choices {
+  display: grid !important;
+  grid-template-columns: repeat(2, 1fr) !important;
+  gap: 10px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  margin: 10px 0 14px 0 !important;
+}
+
+.cart-drawer .choices label,
+#checkoutForm .choices label {
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  padding: 12px 10px !important;
+  min-height: 48px !important;
+  border-radius: 14px !important;
+  font-size: 13.5px !important;
+  font-weight: 800 !important;
+  line-height: 1.2 !important;
+  cursor: pointer !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+  box-sizing: border-box !important;
+  text-align: center !important;
+  margin: 0 !important;
+  width: 100% !important;
+
+  /* Estado Padrão Desmarcado - 3D Cartoon */
+  background: #ffffff !important;
+  color: #14532d !important;
+  border: 2px solid #bbf7d0 !important;
+  box-shadow: 0 4px 0 #86efac, 0 3px 8px rgba(20, 83, 45, 0.08) !important;
+  transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.12s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease !important;
+}
+
+.cart-drawer .choices label:hover:not(:has(input:checked)),
+#checkoutForm .choices label:hover:not(:has(input:checked)) {
+  transform: translateY(-2px) !important;
+  background: #f0fdf4 !important;
+  border-color: #4ade80 !important;
+  box-shadow: 0 6px 0 #4ade80, 0 6px 14px rgba(20, 83, 45, 0.14) !important;
+}
+
+.cart-drawer .choices label:active,
+#checkoutForm .choices label:active {
+  transform: translateY(3px) !important;
+  box-shadow: 0 1px 0 currentColor !important;
+}
+
+/* Estado Selecionado (Checked) - 3D Cartoon Verde Conflora */
+.cart-drawer .choices label:has(input:checked),
+#checkoutForm .choices label:has(input:checked) {
+  background: #15803d !important;
+  color: #ffffff !important;
+  border: 2px solid #0f381e !important;
+  box-shadow: 0 4px 0 #0f381e, 0 6px 16px rgba(21, 128, 61, 0.35) !important;
+}
+
+.cart-drawer .choices label:has(input:checked):hover,
+#checkoutForm .choices label:has(input:checked):hover {
+  transform: translateY(-2px) !important;
+  background: #166534 !important;
+  box-shadow: 0 6px 0 #0f381e, 0 8px 20px rgba(21, 128, 61, 0.45) !important;
+}
+
+.cart-drawer .choices label:has(input:checked):active,
+#checkoutForm .choices label:has(input:checked):active {
+  transform: translateY(3px) !important;
+  box-shadow: 0 1px 0 #0f381e !important;
+}
+
+/* Ícones dentro dos botões 3D da Sacola */
+.cart-drawer .choices label .icon,
+.cart-drawer .choices label svg,
+#checkoutForm .choices label .icon,
+#checkoutForm .choices label svg {
+  width: 18px !important;
+  height: 18px !important;
+  flex-shrink: 0 !important;
+  transition: color 0.15s ease, fill 0.15s ease, stroke 0.15s ease !important;
+}
+
+.cart-drawer .choices label:has(input:checked) .icon,
+.cart-drawer .choices label:has(input:checked) svg,
+#checkoutForm .choices label:has(input:checked) .icon,
+#checkoutForm .choices label:has(input:checked) svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+  fill: #ffffff !important;
+}
 .cart-drawer #pixBox { padding: 14px; border-radius: 13px; line-height: 1.5; }
 .cart-drawer #pixBox small { display: block; margin-top: 6px; font-size: 12px; }
 .cart-drawer #checkoutForm > .total { background: #f1f8f3; border: 1px solid #dceadf; border-radius: 14px; padding: 15px; margin: 16px 0; }
@@ -4091,20 +4183,29 @@ body {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding-bottom: 16px;
-  margin-bottom: 18px;
-  border-bottom: 1px solid #e6efe9;
+  padding-bottom: 2px;
+  margin-bottom: 4px;
+  border-bottom: none;
 }
 .cf-feedback-dialog-header h2 {
-  margin: 4px 0 6px;
+  margin: 4px 0 4px;
   font-size: 20px;
   font-weight: 800;
   color: #14532d;
   line-height: 1.25;
 }
+.cf-feedback-dialog-header p.muted {
+  margin: 0;
+  padding: 0;
+  line-height: 1.35;
+}
 .cf-feedback-form {
   display: grid;
-  gap: 18px;
+  gap: 14px;
+  margin-top: 0;
+}
+.cf-feedback-form > .cf-feedback-field:first-child {
+  margin-top: 0;
 }
 .cf-feedback-field {
   display: grid;
@@ -4386,3 +4487,467 @@ body {
 .search-suggestion span { overflow-wrap: anywhere; }
 .search-suggestion small { color: #647067; font-size: 11px; flex-shrink: 0; }
 .search-suggestion:hover, .search-suggestion[aria-selected="true"] { background: #e8f5eb; color: #0f381e; }
+
+/* ==========================================================================
+   PADRÃO BOTTOMSHEETS — ALÇA COM 2 RISCOS, FECHAMENTO E ROLAGEM MOBILE
+   ========================================================================== */
+.bottomsheet-handle {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 3.5px !important;
+  width: 100% !important;
+  padding: 10px 0 6px !important;
+  cursor: pointer !important;
+  touch-action: manipulation !important;
+  user-select: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+  flex-shrink: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+}
+.bottomsheet-handle .handle-bar {
+  display: block !important;
+  width: 44px !important;
+  height: 3.5px !important;
+  background: #cbd5e1 !important;
+  border-radius: 999px !important;
+  pointer-events: none !important;
+  transition: background-color 0.15s ease !important;
+}
+.bottomsheet-handle:hover .handle-bar,
+.bottomsheet-handle:active .handle-bar {
+  background: #94a3b8 !important;
+}
+
+/* ==========================================================================
+   CHAT IA — BOTÕES COMPACTOS 3D CARTOON (REINICIAR ↻ E LIMPAR 🗑)
+   ========================================================================== */
+.chat-action-back {
+  display: none !important;
+}
+.chat-action-restart,
+.chat-action-clear {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 40px !important;
+  height: 40px !important;
+  min-width: 40px !important;
+  min-height: 40px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  font-size: 20px !important;
+  font-weight: 800 !important;
+  cursor: pointer !important;
+  touch-action: manipulation !important;
+  flex-shrink: 0 !important;
+  transition: transform 0.1s ease, box-shadow 0.1s ease !important;
+}
+.chat-action-restart {
+  background: #16a34a !important;
+  color: #ffffff !important;
+  border: 2px solid #15803d !important;
+  box-shadow: 0 3px 0 #15803d !important;
+}
+.chat-action-clear {
+  background: #fee2e2 !important;
+  color: #dc2626 !important;
+  border: 2px solid #f87171 !important;
+  box-shadow: 0 3px 0 #ef4444 !important;
+}
+.chat-action-restart:active,
+.chat-action-clear:active {
+  transform: translateY(2px) !important;
+  box-shadow: none !important;
+}
+
+/* ==========================================================================
+   CHAT IA — GRID DE PRODUTOS 3 POR LINHA (MINIMALISTA E COMPACTO)
+   ========================================================================== */
+.guided-results-grid,
+.chat-product-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 6px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  padding: 4px 0 !important;
+}
+
+.chat-mini-card {
+  display: flex !important;
+  flex-direction: column !important;
+  background: #ffffff !important;
+  border: 1.5px solid #dce5df !important;
+  border-radius: 12px !important;
+  overflow: hidden !important;
+  padding: 6px !important;
+  box-sizing: border-box !important;
+  text-align: center !important;
+  position: relative !important;
+  min-width: 0 !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04) !important;
+  transition: transform 0.12s ease, box-shadow 0.12s ease !important;
+}
+.chat-mini-card:active {
+  transform: scale(0.97) !important;
+}
+.chat-mini-photo {
+  width: 100% !important;
+  aspect-ratio: 1 / 1 !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+  background: #f1f5f9 !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+.chat-mini-photo img,
+.chat-mini-photo render-image,
+.chat-mini-photo render-image img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  display: block !important;
+}
+.chat-mini-body {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 !important;
+  gap: 3px !important;
+  padding-top: 5px !important;
+  min-width: 0 !important;
+}
+.chat-mini-name {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  line-height: 1.25 !important;
+  color: #1e293b !important;
+  display: -webkit-box !important;
+  -webkit-line-clamp: 2 !important;
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important;
+  min-height: 27px !important;
+  cursor: pointer !important;
+  text-align: center !important;
+  word-break: break-word !important;
+}
+.chat-mini-price {
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  color: #15803d !important;
+  margin: 1px 0 3px !important;
+}
+.chat-mini-add {
+  margin-top: auto !important;
+  width: 100% !important;
+  padding: 5px 4px !important;
+  font-size: 10.5px !important;
+  font-weight: 800 !important;
+  border-radius: 8px !important;
+  background: #16a34a !important;
+  color: #ffffff !important;
+  border: 1.5px solid #15803d !important;
+  box-shadow: 0 2px 0 #15803d !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 26px !important;
+  touch-action: manipulation !important;
+}
+.chat-mini-add:active {
+  transform: translateY(2px) !important;
+  box-shadow: none !important;
+}
+
+/* ==========================================================================
+   LARGURA E ROLAGEM MOBILE DO CHAT IA E BOTTOMSHEETS
+   ========================================================================== */
+@media (max-width: 768px) {
+  .drawer,
+  .cart-drawer,
+  .chat-drawer,
+  .chat-drawer[open],
+  .chat-drawer.has-product-results[open] {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    left: 0 !important;
+    right: 0 !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+  }
+  .chat-drawer .dialog-header,
+  .chat-drawer .messages,
+  .chat-drawer .suggestions,
+  .chat-drawer .composer {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .chat-drawer .dialog-header {
+    padding: 10px 14px 12px !important;
+  }
+  .chat-drawer .composer {
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom)) !important;
+  }
+}
+
+.chat-drawer .messages {
+  flex: 1 1 auto !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior-y: contain !important;
+  touch-action: pan-y !important;
+}
+
+/* ==========================================================================
+   CONTAINMENT GLOBAL ANTI-OVERFLOW (SITE NUNCA MAIOR QUE A TELA NO MOBILE)
+   ========================================================================== */
+html, body {
+  width: 100% !important;
+  max-width: 100vw !important;
+  overflow-x: hidden !important;
+  position: relative !important;
+}
+
+@media (max-width: 768px) {
+  html, body, .main, .container, #main, #catalogView {
+    width: 100% !important;
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
+    box-sizing: border-box !important;
+  }
+}
+
+/* ==========================================================================
+   FILTROS MOBILE — BOTÃO FILTRO + BOTTOMSHEET + OCULTA CHIPS NO CELULAR
+   ========================================================================== */
+@media (max-width: 768px) {
+  #categoryFilterControl,
+  #subcategoryFilterControl,
+  .catalog-category-filter,
+  .catalog-subcategory-filter {
+    display: none !important;
+  }
+  .catalog-mobile-filter-bar {
+    display: flex !important;
+  }
+}
+
+@media (min-width: 769px) {
+  .catalog-mobile-filter-bar {
+    display: none !important;
+  }
+}
+
+.catalog-mobile-filter-bar {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 14px;
+  width: 100%;
+  box-sizing: border-box;
+  flex-wrap: wrap;
+}
+
+.catalog-filter-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  padding: 8px 16px !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  background: #16a34a !important;
+  color: #ffffff !important;
+  border: 2px solid #15803d !important;
+  border-radius: 999px !important;
+  box-shadow: 0 3px 0 #15803d !important;
+  cursor: pointer !important;
+  touch-action: manipulation !important;
+  letter-spacing: 0.5px !important;
+}
+.catalog-filter-btn:active {
+  transform: translateY(2px) !important;
+  box-shadow: none !important;
+}
+.filter-btn-badge {
+  background: #ffffff !important;
+  color: #15803d !important;
+  font-size: 11px !important;
+  font-weight: 900 !important;
+  border-radius: 999px !important;
+  padding: 1px 7px !important;
+  margin-left: 2px !important;
+}
+
+.mobile-active-filter-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.mobile-active-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 750;
+  color: #166534;
+  background: #dcfce7;
+  border: 1.5px solid #86efac;
+  border-radius: 999px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.mobile-active-pill:active {
+  background: #bbf7d0;
+}
+.mobile-active-pill-remove {
+  font-weight: 900;
+  font-size: 12px;
+  margin-left: 2px;
+  color: #15803d;
+}
+
+/* DIALOG DE FILTROS (BOTTOMSHEET) */
+.filter-drawer {
+  inset: auto 0 0 0 !important;
+  margin: 0 !important;
+  width: 100% !important;
+  max-width: 100vw !important;
+  height: auto !important;
+  max-height: 85dvh !important;
+  border-radius: 22px 22px 0 0 !important;
+  border: 0 !important;
+  box-shadow: 0 -10px 34px rgba(15, 23, 42, 0.22), 0 0 0 100vmax rgba(15, 23, 42, 0.48) !important;
+  box-sizing: border-box !important;
+  overflow-x: hidden !important;
+  padding: 0 16px calc(24px + env(safe-area-inset-bottom)) !important;
+  background: #ffffff !important;
+}
+.filter-dialog-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.filter-dialog-heading h2 {
+  font-size: 17px !important;
+  font-weight: 800 !important;
+  color: #111827 !important;
+  margin: 0 !important;
+}
+.filter-dialog-subtitle {
+  font-size: 12px;
+  color: #64748b;
+}
+.filter-drawer-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 10px 0 24px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  max-height: calc(85dvh - 90px);
+}
+.filter-group-title {
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+  color: #64748b !important;
+  margin: 0 0 10px !important;
+}
+.filter-buttons-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.filter-choice-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  padding: 9px 15px !important;
+  font-size: 13px !important;
+  font-weight: 750 !important;
+  border-radius: 12px !important;
+  background: #f8fafc !important;
+  color: #334155 !important;
+  border: 1.5px solid #cbd5e1 !important;
+  box-shadow: 0 2px 0 #94a3b8 !important;
+  cursor: pointer !important;
+  touch-action: manipulation !important;
+  transition: transform 0.1s ease, background-color 0.1s ease !important;
+}
+.filter-choice-btn:active {
+  transform: translateY(2px) !important;
+  box-shadow: none !important;
+}
+.filter-choice-btn.is-active {
+  background: #16a34a !important;
+  color: #ffffff !important;
+  border-color: #15803d !important;
+  box-shadow: 0 2px 0 #15803d !important;
+}
+.filter-choice-btn.is-special {
+  background: #f0fdf4 !important;
+  color: #166534 !important;
+  border-color: #86efac !important;
+  box-shadow: 0 2px 0 #86efac !important;
+  font-weight: 800 !important;
+}
+.filter-choice-btn.is-special.is-active {
+  background: #16a34a !important;
+  color: #ffffff !important;
+  border-color: #15803d !important;
+  box-shadow: 0 2px 0 #15803d !important;
+}
+
+/* ==========================================================================
+   ESTADO VAZIO DO CATÁLOGO / COMPRAS (RESPONSIVO E CENTRALIZADO)
+   ========================================================================== */
+.catalog-empty-state {
+  grid-column: 1 / -1 !important;
+  width: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  margin: 36px auto 48px !important;
+  padding: 32px 20px !important;
+  box-sizing: border-box !important;
+}
+
+.catalog-empty-text {
+  font-size: 16px !important;
+  line-height: 1.6 !important;
+  color: #526071 !important;
+  max-width: 620px !important;
+  margin: 0 auto !important;
+  text-align: center !important;
+}
+
+.catalog-empty-action {
+  margin: 12px auto 0 !important;
+  font-size: 14px !important;
+}
+
+@media (max-width: 640px) {
+  .catalog-empty-state {
+    margin: 20px auto 32px !important;
+    padding: 24px 14px !important;
+  }
+  .catalog-empty-text {
+    font-size: 14px !important;
+    line-height: 1.5 !important;
+  }
+}
+
+

@@ -24,3 +24,5 @@ playwright-report/
 public/pdv/dist/
 
 public/storefront/dist/
+
+tmp/logo-*

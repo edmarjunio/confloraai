@@ -1,4 +1,4 @@
-const { randomUUID } = require('node:crypto');
+﻿const { randomUUID } = require('node:crypto');
 const { safeUser } = require('../security/web-session');
 const { protectCredentials, verifyCredential } = require('../security/credentials');
 const { createHash } = require('node:crypto');
@@ -2230,7 +2230,12 @@ class FirestoreRepository {
       }
     }
 
-    this.inMemoryOrders.set(phone, dataWithTs);
+    const existing = this.inMemoryOrders.get(phone) || {};
+    this.inMemoryOrders.set(phone, { ...existing, ...dataWithTs });
+  }
+
+  async updateOrder(phone, orderData) {
+    return this.saveOrder(phone, orderData);
   }
 
   async getOrder(phone) {

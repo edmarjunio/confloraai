@@ -16,16 +16,6 @@ export function createGuidedChat(state, catalog) {
     messages.append(element("p", { class: `bubble ${role}`, text }));
     messages.scrollTop = messages.scrollHeight;
   };
-  const buttons = (choices) =>
-    messages.append(
-      element(
-        "div",
-        { class: "suggestions guided-choices" },
-        choices.map(([text, action]) =>
-          element("button", { text, onclick: action }),
-        ),
-      ),
-    );
   function clearResults() {
     activeResults?.remove();
     activeResults = null;
@@ -57,7 +47,7 @@ export function createGuidedChat(state, catalog) {
         },
       }, [icon("x")]),
     ]);
-    const grid = element("div", { class: "guided-results-grid" });
+    const grid = element("div", { class: "guided-results-grid chat-product-grid" });
     const empty = element("p", {
       class: "guided-results-empty",
       text: "Nenhum produto encontrado nesta seleção.",
@@ -85,7 +75,7 @@ export function createGuidedChat(state, catalog) {
     let visibleCount = 0;
     const renderProducts = () => {
       matchingProducts = availableProducts;
-      visibleCount = Math.min(24, matchingProducts.length);
+      visibleCount = Math.min(9, matchingProducts.length);
       grid.replaceChildren(
         ...matchingProducts.slice(0, visibleCount).map((product) => catalog.card(product, { chat: true })),
       );
@@ -96,7 +86,7 @@ export function createGuidedChat(state, catalog) {
     };
     more.addEventListener("click", () => {
       const previousCount = visibleCount;
-      visibleCount = Math.min(visibleCount + 24, matchingProducts.length);
+      visibleCount = Math.min(visibleCount + 9, matchingProducts.length);
       grid.append(
         ...matchingProducts.slice(previousCount, visibleCount).map((product) => catalog.card(product, { chat: true })),
       );
@@ -111,34 +101,50 @@ export function createGuidedChat(state, catalog) {
     const actions = element('div', { class: 'suggestions chat-next-search' }, [
       element('p', { text: `${event.detail.product.name} adicionado. Quer pesquisar outro produto ou manter esta seleção?` }),
       element('button', { text: 'Limpar e pesquisar outro', onclick: () => {
-        path = []; messages.replaceChildren(); clearResults(); browse(); $('#chatInput').focus();
+        path = []; messages.replaceChildren(); clearResults(); browse();
       } }),
-      element('button', { text: 'Manter filtro atual', onclick: () => { actions.remove(); $('#chatInput').focus(); } }),
+      element('button', { text: 'Manter filtro atual', onclick: () => { actions.remove(); } }),
     ]);
     messages.append(actions);
     messages.scrollTop = messages.scrollHeight;
   });
   function browse() {
     clearResults();
-    const choices = nextChoices(state.products, state.config.categories, path);
+    const currentPath = [...path];
+    const choices = nextChoices(state.products, state.config.categories, currentPath);
     say(
-      path.length
-        ? `${path.join(" → ")}. Qual opção você procura?`
+      currentPath.length
+        ? `${currentPath.join(" → ")}. Qual opção você procura?`
         : "Do que você precisa?",
     );
     if (choices.length) {
-      buttons(
-        choices.map((choice) => [
-          choice.name,
-          () => {
-            say(choice.name, "user");
-            path.push(choice.name);
-            browse();
-          },
-        ]),
+      const container = element(
+        "div",
+        { class: "suggestions guided-choices" },
+        choices.map((choice) =>
+          element("button", {
+            text: choice.name,
+            onclick: () => {
+              while (container.nextSibling) {
+                container.nextSibling.remove();
+              }
+              path = [...currentPath, choice.name];
+              say(choice.name, "user");
+              browse();
+            },
+          }),
+        ),
       );
-      if (path.length) {
-        buttons([["Ver todos desta categoria", () => results(pool())]]);
+      messages.append(container);
+      if (currentPath.length) {
+        messages.append(
+          element("div", { class: "suggestions guided-choices" }, [
+            element("button", {
+              text: "Ver todos desta categoria",
+              onclick: () => results(pool()),
+            }),
+          ]),
+        );
       }
     } else {
       results(pool());
@@ -158,7 +164,11 @@ export function createGuidedChat(state, catalog) {
         "Não encontrei produtos com essas informações no cadastro. Tente o nome do item ou escolha uma categoria abaixo.",
       );
       clearResults();
-      buttons([["Escolher categoria", () => { path = []; browse(); }], ["Ver todos os produtos", () => results(source, "Todos os produtos")]]);
+      const fallbackChoices = element("div", { class: "suggestions guided-choices" }, [
+        element("button", { text: "Escolher categoria", onclick: () => { path = []; browse(); } }),
+        element("button", { text: "Ver todos os produtos", onclick: () => results(source, "Todos os produtos") }),
+      ]);
+      messages.append(fallbackChoices);
       return;
     }
     if (matches.some((match) => match.approximate)) {
@@ -186,7 +196,6 @@ export function createGuidedChat(state, catalog) {
   });
   $("#aiFab").addEventListener("click", () => {
     openDialog($("#chatDialog"));
-    $("#chatInput").focus();
   });
   function configure() {
     $("#aiFab").hidden = !state.config.assistant.enabled;
@@ -199,24 +208,31 @@ export function createGuidedChat(state, catalog) {
       "Digite o nome ou uma dúvida sobre o produto…";
     $("#chatSuggestions").replaceChildren(
       element("button", {
-        text: "← Voltar",
-        class: "chat-action-back",
-        onclick: () => {
-          path.pop();
-          browse();
-        },
-      }),
-      element("button", {
-        text: "↻ Começar de novo",
-        class: "chat-action-restart",
+        text: "↻",
+        class: "chat-action-restart cf-btn-3d cf-btn-3d--sm",
+        "aria-label": "Começar de novo",
+        title: "Começar de novo",
         onclick: () => {
           path = [];
+          clearResults();
           messages.replaceChildren();
           browse();
         },
       }),
+      element("button", {
+        text: "🗑",
+        class: "chat-action-clear cf-btn-3d cf-btn-3d--sm",
+        "aria-label": "Limpar conversa",
+        title: "Limpar conversa",
+        onclick: () => {
+          path = [];
+          clearResults();
+          messages.replaceChildren();
+          $("#chatInput").value = "";
+          browse();
+        },
+      }),
     );
-    $('#chatSuggestions').append(element('button', { text: 'Limpar conversa', class: 'chat-action-clear', onclick: () => { path = []; clearResults(); messages.replaceChildren(); $('#chatInput').value = ''; browse(); $('#chatInput').focus(); } }));
     if (!messages.children.length) {
       browse();
     }

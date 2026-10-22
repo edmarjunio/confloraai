@@ -1,4 +1,4 @@
-import {
+﻿import {
   $,
   element,
   createApi,
@@ -327,10 +327,10 @@ function applyConfig() {
     .filter(Boolean)
     .join(" · ");
   const logoUrl = existingStore
-    ? "/store-assets/brands/conflora-logo.png"
-    : config.branding?.logoUrl || "/store-assets/brands/conflora-logo.png";
+    ? "/store-assets/brands/conflora-logo.webp"
+    : config.branding?.logoUrl || "/store-assets/brands/conflora-logo.webp";
   const logo = $("#logo");
-  const defaultLogoUrl = "/store-assets/brands/conflora-logo.png";
+  const defaultLogoUrl = "/store-assets/brands/conflora-logo.webp";
   $("#brand").classList.add("has-logo");
   logo.hidden = false;
   logo.onerror = () => {
@@ -851,13 +851,14 @@ async function loadCustomerLedger() {
 
 // Global modal triggers and shortcuts
 for (const button of document.querySelectorAll("[data-close]")) {
-  button.addEventListener("click", () => button.closest("dialog").close());
+  button.addEventListener("click", () => button.closest("dialog")?.close());
 }
 for (const node of document.querySelectorAll("[data-icon]")) {
   node.replaceChildren(icon(node.dataset.icon));
 }
 for (const dialog of document.querySelectorAll("dialog")) {
   dialog.addEventListener("click", (event) => {
+    // 1. Clique fora do bottomsheet/modal (no backdrop escuro) fecha ele
     if (event.target === dialog) {
       const box = dialog.getBoundingClientRect();
       if (
@@ -867,10 +868,49 @@ for (const dialog of document.querySelectorAll("dialog")) {
         event.clientY > box.bottom
       ) {
         dialog.close();
+        return;
+      }
+    }
+    // 2. Clique nos 2 riscos do topo (handle) fecha/abaixa ele
+    if (event.target.closest(".bottomsheet-handle")) {
+      dialog.close();
+      return;
+    }
+    // 3. Clique no cabeçalho do bottomsheet para abaixar/fechar (exceto botões e inputs)
+    const interactive = event.target.closest("button, input, textarea, select, a, label");
+    if (!interactive && dialog.classList.contains("drawer")) {
+      const box = dialog.getBoundingClientRect();
+      if (event.clientY >= box.top && event.clientY <= box.top + 52) {
+        dialog.close();
       }
     }
   });
+
+  // Gesto de puxar para baixo no topo do bottomsheet para abaixar/fechar
+  let touchStartY = 0;
+  dialog.addEventListener("touchstart", (e) => {
+    const touch = e.touches[0];
+    const box = dialog.getBoundingClientRect();
+    if (touch && touch.clientY <= box.top + 60) {
+      touchStartY = touch.clientY;
+    } else {
+      touchStartY = 0;
+    }
+  }, { passive: true });
+  dialog.addEventListener("touchend", (e) => {
+    const touch = e.changedTouches[0];
+    if (touchStartY > 0 && touch && touch.clientY - touchStartY > 50) {
+      dialog.close();
+    }
+    touchStartY = 0;
+  }, { passive: true });
 }
+
+// Fechamento da alça no drawer da equipe
+document.querySelector("#teamDrawerSheet .bottomsheet-handle")?.addEventListener("click", () => {
+  const overlay = document.querySelector("#teamDrawerOverlay");
+  if (overlay) overlay.classList.add("hidden");
+});
 
 // Mobile bottom bar listeners
 $("#navCatalogBtn").addEventListener("click", (event) => {
@@ -1046,7 +1086,7 @@ try {
   }
 } catch (error) {
   $("#storeName").textContent = "Loja Conflora";
-  $("#logo").src = "/store-assets/brands/conflora-logo.png";
+  $("#logo").src = "/store-assets/brands/conflora-logo.webp";
   $("#logo").alt = "Conflora Horta e Viveiro";
   $("#logo").hidden = false;
   $("#brand").classList.add("has-logo");

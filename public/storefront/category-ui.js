@@ -88,7 +88,7 @@
     let tone, symbol;
     if (kind === 'favorites') [tone, symbol] = ['rose', 'heart'];
     else if (kind === 'purchases') [tone, symbol] = ['green', 'box'];
-    else if (kind === 'all') [tone, symbol] = ['slate', 'grid'];
+    else if (kind === 'all') [tone, symbol] = ['forest', 'grid'];
     else if (value.includes('limpar')) [tone, symbol] = ['rose', 'clear'];
     else if (value.includes('frutifer') || value.includes('citric')) [tone, symbol] = ['yellow', 'fruit'];
     else if (value.includes('hortifrut') || value.includes('legum') || value.includes('verdur')) [tone, symbol] = ['orange', 'veggie'];
@@ -127,19 +127,22 @@
       box-shadow:0 3px 0 var(--category-strong), 0 3px 6px rgba(15, 23, 42, 0.12);
       transition:background-color 150ms ease,color 150ms ease,transform 150ms ease,box-shadow 150ms ease;
     }
-    .cf-category-chip.category-chip:hover:not(:disabled) {
+    .cf-category-chip.category-chip:not(.is-active):not([aria-pressed="true"]):hover:not(:disabled) {
       background:var(--category-soft); border-color:var(--category-strong);
       box-shadow:0 4px 0 var(--category-strong), 0 5px 10px rgba(15, 23, 42, 0.16); transform:translateY(-1px);
     }
     .cf-category-chip.category-chip[aria-pressed="true"],
     .cf-category-chip.category-chip[aria-pressed="true"]:hover,
+    .cf-category-chip.category-chip.is-active,
+    .cf-category-chip.category-chip.is-active:hover,
     .cf-category-tag.cf-product-category-tag {
-      color:var(--category-foreground); background:var(--category-strong);
-      border-color:var(--category-strong);
+      color:var(--category-foreground) !important; background:var(--category-strong) !important;
+      border-color:var(--category-strong) !important;
     }
     .cf-category-chip.category-chip:active { transform:translateY(1px); box-shadow:0 1px 0 var(--category-strong); }
     .cf-category-chip.category-chip:focus-visible { outline:3px solid var(--category-strong); outline-offset:3px; }
-    .cf-category-chip.category-chip.cf-category-clear { width:38px; min-width:38px; padding:7px; gap:0; }
+    .cf-category-chip.category-chip.cf-category-clear,
+    .cf-category-chip.category-chip.cf-category-icon-only { width:38px; min-width:38px; height:38px; min-height:38px; padding:0; gap:0; border-radius:999px; }
     .cf-category-tag.cf-product-category-tag { gap:4px; }
     .cf-category-icon { display:inline-flex; align-items:center; justify-content:center; flex:none; line-height:0; filter:drop-shadow(0 1.5px 0 rgba(15, 23, 42, 0.28)); }
     .cf-category-icon > svg { display:block; width:18px; height:18px; flex:none; overflow:visible; }
@@ -149,7 +152,7 @@
   document.head.append(style);
 
   class RenderCategoryTag extends HTMLElement {
-    static get observedAttributes() { return ['category', 'color-category', 'variant', 'selected', 'kind', 'class']; }
+    static get observedAttributes() { return ['category', 'color-category', 'variant', 'selected', 'kind', 'class', 'hide-label']; }
     connectedCallback() {
       this.onLanguageChange ||= () => this.render();
       window.addEventListener('conflora-lang-change', this.onLanguageChange);
@@ -158,12 +161,14 @@
     disconnectedCallback() { window.removeEventListener('conflora-lang-change', this.onLanguageChange); }
     attributeChangedCallback() { if (this.isConnected) this.render(); }
     render() {
-      const category = this.getAttribute('category') || 'Produto';
+      const category = this.getAttribute('category') || '';
       const labelText = category.tr || category;
       const filter = ['filter', 'action'].includes(this.getAttribute('variant'));
       const action = this.getAttribute('variant') === 'action';
       const selected = this.getAttribute('selected') === 'true';
-      const theme = appearance(this.getAttribute('color-category') || category, this.getAttribute('kind'));
+      const kind = this.getAttribute('kind');
+      const hideLabel = this.getAttribute('hide-label') === 'true' || kind === 'all' || !labelText;
+      const theme = appearance(this.getAttribute('color-category') || category || 'todas', kind);
       const tagName = filter ? 'button' : 'span';
       // Preserve the focused native button while React updates selection.
       let tag = this.firstElementChild;
@@ -171,35 +176,34 @@
       tag.className = filter ? `category-chip cf-category-chip${selected ? ' is-active' : ''}`
         : `cf-product-category-tag cf-category-tag ${this.getAttribute('class') || ''}`.trim();
       tag.classList.toggle('cf-category-clear', action);
-      if (action) tag.setAttribute('aria-label', labelText);
-      else tag.removeAttribute('aria-label');
+      tag.classList.toggle('cf-category-icon-only', hideLabel || action);
+      const accessibleLabel = labelText || (kind === 'all' ? 'Todas as categorias'.tr : 'Filtro');
+      tag.setAttribute('aria-label', accessibleLabel);
       tag.dataset.categoryTone = theme.tone;
       tag.style.setProperty('--category-strong', theme.strong);
       tag.style.setProperty('--category-soft', theme.soft);
       tag.style.setProperty('--category-foreground', theme.foreground);
-      tag.title = labelText;
+      tag.title = accessibleLabel;
       if (filter) {
         tag.type = 'button';
-        if (action) tag.removeAttribute('aria-pressed');
-        else tag.setAttribute('aria-pressed', String(selected));
+        tag.setAttribute('aria-pressed', String(selected));
       }
       const icon = document.createElement('span');
       icon.className = 'cf-category-icon';
       icon.setAttribute('aria-hidden', 'true');
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       svg.setAttribute('class', 'cf-category-svg');
-<<<<<<< HEAD
-      for (const [key, value] of Object.entries({ viewBox:'0 0 24 24', width:'16', height:'16', fill:'none', stroke:'currentColor', 'stroke-width':'1.8', 'stroke-linecap':'round', 'stroke-linejoin':'round' })) svg.setAttribute(key, value);
-      for (const d of action ? ['M6 6l12 12M18 6 6 18'] : paths[theme.symbol]) { const path = document.createElementNS(svg.namespaceURI, 'path'); path.setAttribute('d', d); svg.append(path); }
-=======
       for (const [key, value] of Object.entries({ viewBox:'0 0 24 24', width:'18', height:'18', fill:'none' })) svg.setAttribute(key, value);
       svg.innerHTML = cartoonIcons[theme.symbol] || cartoonIcons.box;
->>>>>>> dd4104423355911e21f0665f6497473356e449b7
       icon.append(svg);
-      const label = document.createElement('span');
-      label.className = filter ? 'category-chip-label' : 'cf-product-category-tag-label';
-      label.textContent = labelText;
-      tag.replaceChildren(...(action ? [icon] : [icon, label]));
+      if (hideLabel || action) {
+        tag.replaceChildren(icon);
+      } else {
+        const label = document.createElement('span');
+        label.className = filter ? 'category-chip-label' : 'cf-product-category-tag-label';
+        label.textContent = labelText;
+        tag.replaceChildren(icon, label);
+      }
       this.style.display = 'contents';
     }
   }

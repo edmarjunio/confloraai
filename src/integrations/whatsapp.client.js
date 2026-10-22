@@ -147,6 +147,97 @@ class WhatsAppClient {
   }
 
   /**
+   * Envia uma mensagem interativa de lista (opções nativas no WhatsApp)
+   */
+  async sendInteractiveList(to, { headerText = '', bodyText, footerText = '', buttonText = 'Ver opções', sections }) {
+    if (!this.token || !config.whatsapp.phoneNumberId) {
+      Logger.info(`[WhatsApp Mock Lista] Para: ${to} | Botão: ${buttonText} | Seções: ${sections?.length}`);
+      return { mock: true, success: true };
+    }
+
+    const interactive = {
+      type: 'list',
+      action: {
+        button: String(buttonText).slice(0, 20),
+        sections,
+      },
+      body: {
+        text: String(bodyText).slice(0, 1024),
+      },
+    };
+
+    if (headerText) {
+      interactive.header = {
+        type: 'text',
+        text: String(headerText).slice(0, 60),
+      };
+    }
+    if (footerText) {
+      interactive.footer = {
+        text: String(footerText).slice(0, 60),
+      };
+    }
+
+    const payload = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      type: 'interactive',
+      interactive,
+    };
+
+    return this.postRequest('/messages', payload);
+  }
+
+  /**
+   * Envia botões interativos rápidos nativos no WhatsApp (até 3 botões)
+   */
+  async sendInteractiveButtons(to, { bodyText, buttons, headerText = '', footerText = '' }) {
+    if (!this.token || !config.whatsapp.phoneNumberId) {
+      Logger.info(`[WhatsApp Mock Botões] Para: ${to} | Botões: ${buttons?.map((b) => b.title).join(', ')}`);
+      return { mock: true, success: true };
+    }
+
+    const interactive = {
+      type: 'button',
+      body: {
+        text: String(bodyText).slice(0, 1024),
+      },
+      action: {
+        buttons: buttons.slice(0, 3).map((btn) => ({
+          type: 'reply',
+          reply: {
+            id: String(btn.id).slice(0, 256),
+            title: String(btn.title).slice(0, 20),
+          },
+        })),
+      },
+    };
+
+    if (headerText) {
+      interactive.header = {
+        type: 'text',
+        text: String(headerText).slice(0, 60),
+      };
+    }
+    if (footerText) {
+      interactive.footer = {
+        text: String(footerText).slice(0, 60),
+      };
+    }
+
+    const payload = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      type: 'interactive',
+      interactive,
+    };
+
+    return this.postRequest('/messages', payload);
+  }
+
+  /**
    * Marca a mensagem como lida.
    * Apenas executa para IDs oficiais da Meta (wamid.), prevenindo erro #131009 em testes locais.
    * @param {string} messageId

@@ -25,11 +25,24 @@ export function createChat(state, catalog) {
     const config = state.config.assistant;
     let controls = document.querySelector('.chat-ai-controls');
     if (!controls) {
-      const reset = () => { if (busy) return; messages.replaceChildren(); history.length = 0; bubble('Qual produto você procura?', 'assistant'); $('#chatInput').focus(); };
+      const reset = () => { if (busy) return; messages.replaceChildren(); history.length = 0; bubble('Qual produto você procura?', 'assistant'); };
       controls = element('div', { class: 'suggestions chat-ai-controls' }, [
-        element('button', { type: 'button', class: 'chat-action-back', text: '← Voltar', onclick: () => { if (busy) return; history.splice(-2); const lastUser = [...messages.querySelectorAll('.bubble.user')].pop(); if (lastUser) { while (lastUser.nextSibling) lastUser.nextSibling.remove(); lastUser.remove(); } $('#chatInput').focus(); } }),
-        element('button', { type: 'button', class: 'chat-action-restart', text: '↻ Começar de novo', onclick: reset }),
-        element('button', { type: 'button', class: 'chat-action-clear', text: 'Limpar conversa', onclick: reset }),
+        element('button', {
+          type: 'button',
+          class: 'chat-action-restart cf-btn-3d cf-btn-3d--sm',
+          text: '↻',
+          'aria-label': 'Começar de novo',
+          title: 'Começar de novo',
+          onclick: reset,
+        }),
+        element('button', {
+          type: 'button',
+          class: 'chat-action-clear cf-btn-3d cf-btn-3d--sm',
+          text: '🗑',
+          'aria-label': 'Limpar conversa',
+          title: 'Limpar conversa',
+          onclick: reset,
+        }),
       ]);
       form.before(controls);
     }
@@ -84,11 +97,16 @@ export function createChat(state, catalog) {
       });
       pending.remove();
       bubble(response.message, "assistant");
-      for (const product of response.products || []) {
-        if (!state.products.some((p) => p.id === product.id)) {
-          state.products.push(product);
+      const products = response.products || [];
+      if (products.length) {
+        const grid = element("div", { class: "guided-results-grid chat-product-grid" });
+        for (const product of products.slice(0, 9)) {
+          if (!state.products.some((p) => p.id === product.id)) {
+            state.products.push(product);
+          }
+          grid.append(catalog.card(product, { chat: true }));
         }
-        messages.append(catalog.card(product, { chat: true }));
+        messages.append(grid);
       }
       if (response.products?.length) bubble('Digite no campo abaixo o produto específico que procura para refinar a busca.', 'assistant');
       for (const source of response.sources || []) {
@@ -108,27 +126,15 @@ export function createChat(state, catalog) {
       );
       messages.scrollTop = messages.scrollHeight;
     } catch (error) {
-      pending.textContent = error.message;
-      $("#chatInput").value = message;
-      notify("common.retry".tr);
+      pending.remove();
+      notify(error.message);
     } finally {
       busy = false;
       form.querySelector("button").disabled = false;
     }
   });
 
-  messages.addEventListener('chat-product-added', (event) => {
-    messages.querySelector('.chat-next-search')?.remove();
-    const actions = element('div', { class: 'suggestions chat-next-search' }, [
-      element('p', { text: `${event.detail.product.name} adicionado. Deseja pesquisar outro ou manter os produtos atuais?` }),
-      element('button', { text: 'Limpar e pesquisar outro', onclick: () => { messages.replaceChildren(); history.length = 0; bubble('Qual produto você procura agora?', 'assistant'); $('#chatInput').focus(); } }),
-      element('button', { text: 'Manter filtro atual', onclick: () => { actions.remove(); $('#chatInput').focus(); } }),
-    ]);
-    messages.append(actions);
-    messages.scrollTop = messages.scrollHeight;
-  });
-
-  $('#chatInput').maxLength = 800;
+  $('#chatInput').maxLength = 500;
   $('#chatInput').addEventListener('keydown', event => {
     if (event.key === 'Escape') {
       event.preventDefault(); event.stopPropagation(); $('#chatInput').value = '';
@@ -138,7 +144,6 @@ export function createChat(state, catalog) {
   });
   $("#aiFab").addEventListener("click", () => {
     openDialog($("#chatDialog"));
-    $("#chatInput").focus();
   });
 
   return { configure };

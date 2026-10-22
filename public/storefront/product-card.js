@@ -604,6 +604,24 @@
         </div>`;
     }
 
+    renderChatMini(vm) {
+      const safeName = escapeHtml(vm.name);
+      this.className = `cf-card--product chat-mini-card${vm.isUnavailable ? " is-inactive" : ""}`;
+      this.setAttribute("padding", "none");
+      this.innerHTML = `
+        <div class="chat-mini-photo" data-action="open">
+          ${this.buildImageHtml(vm, "chat-mini-img")}
+        </div>
+        <div class="chat-mini-body">
+          <span class="chat-mini-name" title="${safeName}" data-action="open">${safeName}</span>
+          <span class="chat-mini-price">${vm.formattedPrice}</span>
+          <button type="button" class="chat-mini-add cf-btn-3d cf-btn-3d--sm" data-action="add" ${vm.isUnavailable ? "disabled" : ""} aria-label="Adicionar ${safeName}">
+            <span>+ Adicionar</span>
+          </button>
+        </div>
+      `;
+    }
+
     renderStorefront(vm, compact = false, editing = false) {
       const safeName = escapeHtml(vm.name);
       const variantClasses = compact
@@ -644,6 +662,10 @@
       const vm = normalizeProduct(rawProduct);
       const variant = this.getAttribute("variant");
 
+      if (variant === "chat-mini" || variant === "chat") {
+        this.renderChatMini(vm);
+        return;
+      }
       if (variant === "cashier") {
         this.renderCashier(vm);
         return;

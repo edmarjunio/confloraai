@@ -378,7 +378,7 @@ export function createCatalog(state, add, navigate) {
       unavailable,
     };
     const card = element("render-product-card", {
-      variant: chat ? "cashier" : compact ? "recommendation" : "storefront",
+      variant: chat ? "chat-mini" : compact ? "recommendation" : "storefront",
       "product-data": JSON.stringify(cardProduct),
     });
     card.addEventListener("cf-product-card-action", (event) => {
@@ -430,7 +430,7 @@ export function createCatalog(state, add, navigate) {
         updateFilters();
         refreshPurchases();
       }, "purchases"),
-      categoryFilter("Todas", !showingFavorites && selectedCategories.length === 0, () => {
+      categoryFilter("Todas as categorias".tr, !showingFavorites && selectedCategories.length === 0, () => {
         showingFavorites = false;
         selectedCategories = [];
         updateFilters(true);
@@ -441,7 +441,7 @@ export function createCatalog(state, add, navigate) {
         updateFilters(false);
       })),
       ...(selectedCategories.length ? [element("render-category-tag", {
-        category: "Limpar categorias", variant: "action", kind: "all", onclick: () => {
+        category: "Limpar categorias".tr, variant: "action", selected: "true", onclick: () => {
           selectedCategories = []; updateFilters(true);
         },
       })] : []),
@@ -460,18 +460,24 @@ export function createCatalog(state, add, navigate) {
       subcatContainer.hidden = options.size === 0;
       subcatContainer.replaceChildren(...(options.size ? [
         element("span", { class: "subcategory-header-badge", text: "Subcategorias:".tr }),
+        categoryFilter("Todas as subcategorias".tr, selectedSubcategories.length === 0, () => {
+          selectedSubcategories = [];
+          pageSize = 24;
+          render();
+        }, "all"),
         ...[...options.entries()].map(([key, sub]) => categoryFilter(sub.name,
           selectedSubcategories.includes(key), () => {
             selectedSubcategories = window.ConfloraCategoryUi.toggleSelection(selectedSubcategories, key);
             pageSize = 24; render();
           }, "", sub.parent)),
         ...(selectedSubcategories.length ? [element("render-category-tag", {
-          category: "Limpar subcategorias", variant: "action", kind: "all", onclick: () => {
+          category: "Limpar subcategorias".tr, variant: "action", selected: "true", onclick: () => {
             selectedSubcategories = []; pageSize = 24; render();
           },
         })] : []),
       ] : []));
     }
+    renderMobileFilter(categories, activeProducts, updateFilters);
     const categoriesWithSelectedSub = new Set(
       selectedSubcategories.map(key => options.get(key)?.parentId).filter(Boolean),
     );
@@ -515,28 +521,30 @@ export function createCatalog(state, add, navigate) {
     renderedItems = list;
     $("#products").replaceChildren(...list.slice(0, pageSize).map((product) => renderCard(product)));
     if (!list.length) {
-      const emptyElements = [
+      const emptyContainer = element("div", {
+        class: "catalog-empty-state",
+      }, [
         element("p", {
-          class: "empty",
+          class: "empty catalog-empty-text",
           text: showingFavorites ? (purchaseLoading ? "Carregando suas compras..." : purchaseError || (state.user ? "Seus produtos comprados aparecerão aqui, dos mais comprados para os menos comprados." : "Entre na sua conta para ver os produtos que você mais compra.")).tr : "Nenhum produto encontrado. Tente outra busca.".tr,
         }),
-      ];
-      if (showingFavorites && purchaseError) emptyElements.push(element('button', { type: 'button', class: 'quiet', text: 'Tentar novamente'.tr, onclick: refreshPurchases }));
-      if (rawQuery) {
-        emptyElements.push(
+        ...(showingFavorites && purchaseError ? [
+          element('button', { type: 'button', class: 'quiet catalog-empty-action', text: 'Tentar novamente'.tr, onclick: refreshPurchases })
+        ] : []),
+        ...(rawQuery ? [
           element("button", {
             type: "button",
-            class: "quiet",
-            style: "margin: 0.5rem auto; display: block; text-decoration: underline; cursor: pointer;",
+            class: "quiet catalog-empty-action",
+            style: "margin: 0.75rem auto 0; display: block; text-decoration: underline; cursor: pointer;",
             text: "Limpar busca e ver produtos".tr,
             onclick: () => {
               if ($("#search")) $("#search").value = "";
               render();
             },
           }),
-        );
-      }
-      $("#products").append(...emptyElements);
+        ] : []),
+      ]);
+      $("#products").replaceChildren(emptyContainer);
     }
     $("#resultCount").textContent = list.length === 1 ? `1 ${"produto".tr}` : `${list.length} ${"produtos".tr}`;
     $("#catalogTitle").textContent = showingFavorites ? "Produtos que mais comprei".tr : "Explore o catálogo".tr;
@@ -836,6 +844,151 @@ export function createCatalog(state, add, navigate) {
     render();
   });
 
+  function renderMobileFilter(categoriesList, currentActiveProducts, doUpdateFilters) {
+    const container = $("#filterDialogBody");
+    if (!container) return;
+
+    const activeCatId = selectedCategories.length > 0 ? selectedCategories[0] : null;
+    const activeCatObj = categoriesList.find((c) => c.id === activeCatId);
+
+    // 1. Grupo de Categorias
+    const catButtons = [
+      element("button", {
+        type: "button",
+        class: `filter-choice-btn is-special${selectedCategories.length === 0 ? " is-active" : ""}`,
+        text: "Todas as categorias",
+        onclick: () => {
+          selectedCategories = [];
+          selectedSubcategories = [];
+          doUpdateFilters(true);
+          $("#filterDialog")?.close();
+        },
+      }),
+      ...categoriesList.map((category) => {
+        const isSelected = selectedCategories.includes(category.id);
+        return element("button", {
+          type: "button",
+          class: `filter-choice-btn${isSelected ? " is-active" : ""}`,
+          text: category.name,
+          onclick: () => {
+            selectedCategories = [category.id];
+            selectedSubcategories = [];
+            const subOpts = getSubcategoryOptions(currentActiveProducts, category.id);
+            if (subOpts.length === 0) {
+              doUpdateFilters(true);
+              $("#filterDialog")?.close();
+            } else {
+              renderMobileFilter(categoriesList, currentActiveProducts, doUpdateFilters);
+            }
+          },
+        });
+      }),
+    ];
+
+    const catSection = element("section", { class: "filter-group" }, [
+      element("h3", { class: "filter-group-title", text: "Categorias" }),
+      element("div", { class: "filter-buttons-grid" }, catButtons),
+    ]);
+
+    // 2. Grupo de Subcategorias (da categoria ativa)
+    const subSections = [];
+    if (activeCatObj) {
+      const subOpts = getSubcategoryOptions(currentActiveProducts, activeCatObj.id);
+      if (subOpts.length > 0) {
+        const subButtons = [
+          element("button", {
+            type: "button",
+            class: `filter-choice-btn is-special${selectedSubcategories.length === 0 ? " is-active" : ""}`,
+            text: "TODAS",
+            onclick: () => {
+              selectedSubcategories = [];
+              doUpdateFilters(false);
+              $("#filterDialog")?.close();
+            },
+          }),
+          ...subOpts.map((name) => {
+            const key = normalizeProductText(name);
+            const isSelected = selectedSubcategories.includes(key);
+            return element("button", {
+              type: "button",
+              class: `filter-choice-btn${isSelected ? " is-active" : ""}`,
+              text: name,
+              onclick: () => {
+                selectedSubcategories = [key];
+                doUpdateFilters(false);
+                $("#filterDialog")?.close();
+              },
+            });
+          }),
+        ];
+
+        subSections.push(
+          element("section", { class: "filter-group" }, [
+            element("h3", { class: "filter-group-title", text: `Subcategorias de ${activeCatObj.name}` }),
+            element("div", { class: "filter-buttons-grid" }, subButtons),
+          ]),
+        );
+      }
+    }
+
+    container.replaceChildren(catSection, ...subSections);
+
+    // 3. Atualização de Badge e Pills na barra móvel
+    const badge = $("#activeFilterBadge");
+    const pillsContainer = $("#mobileActiveFilterPills");
+    const totalActive = (selectedCategories.length > 0 ? 1 : 0) + selectedSubcategories.length;
+    if (badge) {
+      badge.textContent = String(totalActive);
+      badge.hidden = totalActive === 0;
+    }
+    if (pillsContainer) {
+      const pills = [];
+      if (activeCatObj) {
+        pills.push(
+          element("button", {
+            type: "button",
+            class: "mobile-active-pill",
+            title: "Remover filtro de categoria",
+            onclick: () => {
+              selectedCategories = [];
+              selectedSubcategories = [];
+              doUpdateFilters(true);
+            },
+          }, [
+            element("span", { text: activeCatObj.name }),
+            element("span", { class: "mobile-active-pill-remove", text: "✕" }),
+          ]),
+        );
+      }
+      if (selectedSubcategories.length > 0) {
+        for (const subKey of selectedSubcategories) {
+          pills.push(
+            element("button", {
+              type: "button",
+              class: "mobile-active-pill",
+              title: "Remover filtro de subcategoria",
+              onclick: () => {
+                selectedSubcategories = selectedSubcategories.filter((k) => k !== subKey);
+                doUpdateFilters(false);
+              },
+            }, [
+              element("span", { text: subKey }),
+              element("span", { class: "mobile-active-pill-remove", text: "✕" }),
+            ]),
+          );
+        }
+      }
+      pillsContainer.replaceChildren(...pills);
+    }
+  }
+
+  $("#openFilterDialogBtn")?.addEventListener("click", () => {
+    openDialog($("#filterDialog"));
+  });
+  $("#navCategoriesBtn")?.addEventListener("click", (e) => {
+    e.preventDefault();
+    openDialog($("#filterDialog"));
+  });
 
   return { render, details, card: renderCard, setFavoritesView, refreshPurchases };
 }

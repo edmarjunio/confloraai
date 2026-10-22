@@ -103,3 +103,135 @@ test('cashier report uploads a PDF and sends its media ID using the approved doc
   assert.equal(message.template.components[0].parameters[0].document.id, 'report-media');
   assert.equal(message.template.components[1].parameters[0].text, 'Caixa geral de hoje');
 });
+
+test('WhatsApp sends interactive list and buttons correctly', async (t) => {
+  let sentPayload;
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    sentPayload = JSON.parse(options.body);
+    return new globalThis.Response(JSON.stringify({ messages: [{ id: 'wamid.interactive' }] }), { status: 200 });
+  });
+
+  const client = new WhatsAppClient();
+  await client.sendInteractiveList('5564999990000', {
+    headerText: '🌿 Conflora',
+    bodyText: 'Escolha uma categoria:',
+    buttonText: 'Ver Categorias',
+    sections: [
+      {
+        title: 'Categorias',
+        rows: [{ id: 'cat_plantas', title: 'Plantas', description: 'Mudas e flores' }],
+      },
+    ],
+  });
+
+  assert.equal(sentPayload.type, 'interactive');
+  assert.equal(sentPayload.interactive.type, 'list');
+  assert.equal(sentPayload.interactive.action.button, 'Ver Categorias');
+  assert.equal(sentPayload.interactive.action.sections[0].rows[0].id, 'cat_plantas');
+
+  await client.sendInteractiveButtons('5564999990000', {
+    bodyText: 'Como deseja receber?',
+    buttons: [
+      { id: 'order_entrega', title: '🛵 Entrega' },
+      { id: 'order_retirada', title: '🏪 Retirada' },
+    ],
+  });
+
+  assert.equal(sentPayload.type, 'interactive');
+  assert.equal(sentPayload.interactive.type, 'button');
+  assert.equal(sentPayload.interactive.action.buttons[0].reply.id, 'order_entrega');
+  assert.equal(sentPayload.interactive.action.buttons[1].reply.id, 'order_retirada');
+});
+
+test('MessageService handles WhatsApp native flow: Atendente, Montar Sacola, and Category selection', async () => {
+  const { MessageService } = require('../src/services/message.service');
+  const firestoreRepo = new FirestoreRepository({ isInMemory: true });
+  const mockCatalog = {
+    items: [
+      { id: 'prod1', name: 'Muda de Palmeira', price: 5000, category: 'Plantas', subcategory: 'Palmeiras' },
+      { id: 'prod2', name: 'Alface Crespa', price: 500, category: 'Horta', subcategory: 'Folhosas' },
+    ],
+    refreshCatalog: async () => {},
+    getCategories: () => ['Plantas', 'Horta'],
+    getSubcategories: (cat) => cat === 'Plantas' ? ['Palmeiras'] : ['Folhosas'],
+    getProductsBySubcategory: (sub) => sub === 'Palmeiras' ? [{ id: 'prod1', name: 'Muda de Palmeira', price: 5000 }] : [],
+    findProductByName: () => null,
+  };
+
+  const clientMock = {
+    markAsRead: async () => {},
+    sendTextMessage: async () => ({ success: true }),
+    sendInteractiveList: async () => ({ success: true }),
+    sendInteractiveButtons: async () => ({ success: true }),
+    sendWelcomeTemplate: async () => ({ success: true }),
+    formatRecipient: (r) => r,
+  };
+
+  const service = new MessageService({
+    router: { route: () => ({ intent: 'GENERAL_CHAT' }) },
+    directPriceService: {},
+    agentService: {},
+    catalogRepo: mockCatalog,
+    firestoreRepo,
+    orderService: {},
+    whatsappClient: clientMock,
+  });
+
+  // 1. Falar com atendente
+  const atendenteRes = await service.handleCustomerMessage({
+    phone: '5564999990000',
+    message: 'falar com atendente',
+  });
+  assert.equal(atendenteRes.intent, 'HUMAN_HANDOFF');
+  assert.match(atendenteRes.reply, /estamos à disposição/i);
+
+  // 2. Montar Sacola
+  const sacolaRes = await service.handleCustomerMessage({
+    phone: '5564999990000',
+    message: 'Montar Sacola',
+    interactiveId: 'montar_sacola',
+  });
+  assert.equal(sacolaRes.intent, 'NATIVE_CATALOG_CATEGORIES');
+
+  // 3. Escolher Categoria Plantas
+  const catRes = await service.handleCustomerMessage({
+    phone: '5564999990000',
+    message: 'Plantas',
+    interactiveId: 'cat_Plantas',
+  });
+  assert.equal(catRes.intent, 'NATIVE_CATALOG_SUBCATEGORIES');
+
+  // 4. Escolher Subcategoria Palmeiras
+  const subRes = await service.handleCustomerMessage({
+    phone: '5564999990000',
+    message: 'Palmeiras',
+    interactiveId: 'sub_Palmeiras',
+  });
+  assert.equal(subRes.intent, 'NATIVE_PRODUCTS_LIST');
+
+  // 5. Adicionar Produto à Sacola
+  const addRes = await service.handleCustomerMessage({
+    phone: '5564999990000',
+    message: 'Muda de Palmeira',
+    interactiveId: 'add_prod1',
+  });
+  assert.equal(addRes.intent, 'NATIVE_CART_UPDATED');
+  assert.match(addRes.reply, /adicionado à sua sacola/i);
+
+  // 6. Escolher Entrega
+  const deliveryRes = await service.handleCustomerMessage({
+    phone: '5564999990000',
+    message: 'Entrega',
+    interactiveId: 'order_entrega',
+  });
+  assert.equal(deliveryRes.intent, 'NATIVE_ORDER_DELIVERY_SET');
+
+  // 7. Escolher Pagamento PIX
+  const payRes = await service.handleCustomerMessage({
+    phone: '5564999990000',
+    message: 'PIX',
+    interactiveId: 'pay_pix',
+  });
+  assert.equal(payRes.intent, 'NATIVE_ORDER_COMPLETED');
+  assert.match(payRes.reply, /Chave PIX/i);
+});

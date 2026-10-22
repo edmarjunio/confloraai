@@ -109,6 +109,7 @@ export function createCart(state) {
     $("#cartFabCount").textContent = Number(count.toFixed(3)).toLocaleString("pt-BR");
     $("#cartTitle").textContent = `${"cart.title".tr} (${items.length})`;
     $("#cartClearButton").disabled = items.length === 0 || sending;
+    $("#cartClearButton").style.display = items.length === 0 ? "none" : "";
     $("#cartTotal").textContent = $("#mobileTotal").textContent =
       money(subtotal());
     $("#cartItems").replaceChildren(

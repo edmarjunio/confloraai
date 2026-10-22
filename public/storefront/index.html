@@ -47,7 +47,7 @@
     <a class="skip" href="#main" data-i18n="nav.skip_to_products">Ir para os produtos</a>
     <header class="header conflora-site-header cf-topbar-layout">
       <a id="brand" class="brand conflora-site-brand has-logo cf-topbar-brand" href="#"
-        ><img id="logo" src="/store-assets/brands/conflora-logo.png" alt="Conflora Horta e Viveiro" /><span
+        ><img id="logo" width="240" height="88" fetchpriority="high" decoding="async" src="/store-assets/brands/conflora-logo.webp" alt="Conflora Horta e Viveiro" /><span
           ><strong id="storeName">Conflora Horta e Viveiro</strong><small id="subtitle"></small></span
       ></a>
       <form
@@ -78,10 +78,10 @@
         <!-- SELETOR DE IDIOMAS (PT, EN, ES, FR) -->
         <div class="lang-selector-wrapper">
           <select id="languageSelect" class="lang-select" aria-label="Idioma / Language">
-            <option value="pt">🇧🇷 PT</option>
-            <option value="en">🇺🇸 EN</option>
-            <option value="es">🇪🇸 ES</option>
-            <option value="fr">🇫🇷 FR</option>
+            <option value="pt">PT 🇧🇷</option>
+            <option value="en">EN 🇺🇸</option>
+            <option value="es">ES 🇪🇸</option>
+            <option value="fr">FR 🇫🇷</option>
           </select>
         </div>
 
@@ -128,6 +128,14 @@
               </select>
             </label>
           </div>
+        </div>
+        <div class="catalog-mobile-filter-bar">
+          <button id="openFilterDialogBtn" type="button" class="catalog-filter-btn" aria-label="Abrir filtros de categoria">
+            <span class="filter-btn-icon">⚡</span>
+            <span class="filter-btn-text">FILTRO</span>
+            <span id="activeFilterBadge" class="filter-btn-badge" hidden>0</span>
+          </button>
+          <div id="mobileActiveFilterPills" class="mobile-active-filter-pills"></div>
         </div>
         <div
           id="categoryFilterControl"
@@ -196,10 +204,11 @@
       class="drawer cart-drawer"
       aria-labelledby="cartTitle"
     >
+      <div class="bottomsheet-handle" role="button" tabindex="0" aria-label="Abaixar e fechar" title="Abaixar e fechar"><span class="handle-bar"></span><span class="handle-bar"></span></div>
       <div class="dialog-header">
         <h2 id="cartTitle" data-i18n="cart.title">Sua sacola</h2>
         <button id="cartClearButton" type="button" data-i18n="cart.clear_all" aria-label="Esvaziar sacola" data-i18n-aria="cart.clear_all">Esvaziar</button>
-        <button id="cartCloseButton" class="cf-drawer-close" type="button" aria-label="Fechar sacola" data-i18n-aria="cart.close_aria"><span aria-hidden="true">»</span></button>
+        <button id="cartCloseButton" class="cf-drawer-close" type="button" aria-label="Fechar sacola" data-i18n-aria="cart.close_aria"><span aria-hidden="true">✕</span></button>
       </div>
       <section id="checkoutCustomer" aria-labelledby="checkoutCustomerTitle">
         <h3 id="checkoutCustomerTitle">
@@ -300,11 +309,29 @@
       </div>
     </dialog>
 
+    <dialog id="filterDialog" class="drawer filter-drawer" aria-labelledby="filterDialogTitle">
+      <div class="bottomsheet-handle" role="button" tabindex="0" aria-label="Abaixar e fechar" title="Abaixar e fechar">
+        <span class="handle-bar"></span>
+        <span class="handle-bar"></span>
+      </div>
+      <div class="dialog-header">
+        <div class="filter-dialog-heading">
+          <h2 id="filterDialogTitle">Filtro de Categorias</h2>
+          <small class="filter-dialog-subtitle">Selecione uma categoria ou subcategoria</small>
+        </div>
+        <button data-close class="cf-drawer-close" aria-label="Fechar filtros">
+          <span aria-hidden="true">✕</span>
+        </button>
+      </div>
+      <div id="filterDialogBody" class="filter-drawer-body"></div>
+    </dialog>
+
     <dialog
       id="chatDialog"
       class="drawer chat-drawer"
       aria-labelledby="chatTitle"
     >
+      <div class="bottomsheet-handle" role="button" tabindex="0" aria-label="Abaixar e fechar" title="Abaixar e fechar"><span class="handle-bar"></span><span class="handle-bar"></span></div>
       <div class="dialog-header">
         <span
           class="assistant-avatar"
@@ -315,7 +342,7 @@
           <h2 id="chatTitle" data-i18n="assistant.drawer_title">Assistente</h2>
           <small data-i18n="assistant.drawer_subtitle">Vamos encontrar a melhor opção</small>
         </div>
-        <button data-close class="cf-drawer-close" aria-label="Fechar conversa" data-i18n-aria="common.close"><span aria-hidden="true">»</span></button>
+        <button data-close class="cf-drawer-close" aria-label="Fechar conversa" data-i18n-aria="common.close"><span aria-hidden="true">✕</span></button>
       </div>
       <div
         id="chatMessages"
@@ -393,6 +420,7 @@
       class="drawer product-entry-drawer"
       aria-labelledby="productEntryTitle"
     >
+      <div class="bottomsheet-handle" role="button" tabindex="0" aria-label="Abaixar e fechar" title="Abaixar e fechar"><span class="handle-bar"></span><span class="handle-bar"></span></div>
       <div class="dialog-header">
         <h2 id="productEntryTitle" data-i18n="product_entry.title">Entrada e Gestão de Produtos</h2>
         <button data-close aria-label="Fechar formulário" data-i18n-aria="common.close">×</button>
@@ -410,7 +438,7 @@
     <!-- ÁREA DA EQUIPE / CAIXA -->
     <div id="teamDrawerOverlay" class="team-drawer-overlay hidden">
       <div id="teamDrawerSheet" class="team-drawer-sheet" role="dialog" aria-labelledby="teamDrawerTitle">
-        <div class="team-drawer-handle" aria-hidden="true"></div>
+        <div class="bottomsheet-handle team-drawer-handle" role="button" tabindex="0" aria-label="Abaixar e fechar" title="Abaixar e fechar"><span class="handle-bar"></span><span class="handle-bar"></span></div>
         <div class="team-drawer-header">
           <div class="team-drawer-brand">
             <span class="team-badge-icon">🌿</span>
@@ -419,7 +447,7 @@
               <span id="teamOperatorSubtitle" class="team-drawer-sub" data-i18n="team.operator">Identifique seu cargo</span>
             </div>
           </div>
-          <button id="closeTeamDrawerBtn" class="team-drawer-close cf-drawer-close" aria-label="Fechar menu" data-i18n-aria="common.close"><span aria-hidden="true">»</span></button>
+          <button id="closeTeamDrawerBtn" class="team-drawer-close cf-drawer-close" aria-label="Fechar menu" data-i18n-aria="common.close"><span aria-hidden="true">✕</span></button>
         </div>
 
         <div class="team-drawer-body">

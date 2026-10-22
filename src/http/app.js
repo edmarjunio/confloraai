@@ -631,6 +631,7 @@ function createApp({
           const messageId = msg.id;
           const isMedia = Boolean(msg.image || msg.document);
           const mediaCaption = msg.image?.caption || msg.document?.caption || '';
+          const interactiveId = msg.interactive?.button_reply?.id || msg.interactive?.list_reply?.id || '';
           const buttonText = msg.button?.text || msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || '';
           const text = msg.text?.body || buttonText || mediaCaption || (isMedia ? '[COMPROVANTE_ENVIADO]' : '');
           const customerName = value.contacts?.[0]?.profile?.name || '';
@@ -641,7 +642,7 @@ function createApp({
 
           systemStatusService.recordWebhookHit(phone);
 
-          const taskPayload = { phone, message: text, customerName, messageId };
+          const taskPayload = { phone, message: text, ...(interactiveId ? { interactiveId } : {}), customerName, messageId };
 
           await incoming.accept(taskPayload);
           if (config.whatsapp.assistantEnabled && taskQueueClient) {

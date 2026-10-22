@@ -401,7 +401,43 @@ class CatalogRepository {
     return Array.from(matchedProducts.values());
   }
 
+  getCategories() {
+    const cats = new Set();
+    for (const item of this.items) {
+      if (item.category) cats.add(item.category.trim());
+    }
+    if (cats.size === 0) {
+      return ['Plantas', 'Pets', 'Horta', 'Vasos & Insumos'];
+    }
+    return Array.from(cats);
+  }
 
+  getSubcategories(categoryName) {
+    const norm = normalizeText(categoryName);
+    const subcats = new Set();
+    for (const item of this.items) {
+      if (normalizeText(item.category || '') === norm && item.subcategory) {
+        subcats.add(item.subcategory.trim());
+      }
+    }
+    return Array.from(subcats);
+  }
+
+  getProductsBySubcategory(subcategoryName) {
+    const norm = normalizeText(subcategoryName);
+    const prods = [];
+    const seen = new Set();
+    for (const item of this.items) {
+      if (normalizeText(item.subcategory || '') === norm || normalizeText(item.category || '') === norm) {
+        const key = item.id || item.name;
+        if (!seen.has(key)) {
+          seen.add(key);
+          prods.push(item);
+        }
+      }
+    }
+    return prods;
+  }
 }
 
 module.exports = {
