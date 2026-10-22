@@ -13,6 +13,7 @@ function renderAdminGerencialHtml() {
   <script src="/store-assets/site-navigation.js?v=1"></script>
   <script src="/store-assets/topbar.js?v=3"></script>
   <script src="/store-assets/button-3d.js?v=1"></script>
+  <script src="/store-assets/cashier-report-actions.js"></script>
   <link rel="stylesheet" href="/store-assets/design-system.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -825,6 +826,8 @@ function renderAdminGerencialHtml() {
           </div>
         </div>
 
+        <div style="padding:20px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:16px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap"><div><strong>Encerre o caixa em 3 passos</strong><p>Confira os valores, confirme o fechamento e fotografe o relatório da maquininha.</p><small>O resumo do dia será enviado ao Júnior após todos os caixas serem fechados.</small></div><button type="button" class="btn-action primary" onclick="window.openCashierClosing(document.getElementById('reportDate').value)">FECHAR CAIXA</button></div>
+        <details><summary style="cursor:pointer;font-weight:700;padding:12px">Consultar conferência geral e relatórios</summary>
         <!-- TABELA DE CONFERÊNCIA: SISTEMA vs CONFERIDO -->
         <div class="conference-box">
           <div class="conference-header-row">
@@ -978,10 +981,10 @@ function renderAdminGerencialHtml() {
 
         <!-- AÇÕES DO FECHAMENTO -->
         <div class="closing-actions-bar">
-          <button type="button" id="btnCloseCash" class="btn-action primary close-day-button" onclick="registerCashClosing()" aria-keyshortcuts="Control+Shift+Enter" title="Atalho: Ctrl + Shift + Enter">
+          <button type="button" id="btnCloseCash" hidden class="btn-action primary close-day-button" onclick="registerCashClosing()" aria-keyshortcuts="Control+Shift+Enter" title="Atalho: Ctrl + Shift + Enter">
             <span>🔒 Registrar Fechamento do Caixa</span><kbd class="shortcut-hint">Ctrl + Shift + Enter</kbd>
           </button>
-          <button type="button" id="btnSendWhatsappClosing" class="btn-action primary" onclick="sendDailyReport()" style="background:#15803d; border-color:#15803d;">
+          <button type="button" hidden id="btnSendWhatsappClosing" class="btn-action primary" onclick="sendDailyReport()" style="background:#15803d; border-color:#15803d;">
             📲 Enviar Resumo para Júnior (WhatsApp)
           </button>
           <a id="btnDownloadClosingPdf" class="btn-action" href="#" target="_blank" hidden>
@@ -1019,7 +1022,7 @@ function renderAdminGerencialHtml() {
         </div>
 
         <!-- RESUMO DETALHADO DO DIA -->
-        <details class="daily-closing" style="margin-top:24px;"><summary>Ver todos os indicadores e métricas detalhadas do dia</summary>
+        </details><details class="daily-closing" style="margin-top:24px;"><summary>Ver todos os indicadores e métricas detalhadas do dia</summary>
           <!-- INDICADORES DO DIA -->
           <div class="summary-grid" style="margin-top:16px;">
             <div class="summary-card highlight">
@@ -1679,32 +1682,16 @@ function renderAdminGerencialHtml() {
 
     async function checkClosingStatus(date) {
       try {
-        const res = await window.ConfloraSession.apiFetch('/api/admin/cashier/closing?date=' + encodeURIComponent(date));
-        const json = await res.json();
+        const response = await window.ConfloraSession.apiFetch('/api/caixa/closing?date=' + encodeURIComponent(date));
+        if (!response.ok) return;
+        const data = await response.json();
+        const closed = data.cashiers.filter(c => c.closing).length;
         const badge = document.getElementById('closingStatusBadge');
-        const pdfBtn = document.getElementById('btnDownloadClosingPdf');
-        if (json && json.closing) {
-          badge.className = 'closing-badge closed';
-          badge.textContent = '🏁 Fechado por ' + (json.closing.closedBy || 'Admin') + ' às ' + new Date(json.closing.closedAt).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
-          if (json.closing.reportFileName) {
-            pdfBtn.href = '/reports/' + json.closing.reportFileName;
-            pdfBtn.hidden = false;
-          }
-          if (json.closing.counted) {
-            document.getElementById('inputCountedCash').value = json.closing.counted.cash ?? '';
-            document.getElementById('inputCountedPix').value = json.closing.counted.pix ?? '';
-            document.getElementById('inputCountedCredit').value = json.closing.counted.credit ?? '';
-            document.getElementById('inputCountedDebit').value = json.closing.counted.debit ?? '';
-            document.getElementById('inputCountedOnAccount').value = json.closing.counted.onAccount ?? '';
-            calculateDifferences();
-          }
-        } else {
-          badge.className = 'closing-badge open';
-          badge.textContent = 'Caixa Aberto (Em Conferência)';
-          if (pdfBtn) pdfBtn.hidden = true;
-        }
+        badge.className = 'closing-badge ' + (closed === data.cashiers.length ? 'closed' : 'open');
+        badge.textContent = closed + ' de ' + data.cashiers.length + ' caixas fechados';
       } catch (_) {}
     }
+    window.addEventListener('cashier-closed', () => checkClosingStatus(document.getElementById('reportDate').value));
 
     function renderPaymentBreakdown(metrics) {
       const methods = [
@@ -1773,58 +1760,8 @@ function renderAdminGerencialHtml() {
       }
     }
 
-    async function registerCashClosing() {
-      const date = document.getElementById('reportDate').value;
-      if (!date || !window.confirm('Confirmar e registrar o fechamento do caixa de ' + date.split('-').reverse().join('/') + '?')) return;
-      const button = document.getElementById('btnCloseCash');
-      const originalText = button.innerHTML;
-      button.disabled = true;
-      button.textContent = 'Registrando fechamento...';
-      try {
-        const getVal = (id) => {
-          const raw = document.getElementById(id)?.value;
-          if (!raw || isNaN(raw)) return 0;
-          return parseFloat(raw) || 0;
-        };
-        const counted = {
-          cash: getVal('inputCountedCash'),
-          pix: getVal('inputCountedPix'),
-          credit: getVal('inputCountedCredit'),
-          debit: getVal('inputCountedDebit'),
-          onAccount: getVal('inputCountedOnAccount'),
-        };
-        const notes = document.getElementById('closingNotesInput')?.value.trim() || '';
-        const receiptProofUrl = currentUploadedProofUrl || null;
+    async function registerCashClosing() { return window.openCashierClosing(document.getElementById('reportDate').value); }
 
-        const response = await window.ConfloraSession.apiFetch('/api/admin/cashier/close-day', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            date,
-            counted,
-            receiptProofUrl,
-            notes,
-            requestId: sessionStorage.getItem('closing:' + date) || (() => { const id = crypto.randomUUID(); sessionStorage.setItem('closing:' + date, id); return id; })()
-          }),
-        });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Não foi possível registrar o fechamento.');
-        showToast('✓ Fechamento de ' + date.split('-').reverse().join('/') + ' registrado com sucesso!');
-        if (data.pdfUrl) {
-          const pdfBtn = document.getElementById('btnDownloadClosingPdf');
-          if (pdfBtn) {
-            pdfBtn.href = data.pdfUrl;
-            pdfBtn.hidden = false;
-          }
-        }
-        checkClosingStatus(date);
-      } catch (error) {
-        showToast('Não foi possível registrar: ' + error.message);
-      } finally {
-        button.innerHTML = originalText;
-        button.disabled = false;
-      }
-    }
   </script>
 </body>
 </html>

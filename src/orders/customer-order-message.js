@@ -20,7 +20,7 @@ function formatCustomerOrderMessage(order) {
   });
   return [
     '🌿 *CONFLORA | HORTA E VIVEIRO*', '',
-    `*Pedido #${number}*`, '',
+    `*Pedido #${number}*`, order.status === 'AWAITING_CONFIRMATION' ? '⏳ Pedido recebido. Aguardando confirmação da loja.' : '✅ Pedido confirmado!', '',
     `👤 *Cliente:* ${order.customerName || order.customer?.name || 'Cliente Balcão'}`, '',
     '*🛒 Seu pedido:*', ...items, '',
     `💰 *Total: ${amountFormat.format(Number(order.total || 0)).replace(/\u00a0/g, ' ')}*`, '',

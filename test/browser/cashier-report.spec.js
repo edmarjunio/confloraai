@@ -41,7 +41,7 @@ test('cashier exports a private PDF at any time and sends it with one button', a
 
 test('PDV report also downloads the selected period with cashier-only scope', async ({ page }) => {
   await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-caixa1', pin: '0000' } });
-  await page.goto('/pdv');
+  await page.goto('/caixa');
   await expect(page.getByPlaceholder('Nome, categoria ou descrição (Ex.: plantas de sombra, plantas para jardim, flores, e etc)')).toBeVisible();
   await page.keyboard.press('F3');
   const actions = page.locator('cashier-report-actions');

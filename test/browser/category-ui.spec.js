@@ -7,10 +7,10 @@ async function openCatalog(page) {
   await page.route('http://categories.test/**', async route => {
     const pathname = new URL(route.request().url()).pathname;
     if (pathname !== '/') {
-      const file = resolve(__dirname, '../../public/storefront', pathname.slice(1));
+      const file = resolve(__dirname, '../../public/storefront', pathname.replace(/^\/store-assets\//, '/').slice(1));
       return route.fulfill({ body: readFileSync(file), contentType: pathname.endsWith('.css') ? 'text/css' : 'text/javascript' });
     }
-    return route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head>
+    return route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head><meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1">
       <link rel="stylesheet" href="/store.css"><link rel="stylesheet" href="/design-system.css">
       <script>Object.defineProperty(String.prototype, 'tr', {get() {return this.toString();}});</script>
@@ -53,7 +53,7 @@ test('category filters combine selections, deselect, reset and keep subcategory 
   await expect(page.locator('#subcategoryFilterControl')).toBeHidden();
   await expect(page.locator('#products render-product-card')).toHaveCount(1);
   await expect(page.locator('#products')).toContainText('Pets produto');
-  await filter('Todas').focus();
+  await filter('Todas as categorias').focus();
   await page.keyboard.press('Enter');
   await expect(page.locator('#products render-product-card')).toHaveCount(3);
   expect(errors).toEqual([]);
@@ -64,7 +64,7 @@ test('filters and card badges share colors in desktop, mobile and selected state
   for (const width of [320, 390, 768, 1440]) {
     await page.setViewportSize({width, height: 900});
     const filter = page.locator('#categoryFilterControl').getByRole('button', { name: 'Horta', exact: true });
-    await page.locator('#categoryFilterControl').getByRole('button', { name: 'Todas', exact: true }).click();
+    await page.locator('#categoryFilterControl').getByRole('button', { name: 'Todas as categorias', exact: true }).click();
     const soft = await filter.evaluate(node => ({background: getComputedStyle(node).backgroundColor, border: getComputedStyle(node).borderTopColor}));
     await filter.click();
     const strong = await filter.evaluate(node => getComputedStyle(node).backgroundColor);

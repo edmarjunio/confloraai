@@ -3,6 +3,8 @@
   element,
   createApi,
   openDialog,
+  lockBodyScroll,
+  unlockBodyScroll,
   notify,
   money,
 } from "./ui.js";
@@ -850,6 +852,12 @@ async function loadCustomerLedger() {
 }
 
 // Global modal triggers and shortcuts
+const syncModalScrollLock = () => {
+  if (document.querySelector('dialog[open]')) lockBodyScroll();
+  else unlockBodyScroll();
+};
+const modalObserver = new window.MutationObserver(syncModalScrollLock);
+modalObserver.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['open'] });
 for (const button of document.querySelectorAll("[data-close]")) {
   button.addEventListener("click", () => button.closest("dialog")?.close());
 }
@@ -894,12 +902,10 @@ for (const dialog of document.querySelectorAll("dialog")) {
     if (window.innerWidth > 768) return;
     const touch = e.touches[0];
     if (!touch) return;
-    const box = dialog.getBoundingClientRect();
     const fromHandle = Boolean(e.target.closest(".bottomsheet-handle"));
     const fromHeader = Boolean(e.target.closest(".dialog-header")) && !e.target.closest("button, input, select, textarea");
-    const atTop = dialog.scrollTop <= 0 && touch.clientY <= box.top + 70;
 
-    if (fromHandle || fromHeader || atTop) {
+    if (fromHandle || fromHeader) {
       touchStartY = touch.clientY;
       isDraggingSheet = true;
       dialog.style.transition = "none";

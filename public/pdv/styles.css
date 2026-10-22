@@ -6,3 +6,9 @@
   --color-brand-green: #109e46;
   --color-brand-light: #f4f6f5;
 }
+
+@media (min-width: 1024px) {
+  .cf-board-scroll > .cf-cashier-board { grid-template-columns: repeat(6, minmax(0, 1fr)); width: 150%; }
+  .cf-board-scroll { overflow-x: auto; overscroll-behavior-x: contain; padding-bottom: 12px; }
+}
+.cf-pdv-inline-category { display: inline-flex; position: static !important; align-items: center; width: fit-content; max-width: 100%; margin: 3px 0; vertical-align: middle; transform: none; }

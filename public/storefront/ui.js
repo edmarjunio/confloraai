@@ -46,31 +46,23 @@ export function notify(message) {
     $("#toast").hidden = true;
   }, 4000);
 }
+let scrollLock = null;
 export function lockBodyScroll() {
-  if (typeof document === "undefined" || document.body.dataset.scrollLocked) return;
-  const scrollY = window.scrollY || document.documentElement.scrollTop || 0;
-  document.body.dataset.scrollLocked = String(scrollY);
-  document.documentElement.style.overflow = "hidden";
-  document.body.style.overflow = "hidden";
-  document.body.style.position = "fixed";
-  document.body.style.top = `-${scrollY}px`;
-  document.body.style.left = "0";
-  document.body.style.right = "0";
-  document.body.style.width = "100%";
+  if (typeof document === 'undefined' || scrollLock) return;
+  scrollLock = { y: window.scrollY, body: document.body.style.cssText, html: document.documentElement.style.cssText };
+  document.body.dataset.scrollLocked = String(scrollLock.y);
+  document.documentElement.style.setProperty('overflow', 'hidden', 'important');
+  document.body.style.setProperty('overflow', 'hidden', 'important');
+  document.body.style.setProperty('position', 'fixed', 'important');
+  Object.assign(document.body.style, { top: '-' + scrollLock.y + 'px', left: '0', right: '0', width: '100%' });
 }
-
 export function unlockBodyScroll() {
-  if (typeof document === "undefined" || !document.body.dataset.scrollLocked) return;
-  const scrollY = Number(document.body.dataset.scrollLocked || 0);
+  if (!scrollLock || document.querySelector('dialog[open]')) return;
+  const saved = scrollLock; scrollLock = null;
   delete document.body.dataset.scrollLocked;
-  document.documentElement.style.overflow = "";
-  document.body.style.overflow = "";
-  document.body.style.position = "";
-  document.body.style.top = "";
-  document.body.style.left = "";
-  document.body.style.right = "";
-  document.body.style.width = "";
-  window.scrollTo(0, scrollY);
+  document.body.style.cssText = saved.body;
+  document.documentElement.style.cssText = saved.html;
+  window.scrollTo({top:saved.y,behavior:'instant'});
 }
 
 export function openDialog(dialog) {
