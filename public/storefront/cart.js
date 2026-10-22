@@ -580,7 +580,7 @@ export function createCart(state) {
     if (window.innerWidth <= 768) {
       lockBodyScroll();
     }
-    if (!dialog.open) dialog.showModal();
+    if (!dialog.open) dialog.show();
     dialog.scrollTop = 0;
     if (!state.existingStore) return;
     const customerSessionId = state.user?.id;

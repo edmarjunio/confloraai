@@ -1052,7 +1052,7 @@ function createApp({
         limit: 20,
       });
       const pendingOrder = (Array.isArray(data.orders) ? data.orders : []).find(
-        (order) => order.status !== 'CANCELLED' && (order.deliveryStatus === 'DELIVERED' || order.status === 'DELIVERED' || (order.orderType !== 'DELIVERY' && order.fulfillment !== 'delivery' && order.completedAt)) && !order.feedback?.submittedAt,
+        (order) => (order.deliveryStatus === 'DELIVERED' || order.status === 'DELIVERED') && !order.feedback?.submittedAt,
       );
       res.json({
         success: true,
@@ -2234,7 +2234,33 @@ function createApp({
   });
 
   // Fechamento de Caixa Diário com PDF e Notificação no WhatsApp do Patrão
-  app.post('/api/admin/cashier/close-day', (_req, res) => res.status(409).json({ error: 'Use FECHAR CAIXA no relatório para conferir os valores por pessoa e anexar a foto da maquininha.' }));
+  app.post('/api/admin/cashier/close-day', async (req, res) => {
+    try {
+      const { date, counted, receiptProofUrl, notes } = req.body || {};
+      const closingDate = date || getBusinessDate(new Date());
+      if (!isValidReportDate(closingDate)) { return res.status(400).json({ error: 'Data inválida. Selecione uma data válida.' }); }
+      const result = await messageService.firestoreRepo.closeCashierDay({
+        date: closingDate,
+        requestId: req.body.requestId,
+        closedBy: req.user?.name || req.user?.email || 'Administrador',
+        counted,
+        receiptProofUrl,
+        notes,
+        notifyOwnerWhatsapp: false,
+        whatsappClient: messageService.whatsappClient,
+      });
+      const jobId = result.closingId + '-owner';
+      await app.locals.pdv.store.transaction(async tx => {
+        if (await tx.get('pdv_outbox', jobId)) return;
+        tx.set('pdv_outbox', jobId, { id: jobId, kind: 'closing', status: 'PENDING', attempts: 0, reportFileName: result.reportFileName, text: formatDailyExecutiveReport(result.metrics).join('\n\n') });
+      });
+      result.whatsappQueued = true;
+      res.status(200).json(result);
+    } catch (err) {
+      Logger.error('Erro no fechamento do caixa diário', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
 
   app.get('/api/admin/cashier/closing', async (req, res) => {
     try {

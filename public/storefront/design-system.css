@@ -273,19 +273,13 @@ render-product-card.cf-pdv-product-card {
   -webkit-line-clamp: 2;
 }
 .cf-pdv-inline-category {
-  display: flex !important;
-  align-items: center;
-  align-self: flex-start;
-  position: static !important;
+  display: block !important;
   min-width: 0;
   max-width: 100%;
   line-height: 1;
 }
 .cf-pdv-inline-category .cf-product-category-tag {
-  display: inline-flex !important;
-  align-items: center;
-  position: static !important;
-  margin: 0;
+  display: inline-flex;
   height: 16px;
   min-width: 0;
   max-width: 100%;

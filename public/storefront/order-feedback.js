@@ -26,7 +26,12 @@ const FEEDBACK_HIGHLIGHTS = [
 
 export function isOrderDelivered(order) {
   if (!order || order.status === "CANCELLED") return false;
-  return order.deliveryStatus === "DELIVERED" || order.status === "DELIVERED" || (order.orderType !== "DELIVERY" && order.fulfillment !== "delivery" && Boolean(order.completedAt));
+  return order.deliveryStatus === "DELIVERED" || order.status === "DELIVERED";
+}
+
+function starString(score) {
+  const n = Math.max(0, Math.min(5, Math.round(Number(score) || 0)));
+  return "★".repeat(n) + "☆".repeat(5 - n);
 }
 
 export function createOrderFeedback(state) {
@@ -232,7 +237,7 @@ export function createOrderFeedback(state) {
         if (response?.ownerWhatsappUrl) {
           try {
             window.open(response.ownerWhatsappUrl, "_blank", "noopener,noreferrer");
-          } catch {}
+          } catch (_) {}
         }
       } catch (err) {
         errorBanner.textContent = err.message || "Não foi possível enviar sua avaliação.".tr;

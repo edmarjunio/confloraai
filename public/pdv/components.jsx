@@ -1488,7 +1488,7 @@ window.PdvComponents = (() => {
     const items = (order.items || []).slice(0, 2);
     const extraItems = Math.max(0, (order.items || []).length - items.length);
     const deliveryDriver = order.assignedDriver || order.deliveredBy;
-    return <OrderCardSurface data-order-card="true" data-order-id={order.id} padding="sm" style={orderCardColors[tone] || orderCardColors.amber} draggable={canMove && ['confirmation', 'payment'].includes(stage) ? 'true' : undefined} onDragStart={(event) => { event.dataTransfer.setData('application/x-conflora-order', JSON.stringify({ id: order.id, from: stage })); event.dataTransfer.effectAllowed = 'move'; onDragStart?.(stage); }} onDragEnd={onDragEnd} className={`cf-order-card cf-order-card--${tone || 'amber'} ${selected ? 'cf-order-card--selected' : ''} ${attention ? 'cf-order-card--attention' : ''}`}>
+    return <OrderCardSurface data-order-card="true" padding="sm" style={orderCardColors[tone] || orderCardColors.amber} draggable={canMove && ['confirmation', 'payment'].includes(stage) ? 'true' : undefined} onDragStart={(event) => { event.dataTransfer.setData('application/x-conflora-order', JSON.stringify({ id: order.id, from: stage })); event.dataTransfer.effectAllowed = 'move'; onDragStart?.(stage); }} onDragEnd={onDragEnd} className={`cf-order-card cf-order-card--${tone || 'amber'} ${selected ? 'cf-order-card--selected' : ''} ${attention ? 'cf-order-card--attention' : ''}`}>
       <button type="button" style={{ transform: 'none', boxShadow: 'none' }} className="w-full cursor-pointer text-left" onClick={() => onDetails(order)} aria-label={`Abrir recibo e detalhes da comanda ${order.ticketNumber}`}>
         <div className="flex items-start justify-between gap-2">
           <span className="text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Comanda #{order.ticketNumber || String(order.id).slice(-6).toUpperCase()}</span>
@@ -1545,6 +1545,7 @@ window.PdvComponents = (() => {
     const [dragFrom, setDragFrom] = useState(null);
     const [refreshing, setRefreshing] = useState(false);
     const [pulsedOrderIds, setPulsedOrderIds] = useState(() => new Set());
+    const [newOrderNotice, setNewOrderNotice] = useState('');
     const dataRef = useRef(null);
     useEffect(() => {
       if (!initialOrderId) return;
@@ -1566,7 +1567,9 @@ window.PdvComponents = (() => {
           if (incoming.length) {
             const ids = new Set(incoming.map((order) => order.id));
             setPulsedOrderIds((current) => new Set([...current, ...ids]));
+            setNewOrderNotice(incoming.length === 1 ? `Nova comanda aguardando ${incoming[0].deliveryStatus ? 'entrega' : incoming[0].status === 'AWAITING_CONFIRMATION' ? 'confirmação' : 'pagamento'}: #${incoming[0].ticketNumber}` : `${incoming.length} novas comandas aguardando atendimento`);
             setTimeout(() => setPulsedOrderIds((current) => new Set([...current].filter((id) => !ids.has(id)))), 9000);
+            setTimeout(() => setNewOrderNotice(''), 9000);
           }
         }
         dataRef.current = nextData;
@@ -1689,9 +1692,10 @@ window.PdvComponents = (() => {
                 <MetricCard label="Recebido por mim" value={money(data.metrics.receipts)} description="Vendas pagas no período" />
                 <MetricCard label="Fiados quitados por mim" value={money(data.metrics.debtReceipts)} description="Recebimentos no período" />
               </div>
-              <div className="cf-board-scroll"><div className="cf-cashier-board grid w-full grid-cols-1 gap-3 pb-3 sm:grid-cols-2 lg:grid-cols-6">
+              {newOrderNotice && <div role="status" className="mb-3 rounded-xl border border-amber-300 bg-amber-100 px-4 py-3 text-sm font-extrabold text-amber-950 shadow-sm" aria-live="polite">🔔 {newOrderNotice}</div>}
+              <div className="cf-cashier-board grid w-full grid-cols-1 gap-3 pb-3 sm:grid-cols-2 lg:grid-cols-6">
                 {columns.map((column) => <CashierColumn key={column.title} {...column} canMove={['ADMIN', 'CAIXA'].includes(user.role) && !busy} dragFrom={dragFrom} onMove={moveOrder} onDragStart={setDragFrom} onDragEnd={() => setDragFrom(null)} pulsedOrderIds={pulsedOrderIds} selectedOrderId={selectedOrder?.id} onDetails={setSelectedOrder} />)}
-              </div></div>
+              </div>
             </>}
 
             {view === 'history' && <>

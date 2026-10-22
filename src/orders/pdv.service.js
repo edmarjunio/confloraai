@@ -340,8 +340,6 @@ class PdvService {
     assertAssignedDelivery(existing, user);
     if (!isDeliverySettled(existing)) throw new Error('Registre o recebimento antes de concluir a entrega.');
     const delivered = await this.repository.markDelivered(orderId, actor(user), payload.notes || '', payload.actualDistanceKm);
-    await this.deliver(orderId + '-customer-completed');
-    await this.deliver(orderId + '-customer-review');
     return { order: { ...delivered, receiptText: formatOrderReceipt(delivered) } };
   }
 
@@ -358,10 +356,9 @@ class PdvService {
     if (!order.customerPhone) {
       throw new Error('Cliente sem telefone cadastrado para aviso por WhatsApp.');
     }
-    const jobId = `${order.id}-delivery-arriving`;
+    const jobId = `${order.id}-arriving-${Date.now()}`;
     const now = new Date().toISOString();
     await this.repository.transaction(async tx => {
-      if (await tx.get('pdv_outbox', jobId)) return;
       tx.set('pdv_outbox', jobId, {
         id: jobId,
         orderId: order.id,
@@ -483,15 +480,12 @@ class PdvService {
       else if (job.kind === 'owner-new') text = `CONFLORA — NOVO PEDIDO #${order.ticketNumber || order.id}\nCliente: ${order.customerName}\nValor: ${money(order.total)}\nPagamento: ${order.completedAt ? 'confirmado' : 'ainda não confirmado'}`;
       else if (job.kind === 'proof-review') text = `CONFLORA — COMPROVANTE AGUARDANDO CONFERÊNCIA\nPedido #${order.ticketNumber || order.id}\nValor: ${money(partAmount(order, 'PIX'))}\nConfira o recebimento na conta bancária antes de aprovar no caixa.`;
       else if (job.kind === 'proof-rejected') text = `CONFLORA — COMPROVANTE RECUSADO\nPedido #${order.ticketNumber || order.id}\n${order.paymentReviewNote}\nEnvie um novo comprovante na página do seu pedido.`;
-      else if (job.kind === 'customer-confirmed') text = '✅ Pedido #' + order.ticketNumber + ' confirmado! Acompanhe as próximas atualizações por aqui.';
-      else if (job.kind === 'customer-completed') text = '🌿 Pedido #' + order.ticketNumber + ' concluído! Obrigado por comprar na Conflora. Foi um prazer atender você!';
-      else if (job.kind === 'customer-review') text = 'Como foi seu atendimento na Conflora? Avalie sua compra na área Meus pedidos do site: ' + (process.env.STOREFRONT_URL || 'https://lojaconflora.web.app') + '/?order=' + encodeURIComponent(order.id);
       else if (job.kind === 'driver-available') text = 'CONFLORA — ENTREGA DISPONÍVEL\nAbra a aba Entregas para consultar e assumir o pedido.';
       else if (job.kind === 'driver-assigned') text = `CONFLORA — ENTREGA ATRIBUÍDA\nPedido #${order.ticketNumber || order.id}\nConsulte os detalhes na aba Entregas.`;
       else if (job.kind === 'delivery-departure') { text = `Seu pedido #${order.ticketNumber || order.id.slice(-6)} saiu para entrega! Responsável: ${order.assignedDriver?.name || 'Equipe Conflora'}. ${isDeliverySettled(order) ? 'Pagamento já registrado.' : 'Pagamento será recebido na entrega.'}`; }
       else if (job.kind === 'delivery-arriving') { text = `🛵 CONFLORA — O ENTREGADOR ESTÁ CHEGANDO NO SEU ENDEREÇO!\nPedido #${order.ticketNumber || order.id.slice(-6)}\nFavor aguardar para receber seu pedido.`; }
       else if (job.kind === 'receipt' || job.kind === 'customer-paid' || job.kind === 'pix-charge') {
-        text = !order.completedAt && !order.paidAt && job.kind !== 'customer-paid' ? formatCustomerOrderMessage(order) : (order.paymentStatus === 'APPROVED' ? '✅ Pagamento confirmado!\n\n' : '') + formatOrderReceipt(order);
+        text = !order.completedAt && !order.paidAt && job.kind !== 'customer-paid' ? formatCustomerOrderMessage(order) : formatOrderReceipt(order);
       }
       else if (settlement?.entryType === 'CREDITO_CLIENTE') { text = `CONFLORA — CRÉDITO DO CLIENTE\nCliente: ${settlement.customerName}\nValor recebido: ${money(settlement.amount)}\nCrédito disponível: ${money(settlement.newCreditBalance)}\nRecebido por: ${settlement.receivedBy.name}\nForma: ${settlementMethods}`; }
       else if (settlement) { text = `CONFLORA — QUITAÇÃO DE FIADO\nCliente: ${settlement.customerName}\nValor: ${money(settlement.amount)}\nSaldo devedor: ${money(settlement.newBalance)}${settlement.excessCredit ? '\nExcedente registrado como crédito: ' + money(settlement.excessCredit) : ''}\nRecebido por: ${settlement.receivedBy.name}\nForma: ${settlementMethods}`; }

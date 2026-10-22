@@ -1,17 +1,10 @@
 .order-notification-stack { position: fixed; right: 16px; top: 80px; z-index: 10000; display: grid; gap: 10px; width: min(380px, calc(100vw - 32px)); max-height: 75dvh; overflow: auto; }
 .order-notification-card { position: relative; padding: 18px; border: 1px solid #b8d9c2; border-radius: 16px; background: #fff; color: #16381f; box-shadow: 0 8px 30px #10271930; }
-.order-notification-card:not(.order-notification-card--comanda) strong { display: block; padding-right: 24px; }
-.order-notification-card:not(.order-notification-card--comanda) p { margin: 8px 0 14px; font-size: 14px; }
-.order-notification-card:not(.order-notification-card--comanda) button:not(.order-notification-close) { padding: 10px 14px; border: 0; border-radius: 10px; background: #15803d; color: #fff; font-size: 12px; font-weight: 800; cursor: pointer; }
+.order-notification-card strong { display: block; padding-right: 24px; }
+.order-notification-card p { margin: 8px 0 14px; font-size: 14px; }
+.order-notification-card button:not(.order-notification-close) { padding: 10px 14px; border: 0; border-radius: 10px; background: #15803d; color: #fff; font-size: 12px; font-weight: 800; cursor: pointer; }
 .order-notification-card .order-notification-close { position: absolute; top: 10px; right: 10px; width: 28px; height: 28px; border: 0; background: transparent; color: #36533e; font-size: 24px; cursor: pointer; }
 .order-notification-permission { padding: 10px 14px; border: 1px solid #b8d9c2; border-radius: 12px; background: #fff; color: #16381f; cursor: pointer; font-size: 13px; }
 .order-notification-permission[hidden] { display: none; }
 .order-notification-permission:disabled { cursor: default; color: #647067; }
 .cashier-notification-permission { position: fixed; right: 16px; bottom: 18px; z-index: 90; max-width: calc(100vw - 32px); box-shadow: 0 4px 16px #10271920; }
-
-.cashier-order-notifications { left:16px; bottom:20px; top:auto; right:auto; overflow:visible; max-height:70dvh; }
-.cashier-order-notifications .order-notification-card { animation:comanda-notice-in 350ms ease-out; transform-origin:top left; }
-.order-notification-card--comanda { padding:0; border:0; }
-.order-notification-card--comanda .order-notification-close { top:3px; right:3px; background:white; border-radius:50%; }
-@keyframes comanda-notice-in { from { transform:translateY(100%); opacity:0; } to { transform:translateY(0); opacity:1; } }
-@media(prefers-reduced-motion:reduce) { .cashier-order-notifications .order-notification-card { animation:none; } }

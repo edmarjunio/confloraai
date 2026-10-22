@@ -214,17 +214,12 @@ class PdvRepository {
         if (previous.requestHash !== order.requestHash || previous.createdBy.id !== order.createdBy.id) { throw new Error('Identificador já utilizado por outra venda.'); }
         return previous;
       }
-      const partialReceipt = (order.paymentParts || []).find(part => part.status === 'RECEIVED_AT_CASHIER');
-      const receiptDate = new Intl.DateTimeFormat('en-CA', {timeZone:'America/Sao_Paulo'}).format(new Date());
-      const receiptRevision = partialReceipt ? await tx.get('cashier_day_revisions', receiptDate) : null;
-      if (partialReceipt && await tx.get('cashier_daily_closings', require('./cashier-closing.service').closingId(receiptDate, partialReceipt.receivedBy?.id || order.createdBy.id))) throw new Error('Este caixa já foi fechado hoje.');
       let savedOrder = order;
       if (order.status === 'AWAITING_PAYMENT' || (String(order.paymentMethod || '').toUpperCase() === 'PIX' && order.pixData)) {
         const reservation = await prepareStockReservation(tx, order.items);
         applyStockReservation(tx, reservation, new Date().toISOString());
         savedOrder = { ...order, inventoryReserved: !reservation.trackingDisabled, reservedItems: reservation.reservedItems };
       }
-      if (partialReceipt) tx.set('cashier_day_revisions', receiptDate, {version:(receiptRevision?.version || 0)+1});
       tx.set('orders', savedOrder.id, savedOrder);
       if (savedOrder.status !== 'CREATING_PIX') {
         tx.set('pdv_outbox', `${savedOrder.id}-receipt`, { id: `${savedOrder.id}-receipt`, orderId: savedOrder.id, kind: 'receipt', status: 'PENDING', attempts: 0 });
@@ -349,10 +344,6 @@ class PdvRepository {
       const previousStats = await tx.get('delivery_driver_metrics', driver.id);
       const updated = { ...order, deliveryStatus: 'DELIVERED', deliveredAt: now, deliveredBy: actor, deliveryNotes: String(notes).slice(0, 500), deliveryMetrics, deliveryHistory: recordDeliveryEvent(tx, order, 'DELIVERED', actor, now), updatedAt: now };
       tx.set('delivery_driver_metrics', driver.id, mergeDriverPerformance(previousStats, updated, now));
-      for (const kind of ['customer-completed', 'customer-review']) {
-        const id = orderId + '-' + kind;
-        tx.set('pdv_outbox', id, { id, orderId, kind, status: 'PENDING', attempts: 0 });
-      }
       updated.receiptText = formatOrderReceipt(updated);
       tx.set('orders', orderId, updated); return updated;
     });
@@ -376,8 +367,6 @@ class PdvRepository {
         confirmedAt: now, updatedAt: now, paymentExpiresAt: new Date(Date.now() + ttl * 1000).toISOString(),
         inventoryReserved: reservation ? !reservation.trackingDisabled : Boolean(order.inventoryReserved), reservedItems: reservation?.reservedItems || order.reservedItems };
       tx.set('orders', orderId, updated);
-      const id = orderId + '-customer-confirmed';
-      tx.set('pdv_outbox', id, { id, orderId, kind: 'customer-confirmed', status: 'PENDING', attempts: 0 });
       return updated;
     });
   }
@@ -410,9 +399,6 @@ class PdvRepository {
       if (approvingCredit && receiver.role !== 'ADMIN' && order.creditApprovedBy?.role !== 'ADMIN') throw new Error('Fiado exige aprovação de um Admin antes de gerar o Pix.');
       if (!paymentParts.some((part) => part.method === 'PIX') || paymentParts.some((part) => part.method === 'SALDO_CLIENTE')) throw new Error('Combine Pix com dinheiro, débito, crédito ou fiado.');
       if (paymentParts.some((part) => part.method === 'FIADO') && !order.customerId) throw new Error('Fiado exige cliente cadastrado.');
-      const receiptDate = new Intl.DateTimeFormat('en-CA', {timeZone:'America/Sao_Paulo'}).format(new Date());
-      if (await tx.get('cashier_daily_closings', require('./cashier-closing.service').closingId(receiptDate, receiver.id))) throw new Error('Este caixa já foi fechado hoje.');
-      const receiptRevision = await tx.get('cashier_day_revisions', receiptDate);
       const reservation = order.inventoryReserved ? null : await prepareStockReservation(tx, order.items);
       const now = new Date().toISOString();
       const pixTtlSeconds = Math.min(86400, Math.max(300, Number(process.env.PIX_PAYMENT_TTL_SECONDS) || 3600));
@@ -422,7 +408,6 @@ class PdvRepository {
         paymentParts: paymentParts.map((part) => ({ ...part, ...(['DINHEIRO', 'DEBITO', 'CREDITO'].includes(part.method) ? { status: 'RECEIVED_AT_CASHIER', receivedBy: receiver } : {}) })), mixedReceivedBy: receiver, deferToCashier: false,
         inventoryReserved: reservation ? !reservation.trackingDisabled : Boolean(order.inventoryReserved), reservedItems: reservation?.reservedItems || order.reservedItems,
         pixTtlSeconds, pixExpiresAt: new Date(Date.now() + pixTtlSeconds * 1000).toISOString(), updatedAt: now };
-      tx.set('cashier_day_revisions', receiptDate, {version:(receiptRevision?.version || 0)+1});
       tx.set('orders', order.id, updated);
       return updated;
     });
@@ -438,10 +423,6 @@ class PdvRepository {
       if (finishDelivery) assertAssignedDelivery(order, receiver);
       if (receiver?.role === 'ENTREGADOR' && !canReceiveOrder(order, receiver)) throw new Error('Sem permissão para receber esta entrega.');
       if (order.completedAt) { return { ...order, alreadyConfirmed: true }; }
-      const closingDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
-      const closingKey = require('./cashier-closing.service').closingId(closingDate, receiver?.id || 'automatic-pix');
-      if (await tx.get('cashier_daily_closings', closingKey)) throw new Error('Este caixa já foi fechado hoje. Utilize outro caixa aberto.');
-      const dayRevision = await tx.get('cashier_day_revisions', closingDate);
       const inventory = { stockControlEnabled: (await tx.get('store_settings', 'inventory'))?.stockControlEnabled ?? process.env.STORE_STOCK_CONTROL_ENABLED !== 'false' };
       if (order.pixMode === 'MANUAL' && order.paymentProofId && verification?.manualPixProofId !== order.paymentProofId) throw new Error('O comprovante mudou. Atualize a comanda.');
       if (Date.parse(order.pixExpiresAt || order.paymentExpiresAt || '') <= Date.now()) {
@@ -549,7 +530,6 @@ class PdvRepository {
         completed.receiptText = formatOrderReceipt(completed);
         tx.set('delivery_driver_metrics', deliveryDriver.id, mergeDriverPerformance(previousDeliveryStats, completed, now));
       }
-      tx.set('cashier_day_revisions', closingDate, { version: (dayRevision?.version || 0) + 1 });
       tx.set('orders', order.id, completed);
       if (!onAccount && completed.source === 'WEB_CATALOG' && /^[a-f0-9-]{36}$/.test(completed.analyticsClientId || '') && require('../integrations/ga4-purchase.client').ga4PurchaseEnabled()) {
         const id = `${order.id}-ga4-purchase`;
@@ -559,12 +539,6 @@ class PdvRepository {
         for (const kind of ['customer-paid', 'owner-paid']) {
           const id = `${order.id}-${kind}`;
           tx.set('pdv_outbox', id, { id, kind, orderId, status: 'PENDING', attempts: 0 });
-        }
-      }
-      if (finishDelivery || !isDelivery(completed)) {
-        for (const kind of ['customer-completed', 'customer-review']) {
-          const id = orderId + '-' + kind;
-          tx.set('pdv_outbox', id, { id, orderId, kind, status: 'PENDING', attempts: 0 });
         }
       }
       if (sendFinalReceipt) {
@@ -589,9 +563,6 @@ class PdvRepository {
         if (previous.customerKey !== customerKey || previous.amount !== amount || JSON.stringify(previousParts) !== JSON.stringify(parts) || previous.entryType !== entryType || previous.receivedBy.id !== receivedBy.id) { throw new Error('Identificador de recebimento já utilizado.'); }
         return previous;
       }
-      const closingDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
-      if (await tx.get('cashier_daily_closings', require('./cashier-closing.service').closingId(closingDate, receivedBy.id))) throw new Error('Este caixa já foi fechado hoje.');
-      const dayRevision = await tx.get('cashier_day_revisions', closingDate);
       const manualPixProof = parts.some((part) => part.method === 'PIX') ? await requireManualProof(tx, verification, receivedBy, 'DEBT', id) : null;
       const customer = await tx.get('customers', customerKey);
       const balanceMinor = Math.round(Number(customer?.debtBalance || 0) * 100);
@@ -607,7 +578,6 @@ class PdvRepository {
         paymentMethod: method, paymentParts: parts, notes, receivedBy, operatorName: receivedBy.name, newBalance, newCreditBalance, entryType, type: entryType, createdAt: now,
         ...(manualPixProof ? { manualPixProof, manualPixProofId: manualPixProof.id, verifiedVia: 'MANUAL_CAIXA_PIX', manualPixProofSeen: true, manualPixNote: verification.manualPixNote } : {}) };
       tx.set('customers', customerKey, { ...customer, debtBalance: newBalance, creditBalance: newCreditBalance, updatedAt: now });
-      tx.set('cashier_day_revisions', closingDate, { version: (dayRevision?.version || 0) + 1 });
       tx.set('debt_settlements', id, settlement);
       tx.set('pdv_outbox', id, { id, settlementId: id, kind: 'debt-receipt', status: 'PENDING', attempts: 0 });
       return settlement;
@@ -661,7 +631,7 @@ class PdvRepository {
       const order = await tx.get('orders', cleanId);
       if (!order) throw new Error('Pedido não encontrado.');
       if (order.status === 'CANCELLED') throw new Error('Pedidos cancelados não podem ser avaliados.');
-      if (order.deliveryStatus !== 'DELIVERED' && order.status !== 'DELIVERED' && (isDelivery(order) || !order.completedAt)) {
+      if (order.deliveryStatus !== 'DELIVERED' && order.status !== 'DELIVERED') {
         throw new Error('A avaliação só fica disponível após o pedido ser marcado como entregue.');
       }
       const now = new Date().toISOString();

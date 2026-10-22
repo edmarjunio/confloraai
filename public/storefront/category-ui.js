@@ -141,6 +141,7 @@
     }
     .cf-category-chip.category-chip:active { transform:translateY(1px); box-shadow:0 1px 0 var(--category-strong); }
     .cf-category-chip.category-chip:focus-visible { outline:3px solid var(--category-strong); outline-offset:3px; }
+    .cf-category-chip.category-chip.cf-category-clear,
     .cf-category-chip.category-chip.cf-category-icon-only { width:38px; min-width:38px; height:38px; min-height:38px; padding:0; gap:0; border-radius:999px; }
     .cf-category-tag.cf-product-category-tag { gap:4px; }
     .cf-category-icon { display:inline-flex; align-items:center; justify-content:center; flex:none; line-height:0; filter:drop-shadow(0 1.5px 0 rgba(15, 23, 42, 0.28)); }
@@ -186,7 +187,7 @@
       const action = this.getAttribute('variant') === 'action';
       const selected = this.getAttribute('selected') === 'true';
       const kind = this.getAttribute('kind');
-      const hideLabel = !action && (this.getAttribute('hide-label') === 'true' || kind === 'all' || !labelText);
+      const hideLabel = this.getAttribute('hide-label') === 'true' || kind === 'all' || !labelText;
       const theme = appearance(this.getAttribute('color-category') || category || 'todas', kind);
       const tagName = filter ? 'button' : 'span';
       // Preserve the focused native button while React updates selection.
@@ -195,7 +196,7 @@
       tag.className = filter ? `category-chip cf-category-chip${selected ? ' is-active' : ''}`
         : `cf-product-category-tag cf-category-tag ${this.getAttribute('class') || ''}`.trim();
       tag.classList.toggle('cf-category-clear', action);
-      tag.classList.toggle('cf-category-icon-only', hideLabel);
+      tag.classList.toggle('cf-category-icon-only', hideLabel || action);
       const accessibleLabel = labelText || (kind === 'all' ? 'Todas as categorias'.tr : 'Filtro');
       tag.setAttribute('aria-label', accessibleLabel);
       tag.dataset.categoryTone = theme.tone;
@@ -215,7 +216,7 @@
       for (const [key, value] of Object.entries({ viewBox:'0 0 24 24', width:'18', height:'18', fill:'none' })) svg.setAttribute(key, value);
       svg.innerHTML = cartoonIcons[theme.symbol] || cartoonIcons.box;
       icon.append(svg);
-      if (hideLabel) {
+      if (hideLabel || action) {
         tag.replaceChildren(icon);
       } else {
         const label = document.createElement('span');
@@ -369,7 +370,7 @@
       autoInitDragScroll();
     }
     if (typeof MutationObserver !== 'undefined') {
-      const observer = new window.MutationObserver(() => autoInitDragScroll());
+      const observer = new MutationObserver(() => autoInitDragScroll());
       observer.observe(document.documentElement, { childList: true, subtree: true });
     }
   }

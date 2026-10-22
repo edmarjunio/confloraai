@@ -12,7 +12,7 @@ const order = { ticketNumber: '5B2C71', customerName: 'TESTE', total: 427.44, pa
 
 test('mensagem de confirmação segue o modelo solicitado com quantidades, kg e total exatos', () => {
   assert.equal(formatCustomerOrderMessage(order), [
-    '🌿 *CONFLORA | HORTA E VIVEIRO*', '', '*Pedido #5B2C71*', '✅ Pedido confirmado!', '', '👤 *Cliente:* TESTE', '', '*🛒 Seu pedido:*',
+    '🌿 *CONFLORA | HORTA E VIVEIRO*', '', '*Pedido #5B2C71*', '', '👤 *Cliente:* TESTE', '', '*🛒 Seu pedido:*',
     '5x Abacaxi — R$ 44,95', '2x Abiu amarelo — R$ 158,00', '1,5 kg Abacate — R$ 13,49', '3x Abóbora cabotiá — R$ 21,00', '2x Aglaonema tricolor — R$ 190,00', '',
     '💰 *Total: R$ 427,44*', '', '💳 *Pagamento: Cartão*', '💳 Estamos levando a maquininha para receber seu pagamento.', '', 'Obrigado pela preferência', '🌱 *Equipe Conflora*',
   ].join('\n'));

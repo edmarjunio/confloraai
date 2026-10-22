@@ -5276,6 +5276,3 @@ html, body {
     animation: none !important;
   }
 }
-
-dialog[open], dialog[open] .cart-items, dialog[open] .cart-content { overscroll-behavior-y: contain; }
-.bottomsheet-handle { touch-action: none; }

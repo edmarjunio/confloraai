@@ -292,19 +292,6 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
       cashierSettlements: closingSettlements,
     };
   };
-  const closingService = new (require('../orders/cashier-closing.service').CashierClosingService)({ store, repository, snapshot: cashierSnapshot, proofStorage });
-  app.get('/api/caixa/closing', requireCashier, route(async (req, res) => {
-    const { from: date } = reportRange({ from: req.query.date, to: req.query.date });
-    const overview = await closingService.overview(req.user, date);
-    res.json({date:overview.date,cashiers:overview.cashiers});
-  }));
-  app.post('/api/caixa/closing', requireCashier, route(async (req, res) => {
-    const { from: date } = reportRange({ from: req.body.date, to: req.body.date });
-    if (date !== businessDate(new Date())) throw new Error('O fechamento deve ser feito no dia atual.');
-    const result = await closingService.close(req.user, { ...req.body, date });
-    if (result.jobId) await service.deliver(result.jobId);
-    res.json(result);
-  }));
   app.get('/api/caixa/orders', route(async (req, res) => {
     const { cashierOrders, ...board } = await cashierSnapshot(req.user, req.query);
     delete board.cashierSettlements;

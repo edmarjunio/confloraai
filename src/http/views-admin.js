@@ -525,7 +525,7 @@ function renderAdminHtml(storeConfig) {
 
         <!-- BOTÕES DE AÇÃO DO FECHAMENTO -->
         <div style="display:flex; justify-content:flex-end; gap:10px; flex-wrap:wrap; margin-top:16px;">
-          <button type="button" class="action-btn btn-green" id="btnSubmitCloseCash" onclick="window.openCashierClosing()" style="min-height:44px; padding:10px 20px; font-size:13px;">
+          <button type="button" class="action-btn btn-green" id="btnSubmitCloseCash" onclick="submitCashierClosing()" style="min-height:44px; padding:10px 20px; font-size:13px;">
             🔒 Registrar Fechamento do Caixa
           </button>
         </div>
