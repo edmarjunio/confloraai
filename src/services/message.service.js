@@ -79,17 +79,34 @@ class MessageService {
     await this.firestoreRepo.appendMessage(phone, 'user', message, { requirePersistence: true, messageId });
 
     const { conversationAutomation } = require('./conversation-automation');
-    const conversation = await conversationAutomation(this.firestoreRepo, phone);
+    let conversation = await conversationAutomation(this.firestoreRepo, phone);
+    const { normalizeText } = require('../shared/string.util');
+    const trimmed = String(message || '').trim().toLowerCase();
+    const normalizedMessage = normalizeText(trimmed);
+    const isGreetingOnly = /^(oi|ola|opa|bom dia|boa tarde|boa noite|e ai|eai|tudo bem|tudo bom|como vai|salve|fala|oie|oii|oiii)(\s+(tudo bem|tudo bom|amigo|amiga|equipe|conflora|pessoal))?[!?.]*$/i.test(normalizedMessage);
+    const isAgentRequest = interactiveId === 'btn_atendente' ||
+      /\b(atendente|humano|pessoa|vendedor|falar com (um |uma )?(atendente|humano|pessoa|vendedor)|alguem ai|alguem a[ií])\b/i.test(normalizedMessage);
+
+    if (conversation.automation === 'paused' && conversation.reason === 'human_requested') {
+      const { resumeAgentRequestedConversation } = require('./conversation-automation');
+      conversation = await resumeAgentRequestedConversation(this.firestoreRepo, phone);
+    }
     if (conversation.automation === 'paused') return { reply: '', intent: 'HUMAN_HANDOFF_ACTIVE', imagesSent: 0, latencyMs: 0 };
     if (verifyOnly) return { reply: '', intent: 'AUTOMATION_DISABLED', imagesSent: 0, latencyMs: 0 };
     const whatsappConfig = require('../config/env').whatsapp;
     if (whatsappConfig.agentOwner !== 'cloud_api') return { reply: '', intent: 'AUTOMATION_DISABLED', imagesSent: 0, latencyMs: 0 };
+    if (isAgentRequest) {
+      const reply = 'Claro! Sou o atendente virtual da Conflora e posso ajudar com produtos, preços e pedidos. O que você procura?';
+      if (whatsapp) await whatsapp.sendTextMessage(phone, reply);
+      await this.firestoreRepo.appendMessage(phone, 'assistant', reply);
+      return { reply, intent: 'AGENT_ASSISTANCE', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
+    }
     const nativeCommerce = /^(add_|cat_|sub_|pay_|order_)/.test(interactiveId) || ['montar_sacola', 'btn_sacola'].includes(interactiveId) ||
       /^(montar sacola|fazer pedido|comprar|fazer compras|abrir sacola|entrega|retirada|quero entrega|quero retirar|pix|cartao|cartão)$/i.test(String(message || '').trim());
     const activeDraft = this.metaAgentService && !nativeCommerce ? await this.firestoreRepo.getOrder(phone) : null;
     const draftIntent = activeDraft?.status === 'AWAITING_CONFIRMATION' ? this.router?.route(message, { pendingOrder: activeDraft })?.intent : null;
     const draftAction = [INTENTS.ORDER_CONFIRMATION, INTENTS.UPDATE_ORDER_DETAILS, INTENTS.PLACE_ORDER, INTENTS.ASK_SIZE_CONFIRMATION].includes(draftIntent);
-    if (this.metaAgentService && !nativeCommerce && !draftAction) {
+    if (this.metaAgentService && !nativeCommerce && !draftAction && !isGreetingOnly) {
       const envelope = await this.metaAgentService.execute('atender_mensagem', { customer_phone: phone, message_id: messageId || require('node:crypto').randomUUID(), message });
       if (!envelope.next_action.send_customer_message) return { reply: '', intent: 'HUMAN_HANDOFF', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
       const { runTransaction } = require('../database/transactions');
@@ -103,19 +120,12 @@ class MessageService {
       return { reply: '', intent: 'VERIFIED_CATALOG_QUEUED', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
     }
 
-    const { normalizeText } = require('../shared/string.util');
-    const trimmed = String(message || '').trim().toLowerCase();
-
     // 2. Opção 2 — 100% Nativo no WhatsApp: Falar com atendente
-    const isHumanRequest = interactiveId === 'btn_atendente' ||
-      /\b(atendente|humano|pessoa|vendedor|falar com (um |uma )?(atendente|humano|pessoa|vendedor)|alguem ai|alguém aí)\b/i.test(trimmed);
     const isNegativeResponse = /^(n[aã]o|nao era|não era|nenhum|nenhuma|errado|outro|outra|nada disso|queria outr[oa])\b/i.test(trimmed);
 
-    if (isHumanRequest || isNegativeResponse) {
-      await conversationAutomation(this.firestoreRepo, phone, { pauseReason: isNegativeResponse ? 'customer_declined_bot' : 'human_requested', messageId });
-      const reply = isHumanRequest
-        ? 'Vou encaminhar sua conversa para a equipe da loja. Um atendente continuará o atendimento por aqui.'
-        : 'Entendido perfeitamente! Já avisei a nossa equipe da loja e um de nossos atendentes vai te responder por aqui em instantes. Um momento, por favor!';
+    if (isNegativeResponse) {
+      await conversationAutomation(this.firestoreRepo, phone, { pauseReason: 'customer_declined_bot', messageId });
+      const reply = 'Entendido perfeitamente! Já avisei a nossa equipe da loja e um de nossos atendentes vai te responder por aqui em instantes. Um momento, por favor!';
       await this.firestoreRepo.appendMessage(phone, 'assistant', reply);
       if (whatsapp) {
         await whatsapp.sendTextMessage(phone, reply);
@@ -341,8 +351,7 @@ class MessageService {
       };
     }
 
-    // 9. Se for saudação isolada (ex: "Bom dia", "Oi", "Boa tarde"), dispara o modelo de boas-vindas com os botões diretos
-    const isGreetingOnly = /^(oi|ola|opa|bom dia|boa tarde|boa noite|e ai|eai|tudo bem|tudo bom|como vai|salve|fala|oie|oii|oiii)(\s+(tudo bem|tudo bom|amigo|amiga|equipe|conflora|pessoal))?[!?.]*$/i.test(normalizeText(trimmed));
+    // 9. Saudação isolada envia o template aprovado com fallback para texto em falha definitiva.
     if (isGreetingOnly) {
       Logger.info('Saudação isolada recebida. Disparando modelo de boas-vindas com botões da loja...', { phone, message });
       let resolvedName = customerName?.trim?.() || '';
@@ -351,9 +360,16 @@ class MessageService {
         resolvedName = profile?.name || profile?.customerName || '';
       }
       if (whatsapp) {
-        await whatsapp.sendWelcomeTemplate(phone, resolvedName).catch((err) => {
-          Logger.warn('Aviso: template de boas-vindas ainda não aprovado na Meta ou token pendente', { error: err.message });
-        });
+        try {
+          await whatsapp.sendWelcomeTemplate(phone, resolvedName);
+        } catch (error) {
+          Logger.warn('Falha ao enviar o template de boas-vindas', { error: error.message });
+          if (!error.definitelyNotSent) throw error;
+          const fallbackReply = 'Olá! Sou o atendente virtual da Conflora. Posso ajudar com produtos, preços e pedidos. O que você procura?';
+          await whatsapp.sendTextMessage(phone, fallbackReply);
+          await this.firestoreRepo.appendMessage(phone, 'assistant', fallbackReply);
+          return { reply: fallbackReply, intent: 'WELCOME_TEXT_FALLBACK', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
+        }
       }
       return {
         reply: 'Modelo de boas-vindas enviado',

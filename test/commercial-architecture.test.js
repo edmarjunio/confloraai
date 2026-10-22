@@ -148,9 +148,9 @@ test('stale WhatsApp prices and unknown product identity cannot become orders', 
   assert.equal([...db.data.keys()].filter(path => path.startsWith('orders/')).length, 0);
 });
 
-test('paused human conversation blocks greetings, native cart and native payment in every environment', async () => {
+test('paused conversation requiring human review blocks greetings, native cart and native payment in every environment', async () => {
   const { db, repo } = fixture();
-  const state = await conversationAutomation(repo, phone, { pauseReason: 'human_requested', messageId: 'm1' });
+  const state = await conversationAutomation(repo, phone, { pauseReason: 'customer_declined_bot', messageId: 'm1' });
   const unexpected = () => { throw new Error('Unexpected automation side effect'); };
   const messages = new MessageService({ firestoreRepo: repo,
     whatsappClient: { sendTextMessage: unexpected, sendWelcomeTemplate: unexpected },

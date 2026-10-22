@@ -160,12 +160,14 @@ test('MessageService handles WhatsApp native flow: Atendente, Montar Sacola, and
 
   let mockMessageId = 0;
   const sendMock = async () => ({ messages: [{ id: `wamid.mock-${++mockMessageId}` }] });
+  const sentTexts = [];
+  const sentWelcomeTemplates = [];
   const clientMock = {
     markAsRead: async () => {},
-    sendTextMessage: sendMock,
+    sendTextMessage: async (...args) => { sentTexts.push(args); return sendMock(); },
     sendInteractiveList: sendMock,
     sendInteractiveButtons: sendMock,
-    sendWelcomeTemplate: sendMock,
+    sendWelcomeTemplate: async (...args) => { sentWelcomeTemplates.push(args); return sendMock(); },
     formatRecipient: (r) => r,
   };
 
@@ -193,14 +195,28 @@ test('MessageService handles WhatsApp native flow: Atendente, Montar Sacola, and
     customerName: 'Cliente Teste',
   });
   assert.equal(greetingRes.intent, 'WELCOME_TEMPLATE_SENT');
+  assert.deepEqual(sentWelcomeTemplates[0], ['5564999990002', 'Cliente Teste']);
 
-  // 1. Falar com atendente
+  // 1. O botão de atendente conversa com o agente virtual, sem abrir handoff humano.
   const atendenteRes = await service.handleCustomerMessage({
     phone: '5564999990001',
-    message: 'falar com atendente',
+    message: '',
+    interactiveId: 'btn_atendente',
   });
-  assert.equal(atendenteRes.intent, 'HUMAN_HANDOFF');
-  assert.match(atendenteRes.reply, /encaminhar.*atendente/i);
+  assert.equal(atendenteRes.intent, 'AGENT_ASSISTANCE');
+  assert.match(atendenteRes.reply, /atendente virtual da Conflora/i);
+  assert.equal(sentTexts.at(-1)[0], '5564999990001');
+
+  // Conversas antigas pausadas por pedido de atendente voltam ao agente no próximo contato.
+  const { conversationAutomation } = require('../src/services/conversation-automation');
+  const resumedGreeting = await service.handleCustomerMessage({ phone: '5564999990003', message: 'Oi' });
+  assert.equal(resumedGreeting.intent, 'WELCOME_TEMPLATE_SENT');
+  assert.equal((await conversationAutomation(firestoreRepo, '5564999990003')).automation, 'active');
+
+  clientMock.sendWelcomeTemplate = async () => { throw Object.assign(new Error('TEMPLATE_NOT_APPROVED'), { definitelyNotSent: true }); };
+  const fallbackGreeting = await service.handleCustomerMessage({ phone: '5564999990004', message: 'Oi' });
+  assert.equal(fallbackGreeting.intent, 'WELCOME_TEXT_FALLBACK');
+  assert.match(fallbackGreeting.reply, /atendente virtual da Conflora/i);
 
   // 2. Montar Sacola
   const sacolaRes = await service.handleCustomerMessage({

@@ -19,4 +19,38 @@ async function conversationAutomation(repo, phone, { pauseReason, messageId = ''
   });
 }
 
-module.exports = { conversationAutomation };
+async function resumeAgentRequestedConversation(repo, phone) {
+  const tenantId = 'conflora';
+  const customerKey = customerKeyFor(tenantId, phone);
+  const conversationId = scopedId(tenantId, customerKey);
+
+  return runTransaction(repo, async tx => {
+    const current = await tx.get('agent_conversations', conversationId);
+    if (!current || current.automation !== 'paused' || current.reason !== 'human_requested') return current;
+
+    const now = new Date().toISOString();
+    if (current.handoffId) {
+      const handoff = await tx.get('agent_handoffs', current.handoffId);
+      if (handoff?.status === 'open') {
+        tx.set('agent_handoffs', current.handoffId, {
+          ...handoff,
+          status: 'resumed',
+          resumedAt: now,
+          resumedBy: { id: 'whatsapp_agent', role: 'AGENT' },
+        });
+      }
+    }
+
+    const resumed = {
+      ...current,
+      automation: 'active',
+      resumedAt: now,
+      resumedBy: 'whatsapp_agent',
+      updatedAt: now,
+    };
+    tx.set('agent_conversations', conversationId, resumed);
+    return resumed;
+  });
+}
+
+module.exports = { conversationAutomation, resumeAgentRequestedConversation };
