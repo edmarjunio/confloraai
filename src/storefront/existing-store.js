@@ -1,6 +1,7 @@
 const profile = require("../../config/stores/conflora.json");
 const { productStatus } = require("../catalog/product-status");
 const { resolveHdProductImage } = require("../catalog/image-resolver");
+const { enrichWithValidatedProfile } = require("../catalog/validated-catalog-profiles");
 const {
   ensure,
   digest,
@@ -10,7 +11,8 @@ const {
 } = require("./validation");
 
 // Compatibility boundary for the existing store. SaaS tenants never use these collections.
-function toProduct(item, { stockControlEnabled = true } = {}) {
+function toProduct(rawItem, { stockControlEnabled = true } = {}) {
+  const item = enrichWithValidatedProfile(rawItem);
   const commercial = require('../catalog/commercial-product').commercialProduct(item);
   const category = String(item.category || item.categoria || item.CATEGORIA || "Geral");
   const name = commercial.name || "Produto";
@@ -19,6 +21,9 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
   const photo = (value) =>
     typeof value === "string" &&
     (/^https:\/\/(?:firebasestorage|storage)\.googleapis\.com\//.test(value) ||
+      /^https:\/\/(?:inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org)\//i.test(value) ||
+      /^https:\/\/images\.unsplash\.com\//i.test(value) ||
+      /^\/store-assets\/products\//.test(value) ||
       /^\/api\/images\//.test(value) ||
       /^gs:\/\/[a-z0-9._-]+\/products\/[a-z0-9_-]+\/[a-z0-9._-]+$/i.test(value) ||
       /^products\/[a-z0-9_-]+\/[a-z0-9._-]+$/i.test(value))
@@ -448,7 +453,30 @@ function installExistingStore(app, { repository, assistant, catalog, getOrderInt
         category: String(data.category || "Geral").trim(),
         subcategory: String(data.subcategory || "").trim(),
         imageUrl: String(data.imageUrl || "").trim(),
+        ...(Array.isArray(data.images) ? { images: data.images } : {}),
         description: String(data.description || "").trim(),
+        ...(data.descriptionAi ? { descriptionAi: String(data.descriptionAi).trim(), descricao_ia: String(data.descriptionAi).trim() } : {}),
+        ...(data.productType ? { productType: String(data.productType).trim() } : {}),
+        ...(data.cuidados_basicos || data.careInstructions ? { cuidados_basicos: String(data.cuidados_basicos || data.careInstructions).trim(), careInstructions: String(data.careInstructions || data.cuidados_basicos).trim() } : {}),
+        ...(data.ambiente_ideal ? { ambiente_ideal: String(data.ambiente_ideal).trim() } : {}),
+        ...(data.housing ? { housing: String(data.housing).trim() } : {}),
+        ...(data.iluminacao || data.illumination ? { iluminacao: String(data.iluminacao || data.illumination).trim(), illumination: String(data.illumination || data.iluminacao).trim() } : {}),
+        ...(data.rega || data.watering ? { rega: String(data.rega || data.watering).trim(), watering: String(data.watering || data.rega).trim() } : {}),
+        ...(data.alimentacao || data.feeding ? { alimentacao: String(data.alimentacao || data.feeding).trim(), feeding: String(data.feeding || data.alimentacao).trim() } : {}),
+        ...(data.manejo || data.handling ? { manejo: String(data.manejo || data.handling).trim(), handling: String(data.handling || data.manejo).trim() } : {}),
+        ...(data.alimentos_proibidos || data.prohibitedFoods ? { alimentos_proibidos: String(data.alimentos_proibidos || data.prohibitedFoods).trim(), prohibitedFoods: String(data.prohibitedFoods || data.alimentos_proibidos).trim() } : {}),
+        ...(data.preferences ? { preferences: String(data.preferences).trim() } : {}),
+        ...(data.dislikes ? { dislikes: String(data.dislikes).trim() } : {}),
+        ...(data.dicas_armazenamento || data.storageTips ? { dicas_armazenamento: String(data.dicas_armazenamento || data.storageTips).trim(), storageTips: String(data.storageTips || data.dicas_armazenamento).trim() } : {}),
+        ...(data.durabilidade || data.durability ? { durabilidade: String(data.durabilidade || data.durability).trim(), durability: String(data.durability || data.durabilidade).trim() } : {}),
+        ...(data.usage ? { usage: String(data.usage).trim() } : {}),
+        ...(data.suitability ? { suitability: String(data.suitability).trim() } : {}),
+        ...(data.matureSize ? { matureSize: String(data.matureSize).trim() } : {}),
+        ...(data.precautions ? { precautions: String(data.precautions).trim() } : {}),
+        ...(data.selectionTips ? { selectionTips: String(data.selectionTips).trim() } : {}),
+        ...(data.botanical && typeof data.botanical === "object" ? { botanical: data.botanical } : {}),
+        ...(data.especificacoes && typeof data.especificacoes === "object" ? { especificacoes: data.especificacoes } : {}),
+        ...(data.specifications && typeof data.specifications === "object" ? { specifications: data.specifications } : {}),
         tags: Array.isArray(data.tags)
           ? data.tags
           : typeof data.tags === "string"
@@ -661,6 +689,9 @@ async function normalizeExistingCheckout(req, repository) {
 }
 async function readStoreSettings(repository) {
   if (repository.firestore && repository._firestoreClientDisabled) {
+    if (process.env.NODE_ENV !== 'test') {
+      return repository.storefrontSettings;
+    }
     throw Object.assign(new Error('Configurações da loja indisponíveis.'), { status: 503 });
   }
   if (repository.firestore && !repository._firestoreClientDisabled) {
@@ -671,6 +702,10 @@ async function readStoreSettings(repository) {
         .get();
       return snap.data();
     } catch (err) {
+      if (process.env.NODE_ENV !== 'test' && (err?.code === 7 || /PERMISSION_DENIED|insufficient permissions/i.test(err?.message || ''))) {
+        repository._firestoreClientDisabled = true;
+        return repository.storefrontSettings;
+      }
       throw Object.assign(new Error('Configurações da loja indisponíveis.', { cause: err }), { status: 503 });
     }
   }

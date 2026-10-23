@@ -69,6 +69,7 @@ function installStorefront(app, { express, firestore, repository, assistant }) {
   );
   app.use("/store-assets", express.static(assets, staticOptions));
   app.use("/storefront", express.static(assets, staticOptions));
+  app.use("/assets", express.static(path.resolve(__dirname, "../../public/assets"), staticOptions));
   app.get(
     ["/shop/:slug", "/shop/:slug/products/:productId", "/shop/:slug/admin"],
     async (req, res, next) => {

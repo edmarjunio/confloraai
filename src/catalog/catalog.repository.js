@@ -4,7 +4,9 @@ const { normalizeCatalogItem } = require('./normalize-catalog-item');
 function isStoredProductImage(value) {
   return typeof value === 'string' && (
     value.startsWith('/api/images/') ||
-    /^https:\/\/(?:firebasestorage|storage)\.googleapis\.com\//i.test(value)
+    value.startsWith('/store-assets/products/') ||
+    /^https:\/\/(?:firebasestorage|storage)\.googleapis\.com\//i.test(value) ||
+    /^https:\/\/(?:inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org)\//i.test(value)
   );
 }
 

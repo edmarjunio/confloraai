@@ -1,4 +1,7 @@
-function normalizeCatalogItem(it) {
+const { enrichWithValidatedProfile } = require('./validated-catalog-profiles');
+
+function normalizeCatalogItem(rawItem) {
+  const it = enrichWithValidatedProfile(rawItem);
   const view = require('./commercial-product').commercialProduct(it);
   const name = view.name;
   const category = it.category || it.categoria || it.CATEGORIA || 'Conflora';
@@ -48,8 +51,11 @@ function normalizeCatalogItem(it) {
 function isStoredProductImage(value) {
   return typeof value === 'string' && (
     /^https:\/\/(?:firebasestorage|storage)\.googleapis\.com\//i.test(value.trim()) ||
+    /^https:\/\/(?:inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org)\//i.test(value.trim()) ||
+    /^\/store-assets\/products\//i.test(value.trim()) ||
     /^\/api\/images\//i.test(value.trim())
   );
 }
 
 module.exports = { normalizeCatalogItem };
+
