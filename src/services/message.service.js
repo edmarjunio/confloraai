@@ -1,6 +1,7 @@
 const { INTENTS } = require('../router/message.router');
 const Logger = require('../shared/logger');
 const { formatCurrency } = require('../shared/string.util');
+const { recognizeGreeting } = require('../shared/greeting');
 
 class MessageService {
   /**
@@ -93,19 +94,6 @@ class MessageService {
     if (!whatsappConfig.assistantEnabled) return { reply: '', intent: 'AUTOMATION_DISABLED', imagesSent: 0, latencyMs: 0 };
     if (whatsappConfig.agentOwner !== 'cloud_api') return { reply: '', intent: 'AUTOMATION_DISABLED', imagesSent: 0, latencyMs: 0 };
 
-    if (!interactiveId && this.firestoreRepo.getAllProducts && this.firestoreRepo.getInventorySettings) {
-      this.orderIntake ||= new (require('./order-intake.service').OrderIntakeService)(this.firestoreRepo, {
-        catalog: this.catalogRepo,
-        notify: id => this.orderService?.commerce?.pdv?.deliver(id),
-      });
-      const intake = await this.orderIntake.handle({ phone, message, messageId, customerName });
-      if (intake) {
-        await this.firestoreRepo.appendMessage(phone, 'assistant', intake.reply, { requirePersistence: true, messageId });
-        if (whatsapp) await whatsapp.sendTextMessage(phone, intake.reply);
-        return { ...intake, imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
-      }
-    }
-
     const isAgentSelection = interactiveId === 'btn_atendente';
     const isCartSelection = ['montar_sacola', 'btn_sacola'].includes(interactiveId) ||
       /^(cat_|sub_|add_|order_|pay_)/.test(interactiveId);
@@ -130,10 +118,17 @@ class MessageService {
     const isReceiptPayload = String(message || '') === '[COMPROVANTE_ENVIADO]';
     const isActiveAgent = conversation.channel === 'agent';
     const isActiveCart = conversation.channel === 'cart';
-    const wantsMenu = /^(?:oi+|ol[aá]+|bom dia|boa tarde|boa noite|opa|menu|quero ver as op[cç][oõ]es)[!,.?\s]*$/i.test(String(message || '').trim());
+    const greeting = recognizeGreeting(message);
+    if (!interactiveId && greeting && (isActiveAgent || isActiveCart)) {
+      const reply = `${greeting} ${isActiveCart ? 'Como posso ajudar com sua sacola?' : 'Qual produto você procura?'}`;
+      if (whatsapp) await whatsapp.sendTextMessage(phone, reply);
+      await this.firestoreRepo.appendMessage(phone, 'assistant', reply);
+      return { reply, intent: 'GREETING_SENT', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
+    }
+    const wantsMenu = greeting || /^(?:menu|quero ver as op[cç][oõ]es)[!,.?\s]*$/i.test(String(message || '').trim());
     if (!interactiveId && !isReceiptPayload && !isActiveAgent && !isActiveCart && wantsMenu) {
       await setConversationChannel(this.firestoreRepo, phone, 'menu');
-      const reply = 'Como prefere continuar?';
+      const reply = `${greeting ? greeting + ' ' : ''}Como prefere continuar?`;
       if (whatsapp) {
         await whatsapp.sendInteractiveButtons(phone, {
           bodyText: reply,
@@ -146,6 +141,19 @@ class MessageService {
       }
       await this.firestoreRepo.appendMessage(phone, 'assistant', reply);
       return { reply, intent: 'MAIN_MENU_SENT', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
+    }
+
+    if (!interactiveId && this.firestoreRepo.getAllProducts && this.firestoreRepo.getInventorySettings) {
+      this.orderIntake ||= new (require('./order-intake.service').OrderIntakeService)(this.firestoreRepo, {
+        catalog: this.catalogRepo,
+        notify: id => this.orderService?.commerce?.pdv?.deliver(id),
+      });
+      const intake = await this.orderIntake.handle({ phone, message, messageId, customerName });
+      if (intake) {
+        await this.firestoreRepo.appendMessage(phone, 'assistant', intake.reply, { requirePersistence: true, messageId });
+        if (whatsapp) await whatsapp.sendTextMessage(phone, intake.reply);
+        return { ...intake, imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
+      }
     }
 
     const nativeCommerce = /^(add_|cat_|sub_|pay_|order_)/.test(interactiveId) || ['montar_sacola', 'btn_sacola'].includes(interactiveId) ||

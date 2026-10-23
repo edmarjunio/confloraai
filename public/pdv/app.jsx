@@ -222,7 +222,6 @@ const { useState, useEffect, useRef, useMemo } = React;
         });
       }, [categoryTabs]);
       useEffect(() => setVisibleCount(60), [selectedCategories, showingFavorites, selectedSubcategories, searchQuery]);
-      const defaultMultiplier = 1;
 
       const [cart, setCart] = useState([]);
 
@@ -623,7 +622,7 @@ const { useState, useEffect, useRef, useMemo } = React;
       const saleQuantityStep = (product) => Number(product?.saleUnit?.increment) || (isSoldByKg(product) ? 0.1 : 1);
 
       const addToCart = (product, customQty = null) => {
-        const rawQuantity = customQty !== null ? Number(customQty) : Math.max(1, Number(defaultMultiplier) || 1);
+        const rawQuantity = customQty !== null ? Number(customQty) : 1;
         const qtyToAdd = isSoldByKg(product) ? Number(rawQuantity.toFixed(3)) : rawQuantity;
         const productId = String(product?.id ?? product?.productId ?? product?.sku ?? '').trim();
         if (!productId || !Number.isFinite(qtyToAdd) || qtyToAdd <= 0) return;
@@ -638,8 +637,6 @@ const { useState, useEffect, useRef, useMemo } = React;
           }
           return [...prev, { ...product, id: productId, quantity: qtyToAdd }];
         });
-        // Reset multiplier back to 1 after adding
-        setDefaultMultiplier(1);
       };
 
       const addProductToCart = (product) => {
@@ -928,7 +925,7 @@ const { useState, useEffect, useRef, useMemo } = React;
               {/* Quick Pills Bar: Tipo de Pedido, Cliente, Desconto, Entrega & Limpar */}
               {!isCollapsed && (
                 <div className="px-3.5 py-2 bg-slate-50/90 border-t border-slate-100 flex items-center justify-between gap-2 text-[11px]">
-                  <div ref={attachDragScrollRef} data-drag-scroll="true" className="cf-drag-scroll flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                  <div data-drag-scroll="true" className="cf-drag-scroll flex items-center gap-1.5 overflow-x-auto no-scrollbar">
                     {/* Toggle Balcão / Entrega */}
                     <button
                       onClick={() => {
@@ -1299,7 +1296,7 @@ const { useState, useEffect, useRef, useMemo } = React;
 
               {/* Com Flora Category Pills Row */}
               <div className="cf-pos-categories mx-auto flex min-w-0 w-full max-w-[1600px] flex-col gap-2 lg:mx-0 lg:w-2/3">
-                <div ref={attachDragScrollRef} data-drag-scroll="true" className="cf-drag-scroll flex min-w-0 flex-1 items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+                <div data-drag-scroll="true" className="cf-drag-scroll flex min-w-0 flex-1 items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
                   {categoryTabs.map(cat => (
                     <render-category-tag key={cat.id} category={cat.label} variant="filter"
                       kind={cat.id === 'atalhos' ? 'favorites' : cat.id === 'todas' ? 'all' : ''}
@@ -1311,7 +1308,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                 </div>
 
                 {availableSubcategories.length > 0 && (
-                  <div ref={attachDragScrollRef} data-drag-scroll="true" className="cf-drag-scroll flex min-w-0 w-full items-center gap-1.5 overflow-x-auto py-1 px-1 bg-emerald-50/70 rounded-full border border-emerald-200 no-scrollbar">
+                  <div data-drag-scroll="true" className="cf-drag-scroll flex min-w-0 w-full items-center gap-1.5 overflow-x-auto py-1 px-1 bg-emerald-50/70 rounded-full border border-emerald-200 no-scrollbar">
                     <span className="text-[11px] font-black text-emerald-800 uppercase tracking-wide px-2 shrink-0">
                       🏷️ Sub:
                     </span>
