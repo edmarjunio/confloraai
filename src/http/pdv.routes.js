@@ -4,7 +4,7 @@ const { PaymentProofStorage } = require('../orders/payment-proof');
 const { timingSafeEqual, randomUUID } = require('node:crypto');
 const { PdvRepository } = require('../orders/pdv.repository');
 const { PdvService, actor, requestId, normalizePhone } = require('../orders/pdv.service');
-const { formatOrderReceipt, money } = require('../orders/receipt.util');
+const { formatOrderReceipt } = require('../orders/receipt.util');
 const Logger = require('../shared/logger');
 const { setInterval, clearInterval } = require('node:timers');
 const { normalizePaymentParts, partAmount } = require('../orders/payment-parts');
@@ -316,210 +316,18 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     res.json({ success: true, message: 'PDF enviado ao WhatsApp da loja.' });
   }));
 
-  app.get('/api/caixa/closing-status', requireCashier, route(async (req, res) => {
-    const date = businessDate(new Date());
-    const closings = await store.list('cashier_closings', 'date', date);
-    const myClosing = closings.find((c) => c.userId === req.user.id) || null;
-
-    const allOrders = await store.list('orders');
-    const todayOrders = allOrders.filter((o) => o.completedAt && businessDate(o.completedAt) === date);
-    const allSettlements = await store.list('debt_settlements');
-    const todaySettlements = allSettlements.filter((s) => s.settledAt && businessDate(s.settledAt) === date);
-
-    const operatorMap = new Map();
-    for (const order of todayOrders) {
-      const receiver = financialReceiver(order) || order.receivedBy || order.createdBy;
-      if (receiver?.id && ['ADMIN', 'CAIXA'].includes(receiver.role)) {
-        operatorMap.set(receiver.id, { id: receiver.id, name: receiver.name || 'Operador', role: receiver.role });
-      }
-    }
-    for (const s of todaySettlements) {
-      if (s.receivedBy?.id && ['ADMIN', 'CAIXA'].includes(s.receivedBy.role)) {
-        operatorMap.set(s.receivedBy.id, { id: s.receivedBy.id, name: s.receivedBy.name || 'Operador', role: s.receivedBy.role });
-      }
-    }
-    for (const c of closings) {
-      if (!operatorMap.has(c.userId)) {
-        operatorMap.set(c.userId, { id: c.userId, name: c.userName || 'Operador', role: c.userRole });
-      }
-    }
-    if (!operatorMap.has(req.user.id) && ['ADMIN', 'CAIXA'].includes(req.user.role)) {
-      operatorMap.set(req.user.id, { id: req.user.id, name: req.user.name || req.user.email, role: req.user.role });
-    }
-
-    const myOrders = todayOrders.filter((order) => {
-      const r = financialReceiver(order) || order.receivedBy || order.createdBy;
-      return r?.id === req.user.id;
-    });
-    const mySettlements = todaySettlements.filter((s) => s.receivedBy?.id === req.user.id);
-    const myTotals = paymentTotals(myOrders, mySettlements);
-    const myExpected = {
-      cash: Math.round((myTotals.DINHEIRO?.total || 0) * 100) / 100,
-      pix: Math.round((myTotals.PIX?.total || 0) * 100) / 100,
-      credit: Math.round((myTotals.CREDITO?.total || 0) * 100) / 100,
-      debit: Math.round((myTotals.DEBITO?.total || 0) * 100) / 100,
-      total: Math.round(((myTotals.DINHEIRO?.total || 0) + (myTotals.PIX?.total || 0) + (myTotals.CREDITO?.total || 0) + (myTotals.DEBITO?.total || 0)) * 100) / 100,
-    };
-
-    const activeOperators = Array.from(operatorMap.values()).map((op) => {
-      const opClosing = closings.find((c) => c.userId === op.id);
-      return {
-        id: op.id,
-        name: op.name,
-        role: op.role,
-        closed: Boolean(opClosing),
-        closedAt: opClosing?.closedAt || null,
-        closingId: opClosing?.id || null,
-        proofId: opClosing?.proofId || null,
-      };
-    });
-
-    const allClosed = activeOperators.length > 0 && activeOperators.every((op) => op.closed);
-    res.json({ date, myClosing, myExpected, activeOperators, allClosed });
+  const cashierSessions = require('../orders/cashier-sessions');
+  app.post('/api/caixa/open-my-cashier', requireCashier, route(async (req, res) => {
+    res.json({ success: true, session: await cashierSessions.open(store, req.user, req.body) });
   }));
-
+  app.get('/api/caixa/closing-status', requireCashier, route(async (req, res) => {
+    res.json(await cashierSessions.status(store, req.user));
+  }));
   app.post('/api/caixa/close-my-cashier', requireCashier, route(async (req, res) => {
-    const date = req.body.date || businessDate(new Date());
-    const closingId = `${req.user.id}_${date}`;
-    const existing = await store.read('cashier_closings', closingId);
-    if (existing) {
-      return res.status(409).json({ error: 'O seu caixa para esta data já foi fechado e não pode ser reaberto.' });
-    }
-
-    const allOrders = await store.list('orders');
-    const todayOrders = allOrders.filter((o) => o.completedAt && businessDate(o.completedAt) === date);
-    const allSettlements = await store.list('debt_settlements');
-    const todaySettlements = allSettlements.filter((s) => s.settledAt && businessDate(s.settledAt) === date);
-
-    const myOrders = todayOrders.filter((order) => {
-      const r = financialReceiver(order) || order.receivedBy || order.createdBy;
-      return r?.id === req.user.id;
-    });
-    const mySettlements = todaySettlements.filter((s) => s.receivedBy?.id === req.user.id);
-    const myTotals = paymentTotals(myOrders, mySettlements);
-    const expected = {
-      cash: Math.round((myTotals.DINHEIRO?.total || 0) * 100) / 100,
-      pix: Math.round((myTotals.PIX?.total || 0) * 100) / 100,
-      credit: Math.round((myTotals.CREDITO?.total || 0) * 100) / 100,
-      debit: Math.round((myTotals.DEBITO?.total || 0) * 100) / 100,
-      total: Math.round(((myTotals.DINHEIRO?.total || 0) + (myTotals.PIX?.total || 0) + (myTotals.CREDITO?.total || 0) + (myTotals.DEBITO?.total || 0)) * 100) / 100,
-    };
-
-    const countedInput = req.body.counted || {};
-    const counted = {
-      cash: Math.round(Number(countedInput.cash || 0) * 100) / 100,
-      pix: Math.round(Number(countedInput.pix || 0) * 100) / 100,
-      credit: Math.round(Number(countedInput.credit || 0) * 100) / 100,
-      debit: Math.round(Number(countedInput.debit || 0) * 100) / 100,
-    };
-    const countedTotal = Math.round((counted.cash + counted.pix + counted.credit + counted.debit) * 100) / 100;
-    const differences = {
-      cash: Math.round((counted.cash - expected.cash) * 100) / 100,
-      pix: Math.round((counted.pix - expected.pix) * 100) / 100,
-      credit: Math.round((counted.credit - expected.credit) * 100) / 100,
-      debit: Math.round((counted.debit - expected.debit) * 100) / 100,
-      total: Math.round((countedTotal - expected.total) * 100) / 100,
-    };
-
-    const closingDoc = {
-      id: closingId,
-      userId: req.user.id,
-      userName: req.user.name || req.user.email,
-      userRole: req.user.role,
-      date,
-      status: 'CLOSED',
-      closedAt: new Date().toISOString(),
-      expected,
-      counted: { ...counted, total: countedTotal },
-      differences,
-      notes: String(req.body.notes || '').slice(0, 500),
-      proofId: req.body.proofId || null,
-    };
-
-    await store.transaction(async (tx) => {
-      tx.set('cashier_closings', closingId, closingDoc);
-    });
-
-    const closings = await store.list('cashier_closings', 'date', date);
-    const operatorMap = new Map();
-    for (const order of todayOrders) {
-      const receiver = financialReceiver(order) || order.receivedBy || order.createdBy;
-      if (receiver?.id && ['ADMIN', 'CAIXA'].includes(receiver.role)) {
-        operatorMap.set(receiver.id, { id: receiver.id, name: receiver.name || 'Operador', role: receiver.role });
-      }
-    }
-    for (const s of todaySettlements) {
-      if (s.receivedBy?.id && ['ADMIN', 'CAIXA'].includes(s.receivedBy.role)) {
-        operatorMap.set(s.receivedBy.id, { id: s.receivedBy.id, name: s.receivedBy.name || 'Operador', role: s.receivedBy.role });
-      }
-    }
-    for (const c of closings) {
-      if (!operatorMap.has(c.userId)) {
-        operatorMap.set(c.userId, { id: c.userId, name: c.userName || 'Operador', role: c.userRole });
-      }
-    }
-
-    const activeOperators = Array.from(operatorMap.values());
-    const allClosed = activeOperators.length > 0 && activeOperators.every((op) => closings.some((c) => c.userId === op.id));
-
-    let whatsappSent = false;
-    let whatsappQueued = false;
-
-    if (allClosed) {
-      const ownerWhatsApp = process.env.OWNER_WHATSAPP_NUMBER || '5564999994321';
-      const grandTotalExpected = closings.reduce((sum, c) => sum + (c.expected?.total || 0), 0);
-      const grandTotalCounted = closings.reduce((sum, c) => sum + (c.counted?.total || 0), 0);
-      const totalCountedCash = closings.reduce((sum, c) => sum + (c.counted?.cash || 0), 0);
-      const totalCountedPix = closings.reduce((sum, c) => sum + (c.counted?.pix || 0), 0);
-      const totalCountedDebit = closings.reduce((sum, c) => sum + (c.counted?.debit || 0), 0);
-      const totalCountedCredit = closings.reduce((sum, c) => sum + (c.counted?.credit || 0), 0);
-
-      const operatorsSummary = closings.map((c) => {
-        const diffTotal = c.differences.total;
-        const diffSign = diffTotal === 0 ? 'Exato' : (diffTotal > 0 ? `+${money(diffTotal)} (Sobra)` : `${money(diffTotal)} (Falta)`);
-        return `👤 *${c.userName}* (${c.userRole}):\n  - Apurado Sistema: ${money(c.expected.total)}\n  - Conferido Caixa: ${money(c.counted.total)}\n  - Diferença: ${diffSign}${c.proofId ? '\n  - Comprovante de maquininha anexado' : ''}`;
-      }).join('\n\n');
-
-      const consolidatedText = `📊 *CONFLORA — FECHAMENTO GERAL DE TODOS OS CAIXAS*
-📅 Data: ${date}
-
-✅ *Todos os operadores fecharam seus caixas com sucesso!*
-
-👥 *Detalhamento por Operador:*
-${operatorsSummary}
-
-💰 *Total Conferido em Caixa:*
-💵 Dinheiro: ${money(totalCountedCash)}
-⚡ PIX: ${money(totalCountedPix)}
-💳 Cartão Débito: ${money(totalCountedDebit)}
-💳 Cartão Crédito: ${money(totalCountedCredit)}
-━━━━━━━━━━━━━━━━━━━
-💎 TOTAL GERAL: ${money(grandTotalCounted)} (Apurado Sistema: ${money(grandTotalExpected)})
-
-Operação diária Conflora finalizada.`;
-
-      const jobId = `closing-summary-${date}`;
-      await store.transaction(async (tx) => {
-        tx.set('pdv_outbox', jobId, {
-          id: jobId,
-          kind: 'closing',
-          recipient: ownerWhatsApp,
-          text: consolidatedText,
-          status: 'PENDING',
-          attempts: 0,
-          createdAt: new Date().toISOString(),
-        });
-      });
-      whatsappQueued = true;
-      try {
-        await service.deliver(jobId);
-        whatsappSent = true;
-      } catch (err) {
-        Logger.error('Falha ao enviar resumo de fechamento para o WhatsApp do proprietário', err);
-      }
-    }
-
-    res.json({ success: true, closing: closingDoc, allClosed, whatsappQueued, whatsappSent });
+    const result = await cashierSessions.close(store, req.user, req.body);
+    if (result.jobId) await service.deliver(result.jobId);
+    const job = result.jobId ? await store.read('pdv_outbox', result.jobId) : null;
+    res.json({ ...result, whatsappSent: job?.status === 'SENT' });
   }));
 
   const findOrder = async (req) => {

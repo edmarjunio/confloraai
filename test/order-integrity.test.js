@@ -229,6 +229,7 @@ test('Firestore transaction: command reservation and settlement roll back togeth
   const { PdvRepository } = require('../src/orders/pdv.repository');
   const state = setup('transaction', { source: 'PDV', status: 'AWAITING_CONFIRMATION', paymentMethod: 'DINHEIRO' });
   const pdv = new PdvRepository(state.repo); const cashier = { id: 'cashier', name: 'Caixa', role: 'CAIXA' };
+  await require('../src/orders/cashier-sessions').open(pdv, cashier, { requestId: require('node:crypto').randomUUID(), openingFloat: 0 });
   state.store.failCommit = true;
   await assert.rejects(pdv.advanceToPayment('sale', cashier), /Commit/);
   assert.equal(state.order().status, 'AWAITING_CONFIRMATION');

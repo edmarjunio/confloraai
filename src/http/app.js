@@ -1381,6 +1381,10 @@ function createApp({
         });
       }
       const resolvedPaymentMethod = String(paymentMethod || 'DINHEIRO').toUpperCase();
+      if (req.user?.role === 'CAIXA') {
+        const order = await app.locals.pdv.service.create({ requestId: randomUUID(), items: normalizedItems, paymentMethod: resolvedPaymentMethod, orderType: 'PICKUP', customerName, customerPhone, notes }, req.user);
+        return res.json({ success: true, order, receiptText: formatOrderReceipt(order) });
+      }
       if (resolvedPaymentMethod === 'PIX' && require('../orders/pix-mode').pixMode() === 'MANUAL') {
         const order = await app.locals.pdv.service.create({ requestId: randomUUID(), items: normalizedItems, paymentMethod: 'PIX', orderType: 'PICKUP', customerName, customerPhone, notes }, req.user);
         return res.json({ success: true, order, receiptText: formatOrderReceipt(order) });
@@ -1430,7 +1434,7 @@ function createApp({
       });
     } catch (err) {
       Logger.error('error_posting_manual_order_at_the_register'.tr, err);
-      res.status(500).json({ error: err.message });
+      res.status(err.status || 400).json({ error: err.message });
     }
   });
 

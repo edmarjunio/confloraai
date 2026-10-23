@@ -24,6 +24,7 @@ async function sales(count, legacyCatalogRead) {
     sendTextMessage: async () => ({ messages: [{ id: `wamid.mock.${++sends}` }] }),
   } });
   const actor = { id: 'cashier', name: 'Teste isolado', role: 'CAIXA' };
+  require('./helpers/open-cashier-fixture').seedOpenCashier(base, actor);
   const start = performance.now();
   const orders = [];
   await concurrent(Array.from({ length: count }), 20, async () => {

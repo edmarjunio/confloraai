@@ -1483,6 +1483,28 @@ window.PdvComponents = (() => {
       {description && <p className="mt-1 text-[10px] text-slate-500">{description}</p>}
     </cf-card>;
   }
+  function AbrirCaixaModal({ onOpened, onClose }) {
+    const [openingFloat, setOpeningFloat] = useState('');
+    const [requestId] = useState(() => crypto.randomUUID());
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState('');
+    return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+      <form aria-label="Abertura de caixa" className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl" onSubmit={async event => {
+        event.preventDefault(); setBusy(true); setError('');
+        try { await api('/api/caixa/open-my-cashier', { requestId, openingFloat: Number(openingFloat) }); await onOpened(); }
+        catch (err) { setError(err.message); } finally { setBusy(false); }
+      }}>
+        <h2 className="text-xl font-black text-emerald-950">Abertura de caixa</h2>
+        <p className="my-3 text-sm text-slate-600">Conte o dinheiro recebido para dar troco. Informe zero se não recebeu troco. Cada nova abertura tem seu próprio valor.</p>
+        <label className="block text-sm font-bold">Troco do dia (R$)
+          <input autoFocus required type="number" min="0" step="0.01" value={openingFloat} onChange={e => setOpeningFloat(e.target.value)} className="my-2 w-full rounded-xl border p-3" />
+        </label>
+        {error && <p role="alert" className="my-2 text-sm text-red-700">{error}</p>}
+        <button disabled={busy} className="cf-btn-3d cf-btn-3d--primary w-full">{busy ? 'Abrindo...' : 'Confirmar troco e abrir caixa'}</button>
+        {onClose && <button type="button" onClick={onClose} disabled={busy} className="mt-3 w-full text-sm">Cancelar</button>}
+      </form>
+    </div>;
+  }
   function FecharCaixaModal({ status, onClose, onClosed, user }) {
     const [counted, setCounted] = useState({ cash: '', pix: '', credit: '', debit: '' });
     const [proofId, setProofId] = useState('');
@@ -1519,6 +1541,7 @@ window.PdvComponents = (() => {
       try {
         const response = await api('/api/caixa/close-my-cashier', {
           date: status.date,
+          sessionId: status.mySession.id,
           counted: { cash: cashVal, pix: pixVal, credit: creditVal, debit: debitVal },
           proofId,
           notes,
@@ -1547,6 +1570,12 @@ window.PdvComponents = (() => {
           {error && <p role="alert" className="mt-3 rounded-xl bg-rose-50 p-3 text-xs font-bold text-rose-800 border border-rose-200">{error}</p>}
 
           <div className="mt-4 space-y-3">
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
+              <p>Troco do dia desta abertura: <strong>{money(expected.openingFloat || 0)}</strong></p>
+              <p>Recebimentos em dinheiro: <strong>{money(expected.cashReceipts || 0)}</strong></p>
+              <p>Total em dinheiro (troco + recebimentos): <strong>{money(expected.cash)}</strong></p>
+              <p className="mt-1 text-xs">Conte todo o dinheiro da gaveta, incluindo o troco inicial.</p>
+            </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5">
               <h4 className="text-xs font-black uppercase text-slate-700">{'enter_the_physically_counted_amounts'.tr}</h4>
               <div className="mt-3 space-y-2.5">
@@ -1569,6 +1598,7 @@ window.PdvComponents = (() => {
                           step="0.01"
                           min="0"
                           placeholder="0,00"
+                          aria-label={item.label}
                           value={counted[item.key]}
                           onChange={(e) => setCounted({ ...counted, [item.key]: e.target.value })}
                           className="w-full rounded-lg border border-slate-300 py-1 pl-8 pr-2 text-right text-xs font-bold text-slate-800 focus:border-emerald-600 focus:outline-none"
@@ -1605,7 +1635,7 @@ window.PdvComponents = (() => {
               <p className="text-[11px] text-slate-500 mb-2">{'take_a_photo_of_the_screen_or_printed_receipt_from_the_card_machine_closing'.tr}</p>
               <PixProofUpload
                 targetType="CLOSING"
-                targetId={'closing_' + status.date}
+                targetId={status.mySession.id}
                 label={'attach_photo_or_pdf_of_card_machine_report'.tr}
                 hint="Tire foto da maquininha • até 3 MB"
                 onChange={setProofId}
@@ -1636,7 +1666,10 @@ window.PdvComponents = (() => {
                 > {'product_entry_cancel'.tr} </button>
                 <button
                   type="button"
-                  onClick={() => setShowConfirm(true)}
+                  onClick={() => {
+                    if (Object.values(counted).some(value => value === '' || !Number.isFinite(Number(value)) || Number(value) < 0)) { setError('Preencha todos os valores conferidos, incluindo zero quando não houver recebimentos.'); return; }
+                    setError(''); setShowConfirm(true);
+                  }}
                   disabled={busy}
                   className="cf-btn-3d cf-btn-3d--primary px-5 py-2.5 text-xs font-black"
                 > {'review_close_register'.tr} </button>
@@ -1922,6 +1955,7 @@ window.PdvComponents = (() => {
     const [flyingToStage, setFlyingToStage] = useState(null);
     const [closingStatus, setClosingStatus] = useState(null);
     const [showClosingModal, setShowClosingModal] = useState(false);
+    const [showOpeningModal, setShowOpeningModal] = useState(false);
     const [closingNotice, setClosingNotice] = useState('');
     const dataRef = useRef(null);
     const soundSettingsRef = useRef(soundSettings);
@@ -1936,7 +1970,7 @@ window.PdvComponents = (() => {
       try {
         const res = await api('/api/caixa/closing-status');
         setClosingStatus(res);
-      } catch { /* Ignore */ }
+      } catch (err) { setClosingNotice(err.message); }
     };
 
     useEffect(() => {
@@ -2285,23 +2319,20 @@ window.PdvComponents = (() => {
                       </h2>
                       <p className="mt-1 max-w-xl text-xs text-emerald-100/80">
                         {closingStatus.myClosing
-                          ? `${'closing_recorded_at'.tr} ${dateTime(closingStatus.myClosing.closedAt)}. Comprovante da maquininha anexado e valores conciliados.`
+                          ? `${'closing_recorded_at'.tr} ${dateTime(closingStatus.myClosing.closedAt)}. Confira os valores registrados no fechamento.`
                           : 'check_the_cash_amounts_in_the_drawer_pix_and_card_machine_reports_the_consolidated_su'.tr}
                       </p>
                     </div>
 
                     <div className="shrink-0">
-                      {closingStatus.myClosing ? (
-                        <div className="flex flex-col items-end gap-1">
-                          <span className="rounded-2xl border border-emerald-400/40 bg-emerald-500/20 px-5 py-2.5 text-xs font-black text-emerald-200"> {'register_closed'.tr} </span>
-                          <span className="text-[10px] text-emerald-300/70">{'irreversible_operation_completed'.tr}</span>
-                        </div>
+                      {!closingStatus.mySession ? (
+                        <button type="button" onClick={() => setShowOpeningModal(true)} className="cf-btn-3d cf-btn-3d--primary px-6 py-3">Abrir novo caixa</button>
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() => setShowClosingModal(true)}
-                          className="cf-btn-3d cf-btn-3d--primary !bg-emerald-400 !text-slate-950 px-6 py-3.5 text-sm font-black shadow-2xl hover:scale-105 active:scale-95 transition-transform"
-                        > {'close_my_register_now'.tr} </button>
+                        <div>
+                          <p className="mb-2 text-xs">Troco do dia: {money(closingStatus.mySession.openingFloat)}</p>
+                          <p className="mb-2 text-xs">Total em dinheiro: {money(closingStatus.myExpected.cash)}</p>
+                          <button type="button" onClick={async () => { await loadClosingStatus(); setShowClosingModal(true); }} className="cf-btn-3d cf-btn-3d--primary px-6 py-3">Fechar meu caixa</button>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -2359,7 +2390,7 @@ window.PdvComponents = (() => {
                 </div>
                 <div className="divide-y divide-slate-100">
                   {[
-                    { key: 'DINHEIRO', label: 'cash_in_drawer_16eb48'.tr, hint: 'bills_and_coins_in_the_drawer'.tr },
+                    { key: 'DINHEIRO', label: 'Recebimentos em dinheiro no período', hint: 'Sem o troco inicial; confira o total da gaveta no fechamento do turno' },
                     { key: 'PIX', label: 'pix_received'.tr, hint: 'sicredi_statement_confirmations'.tr },
                     { key: 'CREDITO', label: 'credit_card_e617a2'.tr, hint: 'printed_card_machine_report'.tr },
                     { key: 'DEBITO', label: 'debit_card_9c7168'.tr, hint: 'printed_card_machine_report'.tr },
@@ -2602,15 +2633,19 @@ window.PdvComponents = (() => {
         );
       })()}
 
-      {showClosingModal && closingStatus && (
+      {showOpeningModal && (
+        <AbrirCaixaModal onClose={showOpeningModal ? () => setShowOpeningModal(false) : undefined} onOpened={async () => { setShowOpeningModal(false); setClosingNotice(''); await loadClosingStatus(); refresh(true); }} />
+      )}
+      {showClosingModal && closingStatus?.mySession && (
         <FecharCaixaModal
           status={closingStatus}
           user={user}
           onClose={() => setShowClosingModal(false)}
           onClosed={(res) => {
             setShowClosingModal(false);
-            setClosingStatus((curr) => ({ ...curr, myClosing: res.closing, allClosed: res.allClosed }));
-            setClosingNotice(res.allClosed ? 'all_cash_registers_for_the_day_have_been_closed_and_the_consolidated_summary_has_been'.tr : 'your_cash_register_has_been_successfully_closed_with_the_receipt_archived'.tr);
+            setClosingStatus((curr) => ({ ...curr, mySession: null, myClosing: res.closing, allClosed: res.allClosed }));
+            loadClosingStatus();
+            setClosingNotice(res.allClosed ? (res.whatsappSent ? 'Todos os caixas fechados. Resumo enviado ao Junior.' : 'Todos os caixas fechados. Resumo registrado na fila de envio ao Junior; o envio ainda não foi confirmado.') : 'Caixa fechado. Aguardando os demais caixas.');
             refresh(true);
           }}
         />
@@ -2633,5 +2668,5 @@ window.PdvComponents = (() => {
     const amountInvalid = !Number.isFinite(Number(amount)) || Number(amount) <= 0 || (!isCreditEntry && Number(amount) > balance);
     return <Panel title={'receive_customer_payment'.tr} onClose={onClose}>{error && <p role="alert" className="text-red-700">{error}</p>}{result ? <div><p> {'recorded_payment'.tr} {money(result.amount)}</p><p> {'remaining_balance_9a6698'.tr} {money(result.newBalance)}</p><p>{'available_credit'.tr} {money(result.newCreditBalance)}</p>{result.newBalance > 0 && <button className={button + ' mt-4'} onClick={() => { setBalance(result.newBalance); setCreditBalance(result.newCreditBalance || 0); setAmount(Number(result.newBalance).toFixed(2)); setId(crypto.randomUUID()); setResult(null); setSplitPayment(false); setProofSeen(false); setNote(''); setProofId(''); }}> {'receive_remaining_amount'.tr} </button>}</div> : <><label>{'search_registered_customer'.tr}<input className={field} value={query} onChange={(e) => setQuery(e.target.value)} /></label><div className="max-h-36 overflow-auto">{customers.map((row) => <button className="block w-full border-b p-2 text-left" key={row.id} onClick={() => select(row)}>{row.name} · {row.phone || 'no_phone'.tr}</button>)}</div>{customer && <><p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm font-bold">{customer.name}<span className="mt-1 block text-xs font-medium text-amber-800"> {'remaining_balance_9a6698'.tr} {money(balance)}</span><span className="block text-xs font-medium text-emerald-800">{'available_credit'.tr} {money(creditBalance)}</span></p><label>{'transaction_type'.tr}<select className={field} value={entryType} onChange={(event) => setEntryType(event.target.value)}><option value="QUITACAO_FIADO">{'receive_debt_payment'.tr}</option><option value="CREDITO_CLIENTE">{'add_advance_credit'.tr}</option></select></label><label> {'amount_received'.tr} <input className={field} type="number" min="0.01" max={isCreditEntry ? undefined : balance} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></label><PaymentMethodButtons value={method} onChange={setMethod} labels={{ DINHEIRO: 'cart_cash_option'.tr, DEBITO: 'cart_debit_option'.tr, CREDITO: 'cart_card_option'.tr, PIX: 'pix_already_received'.tr }} /><label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={splitPayment} onChange={(event) => setSplitPayment(event.target.checked)} />{'use_more_than_one_payment_method'.tr}</label>{splitPayment && <PaymentPartsEditor parts={parts} onChange={setParts} total={Number(amount || 0)} allowedMethods={['DINHEIRO', 'DEBITO', 'CREDITO', "PIX"]} />}{hasPix && <div className="my-3 space-y-2"><PixProofUpload key={id} targetType="DEBT" targetId={id} onChange={setProofId} /><label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={proofSeen} onChange={(event) => setProofSeen(event.target.checked)} />{'i_checked_the_pix_received_in_conflora_s_account'.tr}</label><label className="block text-xs">{'receipt_note'.tr}<textarea className={field} value={note} onChange={(event) => setNote(event.target.value)} /></label></div>}{!isCreditEntry && <p className="my-3 text-sm font-bold">{'balance_after_receipt'.tr} {money(Math.max(0, balance - Number(amount || 0)))}</p>}<button className={button} disabled={busy || (hasPix && (!proofId || !proofSeen || note.trim().length < 8)) || amountInvalid || (!isCreditEntry && balance <= 0)} onClick={submit}>{busy ? 'recording'.tr : isCreditEntry ? 'register_received_credit'.tr : 'confirm_receipt'.tr}</button></>}</>}</Panel>;
   }
-  return { Topbar, Loading, Login, Receipt, CashierQueue, DebtSettlement, DiscountApproval, ProductInformation, WeightPrompt, handleProductImageError, PaymentPartsEditor, PaymentMethodButtons, CustomerSearch, LocationPicker, OrderDetails, CashierColumn, SeparationModal, Button3D, OrderSoundAlert, playOrderAlertSound };
+  return { AbrirCaixaModal, Topbar, Loading, Login, Receipt, CashierQueue, DebtSettlement, DiscountApproval, ProductInformation, WeightPrompt, handleProductImageError, PaymentPartsEditor, PaymentMethodButtons, CustomerSearch, LocationPicker, OrderDetails, CashierColumn, SeparationModal, Button3D, OrderSoundAlert, playOrderAlertSound };
 })();

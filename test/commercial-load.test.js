@@ -13,6 +13,7 @@ test('shared commercial core: 100/500/1000 sales, 20 concurrent requests, replay
       id: `p${i}`, name: `Produto ${i}`, price: 8.99, unit: 'KG', stockQuantity: 10000, status: 'ATIVO',
     }])));
     const repo = new FirestoreRepository({ firestoreInstance: db, isInMemory: true });
+    require('./helpers/open-cashier-fixture').seedOpenCashier(repo, { id: 'cashier' });
     const store = new PdvRepository(repo); const timings = [];
     const started = performance.now();
     for (let offset = 0; offset < count; offset += 20) await Promise.all(Array.from({ length: Math.min(20, count - offset) }, async (_, n) => {

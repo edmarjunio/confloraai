@@ -247,6 +247,7 @@ test('a paid catalog order creates a single durable GA4 intent in the payment tr
       items: [{ productId: 'p', quantity: 1, price: 10 }], createdBy: { id: 'cashier', role: 'CAIXA' } };
     const { store, db } = setup({ 'orders/web': order, 'products/p': { stockQuantity: 20, price: 10 }, 'store_settings/inventory': { stockControlEnabled: true } });
     const receiver = { id: 'cashier', name: 'Teste', role: 'CAIXA' };
+    require('./helpers/open-cashier-fixture').seedOpenCashier(store.repository, receiver);
     await Promise.all([store.receive('web', receiver), store.receive('web', receiver)]);
     assert.equal(db.data.get('products/p').stockQuantity, 19);
     assert.equal(db.data.get('pdv_outbox/web-ga4-purchase').kind, 'ga4-purchase');

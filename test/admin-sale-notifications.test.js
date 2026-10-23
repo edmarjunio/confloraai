@@ -178,6 +178,7 @@ test('WHATSAPP: OrderService.confirmOrder registra pedido pendente e recibo dur�
 test('CAIXA DISCOUNTS: desconto acima de 5% aguarda Admin e só vira pedido após aceite', async (t) => {
   const repo = new FirestoreRepository({ isInMemory: true });
   const config = require('../src/config/env');
+  require('./helpers/open-cashier-fixture').seedOpenCashier(repo, { id: 'usr-caixa1' });
   const previousServiceUrl = config.tasks.serviceUrl;
   config.tasks.serviceUrl = 'https://conflora.example';
   t.after(() => { config.tasks.serviceUrl = previousServiceUrl; });

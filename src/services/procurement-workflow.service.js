@@ -1,3 +1,4 @@
+const { activeSession, recordReceipt } = require('../orders/cashier-sessions');
 const { PdvRepository } = require('../orders/pdv.repository');
 const { payableTotal, procurementOrder } = require('../orders/procurement-payment');
 const { requireManualProof } = require('../orders/payment-proof');
@@ -108,6 +109,7 @@ class ProcurementWorkflowService {
       if (method === 'PIX' && (input.proofSeen !== true || String(input.note || '').trim().length < 8)) throw fail('Confira o crédito na conta, anexe o comprovante e registre uma observação.');
       const proof = method === 'PIX' ? await requireManualProof(tx, verification, operator, 'ORDER', id) : null;
       const now = this.now().toISOString();
+      const cashier = await activeSession(tx, operator);
       const deposit = { amountMinor: input.amountMinor, method, receivedBy: operator, receivedAt: now,
         verifiedVia: method === 'PIX' ? 'MANUAL_CAIXA_PIX' : 'CAIXA', ...(proof ? { proof, note: String(input.note).trim().slice(0, 500) } : {}) };
       const updated = { ...request, deposit, version: request.version + 1, updatedAt: now };
@@ -115,7 +117,8 @@ class ProcurementWorkflowService {
       const settlementId = `${id}-deposit`;
       const job = this.event(updated, 'deposit', `Sinal de ${money(deposit.amountMinor)} confirmado! Restante: ${money(request.totalMinor - deposit.amountMinor)} na retirada ou entrega. Avisaremos quando chegar.`);
       tx.set('agent_handoffs', id, updated); tx.set('orders', id, saved);
-      tx.set('debt_settlements', settlementId, { id: settlementId, orderId: id, customerKey: order.customerId || request.customerPhone,
+      recordReceipt(tx, cashier, [{ method, amount: deposit.amountMinor / 100 }]);
+      tx.set('debt_settlements', settlementId, { id: settlementId, ...(cashier ? { cashierSessionId: cashier.id } : {}), orderId: id, customerKey: order.customerId || request.customerPhone,
         customerName: request.customerName, customerPhone: request.customerPhone, amount: deposit.amountMinor / 100,
         paymentMethod: method, paymentParts: [{ method, amount: deposit.amountMinor / 100 }], receivedBy: operator,
         entryType: 'ENCOMENDA_SINAL', type: 'ENCOMENDA_SINAL', createdAt: now, settledAt: now,

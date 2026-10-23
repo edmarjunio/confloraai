@@ -1,3 +1,4 @@
+const { activeSession } = require('./cashier-sessions');
 const { runTransaction } = require('../database/transactions');
 const { commercialLine } = require('../catalog/commercial-product');
 const { prepareStockReservation, applyStockReservation } = require('./stock-reservation');
@@ -48,7 +49,10 @@ async function createCommercialOrder(repo, order, { reserveInventory = true, rec
     }
     const customerProfile = order.source === 'WHATSAPP_BOT' ? await tx.get('customers', order.customerPhone) : null;
     const reservation = reserveInventory ? await prepareStockReservation(tx, order.items, records) : null;
-    const saved = { ...order, ...(reservation ? { inventoryReserved: !reservation.trackingDisabled, reservedItems: reservation.reservedItems } : {}) };
+    const cashier = order.source === 'PDV' ? await activeSession(tx, order.createdBy) : null;
+    const bindPix = cashier && order.pixData?.txid;
+    const saved = { ...order, ...(bindPix ? { cashierSessionId: cashier.id } : {}), ...(reservation ? { inventoryReserved: !reservation.trackingDisabled, reservedItems: reservation.reservedItems } : {}) };
+    if (bindPix) tx.set('cashier_sessions', cashier.id, { ...cashier, pendingOrders: [...cashier.pendingOrders, order.id] });
     // All reads precede all writes, including the notification intent.
     if (reservation) applyStockReservation(tx, reservation, order.updatedAt || order.createdAt || new Date().toISOString());
     tx.set('orders', saved.id, saved);

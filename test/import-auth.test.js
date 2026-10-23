@@ -315,6 +315,7 @@ test("Fluxo caixa: venda, solicitação, aprovação/recusa de admin e notifica�
   const { repo, request, login } = await appContext(t);
   const cashier = await login("usr-caixa1", "0000");
   const admin = await login("usr-edmar", "1234");
+  assert.equal((await request("/api/caixa/open-my-cashier", { requestId: require("node:crypto").randomUUID(), openingFloat: 0 }, cashier)).status, 200);
   await repo.saveProduct({
     id: "sale",
     name: "Venda teste",

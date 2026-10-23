@@ -1,0 +1,31 @@
+const { test, expect } = require('@playwright/test');
+const { randomUUID } = require('node:crypto');
+
+test('caixa exige troco na entrada e confere separadamente troco, recebimentos e total', async ({ page }) => {
+  await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-caixa1', pin: '0000' } });
+  await page.goto('/pdv');
+  const opening = page.getByRole('form', { name: 'Abertura de caixa' });
+  await expect(opening).toBeVisible();
+  await opening.getByLabel('Troco do dia (R$)').fill('100');
+  await opening.getByRole('button', { name: 'Confirmar troco e abrir caixa' }).click();
+  await expect(opening).toHaveCount(0);
+  const sale = await page.request.post('/api/caixa/orders', { data: { requestId: randomUUID(), items: [{ productId: 'test-plant', quantity: 1 }], paymentMethod: 'DINHEIRO', cashReceived: 50 } });
+  expect(sale.ok()).toBe(true);
+  await page.goto('/pdv?view=report');
+  await page.getByRole('button', { name: 'Fechar meu caixa', exact: true }).click();
+  await expect(page.getByText('Troco do dia desta abertura:')).toContainText('100,00');
+  await expect(page.getByText('Recebimentos em dinheiro:', { exact: false })).toContainText('25,00');
+  await expect(page.getByText('Total em dinheiro (troco + recebimentos):')).toContainText('125,00');
+  await page.locator('input[aria-label][type=number]').nth(0).fill('125');
+  for (const input of (await page.locator('input[aria-label][type=number]').all()).slice(1)) await input.fill('0');
+  await page.getByRole('button', { name: /CONFERIR & FECHAR CAIXA/ }).click();
+  await page.getByRole('button', { name: /Sim, Fechar/ }).click();
+  await expect(page.getByRole('button', { name: 'Abrir novo caixa' })).toBeVisible();
+  await page.getByRole('button', { name: 'Abrir novo caixa' }).click();
+  await page.getByLabel('Troco do dia (R$)').fill('20');
+  await page.getByRole('button', { name: 'Confirmar troco e abrir caixa' }).click();
+  const state = await (await page.request.get('/api/caixa/closing-status')).json();
+  expect(state.myExpected.cash).toBe(20);
+  expect(state.myExpected.cashReceipts).toBe(0);
+  await page.screenshot({ path: 'test-results/cashier-second-session.png', fullPage: true });
+});

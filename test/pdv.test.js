@@ -35,6 +35,7 @@ function setup() {
   base.inMemoryProducts.set('plant', { id: 'plant', name: 'Muda', price: 10, stockQuantity: 20, status: 'ATIVO' });
   base.inMemoryCustomers.set('customer', { id: 'customer', name: 'Cliente', phone: '5564999991234', debtBalance: 0 });
   const repository = new PdvRepository(base);
+  for (const user of [cashier, secondCashier]) require('./helpers/open-cashier-fixture').seedOpenCashier(base, user);
   const sent = [];
   const chargeCalls = [];
   const whatsapp = {

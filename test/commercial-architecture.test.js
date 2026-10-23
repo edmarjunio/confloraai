@@ -20,6 +20,7 @@ function fixture(data = {}) {
   const repo = new FirestoreRepository({ firestoreInstance: db, isInMemory: true });
   if (!db.data.has('store_settings/storefront')) db.data.set('store_settings/storefront', repo.storefrontSettings);
   const store = new PdvRepository(repo);
+  require('./helpers/open-cashier-fixture').seedOpenCashier(repo, cashier);
   return { db, repo, store };
 }
 const sale = (id = randomUUID(), source = 'WEB_CATALOG') => ({ id, source, status: 'AWAITING_PAYMENT',

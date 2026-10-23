@@ -12,6 +12,7 @@ const cashier = { id: 'cashier', name: 'Caixa', role: 'CAIXA' };
 
 async function fixture() {
   const repo = new FirestoreRepository({ isInMemory: true });
+  require('./helpers/open-cashier-fixture').seedOpenCashier(repo, cashier);
   const now = () => new Date('2026-10-22T16:00:00Z');
   const intake = new OrderIntakeService(repo, { now, env: {} });
   const flow = intake.procurement;

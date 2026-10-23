@@ -1,3 +1,4 @@
+const { activeSession, recordReceipt } = require('./cashier-sessions');
 const { recordDeliveryEvent, completionMetrics, mergeDriverPerformance } = require('./delivery-metrics');
 const { formatOrderReceipt } = require('./receipt.util');
 const { isDelivery, isDeliverySettled, assertAssignedDelivery, canReceiveOrder, canConfirmManualPix } = require('./delivery-policy');
@@ -363,8 +364,10 @@ class PdvRepository {
       const now = new Date().toISOString();
       const pixTtlSeconds = Math.min(86400, Math.max(300, Number(process.env.PIX_PAYMENT_TTL_SECONDS) || 3600));
       const pixData = { txid: createHash('sha256').update(order.id).digest('hex').slice(0, 32).toUpperCase(), provider: 'SICREDI', expiresInSeconds: pixTtlSeconds };
+      const cashier = await activeSession(tx, receiver);
+      if (cashier) tx.set('cashier_sessions', cashier.id, { ...cashier, pendingOrders: [...new Set([...cashier.pendingOrders, order.id])] });
       if (reservation) applyStockReservation(tx, reservation, now);
-      const updated = { ...order, ...(!approvingCredit && order.creditApprovalStatus === 'PENDING' ? { creditApprovalStatus: 'NOT_REQUIRED' } : {}), ...(approvingCredit && receiver.role === 'ADMIN' ? { creditApprovalStatus: 'APPROVED', creditApprovedBy: receiver, creditApprovedAt: now } : {}), paymentMethod: 'PIX', paymentStatus: 'PENDING', status: 'CREATING_PIX', pixData, pixCopiaECola: '',
+      const updated = { ...order, ...(cashier ? { cashierSessionId: cashier.id } : {}), ...(!approvingCredit && order.creditApprovalStatus === 'PENDING' ? { creditApprovalStatus: 'NOT_REQUIRED' } : {}), ...(approvingCredit && receiver.role === 'ADMIN' ? { creditApprovalStatus: 'APPROVED', creditApprovedBy: receiver, creditApprovedAt: now } : {}), paymentMethod: 'PIX', paymentStatus: 'PENDING', status: 'CREATING_PIX', pixData, pixCopiaECola: '',
         paymentParts: paymentParts.map((part) => ({ ...part, ...(['DINHEIRO', 'DEBITO', 'CREDITO'].includes(part.method) ? { status: 'RECEIVED_AT_CASHIER', receivedBy: receiver } : {}) })), mixedReceivedBy: receiver, deferToCashier: false,
         inventoryReserved: reservation ? !reservation.trackingDisabled : Boolean(order.inventoryReserved), reservedItems: reservation?.reservedItems || order.reservedItems,
         pixTtlSeconds, pixExpiresAt: new Date(Date.now() + pixTtlSeconds * 1000).toISOString(), updatedAt: now };
@@ -452,16 +455,18 @@ class PdvRepository {
       const deliveryDriver = finishDelivery ? order.assignedDriver || receiver : null;
       const previousDeliveryStats = finishDelivery ? await tx.get('delivery_driver_metrics', deliveryDriver.id) : null;
       const procurementRequest = order.procurement ? await tx.get('agent_handoffs', order.procurementRequestId) : null;
+      const collectingActor = paymentMethod === 'PIX' && verification?.verifiedVia !== 'MANUAL_CAIXA_PIX'
+        ? (order.mixedReceivedBy || order.createdBy || { id: 'SICREDI', name: 'Sicredi · confirmação automática', role: 'SYSTEM' }) : receiver;
+      const receivedBy = collectingActor.role === 'ENTREGADOR' ? order.createdBy || { id: 'ONLINE', name: 'Catálogo online', role: 'SYSTEM' } : collectingActor;
+      const cashier = await activeSession(tx, collectingActor, order.cashierSessionId);
       // No transaction reads after this point.
+      recordReceipt(tx, cashier, paymentParts);
       for (const { id, quantity, product, stock, ownReservation } of products) {
         tx.set('products', id, { ...product, stockQuantity: stock, estoque: stock,
           ...(ownReservation ? { reservedQuantity: Math.max(0, Number(product.reservedQuantity || 0) - ownReservation) } : {}), updatedAt: now });
         tx.set('stock_movements', `${order.id}-${id}`, { productId: id, productName: product.name, orderId, quantityDeducted: quantity, previousStock: stock + quantity, newStock: stock, type: 'SALE_PDV', createdAt: now });
       }
-      const collectingActor = paymentMethod === 'PIX' && verification?.verifiedVia !== 'MANUAL_CAIXA_PIX'
-        ? (order.mixedReceivedBy || order.createdBy || { id: 'SICREDI', name: 'Sicredi · confirmação automática', role: 'SYSTEM' }) : receiver;
-      const receivedBy = collectingActor.role === 'ENTREGADOR' ? order.createdBy || { id: 'ONLINE', name: 'Catálogo online', role: 'SYSTEM' } : collectingActor;
-      const completed = { ...order,
+      const completed = { ...order, ...(cashier ? { cashierSessionId: cashier.id } : {}),
         ...(collectingActor.role === 'ENTREGADOR' ? { collectedBy: collectingActor } : {}),
         ...(order.creditApprovalStatus === 'PENDING' && !onAccount ? { creditApprovalStatus: 'NOT_REQUIRED' } : {}),
         ...(onAccount && receiver?.role === 'ADMIN' ? { creditApprovalStatus: 'APPROVED', creditApprovedBy: receiver, creditApprovedAt: now } : {}),
@@ -539,10 +544,12 @@ class PdvRepository {
       const newCreditBalance = entryType === 'CREDITO_CLIENTE'
         ? (Math.round(Number(customer.creditBalance || 0) * 100) + amountMinor) / 100
         : Number(customer.creditBalance || 0);
-      const settlement = { id, customerKey, customerName: customer.name, customerPhone: customer.phone || '', amount,
+      const cashier = await activeSession(tx, receivedBy);
+      const settlement = { id, ...(cashier ? { cashierSessionId: cashier.id } : {}), customerKey, customerName: customer.name, customerPhone: customer.phone || '', amount,
         paymentMethod: method, paymentParts: parts, notes, receivedBy, operatorName: receivedBy.name, newBalance, newCreditBalance, entryType, type: entryType, createdAt: now,
         ...(manualPixProof ? { manualPixProof, manualPixProofId: manualPixProof.id, verifiedVia: 'MANUAL_CAIXA_PIX', manualPixProofSeen: true, manualPixNote: verification.manualPixNote } : {}) };
       tx.set('customers', customerKey, { ...customer, debtBalance: newBalance, creditBalance: newCreditBalance, updatedAt: now });
+      recordReceipt(tx, cashier, parts);
       tx.set('debt_settlements', id, settlement);
       tx.set('pdv_outbox', id, { id, settlementId: id, kind: 'debt-receipt', status: 'PENDING', attempts: 0 });
       return settlement;

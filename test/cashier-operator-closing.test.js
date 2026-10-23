@@ -62,6 +62,13 @@ test('fluxo de fechamento de caixa: operador confere valores, anexa foto da maqu
     // 2. Login Edmar
     const edmarCookie = await login(cashierEdmar);
 
+    const roseOpen = await post('/api/caixa/open-my-cashier', { requestId: randomUUID(), openingFloat: 100 }, roseCookie);
+    const roseSession = (await roseOpen.json()).session;
+    assert.equal(roseOpen.status, 200);
+    const edmarOpen = await post('/api/caixa/open-my-cashier', { requestId: randomUUID(), openingFloat: 30 }, edmarCookie);
+    const edmarSession = (await edmarOpen.json()).session;
+    assert.equal(edmarOpen.status, 200);
+
     // 3. Criar e receber venda pela Rose (R$ 50 em dinheiro)
     const saleRose = await fetch(`${base}/api/caixa/orders`, {
       method: 'POST',
@@ -94,7 +101,7 @@ test('fluxo de fechamento de caixa: operador confere valores, anexa foto da maqu
     assert.equal(statusRose.status, 200);
     const roseStatusData = await statusRose.json();
     assert.equal(roseStatusData.myClosing, null);
-    assert.equal(roseStatusData.myExpected.cash, 50);
+    assert.equal(roseStatusData.myExpected.cash, 150);
     assert.equal(roseStatusData.allClosed, false);
 
     // 6. Anexar foto da maquininha para o fechamento
@@ -103,7 +110,7 @@ test('fluxo de fechamento de caixa: operador confere valores, anexa foto da maqu
       headers: { 'Content-Type': 'application/json', cookie: roseCookie },
       body: JSON.stringify({
         targetType: 'CLOSING',
-        targetId: 'closing_' + roseStatusData.date,
+        targetId: roseSession.id,
         dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
         fileName: 'relatorio-maquininha-rose.png',
       }),
@@ -118,7 +125,8 @@ test('fluxo de fechamento de caixa: operador confere valores, anexa foto da maqu
       headers: { 'Content-Type': 'application/json', cookie: roseCookie },
       body: JSON.stringify({
         date: roseStatusData.date,
-        counted: { cash: 50, pix: 0, credit: 0, debit: 0 },
+        sessionId: roseSession.id,
+        counted: { cash: 150, pix: 0, credit: 0, debit: 0 },
         notes: 'Gaveta conferida perfeitamente.',
         proofId: proofData.id,
       }),
@@ -137,7 +145,8 @@ test('fluxo de fechamento de caixa: operador confere valores, anexa foto da maqu
       headers: { 'Content-Type': 'application/json', cookie: roseCookie },
       body: JSON.stringify({
         date: roseStatusData.date,
-        counted: { cash: 50, pix: 0, credit: 0, debit: 0 },
+        sessionId: roseSession.id,
+        counted: { cash: 150, pix: 0, credit: 0, debit: 0 },
       }),
     });
     assert.equal(duplicateRose.status, 409);
@@ -148,7 +157,7 @@ test('fluxo de fechamento de caixa: operador confere valores, anexa foto da maqu
       headers: { 'Content-Type': 'application/json', cookie: edmarCookie },
       body: JSON.stringify({
         targetType: 'CLOSING',
-        targetId: 'closing_' + roseStatusData.date,
+        targetId: edmarSession.id,
         dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
         fileName: 'relatorio-maquininha-edmar.png',
       }),
@@ -161,7 +170,8 @@ test('fluxo de fechamento de caixa: operador confere valores, anexa foto da maqu
       headers: { 'Content-Type': 'application/json', cookie: edmarCookie },
       body: JSON.stringify({
         date: roseStatusData.date,
-        counted: { cash: 0, pix: 0, credit: 0, debit: 100 },
+        sessionId: edmarSession.id,
+        counted: { cash: 30, pix: 0, credit: 0, debit: 100 },
         notes: 'Débito conferido na maquininha.',
         proofId: edmarProofData.id,
       }),

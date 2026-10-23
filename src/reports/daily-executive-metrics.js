@@ -183,7 +183,10 @@ function summarizeDailyExecutiveMetrics({ date, orders = [], settlements = [], u
   cashSalesMinor = cashFacts.filter(fact => fact.method === 'DINHEIRO').reduce((sum, fact) => sum + fact.amountMinor, 0);
   cashTenderedMinor = 0; changeMinor = 0;
   const attributed = new Map();
+  for (const method of byPayment.keys()) if (!['FIADO', 'SALDO_CLIENTE'].includes(method)) byPayment.delete(method);
   for (const fact of cashFacts) {
+    const payment = byPayment.get(fact.method) || { method: fact.method, count: 0, totalMinor: 0 };
+    payment.count++; payment.totalMinor += fact.amountMinor; byPayment.set(fact.method, payment);
     if (fact.method === 'DINHEIRO') {
       cashTenderedMinor += currencyToMinor(fact.order.cashReceived ?? fact.order.cashTendered ?? fact.amountMinor / 100);
       changeMinor += currencyToMinor(fact.order.changeGiven);

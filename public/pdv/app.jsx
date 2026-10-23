@@ -298,6 +298,18 @@ const { useState, useEffect, useRef, useMemo } = React;
 
       // Atribuição de venda e recebimento vem da sessão autenticada.
       const [currentUser, setCurrentUser] = useState(null);
+      const [openingRequired, setOpeningRequired] = useState(false);
+      const [openingCheckError, setOpeningCheckError] = useState('');
+      useEffect(() => {
+        if (currentUser?.role !== 'CAIXA') return;
+        let active = true;
+        window.ConfloraSession.apiFetch('/api/caixa/closing-status').then(async response => {
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || 'Não foi possível consultar o caixa.');
+          if (active) { setOpeningRequired(!data.mySession && (!data.myClosing || !cashierPage)); setOpeningCheckError(''); }
+        }).catch(err => { if (active) setOpeningCheckError(err.message); });
+        return () => { active = false; };
+      }, [currentUser?.id, cashierPage]);
       const [notificationOrderId, setNotificationOrderId] = useState(() => new URLSearchParams(window.location.search).get('order') || '');
       useEffect(() => {
         if (!currentUser) return;
@@ -1221,6 +1233,8 @@ const { useState, useEffect, useRef, useMemo } = React;
 
       if (!authReady) return <PdvComponents.Loading />;
       if (!currentUser) return <PdvComponents.Login onLogin={setCurrentUser} />;
+      if (openingRequired) return <PdvComponents.AbrirCaixaModal onOpened={() => setOpeningRequired(false)} />;
+      if (openingCheckError) return <div role="alert">{openingCheckError}<button onClick={() => window.location.reload()}>Tentar novamente</button></div>;
       if (currentUser.role === 'ENTREGADOR' || cashierPage === 'deliveries') return <PdvDelivery user={currentUser} onBack={() => navigateCashierPage(null)} />;
       if (cashierPage) return <PdvComponents.CashierQueue onInitialOrderOpened={() => setNotificationOrderId('')} initialOrderId={notificationOrderId} user={currentUser} view={cashierPage} onBack={() => navigateCashierPage(null)} onDebt={() => { navigateCashierPage(null); setActiveModal('debt_settle'); }} />;
       return (
