@@ -686,7 +686,7 @@ function createApp({
   app.post('/tasks/processar-mensagem', require('./incoming-task').incomingTaskHandler({ incoming, messageService, config }));
 
   // Live Inventory & Stock Movements API (somente Firestore)
-  const handleInventoryRequest = async (_req, res) => {
+  const handleInventoryRequest = async (req, res) => {
     res.setHeader('Cache-Control', 'no_cache_no_store_must_revalidate'.tr);
     res.setHeader('Pragma', 'no_cache'.tr);
     res.setHeader('Expires', '0');
@@ -704,13 +704,51 @@ function createApp({
           imageFallbackUrl: '/store-assets/placeholder.svg',
         };
       });
+
+      const limit = Number.parseInt(req?.query?.limit, 10);
+      const page = Number.parseInt(req?.query?.page, 10) || 1;
+      const category = req?.query?.category ? String(req.query.category).trim().toLowerCase() : '';
+      const search = req?.query?.search ? String(req.query.search).trim().toLowerCase() : '';
+
+      let filteredProducts = products;
+      if (category) {
+        filteredProducts = filteredProducts.filter(p =>
+          (p.category && String(p.category).toLowerCase().includes(category)) ||
+          (p.categoria && String(p.categoria).toLowerCase().includes(category))
+        );
+      }
+      if (search) {
+        filteredProducts = filteredProducts.filter(p =>
+          (p.name && String(p.name).toLowerCase().includes(search)) ||
+          (p.descricao && String(p.descricao).toLowerCase().includes(search))
+        );
+      }
+
       let movements = [];
       try {
         movements = await messageService.firestoreRepo.getStockMovements(15);
       } catch {
         movements = [];
       }
-      res.status(200).json({ products, movements: movements || [] });
+
+      if (limit && limit > 0) {
+        const startIndex = (page - 1) * limit;
+        const endIndex = startIndex + limit;
+        const paginatedProducts = filteredProducts.slice(startIndex, endIndex);
+        return res.status(200).json({
+          products: paginatedProducts,
+          movements: movements || [],
+          pagination: {
+            page,
+            limit,
+            totalItems: filteredProducts.length,
+            totalPages: Math.ceil(filteredProducts.length / limit),
+            hasMore: endIndex < filteredProducts.length,
+          },
+        });
+      }
+
+      res.status(200).json({ products: filteredProducts, movements: movements || [] });
     } catch {
       res.status(503).json({ error: 'catalog_unavailable_please_try_again'.tr });
     }
