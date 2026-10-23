@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 const { meteredFirestore } = require('./helpers/metered-firestore');
 const { createInMemoryFirestore } = require('./helpers/agent-firestore');
-const { FirestoreRepository } = require('../src/database/firestore.repository');
+const { FirestoreRepository } = require('./helpers/repository-fixture');
 const { PdvRepository } = require('../src/orders/pdv.repository');
 const { PdvService } = require('../src/orders/pdv.service');
 const { OrderService } = require('../src/orders/order.service');
@@ -18,6 +18,7 @@ const plant = { id: 'plant', name: 'Muda', price: 10, unit: 'UN', stockQuantity:
 function fixture(data = {}) {
   const db = meteredFirestore({ 'products/plant': plant, 'store_settings/inventory': { stockControlEnabled: true }, ...data });
   const repo = new FirestoreRepository({ firestoreInstance: db, isInMemory: true });
+  if (!db.data.has('store_settings/storefront')) db.data.set('store_settings/storefront', repo.storefrontSettings);
   const store = new PdvRepository(repo);
   return { db, repo, store };
 }
@@ -271,6 +272,7 @@ test('Cloud Tasks worker authenticates and processes only the signed persisted p
 
 test('durable administrator notification is idempotent and preserves a read notification', async () => {
   const { repo, db, store } = fixture();
+  db.data.set('users/admin', { id: 'admin', role: 'ADMIN', active: true });
   const order = await repo.createDirectOrder(sale('notify'), { reserveInventory: true });
   const service = new PdvService({ repository: store });
   await service.deliver('notify-admin-new');

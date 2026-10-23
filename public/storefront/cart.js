@@ -70,7 +70,7 @@ export function createCart(state) {
       quantity < min ||
       Math.abs(steps - Math.round(steps)) > 0.00001
     ) {
-      notify("common.required_fields".tr);
+      notify('common_required_fields'.tr);
       return;
     }
     const current = items.find((i) => i.productId === product.id);
@@ -79,7 +79,7 @@ export function createCart(state) {
       !product.isAvailable ||
       (product.stock?.tracked && product.stock.quantity < next)
     ) {
-      notify("catalog.out_of_stock".tr);
+      notify('catalog_out_of_stock'.tr);
       return;
     }
     if (current) {
@@ -89,7 +89,7 @@ export function createCart(state) {
     }
     persist();
     render();
-    notify(`${product.name} ${"catalog.added_to_cart".tr}`);
+    notify(`${product.name} ${'catalog_added_to_cart'.tr}`);
     state.trackEvent?.("add_to_cart", {
       productId: product.id,
       productName: product.name,
@@ -151,7 +151,7 @@ export function createCart(state) {
       count.toFixed(3),
     ).toLocaleString("pt-BR");
     $("#cartFabCount").textContent = Number(count.toFixed(3)).toLocaleString("pt-BR");
-    $("#cartTitle").textContent = `${"cart.title".tr} (${items.length})`;
+    $("#cartTitle").textContent = `${'cart_title'.tr} (${items.length})`;
     $("#cartClearButton").disabled = items.length === 0 || sending;
     $("#cartClearButton").style.display = items.length === 0 ? "none" : "";
     $("#cartTotal").textContent = $("#mobileTotal").textContent =
@@ -171,7 +171,7 @@ export function createCart(state) {
           min: product?.saleUnit?.minimum || 1,
           step: product?.saleUnit?.increment || 1,
           value: item.quantity,
-          "aria-label": `${"product.quantity".tr} ${product?.name || ""}`,
+          "aria-label": `${'product_quantity'.tr} ${product?.name || ""}`,
         });
         quantity.addEventListener("change", () => {
           const value = Number(quantity.value);
@@ -202,8 +202,8 @@ export function createCart(state) {
           }),
           element("div", {}, [
             element("strong", {
-              text: product?.name || "catalog.unavailable".tr,
-              title: product?.name || "catalog.unavailable".tr,
+              text: product?.name || 'catalog_unavailable'.tr,
+              title: product?.name || 'catalog_unavailable'.tr,
             }),
             element("span", {
               text: money((product?.price?.amountMinor || 0) * item.quantity),
@@ -212,7 +212,7 @@ export function createCart(state) {
             quantityControl(quantity),
             element("span", {
               class: "cart-item-unit-label",
-              text: product?.saleUnit?.label || "unidade",
+              text: product?.saleUnit?.label || 'unit_a9959d28d9'.tr,
             }),
           ]),
           ]),
@@ -220,7 +220,7 @@ export function createCart(state) {
             "button",
             {
               class: "quiet",
-              "aria-label": `${"common.remove".tr} ${product?.name || ""}`,
+              "aria-label": `${'common_remove'.tr} ${product?.name || ""}`,
               onclick: remove,
             },
             [icon("trash")],
@@ -232,7 +232,7 @@ export function createCart(state) {
       $("#cartItems").append(
         element("p", {
           class: "empty",
-          text: "cart.empty_subtitle".tr,
+          text: 'cart_empty_subtitle'.tr,
         }),
       );
     }
@@ -242,7 +242,7 @@ export function createCart(state) {
   const cartoonChoiceIcons = {
     delivery: `<svg viewBox="0 0 28 28" width="24" height="24" class="cart-choice-svg" aria-hidden="true"><rect x="2" y="7" width="14" height="12" rx="2.5" fill="#22c55e" stroke="#0f172a" stroke-width="1.8"/><path d="M16 10h5.5l3.5 4.5v4.5H16z" fill="#4ade80" stroke="#0f172a" stroke-width="1.8" stroke-linejoin="round"/><circle cx="7" cy="20" r="3" fill="#f8fafc" stroke="#0f172a" stroke-width="1.8"/><circle cx="7" cy="20" r="1.2" fill="#0f172a"/><circle cx="20" cy="20" r="3" fill="#f8fafc" stroke="#0f172a" stroke-width="1.8"/><circle cx="20" cy="20" r="1.2" fill="#0f172a"/><rect x="18" y="11.5" width="4" height="3" rx="1" fill="#38bdf8" stroke="#0f172a" stroke-width="1.2"/></svg>`,
     pickup: `<svg viewBox="0 0 28 28" width="24" height="24" class="cart-choice-svg" aria-hidden="true"><path d="M4 11v11h20V11" fill="#f8fafc" stroke="#0f172a" stroke-width="1.8" stroke-linejoin="round"/><path d="M2.5 11 5.5 5h17l3 6z" fill="#facc15" stroke="#0f172a" stroke-width="1.8" stroke-linejoin="round"/><path d="M2.5 11c0 1.5 1.2 2.5 2.5 2.5s2.5-1 2.5-2.5c0 1.5 1.2 2.5 2.5 2.5s2.5-1 2.5-2.5c0 1.5 1.2 2.5 2.5 2.5s2.5-1 2.5-2.5c0 1.5 1.2 2.5 2.5 2.5s2.5-1 2.5-2.5" fill="none" stroke="#0f172a" stroke-width="1.6"/><rect x="11" y="15" width="6" height="7" rx="1.5" fill="#22c55e" stroke="#0f172a" stroke-width="1.6"/></svg>`,
-    pix: `<img src="https://upload.wikimedia.org/wikipedia/commons/5/50/Pix_%28Brazil%29_logo.svg" width="96" height="34" class="cart-pix-official-logo" alt="Pix" loading="eager" decoding="async" referrerpolicy="no-referrer" />`,
+    pix: `<img src="/storefront/images/pix-image.png" width="96" height="34" class="cart-pix-official-logo" alt="Pix" loading="eager" decoding="async" />`,
     cash: `<svg viewBox="0 0 28 28" width="24" height="24" class="cart-choice-svg" aria-hidden="true"><rect x="2.5" y="6" width="23" height="16" rx="3.5" fill="#4ade80" stroke="#0f172a" stroke-width="1.8"/><rect x="4.5" y="8" width="19" height="12" rx="2.5" fill="#22c55e"/><circle cx="14" cy="14" r="4" fill="#dcfce7" stroke="#0f172a" stroke-width="1.6"/><path d="M14 11.8v4.4M12.6 13c.4-.7 2.2-.8 2.8.2.5 1-2.2 1.2-2.2 2 .1.7 1.4.8 2.2.3" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round"/><circle cx="6" cy="14" r="1.5" fill="#dcfce7"/><circle cx="22" cy="14" r="1.5" fill="#dcfce7"/></svg>`,
     credit: `<svg viewBox="0 0 28 28" width="24" height="24" class="cart-choice-svg" aria-hidden="true"><rect x="2.5" y="5" width="23" height="18" rx="4" fill="#38bdf8" stroke="#0f172a" stroke-width="1.8"/><rect x="2.5" y="9.5" width="23" height="3.8" fill="#0f172a"/><rect x="5.5" y="15.5" width="5.5" height="4.5" rx="1.2" fill="#facc15" stroke="#0f172a" stroke-width="1.4"/><path d="M14 17.5h8" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/></svg>`,
     debit: `<svg viewBox="0 0 28 28" width="24" height="24" class="cart-choice-svg" aria-hidden="true"><rect x="2.5" y="5" width="23" height="18" rx="4" fill="#c084fc" stroke="#0f172a" stroke-width="1.8"/><rect x="2.5" y="9.5" width="23" height="3.8" fill="#0f172a"/><rect x="5.5" y="15.5" width="5.5" height="4.5" rx="1.2" fill="#facc15" stroke="#0f172a" stroke-width="1.4"/><circle cx="17.5" cy="17.5" r="2.5" fill="#fb7185"/><circle cx="21" cy="17.5" r="2.5" fill="#facc15"/></svg>`,
@@ -295,7 +295,7 @@ export function createCart(state) {
         return element("label", {
           class: `choice-card${isPix ? " is-choice-pix" : ""}`,
           title: option.label,
-          "aria-label": isPix ? "Pagar com Pix" : undefined,
+          "aria-label": isPix ? 'pay_with_pix'.tr : undefined,
         }, children);
       }),
     );
@@ -313,7 +313,7 @@ export function createCart(state) {
         .filter((type) => checkout[type]?.enabled)
         .map((type) => ({
           value: type,
-          label: type === "delivery" ? "Entrega" : "Retirada",
+          label: type === "delivery" ? 'cart_delivery_option'.tr : 'cart_pickup_option'.tr,
         })),
     );
     choices(
@@ -387,36 +387,36 @@ export function createCart(state) {
     const total = subtotal() + fee;
     const rows = [
       element("div", { class: "order-review-section" }, [
-        element("strong", { text: "Cliente".tr }),
+        element("strong", { text: 'customer'.tr }),
         element("p", { text: form.elements.name.value.trim() }),
         element("p", { text: form.elements.phone.value.trim() }),
       ]),
       element("div", { class: "order-review-section" }, [
-        element("strong", { text: delivery ? "Entrega".tr : "Retirada".tr }),
+        element("strong", { text: delivery ? 'cart_delivery_option'.tr : 'cart_pickup_option'.tr }),
         ...(delivery
           ? [
               ...(serviceArea ? [element("p", { text: serviceArea })] : []),
               element("p", { text: address }),
-              ...(fee ? [element("p", { text: "Taxa de entrega: ".tr + money(fee) })] : []),
+              ...(fee ? [element("p", { text: 'delivery_fee'.tr + money(fee) })] : []),
             ]
-          : [element("p", { text: state.config?.checkout?.pickup?.address || "Retirada".tr })]),
+          : [element("p", { text: state.config?.checkout?.pickup?.address || 'cart_pickup_option'.tr })]),
       ]),
       element("div", { class: "order-review-section" }, [
-        element("strong", { text: "Pagamento".tr }),
+        element("strong", { text: 'payment'.tr }),
         element("p", { text: paymentMethod === "CASH"
-          ? "Dinheiro · troco para ".tr + money(Math.round(Number(form.elements.cash.value || 0) * 100))
+          ? 'cash_change_for'.tr + money(Math.round(Number(form.elements.cash.value || 0) * 100))
           : window.ConfloraOrderDisplay.payment(paymentMethod).tr }),
       ]),
       element("div", { class: "order-review-items" }, [
         ...items.map((item) => {
           const product = productFor(item);
           return element("div", { class: "order-review-item" }, [
-            element("span", { text: item.quantity + " × " + (product?.name || "Produto") }),
+            element("span", { text: item.quantity + " × " + (product?.name || 'product'.tr) }),
             element("strong", { text: money(Math.round((product?.price.amountMinor || 0) * item.quantity)) }),
           ]);
         }),
-        element("div", { class: "order-review-total" }, [
-          element("strong", { text: "Total do pedido".tr }),
+        element("div", { class: 'order_review_total'.tr }, [
+          element("strong", { text: 'order_total'.tr }),
           element("strong", { text: money(total) }),
         ]),
       ]),
@@ -439,20 +439,20 @@ export function createCart(state) {
       const payment = form.elements.payment?.value;
       const total = subtotal() + (delivery ? state.config?.checkout?.delivery?.feeMinor || 0 : 0);
       if (!form.elements.name.value.trim() || phoneDigits.length < 10 || phoneDigits.length > 11) {
-        $("#checkoutError").textContent = "Informe o nome e um número de WhatsApp válido com DDD.".tr;
+        $("#checkoutError").textContent = 'cart_error_name_phone'.tr;
         return;
       }
       if (delivery && address.length < 8) {
-        $("#checkoutError").textContent = "Informe o endereço completo para a entrega.".tr;
+        $("#checkoutError").textContent = 'cart_error_address'.tr;
         form.elements.address?.focus();
         return;
       }
       if (payment === "FIADO") {
-        $("#checkoutError").textContent = "Fiado disponível somente no caixa.".tr;
+        $("#checkoutError").textContent = 'store_credit_is_available_only_at_checkout_desk'.tr;
         return;
       }
       if (payment === "CASH" && cash < total) {
-        $("#checkoutError").textContent = "Informe para quanto precisa de troco. O valor deve ser igual ou maior que o total.".tr;
+        $("#checkoutError").textContent = 'cart_tendered_insufficient'.tr;
         form.elements.cash?.focus();
         return;
       }
@@ -509,7 +509,7 @@ export function createCart(state) {
           const product = productFor(item);
           return {
             productId: item.productId,
-            productName: product?.name || "Produto",
+            productName: product?.name || 'product'.tr,
             category: product?.categoryName || "",
             value: Number(product?.price?.amountMinor || 0) / 100,
             quantity: item.quantity,
@@ -528,8 +528,8 @@ export function createCart(state) {
       const receipt = $("#receipt");
       receipt.hidden = false;
       receipt.replaceChildren(
-        element("h2", { text: "cart.order_success_title".tr }),
-        element("p", { text: "cart.order_success_desc".tr }),
+        element("h2", { text: 'cart_order_success_title'.tr }),
+        element("p", { text: 'cart_order_success_desc'.tr }),
         renderOrderReceipt(order),
         state.orderNotifications.button(),
       );
@@ -538,7 +538,7 @@ export function createCart(state) {
           type: "button",
           class: "quiet",
           style: "margin-top: 16px; width: 100%;",
-          text: "cart.new_order".tr,
+          text: 'cart_new_order'.tr,
           onclick: () => {
             resetCartView();
             close();

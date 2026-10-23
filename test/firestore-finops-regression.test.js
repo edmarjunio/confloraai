@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { meteredFirestore } = require('./helpers/metered-firestore');
-const { FirestoreRepository } = require('../src/database/firestore.repository');
+const { FirestoreRepository } = require('./helpers/repository-fixture');
 const { PdvRepository } = require('../src/orders/pdv.repository');
 const { IncomingMessageService } = require('../src/services/incoming-message.service');
 const { compactIncomingRecord, conversationExpiry } = require('../src/database/retention');
@@ -12,6 +12,7 @@ const { installRequestProtection } = require('../src/security/request-protection
 const setup = initial => {
   const db = meteredFirestore(initial);
   const repo = new FirestoreRepository({ firestoreInstance: db, isInMemory: true });
+  if (!db.data.has('store_settings/storefront')) db.data.set('store_settings/storefront', repo.storefrontSettings);
   return { db, repo, store: new PdvRepository(repo) };
 };
 const request = () => ({ path: '/api/storefront/orders', body: {
@@ -60,11 +61,11 @@ test('public catalog shares a short snapshot and invalidates after a product edi
   assert.equal(configReads, 1); assert.equal(inventoryReads, 1);
   assert.equal(body.products[0].price.amountMinor, 1200);
   await routes.get('/api/storefront/catalog')({}, res, next);
-  assert.equal(configReads, 1); assert.equal(inventoryReads, 1);
+  assert.equal(configReads, 2); assert.equal(inventoryReads, 2);
   db.data.get('products/p').price = 20;
   app.locals.publicCatalogCache.invalidate();
   await routes.get('/api/storefront/catalog')({}, res, next);
-  assert.equal(configReads, 2); assert.equal(body.products[0].price.amountMinor, 2000);
+  assert.equal(configReads, 3); assert.equal(body.products[0].price.amountMinor, 2000);
 });
 
 test('completed inbox compaction preserves deduplication indefinitely and never compacts active work', async () => {

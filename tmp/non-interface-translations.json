@@ -1,0 +1,128 @@
+[
+  [
+    "awaiting_payment_21acd7",
+    {
+      "pt": ") → ESPERANDO PAGAMENTO",
+      "en": ") → AWAITING PAYMENT",
+      "es": ") → ESPERANDO PAGO",
+      "fr": ") → EN ATTENTE DE PAIEMENT"
+    }
+  ],
+  [
+    "this_status_tap_the_map_or_drag_the_pin_to_the_house_entrance",
+    {
+      "pt": "this.status('Toque no mapa ou arraste o pino até a entrada da casa.');",
+      "en": "this.status('Tap the map or drag the pin to the house entrance.');",
+      "es": "this.status('Toca el mapa o arrastra el pin hasta la entrada de la casa.');",
+      "fr": "this.status('Appuyez sur la carte ou faites glisser l\\'épingle jusqu\\'à l\\'entrée de la maison.');"
+    }
+  ],
+  [
+    "notify_select_a_product",
+    {
+      "pt": "notify(\"Selecione um produto.\");",
+      "en": "notify(\"Select a product.\");",
+      "es": "notify(\"Seleccione un producto.\");",
+      "fr": "notify(\"Sélectionnez un produit.\");"
+    }
+  ],
+  [
+    "check_the_description_and_packaging_guidelines_to_choose_and_use_this_item_best",
+    {
+      "pt": ": consulte a descrição e as orientações da embalagem para escolher e usar este item da melhor forma.",
+      "en": ": check the description and packaging guidelines to choose and use this item best.",
+      "es": ": consulte la descripción y las orientaciones del envase para elegir y usar este artículo de la mejor manera.",
+      "fr": ": consultez la description et les instructions sur l'emballage pour choisir et utiliser cet article au mieux."
+    }
+  ],
+  [
+    "dialog_setattribute_aria_label_navegacao_da_loja_tr",
+    {
+      "pt": "dialog.setAttribute('aria-label', 'Navegação da loja'.tr);",
+      "en": "dialog.setAttribute('aria-label', 'Navegação da loja'.tr);",
+      "es": "dialog.setAttribute('aria-label', 'Navegação da loja'.tr);",
+      "fr": "dialog.setAttribute('aria-label', 'Navegação da loja'.tr);"
+    }
+  ],
+  [
+    "enter_the_quantity_received_for_example_100_it_will_be_added_to_the_balance_if_you_wa",
+    {
+      "pt": "? 'Digite a quantidade recebida, por exemplo 100. Ela será somada ao saldo. Se quer deixar o saldo exatamente em 100, use Conferir o que tenho.'",
+      "en": "? 'Enter the quantity received, for example 100. It will be added to the balance. If you want the balance to be exactly 100, use Audit what I have.'",
+      "es": "? 'Ingrese la cantidad recibida, por ejemplo 100. Se sumará al saldo. Si desea dejar el saldo exactamente en 100, use Auditar lo que tengo.'",
+      "fr": "? 'Saisissez la quantité reçue, par exemple 100. Elle sera ajoutée au solde. Si vous souhaitez que le solde soit exactement de 100, utilisez Auditer ce que j'ai.'"
+    }
+  ],
+  [
+    "enter_the_actual_balance_for_example_100_upon_completion_the_stock_will_be_exactly_10",
+    {
+      "pt": ": 'Digite o saldo real, por exemplo 100. Ao concluir, o estoque será exatamente 100, mesmo se antes estava negativo. Para contar aos poucos, cada toque soma +1.';",
+      "en": ": 'Enter the actual balance, for example 100. Upon completion, the stock will be exactly 100, even if it was negative before. To count gradually, each tap adds +1.';",
+      "es": ": 'Ingrese el saldo real, por ejemplo 100. Al finalizar, el inventario será exactamente 100, incluso si antes era negativo. Para contar de a poco, cada toque suma +1.';",
+      "fr": ": 'Saisissez le solde réel, par exemple 100. Une fois terminé, le stock sera exactement de 100, même s'il était négatif auparavant. Pour compter progressivement, chaque appui ajoute +1.';"
+    }
+  ],
+  [
+    "drafts_size_counted_product_s_review_the_numbers_on_the_cards",
+    {
+      "pt": "? drafts.size + ' produto(s) contado(s) · revise os números nos cartões'",
+      "en": "? drafts.size + ' counted product(s) · review the numbers on the cards'",
+      "es": "? drafts.size + ' producto(s) contado(s) · revise los números en las tarjetas'",
+      "fr": "? drafts.size + ' produit(s) compté(s) · vérifiez les chiffres sur les cartes'"
+    }
+  ],
+  [
+    "enter_the_quantity_or_tap_the_card_to_count",
+    {
+      "pt": ": 'Digite a quantidade ou toque no cartão para contar';",
+      "en": ": 'Enter the quantity or tap the card to count';",
+      "es": ": 'Ingrese la cantidad o toque en la tarjeta para contar';",
+      "fr": ": 'Entrez la quantité ou touchez la carte pour compter';"
+    }
+  ],
+  [
+    "not_counted_yet",
+    {
+      "pt": ": 'Ainda não contado';",
+      "en": ": 'Not counted yet';",
+      "es": ": 'Aún no contado';",
+      "fr": ": 'Pas encore compté';"
+    }
+  ],
+  [
+    "conflora_daily_operation_completed",
+    {
+      "pt": ")\n\nOperação diária Conflora finalizada.",
+      "en": ")\n\nConflora daily operation completed.",
+      "es": ")\n\nOperación diaria Conflora finalizada.",
+      "fr": ")\n\nOpération quotidienne Conflora terminée."
+    }
+  ],
+  [
+    "formatcurrency_payment_total",
+    {
+      "pt": "+ formatCurrency(payment.total) +",
+      "en": "+ formatCurrency(payment.total) +",
+      "es": "+ formatCurrency(payment.total) +",
+      "fr": "+ formatCurrency(payment.total) +"
+    }
+  ],
+  [
+    "formatcurrency_person_total",
+    {
+      "pt": "+ formatCurrency(person.total) +",
+      "en": "+ formatCurrency(person.total) +",
+      "es": "+ formatCurrency(person.total) +",
+      "fr": "+ formatCurrency(person.total) +"
+    }
+  ],
+  [
+    "revenue_confirmed_receipts_in_firestore_conversion_paid_orders_per_visitor_traffic_ma",
+    {
+      "pt": "). Faturamento: recebimentos confirmados no Firestore. Conversão: pedidos pagos por visitante. Tráfego pode levar até 60 segundos para atualizar.",
+      "en": "). Revenue: confirmed receipts in Firestore. Conversion: paid orders per visitor. Traffic may take up to 60 seconds to update.",
+      "es": "). Facturación: cobros confirmados en Firestore. Conversión: pedidos pagados por visitante. El tráfico puede tardar hasta 60 segundos en actualizarse.",
+      "fr": "). Chiffre d'affaires : encaissements confirmés dans Firestore. Conversion : commandes payées par visiteur. Le trafic peut prendre jusqu'à 60 secondes pour se mettre à jour."
+    }
+  ]
+]

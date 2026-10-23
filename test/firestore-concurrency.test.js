@@ -6,7 +6,7 @@ test('emulador: instâncias concorrentes reivindicam mensagem uma única vez', {
   const host = process.env.FIRESTORE_EMULATOR_HOST;
   if (!/^(127\.0\.0\.1|localhost|\[::1\]):\d+$/.test(host)) throw new Error('O teste exige emulador local.');
   const { Firestore } = require('@google-cloud/firestore');
-  const { FirestoreRepository } = require('../src/database/firestore.repository');
+  const { FirestoreRepository } = require('./helpers/repository-fixture');
   const { IncomingMessageService } = require('../src/services/incoming-message.service');
   const db = new Firestore({ projectId: 'demo-conflora-tests' });
   const first = new IncomingMessageService(new FirestoreRepository({ firestoreInstance: db }));

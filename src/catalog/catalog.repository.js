@@ -34,11 +34,9 @@ function wordMatchToken(haystack, token) {
 }
 
 class CatalogRepository {
-  constructor({ mockData = null, firestoreRepo = null, cacheTtlMs = 600000, now = Date.now } = {}) {
-    if (mockData && process.env.NODE_ENV !== 'test') {throw new Error('Catálogo simulado permitido apenas em testes.');}
+  constructor({ firestoreRepo = null, now = Date.now } = {}) {
     this.items = [];
     this.rawItems = [];
-    this.cacheTtlMs = cacheTtlMs;
     this.now = now;
     this.expiresAt = 0;
     this.cacheGeneration = 0;
@@ -48,9 +46,7 @@ class CatalogRepository {
     this.productsByCategoryMap = new Map();
     this.categoriesSet = new Set();
     this.subcategoriesSet = new Set();
-    this.mockData = mockData;
     this.firestoreRepo = firestoreRepo;
-    if (mockData) {this.loadItems(mockData);}
   }
 
   isCacheValid() {
@@ -63,20 +59,19 @@ class CatalogRepository {
   }
 
   async refreshCatalog() {
-    if (this.isCacheValid()) return;
     if (this.refreshPromise) {
       await this.refreshPromise;
-      return this.isCacheValid() ? undefined : this.refreshCatalog();
+      return;
     }
     const generation = this.cacheGeneration;
     this.refreshPromise = (async () => {
-      if (!this.mockData && !this.firestoreRepo) throw new Error('Repositório Firestore não configurado.');
-      const products = this.mockData || await this.firestoreRepo.getAllProducts();
+      if (!this.firestoreRepo) throw new Error('Repositório Firestore não configurado.');
+      const products = await this.firestoreRepo.getAllProducts();
       // Never publish a snapshot superseded by an edit during the read.
       if (generation === this.cacheGeneration) this.loadItems(Array.isArray(products) ? products : []);
     })();
     try { await this.refreshPromise; } finally { this.refreshPromise = null; }
-    if (!this.isCacheValid()) await this.refreshCatalog();
+    if (generation !== this.cacheGeneration) await this.refreshCatalog();
   }
 
   loadItems(rawItems) {
@@ -86,7 +81,7 @@ class CatalogRepository {
 
 
     this.rawItems = rawItems;
-    this.expiresAt = this.now() + this.cacheTtlMs;
+    this.expiresAt = 0;
     this.items = rawItems
       .filter((item) => (item.status || 'ATIVO').toUpperCase() === 'ATIVO')
       .map((item) => normalizeCatalogItem(item));

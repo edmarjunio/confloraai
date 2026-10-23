@@ -1,7 +1,7 @@
 process.env.NODE_ENV = 'test';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { CatalogRepository } = require('../src/catalog/catalog.repository');
+const { CatalogRepository } = require('./helpers/catalog-fixture');
 const { StoreAssistant } = require('../src/storefront/assistant');
 
 test('cache vazio compartilha leitura concorrente, expira e permite invalidar após edição', async () => {
@@ -9,9 +9,9 @@ test('cache vazio compartilha leitura concorrente, expira e permite invalidar ap
   const catalog = new CatalogRepository({ now: () => now, firestoreRepo: { getAllProducts: async () => { reads++; return []; } } });
   await Promise.all(Array.from({ length: 20 }, () => catalog.refreshCatalog()));
   assert.equal(reads, 1);
-  await catalog.refreshCatalog(); assert.equal(reads, 1);
-  now += 600000; await catalog.refreshCatalog(); assert.equal(reads, 2);
-  catalog.invalidateCache(); await catalog.refreshCatalog(); assert.equal(reads, 3);
+  await catalog.refreshCatalog(); assert.equal(reads, 2);
+  now += 600000; await catalog.refreshCatalog(); assert.equal(reads, 3);
+  catalog.invalidateCache(); await catalog.refreshCatalog(); assert.equal(reads, 4);
 });
 
 test('edição durante leitura impede publicação de catálogo antigo; falha pode ser repetida', async () => {
@@ -26,7 +26,7 @@ test('edição durante leitura impede publicação de catálogo antigo; falha po
   catalog.invalidateCache(); catalog.firestoreRepo.getAllProducts = async () => { throw new Error('offline'); };
   await assert.rejects(catalog.refreshCatalog(), /offline/); assert.equal(catalog.isCacheValid(), false);
   catalog.firestoreRepo.getAllProducts = async () => [];
-  await catalog.refreshCatalog(); assert.equal(catalog.isCacheValid(), true);
+  await catalog.refreshCatalog(); assert.equal(catalog.isCacheValid(), false);
 });
 
 test('chat sem pesquisa faz uma chamada limitada e não inclui produtos irrelevantes ou instruções na resposta', async () => {
@@ -43,11 +43,11 @@ test('chat sem pesquisa faz uma chamada limitada e não inclui produtos irreleva
 
 test('API pública retorna somente reply, usa cache e limita tentativas', async t => {
   const { createApp } = require('../src/http/app');
-  const { FirestoreRepository } = require('../src/database/firestore.repository');
+  const { FirestoreRepository } = require('./helpers/repository-fixture');
   const previousMode = process.env.STOREFRONT_CHAT_MODE;
   process.env.STOREFRONT_CHAT_MODE = 'AI';
   t.after(() => { if (previousMode === undefined) delete process.env.STOREFRONT_CHAT_MODE; else process.env.STOREFRONT_CHAT_MODE = previousMode; });
-  const repository = new FirestoreRepository({ isInMemory: true }); let reads = 0;
+  const repository = new FirestoreRepository({ isInMemory: true }); repository.storefrontSettings.config.assistant.mode = 'AI'; let reads = 0;
   const catalog = new CatalogRepository({ firestoreRepo: { getAllProducts: async () => { reads++; return []; } } });
   const app = createApp({ messageService: { firestoreRepo: repository, catalogRepo: catalog }, storeAssistant: { recommend: async () => ({ message: 'Olá!', products: [], privateContext: 'never-return' }) } });
   const server = app.listen(0); await new Promise(resolve => server.once('listening', resolve)); t.after(() => server.close());
@@ -56,5 +56,5 @@ test('API pública retorna somente reply, usa cache e limita tentativas', async 
   for (let i = 0; i < 8; i++) {
     const response = await send(); assert.equal(response.status, 200); assert.deepEqual(await response.json(), { reply: 'Olá!' });
   }
-  assert.equal(reads, 1); assert.equal((await send()).status, 429);
+  assert.equal(reads, 8); assert.equal((await send()).status, 429);
 });

@@ -63,15 +63,15 @@ export function createPurchaseInsights(state) {
           const query = new URLSearchParams({ limit: '30' });
           if (cursor) query.set('cursor', cursor);
           const page = await state.api(`/customer/orders?${query}`);
-          if (state.user?.id !== owner || revision !== version) throw new Error('Conta alterada.');
+          if (state.user?.id !== owner || revision !== version) throw new Error('account_changed'.tr);
           orders.push(...(page.orders || []));
           if (!page.hasMore) break;
           cursor = page.nextCursor;
-          if (!cursor || cursors.has(cursor)) throw new Error('Não foi possível carregar o histórico completo. Tente novamente.');
+          if (!cursor || cursors.has(cursor)) throw new Error('could_not_load_the_full_history_please_try_again'.tr);
           cursors.add(cursor);
         } while (cursor);
       }
-      if (state.user?.id !== owner || revision !== version) throw new Error('Conta alterada.');
+      if (state.user?.id !== owner || revision !== version) throw new Error('account_changed'.tr);
       return summarizePurchases(orders, new Date(), state.products);
     })();
     cache = { owner, time: Date.now(), promise };

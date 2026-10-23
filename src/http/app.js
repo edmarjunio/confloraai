@@ -1,3 +1,4 @@
+require('../i18n/default');
 const { createHash, randomUUID } = require('node:crypto');
 const { createWebSessions, safeUser } = require('../security/web-session');
 const { rankProductSales } = require('../catalog/product-sales');
@@ -112,6 +113,7 @@ function renderPrivacyPolicyHtml() {
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
+<script src="/store-assets/i18n-runtime.js"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Política de Privacidade | Conflora Horta e Viveiro</title>
@@ -182,6 +184,7 @@ function renderDataDeletionHtml() {
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
+<script src="/store-assets/i18n-runtime.js"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Instruções de Exclusão de Dados | Conflora AI</title>
@@ -231,6 +234,7 @@ function renderTermsOfServiceHtml() {
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
+<script src="/store-assets/i18n-runtime.js"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Termos de Serviço | Conflora AI</title>
@@ -274,11 +278,11 @@ function whatsappCustomerPhone(phone) {
 async function sendCustomerOrderReceipt(whatsappClient, phone, receiptText) {
   const targetPhone = whatsappCustomerPhone(phone);
   if (!/^\d{12,15}$/.test(targetPhone)) {
-    return { sent: false, reason: 'Telefone do cliente inválido ou não informado.' };
+    return { sent: false, reason: 'invalid_or_missing_customer_phone_number'.tr };
   }
   const template = config.whatsapp.templates.customerOrder;
   if (!template) {
-    return { sent: false, reason: 'Configure um modelo aprovado de recibo para WhatsApp.' };
+    return { sent: false, reason: 'configure_an_approved_whatsapp_receipt_template'.tr };
   }
   try {
     const result = await whatsappClient.sendTemplate(
@@ -293,12 +297,12 @@ async function sendCustomerOrderReceipt(whatsappClient, phone, receiptText) {
       ],
     );
     if (result?.mock || result?.success === false) {
-      return { sent: false, reason: 'WhatsApp sem credenciais válidas ou envio não confirmado.' };
+      return { sent: false, reason: 'whatsapp_without_valid_credentials_or_unconfirmed_sending'.tr };
     }
     return { sent: true };
   } catch (error) {
-    Logger.error('Falha ao enviar recibo de pedido pelo WhatsApp', error);
-    return { sent: false, reason: 'Não foi possível enviar o recibo pelo WhatsApp.' };
+    Logger.error('failed_to_send_order_receipt_via_whatsapp'.tr, error);
+    return { sent: false, reason: 'could_not_send_receipt_via_whatsapp'.tr };
   }
 }
 
@@ -314,24 +318,24 @@ async function prepareSicrediCheckoutOrder({ app, sicrediClient, taskQueueClient
     return { order, receiptDelivery: { sent: job?.status === 'SENT' && !job.skipped, reason: job?.lastError || '' } };
   }
   if (order.pixProvider !== 'SICREDI' || !order.pixData?.txid) {
-    return { order, receiptDelivery: { sent: false, reason: 'Pedido Pix anterior à integração Sicredi; não gere uma nova cobrança.' } };
+    return { order, receiptDelivery: { sent: false, reason: 'pix_order_prior_to_sicredi_integration_do_not_generate_a_new_charge'.tr } };
   }
   if (order.status === 'CANCELLED' || order.completedAt || order.paidAt) {
-    return { order, receiptDelivery: order.receiptDelivery || { sent: false, reason: 'Pedido já encerrado; nenhuma cobrança adicional foi emitida.' } };
+    return { order, receiptDelivery: order.receiptDelivery || { sent: false, reason: 'order_already_closed_no_additional_charges_were_issued'.tr } };
   }
   if (Date.parse(order.pixExpiresAt || '') <= Date.now()) {
     await app.locals.pdv.service.expirePixOrder(order.id);
-    throw new Error('Esta cobrança Pix venceu. Inicie um novo pedido.');
+    throw new Error('this_pix_charge_has_expired_please_initiate_a_new_order'.tr);
   }
   const ttlSeconds = Number(order.pixTtlSeconds || order.pixData?.expiresInSeconds) || 3600;
   if (process.env.NODE_ENV === 'production' && typeof taskQueueClient?.enqueuePixExpiration !== 'function') {
-    await app.locals.pdv.store.cancelOrder(order.id, 'Cloud Tasks não está disponível para expirar a reserva Pix.').catch(() => {});
-    throw new Error('Cloud Tasks não está disponível para expirar a reserva Pix.');
+    await app.locals.pdv.store.cancelOrder(order.id, 'cloud_tasks_is_not_available_to_expire_the_pix_reservation'.tr).catch(() => {});
+    throw new Error('cloud_tasks_is_not_available_to_expire_the_pix_reservation'.tr);
   }
   try {
     await taskQueueClient?.enqueuePixExpiration?.(order.id, ttlSeconds);
   } catch (error) {
-    await app.locals.pdv.store.cancelOrder(order.id, 'Não foi possível agendar a expiração da reserva Pix.').catch(() => {});
+    await app.locals.pdv.store.cancelOrder(order.id, 'could_not_schedule_pix_reservation_expiration'.tr).catch(() => {});
     throw error;
   }
   let preparedOrder = order;
@@ -380,7 +384,7 @@ function createApp({
     });
   }
   app.use('/api', (_req, res, next) => {
-    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Cache-Control', 'private_no_store'.tr);
     next();
   });
   const signatureValidator = new SignatureValidator(config.whatsapp.metaAppSecret);
@@ -411,7 +415,7 @@ function createApp({
 
   const sessions = createWebSessions(messageService.firestoreRepo);
   app.use('/api', sessions.resolve);
-  app.use('/api/customer', (req, res, next) => req.user?.role === 'ENTREGADOR' ? res.status(403).json({ error: 'Seu acesso é exclusivo às entregas.' }) : next());
+  app.use('/api/customer', (req, res, next) => req.user?.role === 'ENTREGADOR' ? res.status(403).json({ error: 'your_access_is_exclusive_to_deliveries'.tr }) : next());
 
   require('../security/request-protection').installRequestProtection(app, messageService.firestoreRepo);
   // Meta Business Agent Platform - Tools HTTP Connector & Fila Humana
@@ -451,7 +455,7 @@ function createApp({
       storeLocation: {
         lat: config.maps?.storeLat ?? -17.5694,
         lng: config.maps?.storeLng ?? -52.5511,
-        name: config.maps?.storeName || 'Conflora Horta e Viveiro',
+        name: config.maps?.storeName || 'conflora_garden_nursery'.tr,
         address: config.maps?.storeAddress || 'Mineiros - GO',
       },
     });
@@ -467,7 +471,7 @@ function createApp({
   app.post('/api/auth/switch-profile', async (req, res, next) => {
     try {
       if (!req.user) {
-        return res.status(401).json({ success: false, error: 'Sessão não autenticada.' });
+        return res.status(401).json({ success: false, error: 'unauthenticated_session'.tr });
       }
       const result = await sessions.setActiveRole(req, req.body?.role);
       if (!result.success) {
@@ -479,12 +483,12 @@ function createApp({
     }
   });
   app.patch('/api/auth/profile', async (req, res, next) => {
-    if (!req.user) return res.status(401).json({ error: 'Entre na sua conta.' });
+    if (!req.user) return res.status(401).json({ error: 'sign_in_to_your_account_249741'.tr });
     const body = req.body || {};
     const name = String(body.name || '').trim();
     const phone = String(body.phone || '').replace(/\D/g, '');
     const address = String(body.address || '').trim();
-    if (name.length < 2 || name.length > 120 || (phone && !/^\d{10,13}$/.test(phone)) || address.length > 500) return res.status(400).json({ error: 'Confira nome, WhatsApp com DDD e endereço.' });
+    if (name.length < 2 || name.length > 120 || (phone && !/^\d{10,13}$/.test(phone)) || address.length > 500) return res.status(400).json({ error: 'check_name_whatsapp_with_area_code_and_address'.tr });
     try {
       const profile = await messageService.firestoreRepo.updateOwnUserProfile(req.user.id, { name, phone, address });
       const user = { ...req.user, name: profile.name, phone: profile.phone, address: profile.address };
@@ -494,14 +498,18 @@ function createApp({
   });
   app.use('/api/admin', (req, res, next) => {
     if (req.path === '/auth/login' || (req.path === '/auth/users' && req.method === 'GET')) {return next();}
-    if (!req.user) {return res.status(401).json({ error: 'Entre na sua conta.' });}
+    if (!req.user) {return res.status(401).json({ error: 'sign_in_to_your_account_249741'.tr });}
     const cashierRoute = /^(?:\/orders(?:\/manual)?|\/daily-metrics|\/stock\/quick-entry|\/alterations|\/notifications(?:\/[^/]+\/read)?)$/.test(req.path);
-    if (req.user.role !== 'ADMIN' && !(['CAIXA', 'VENDEDOR'].includes(req.user.role) && cashierRoute)) {
-      return res.status(403).json({ error: 'Acesso não autorizado para este perfil.' });
+    if (req.user.role !== 'ADMIN' && !(["CAIXA", 'VENDEDOR'].includes(req.user.role) && cashierRoute)) {
+      return res.status(403).json({ error: 'unauthorized_access_for_this_profile'.tr });
     }
     next();
   });
   require('./error-history.routes').installErrorHistoryRoutes(app, errorHistory);
+  app.post('/api/admin/sicredi-pix/simulate', async (req, res, next) => {
+    try { res.json(await require('../integrations/sicredi-simulation').simulateSicrediPayment(req.body)); }
+    catch (error) { next(error); }
+  });
   require('./product-import.routes').installProductImportRoutes(app, { repository: messageService.firestoreRepo, catalog: messageService.catalogRepo });
   // Home / Cardápio Digital Conflora
   app.get(['/', '/products/:productId', '/configuracoes'], (req, res) => {
@@ -509,7 +517,7 @@ function createApp({
       const detail = req.path === '/configuracoes' ? '/admin' : req.params.productId ? '/products/' + encodeURIComponent(req.params.productId) : '';
       return res.redirect('/shop/' + encodeURIComponent(process.env.STOREFRONT_STORE_SLUG) + detail);
     }
-    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Cache-Control', 'no_store'.tr);
     const shellPath = require('node:path').resolve(__dirname, '../../public/storefront/shell.html');
     return res.sendFile(require('node:fs').existsSync(shellPath) ? shellPath : require('node:path').resolve(__dirname, '../../public/storefront/index.html'));
   });
@@ -518,8 +526,8 @@ function createApp({
   // Painel de Administração, Frente de Caixa & Estoque
   app.get('/admin', async (_req, res, next) => {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Cache-Control', 'no_cache_no_store_must_revalidate'.tr);
+    res.setHeader('Pragma', 'no_cache'.tr);
     res.setHeader('Expires', '0');
     try {
       const { readStoreSettings, existingConfig } = require('../storefront/existing-store');
@@ -530,8 +538,8 @@ function createApp({
   // Painel Admin Gerencial (Substituição de Alta Performance do Looker Studio)
   app.get('/admin-gerencial', async (_req, res, next) => {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Cache-Control', 'no_cache_no_store_must_revalidate'.tr);
+    res.setHeader('Pragma', 'no_cache'.tr);
     res.setHeader('Expires', '0');
     try {
       res.status(200).send(renderAdminGerencialHtml());
@@ -545,15 +553,15 @@ function createApp({
       const storage = new (require('../reports/private-report-storage').PrivateReportStorage)(messageService.firestoreRepo);
       const buffer = await storage.read(req.params.name);
       if (!buffer) return res.sendStatus(404);
-      res.set('Cache-Control', 'private, no-store').type('application/pdf').send(buffer);
+      res.set('Cache-Control', 'private_no_store'.tr).type('application/pdf').send(buffer);
     } catch { res.sendStatus(404); }
   });
 
   // Tela Dedicada do Caixa & Frente de Loja (Mobile & Desktop)
   app.get(['/caixa', '/pdv'], (_req, res) => {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Cache-Control', 'no_cache_no_store_must_revalidate'.tr);
+    res.setHeader('Pragma', 'no_cache'.tr);
     res.setHeader('Expires', '0');
     res.status(200).send(renderCaixaHtml());
   });
@@ -594,11 +602,11 @@ function createApp({
     const challenge = req.query['hub.challenge'];
 
     if (mode === 'subscribe' && token === config.whatsapp.verifyToken) {
-      Logger.info('Meta Webhook verificado com sucesso.');
+      Logger.info('meta_webhook_successfully_verified'.tr);
       return res.status(200).send(challenge);
     }
 
-    Logger.warn('Tentativa de verificação do Webhook com token inválido.');
+    Logger.warn('webhook_verification_attempt_with_invalid_token'.tr);
     return res.sendStatus(403);
   });
 
@@ -607,7 +615,7 @@ function createApp({
     const signature = req.headers['x-hub-signature-256'];
 
     if (!signatureValidator.validate(req.rawBody, signature)) {
-      Logger.warn('Assinatura do webhook inválida.');
+      Logger.warn('invalid_webhook_signature'.tr);
       return res.sendStatus(401);
     }
 
@@ -647,8 +655,8 @@ function createApp({
           const taskPayload = { phone, message: text, ...(interactiveId ? { interactiveId } : {}), customerName, messageId };
 
           await incoming.accept(taskPayload);
-          if (config.whatsapp.assistantEnabled && taskQueueClient) {
-            await taskQueueClient.enqueueProcessMessage(taskPayload).catch(error => Logger.warn('Mensagem persistida; fila será retomada pelo trabalhador.', { messageId, error: error.message }));
+          if (process.env.NODE_ENV === 'production' && config.whatsapp.assistantEnabled && taskQueueClient) {
+            await taskQueueClient.enqueueProcessMessage(taskPayload).catch(error => Logger.warn('message_persisted_queue_will_be_resumed_by_the_worker'.tr, { messageId, error: error.message }));
           }
           // The durable inbox is authoritative even when Cloud Tasks is unavailable.
           if (process.env.NODE_ENV !== 'production') setImmediate(() => messageService.handleCustomerMessage({ ...taskPayload, ...(!config.whatsapp.assistantEnabled ? { verifyOnly: true } : {}) }).catch(() => {}));
@@ -656,7 +664,7 @@ function createApp({
       }
     }
     res.sendStatus(200);
-    } catch (error) { Logger.error('Não foi possível persistir o webhook.', error); res.sendStatus(503); }
+    } catch (error) { Logger.error('could_not_persist_webhook'.tr, error); res.sendStatus(503); }
   });
 
   const retryIncoming = () => incoming.retry(payload => messageService.handleCustomerMessage({ ...payload, verifyOnly: !config.whatsapp.assistantEnabled }));
@@ -669,7 +677,7 @@ function createApp({
       if (!incoming.store.isAvailable()) return;
       retryIncoming().catch(error => {
         if (incoming.store.repository?._firestoreClientDisabled) return;
-        Logger.error('Entrada de mensagens pendente', error, { source: 'WORKER' });
+        Logger.error('pending_message_input'.tr, error, { source: 'WORKER' });
       });
     }, 15000);
     timer.unref();
@@ -680,8 +688,8 @@ function createApp({
 
   // Live Inventory & Stock Movements API (somente Firestore)
   const handleInventoryRequest = async (_req, res) => {
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Cache-Control', 'no_cache_no_store_must_revalidate'.tr);
+    res.setHeader('Pragma', 'no_cache'.tr);
     res.setHeader('Expires', '0');
     try {
       let products = await messageService.firestoreRepo.getAllProducts();
@@ -690,7 +698,7 @@ function createApp({
           const orders = await messageService.firestoreRepo.getSalesOrders();
           products = rankProductSales(products, orders);
         } catch (error) {
-          Logger.warn('Ranking de vendas temporariamente indisponível', { error: error.message });
+          Logger.warn('sales_ranking_temporarily_unavailable'.tr, { error: error.message });
         }
       }
       products = products.map((product) => {
@@ -712,7 +720,7 @@ function createApp({
       }
       res.status(200).json({ products, movements: movements || [] });
     } catch {
-      res.status(503).json({ error: 'Catálogo indisponível. Tente novamente.' });
+      res.status(503).json({ error: 'catalog_unavailable_please_try_again'.tr });
     }
   };
 
@@ -735,7 +743,7 @@ function createApp({
       });
       res.status(200).json(result);
     } catch (err) {
-      Logger.error('Erro na consultoria botânica Conflora AI', err);
+      Logger.error('error_in_conflora_ai_botanical_consultancy'.tr, err);
       res.status(500).json({ success: false, error: err.message });
     }
   });
@@ -765,8 +773,8 @@ function createApp({
       }
       return res.redirect(302, '/store-assets/placeholder.svg');
     } catch (err) {
-      Logger.error('Erro ao servir imagem do Firestore', err);
-      res.status(500).send('Erro ao carregar imagem');
+      Logger.error('error_serving_firestore_image'.tr, err);
+      res.status(500).send('error_loading_image'.tr);
     }
   });
 
@@ -775,7 +783,7 @@ function createApp({
     const isStorefrontOrder = req.path === '/api/storefront/orders';
     const idempotencyKey = String(req.get('Idempotency-Key') || '').trim();
     if (isStorefrontOrder && !/^[a-zA-Z0-9_-]{1,128}$/.test(idempotencyKey)) {
-      return res.status(400).json({ error: 'Chave de envio do pedido inválida. Atualize a página e tente novamente.' });
+      return res.status(400).json({ error: 'invalid_order_submission_key_refresh_the_page_and_try_again'.tr });
     }
     const releaseRequestLock = idempotencyKey
       ? await acquireRequestLock(app.locals.storefrontCheckoutLocks, idempotencyKey)
@@ -797,7 +805,7 @@ function createApp({
       } = req.body;
 
       if (!customerName || !customerPhone || !Array.isArray(items) || items.length === 0) {
-        return res.status(400).json({ error: 'Dados do pedido incompletos.' });
+        return res.status(400).json({ error: 'incomplete_order_data'.tr });
       }
 
       let orderItems = items;
@@ -806,7 +814,7 @@ function createApp({
       let resolvedCoupon = coupon || '';
       if (req.path === '/api/orders') {
         if (items.length > 100) {
-          return res.status(400).json({ error: 'O pedido excede o limite de itens.' });
+          return res.status(400).json({ error: 'the_order_exceeds_the_item_limit'.tr });
         }
         const products = await messageService.firestoreRepo.getProductsByIds(items.map(item => item.productId));
         const productsById = new Map(products.map((product) => [String(product.id), product]));
@@ -821,7 +829,7 @@ function createApp({
             !Number.isFinite(quantity) ||
             quantity <= 0
           ) {
-            return res.status(400).json({ error: 'Produto ou quantidade inválida no pedido.' });
+            return res.status(400).json({ error: 'invalid_product_or_quantity_in_order'.tr });
           }
           orderItems.push(require('../catalog/commercial-product').commercialLine(product, quantity));
         }
@@ -839,7 +847,7 @@ function createApp({
         resolvedCoupon = String(coupon || '').trim().toUpperCase();
         const couponRule = legacyCoupons[resolvedCoupon];
         if (resolvedCoupon && !couponRule) {
-          return res.status(400).json({ error: 'Cupom inválido.' });
+          return res.status(400).json({ error: 'invalid_coupon'.tr });
         }
         appliedDiscount = couponRule
           ? Number(
@@ -855,9 +863,9 @@ function createApp({
         appliedDiscount = Math.max(0, Number(discount) || 0);
       }
       const finalTotal = Math.max(0, Math.round((calculatedSubtotal - appliedDiscount) * 100) / 100);
-      const resolvedPaymentMethod = String(paymentMethod || 'PIX').toUpperCase();
-      if (!['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO', 'CARTAO', 'FIADO'].includes(resolvedPaymentMethod)) return res.status(400).json({ error: 'Forma de pagamento inválida para compra pelo cliente.' });
-      if (orderType === 'DELIVERY' && (!String(customerName || '').trim() || !/^\d{10,13}$/.test(String(customerPhone || '').replace(/\D/g, '')) || String(deliveryAddress || '').trim().length < 8)) return res.status(400).json({ error: 'Entrega exige nome, WhatsApp com DDD e endereço completo (rua, número, bairro e cidade).' });
+      const resolvedPaymentMethod = String(paymentMethod || "PIX").toUpperCase();
+      if (!["PIX", 'DINHEIRO', 'DEBITO', 'CREDITO', 'CARTAO', 'FIADO'].includes(resolvedPaymentMethod)) return res.status(400).json({ error: 'invalid_payment_method_for_customer_purchase'.tr });
+      if (orderType === 'DELIVERY' && (!String(customerName || '').trim() || !/^\d{10,13}$/.test(String(customerPhone || '').replace(/\D/g, '')) || String(deliveryAddress || '').trim().length < 8)) return res.status(400).json({ error: 'delivery_requires_name_whatsapp_with_area_code_and_full_address_street_number_neighbo'.tr });
       const normalizedLocation = normalizeDeliveryLocation(deliveryLocation);
       const checkoutFingerprint = idempotencyKey
         ? createHash('sha256').update(JSON.stringify({
@@ -881,7 +889,7 @@ function createApp({
         const existingOrder = await messageService.firestoreRepo.getOrderById(orderId);
         if (existingOrder) {
           if (existingOrder.idempotencyFingerprint !== checkoutFingerprint) {
-            return res.status(409).json({ error: 'Este pedido já foi enviado com dados diferentes. Confira a sacola e tente novamente.' });
+            return res.status(409).json({ error: 'this_order_has_already_been_sent_with_different_data_check_the_bag_and_try_again'.tr });
           }
           const prepared = await prepareSicrediCheckoutOrder({ app, sicrediClient: sicrediPixClient, taskQueueClient, order: existingOrder });
           const replayOrder = prepared.order;
@@ -895,11 +903,12 @@ function createApp({
         }
       }
       let pixData = null;
-      const manualPix = resolvedPaymentMethod === 'PIX' ? require('../orders/pix-mode').manualPixSettings() : null;
+      const manualPix = resolvedPaymentMethod === 'PIX' && require('../orders/pix-mode').pixMode() === 'MANUAL'
+        ? require('../orders/pix-mode').manualPixSettings() : null;
       if (manualPix) require('../orders/manual-pix.routes').orderAccessToken({ id: orderId });
       if (resolvedPaymentMethod === 'PIX' && !manualPix) {
         if (!sicrediPixClient.isOfficialApiConfigured) {
-          return res.status(503).json({ error: 'Pagamento Pix indisponível. Configure as credenciais, certificado e chave Pix do Sicredi.' });
+          return res.status(503).json({ error: 'pix_payment_unavailable_configure_sicredi_credentials_certificate_and_pix_key'.tr });
         }
         const ttlSeconds = Math.min(86400, Math.max(300, Number(process.env.PIX_PAYMENT_TTL_SECONDS) || 3600));
         pixData = { txid: sicrediPixClient.generateTxId(), provider: 'SICREDI', expiresInSeconds: ttlSeconds };
@@ -907,9 +916,9 @@ function createApp({
 
       let financialCustomerId = req.user?.id || '';
       if (resolvedPaymentMethod === 'FIADO') {
-        if (!req.user?.email) return res.status(401).json({ error: 'Entre na sua conta para solicitar uma compra fiada.' });
+        if (!req.user?.email) return res.status(401).json({ error: 'sign_in_to_your_account_to_request_a_store_credit_purchase'.tr });
         const profiles = await messageService.firestoreRepo.findCustomerProfilesByEmail(req.user.email);
-        if (profiles.length > 1) return res.status(409).json({ error: 'A loja precisa conferir os cadastros vinculados ao seu e-mail antes de liberar fiado.' });
+        if (profiles.length > 1) return res.status(409).json({ error: 'the_store_needs_to_check_the_registrations_linked_to_your_email_before_releasing_stor'.tr });
         financialCustomerId = profiles[0]?.id || 'account-' + createHash('sha256').update(req.user.id).digest('hex').slice(0, 24);
         if (!profiles.length) await app.locals.pdv.store.transaction(async tx => {
           if (await tx.get('customers', financialCustomerId)) return;
@@ -924,9 +933,9 @@ function createApp({
         customerName,
         customerPhone,
         orderType: orderType || 'DELIVERY',
-        deliveryAddress: deliveryAddress || 'Retirada no Viveiro Conflora',
+        deliveryAddress: deliveryAddress || 'pickup_at_conflora_nursery'.tr,
         ...(normalizedLocation ? { deliveryLocation: normalizedLocation } : {}),
-        ...((orderType || 'DELIVERY') === 'DELIVERY' ? { deliveryStatus: ['PIX', 'FIADO'].includes(resolvedPaymentMethod) ? 'PENDING_DISPATCH' : 'PENDING_DELIVERY' } : {}),
+        ...((orderType || 'DELIVERY') === 'DELIVERY' ? { deliveryStatus: ["PIX", 'FIADO'].includes(resolvedPaymentMethod) ? 'PENDING_DISPATCH' : 'PENDING_DELIVERY' } : {}),
         paymentMethod: resolvedPaymentMethod,
         items: orderItems,
         subtotal: calculatedSubtotal,
@@ -946,7 +955,7 @@ function createApp({
         ...(pixData ? { pixData, pixProvider: 'SICREDI', paymentProvider: 'SICREDI' } : {}),
       }, { requirePersistence: resolvedPaymentMethod === 'PIX' && !(manualPix && messageService.firestoreRepo.isInMemory && !messageService.firestoreRepo.firestore), reserveInventory: true });
 
-      let receiptDelivery = { sent: false, reason: 'Envio não solicitado.' };
+      let receiptDelivery = { sent: false, reason: 'shipping_not_requested'.tr };
       if (order.source === 'WEB_CATALOG') {
         const prepared = await prepareSicrediCheckoutOrder({ app, sicrediClient: sicrediPixClient, taskQueueClient, order });
         order = prepared.order;
@@ -957,11 +966,11 @@ function createApp({
       const receiptText = formatOrderReceipt(order);
       order.receiptText = receiptText;
       await messageService.firestoreRepo.saveOrderReceipt(order.id, receiptText).catch((error) => {
-        Logger.warn('Pedido registrado; a cópia persistente do recibo ficou indisponível.', { orderId: order.id, error: error.message });
+        Logger.warn('order_registered_persistent_copy_of_receipt_became_unavailable'.tr, { orderId: order.id, error: error.message });
       });
       // Notificação para todos os usuários ADMIN sobre a venda finalizada
       await messageService.firestoreRepo.notifyAllAdminUsersOfSale(order, { source: 'WEB_CATALOG' }).catch((err) => {
-        Logger.warn('Aviso: falha ao notificar administradores sobre nova venda web', { error: err.message });
+        Logger.warn('warning_failed_to_notify_administrators_about_new_web_sale'.tr, { error: err.message });
       });
 
       await app.locals.pdv.service.queueOperationalNotifications(order);
@@ -977,7 +986,7 @@ function createApp({
         receiptDelivery,
       });
     } catch (err) {
-      Logger.error('Erro ao registrar pedido web', err);
+      Logger.error('error_registering_web_order'.tr, err);
       res.status(err.status || 500).json({ error: err.message });
     } finally {
       releaseRequestLock();
@@ -987,10 +996,10 @@ function createApp({
   // Client: Histórico de Compras e Produtos Mais Comprados
   app.get('/api/customer/orders', async (req, res) => {
     try {
-      if (!req.user) {return res.status(401).json({ error: 'Entre na sua conta.' });}
+      if (!req.user) {return res.status(401).json({ error: 'sign_in_to_your_account_249741'.tr });}
       const limit = Math.max(1, Math.min(30, Number.parseInt(req.query.limit, 10) || 12));
       const profiles = req.user.email ? await messageService.firestoreRepo.findCustomerProfilesByEmail(req.user.email) : [];
-      if (profiles.length > 1) { return res.status(409).json({ success: false, error: 'Há mais de um cadastro vinculado a este e-mail. Peça à equipe para corrigir o vínculo.' }); }
+      if (profiles.length > 1) { return res.status(409).json({ success: false, error: 'there_is_more_than_one_registration_linked_to_this_email_ask_the_team_to_fix_the_link'.tr }); }
       const data = await messageService.firestoreRepo.getCustomerOrderHistoryPage({
         customerId: req.user.id,
         customerIds: profiles.map((profile) => profile.id),
@@ -1006,14 +1015,14 @@ function createApp({
       });
       res.status(200).json({ success: true, ...data, orders });
     } catch (err) {
-      Logger.error('Erro ao buscar pedidos do cliente', err);
+      Logger.error('error_fetching_customer_orders'.tr, err);
       res.status(500).json({ success: false, error: err.message });
     }
   });
 
   app.get('/api/customer/orders/pending-feedback', async (req, res) => {
     try {
-      if (!req.user) return res.status(401).json({ error: 'Entre na sua conta.' });
+      if (!req.user) return res.status(401).json({ error: 'sign_in_to_your_account_249741'.tr });
       const profiles = req.user.email ? await messageService.firestoreRepo.findCustomerProfilesByEmail(req.user.email) : [];
       if (profiles.length > 1) return res.json({ success: true, order: null });
       const data = await messageService.firestoreRepo.getCustomerOrderHistoryPage({
@@ -1032,18 +1041,18 @@ function createApp({
           : null,
       });
     } catch (err) {
-      Logger.warn('Não foi possível consultar avaliações pendentes', { error: err.message });
+      Logger.warn('could_not_check_pending_reviews'.tr, { error: err.message });
       res.json({ success: true, order: null });
     }
   });
 
   app.post('/api/customer/orders/:id/feedback', async (req, res) => {
     try {
-      if (!req.user) return res.status(401).json({ error: 'Entre na sua conta para avaliar o pedido.' });
+      if (!req.user) return res.status(401).json({ error: 'sign_in_to_your_account_to_review_the_order'.tr });
       const orderId = String(req.params.id || '').trim();
       const existing = await app.locals.pdv.store.read('orders', orderId);
-      if (!existing) return res.status(404).json({ error: 'Pedido não encontrado.' });
-      const isStaff = ['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(req.user.role);
+      if (!existing) return res.status(404).json({ error: 'order_not_found'.tr });
+      const isStaff = ['ADMIN', "CAIXA", 'VENDEDOR', 'ENTREGADOR'].includes(req.user.role);
       if (!isStaff) {
         const profiles = req.user.email ? await messageService.firestoreRepo.findCustomerProfilesByEmail(req.user.email) : [];
         const linkedIds = new Set([String(req.user.id || ''), ...profiles.map((p) => String(p.id || ''))].filter(Boolean));
@@ -1051,7 +1060,7 @@ function createApp({
         const orderEmail = String(existing.customerEmail || '').trim().toLowerCase();
         const ownsOrder = linkedIds.has(String(existing.customerId || '')) || (userEmail && orderEmail === userEmail);
         if (!ownsOrder) {
-          return res.status(403).json({ error: 'Este pedido não pertence à sua conta.' });
+          return res.status(403).json({ error: 'this_order_does_not_belong_to_your_account'.tr });
         }
       }
       const updated = await app.locals.pdv.store.submitFeedback(orderId, req.body || {}, req.user);
@@ -1073,7 +1082,7 @@ function createApp({
       const clientPhone = String(phone || req.user?.phone || '').trim();
       const clientEmail = String(email || req.user?.email || '').trim();
       const numRating = Math.max(1, Math.min(5, Number(rating) || 5));
-      const feedbackType = String(type || 'Avaliação do Site').trim();
+      const feedbackType = String(type || 'site_review_489888'.tr).trim();
       const feedbackHighlights = Array.isArray(highlights) ? highlights : [];
       const feedbackComment = String(comment || '').trim();
       const nowIso = new Date().toISOString();
@@ -1099,7 +1108,7 @@ function createApp({
           });
         }
       } catch (storeErr) {
-        Logger.warn('Aviso ao registrar feedback avulso no banco:', { error: storeErr.message });
+        Logger.warn('warning_when_registering_standalone_feedback_in_the_database'.tr, { error: storeErr.message });
       }
 
       const rawOwnerPhone = process.env.OWNER_WHATSAPP_NUMBER || config.whatsapp?.ownerNumber || '5564999361572';
@@ -1108,10 +1117,10 @@ function createApp({
       const formattedDate = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 
       const msgLines = [
-        '🌿 *CONFLORA — NOVA AVALIAÇÃO DO SITE* 🌿',
+        'conflora_new_site_review'.tr,
         '',
-        `👤 *Cliente:* ${clientName || 'Não identificado / Anônimo'}`,
-        `📱 *Contato:* ${clientPhone || 'Não informado'}${clientEmail ? ` (${clientEmail})` : ''}`,
+        `${'customer_bddd7a'.tr} ${clientName || 'unidentified_anonymous'.tr}`,
+        `📱 *Contato:* ${clientPhone || 'not_informed'.tr}${clientEmail ? ` (${clientEmail})` : ''}`,
         `⭐ *Nota:* ${numRating}/5 (${stars})`,
         `🏷️ *Tipo:* ${feedbackType}`,
       ];
@@ -1122,8 +1131,8 @@ function createApp({
 
       msgLines.push(
         '',
-        '💬 *Comentário / Reclamação:*',
-        feedbackComment ? `"${feedbackComment}"` : '(Sem mensagem adicional)',
+        'comment_complaint'.tr,
+        feedbackComment ? `"${feedbackComment}"` : 'no_additional_message'.tr,
         '',
         `🕒 ${formattedDate}`
       );
@@ -1135,9 +1144,9 @@ function createApp({
         try {
           await messageService.whatsappClient.sendTextMessage(ownerPhone, messageText);
           sentViaApi = true;
-          Logger.info('Avaliação enviada ao WhatsApp do proprietário com sucesso', { ownerPhone, feedbackId });
+          Logger.info('review_successfully_sent_to_the_owner_s_whatsapp'.tr, { ownerPhone, feedbackId });
         } catch (waErr) {
-          Logger.warn('WhatsApp API não confirmou envio direto ao proprietário:', { error: waErr.message });
+          Logger.warn('whatsapp_api_did_not_confirm_direct_sending_to_the_owner'.tr, { error: waErr.message });
         }
       }
 
@@ -1152,29 +1161,29 @@ function createApp({
         feedback: record,
       });
     } catch (err) {
-      Logger.error('Erro na rota de avaliação do site', err);
+      Logger.error('error_in_site_review_route'.tr, err);
       res.status(500).json({ success: false, error: err.message });
     }
   });
 
   app.get('/api/customer/profile', async (req, res) => {
-    if (!req.user) return res.status(401).json({ error: 'Entre na sua conta.' });
+    if (!req.user) return res.status(401).json({ error: 'sign_in_to_your_account_249741'.tr });
     try {
       const profiles = req.user.email ? await messageService.firestoreRepo.findCustomerProfilesByEmail(req.user.email) : [];
-      if (profiles.length > 1) return res.status(409).json({ error: 'Confira o vínculo do cadastro com a loja.' });
+      if (profiles.length > 1) return res.status(409).json({ error: 'check_the_registration_link_with_the_store'.tr });
       const profile = profiles[0];
       res.json({ name: profile?.name || req.user.name || '', phone: profile?.phone || req.user.phone || '', address: profile?.address || profile?.deliveryAddress || '', email: req.user.email || '' });
-    } catch { res.status(503).json({ error: 'Não foi possível consultar seu cadastro.' }); }
+    } catch { res.status(503).json({ error: 'could_not_check_your_registration'.tr }); }
   });
 
   app.get('/api/customer/ledger', async (req, res) => {
-    if (!req.user) { return res.status(401).json({ success: false, error: 'Entre na sua conta para consultar seu saldo.' }); }
+    if (!req.user) { return res.status(401).json({ success: false, error: 'log_in_to_your_account_to_check_your_balance'.tr }); }
     const email = String(req.user.email || '').trim().toLowerCase();
-    if (!email) { return res.status(400).json({ success: false, error: 'Sua conta não possui e-mail para vincular ao cadastro do cliente.' }); }
+    if (!email) { return res.status(400).json({ success: false, error: 'your_account_does_not_have_an_email_to_link_to_the_customer_record'.tr }); }
     try {
       const profiles = await messageService.firestoreRepo.findCustomerProfilesByEmail(email);
-      if (profiles.length > 1) { return res.status(409).json({ success: false, error: 'Há mais de um cadastro vinculado a este e-mail. Peça à equipe para corrigir o vínculo.' }); }
-      if (!profiles.length) { return res.status(404).json({ success: false, linked: false, error: 'Seu cadastro ainda não está vinculado a este e-mail. Peça ao caixa para atualizar seu cadastro.' }); }
+      if (profiles.length > 1) { return res.status(409).json({ success: false, error: 'there_is_more_than_one_registration_linked_to_this_email_ask_the_team_to_fix_the_link'.tr }); }
+      if (!profiles.length) { return res.status(404).json({ success: false, linked: false, error: 'your_registration_is_not_yet_linked_to_this_email_ask_the_cashier_to_update_your_reco'.tr }); }
       const profile = profiles[0];
       const ledger = await messageService.firestoreRepo.getCustomerDebts(profile.id);
       const transactions = await Promise.all((ledger.transactions || []).map(async (entry) => {
@@ -1186,7 +1195,7 @@ function createApp({
           ? {
             ticketNumber: order.ticketNumber || '',
             items: (Array.isArray(order.items) ? order.items : []).map((item) => ({
-              name: String(item.name || 'Produto'), quantity: Number(item.quantity || 0),
+              name: String(item.name || 'product'.tr), quantity: Number(item.quantity || 0),
               unit: String(item.unit || 'UN'), subtotal: Number(item.subtotalMinor || 0) / 100,
             })),
             receiptText: order.receiptText || formatOrderReceipt(order),
@@ -1206,42 +1215,42 @@ function createApp({
       }));
       return res.status(200).json({
         success: true,
-        customerName: profile.name || req.user.name || 'Cliente',
+        customerName: profile.name || req.user.name || 'customer'.tr,
         balance: Number(ledger.balance || 0),
         creditBalance: Number(profile.creditBalance || 0),
         supportPhone: String(config.whatsapp.ownerNumber || '').replace(/\D/g, ''),
         transactions,
       });
     } catch (error) {
-      Logger.error('Erro ao consultar saldo do cliente', error);
-      return res.status(503).json({ success: false, error: 'Não foi possível carregar seu saldo neste momento.' });
+      Logger.error('error_checking_customer_balance'.tr, error);
+      return res.status(503).json({ success: false, error: 'could_not_load_your_balance_at_this_time'.tr });
     }
   });
 
   app.get('/api/customer/favorites', async (req, res) => {
     try {
-      if (!req.user) {return res.status(401).json({ error: 'Entre na sua conta.' });}
+      if (!req.user) {return res.status(401).json({ error: 'sign_in_to_your_account_249741'.tr });}
       const favoriteProductIds = await messageService.firestoreRepo.getUserFavorites(req.user.id);
       res.json({ favoriteProductIds });
     } catch (err) {
-      Logger.error('Erro ao buscar favoritos do cliente', err);
-      res.status(500).json({ error: 'Não foi possível carregar seus produtos curtidos.' });
+      Logger.error('error_fetching_customer_favorites'.tr, err);
+      res.status(500).json({ error: 'could_not_load_your_liked_products'.tr });
     }
   });
 
   app.put('/api/customer/favorites', async (req, res) => {
     try {
-      if (!req.user) {return res.status(401).json({ error: 'Entre na sua conta.' });}
+      if (!req.user) {return res.status(401).json({ error: 'sign_in_to_your_account_249741'.tr });}
       const ids = req.body?.favoriteProductIds;
       if (!Array.isArray(ids) || ids.length > 2000) {
-        return res.status(400).json({ error: 'Lista de produtos curtidos inválida.' });
+        return res.status(400).json({ error: 'invalid_liked_products_list'.tr });
       }
       const validIds = ids.map((id) => String(id || '').trim()).filter((id) => /^[a-zA-Z0-9_-]{1,160}$/.test(id));
       const favoriteProductIds = await messageService.firestoreRepo.setUserFavorites(req.user.id, validIds);
       res.json({ success: true, favoriteProductIds });
     } catch (err) {
-      Logger.error('Erro ao salvar favoritos do cliente', err);
-      res.status(500).json({ error: 'Não foi possível salvar seus produtos curtidos.' });
+      Logger.error('error_saving_customer_favorites'.tr, err);
+      res.status(500).json({ error: 'could_not_save_your_liked_products'.tr });
     }
   });
 
@@ -1253,7 +1262,7 @@ function createApp({
     const eventName = String(body.eventName || '').trim();
     const visitorId = String(body.visitorId || '').trim();
     if (!acceptedEvents.has(eventName) || !/^[a-zA-Z0-9_-]{8,80}$/.test(visitorId)) {
-      return res.status(400).json({ success: false, error: 'Evento de catálogo inválido.' });
+      return res.status(400).json({ success: false, error: 'invalid_catalog_event'.tr });
     }
     const shortText = (value, max) => String(value || '').trim().slice(0, max);
     const numericValue = Number(body.value);
@@ -1282,8 +1291,8 @@ function createApp({
       });
       res.status(202).json({ success: true });
     } catch (error) {
-      Logger.error('Falha ao armazenar evento do catálogo', error);
-      res.status(503).json({ success: false, error: 'Não foi possível registrar o evento.' });
+      Logger.error('failed_to_store_catalog_event'.tr, error);
+      res.status(503).json({ success: false, error: 'could_not_record_the_event'.tr });
     }
   });
 
@@ -1292,8 +1301,8 @@ function createApp({
       const summary = await storefrontAnalytics.summary({ days: _req.query.days });
       res.status(200).json(summary);
     } catch (error) {
-      Logger.error('Erro ao consultar eventos do catálogo', error);
-      res.status(500).json({ error: 'Não foi possível consultar os eventos do catálogo.' });
+      Logger.error('error_querying_catalog_events'.tr, error);
+      res.status(500).json({ error: 'could_not_query_catalog_events'.tr });
     }
   });
 
@@ -1310,7 +1319,7 @@ function createApp({
       }
       res.status(200).json(orders);
     } catch (err) {
-      Logger.error('Erro ao buscar pedidos no admin', err);
+      Logger.error('error_fetching_orders_in_admin'.tr, err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1322,7 +1331,7 @@ function createApp({
       const { status } = req.body;
       const order = await messageService.firestoreRepo.getOrderById(id);
       if (!order) {
-        return res.status(404).json({ error: 'Pedido não encontrado.' });
+        return res.status(404).json({ error: 'order_not_found'.tr });
       }
       if (
         String(order.paymentMethod || '').toUpperCase() === 'PIX' &&
@@ -1330,13 +1339,13 @@ function createApp({
         !order.paymentTransactionId
       ) {
         return res.status(409).json({
-          error: 'O PIX só pode ser confirmado após confirmação do Sicredi ou conferência manual autorizada.',
+          error: 'pix_can_only_be_confirmed_after_sicredi_confirmation_or_authorized_manual_verificatio'.tr,
         });
       }
       const result = await messageService.firestoreRepo.updateOrderStatus(id, status);
       res.status(200).json(result);
     } catch (err) {
-      Logger.error('Erro ao atualizar status do pedido', err);
+      Logger.error('error_updating_order_status'.tr, err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1346,7 +1355,7 @@ function createApp({
     try {
       const { customerName, customerPhone, items, paymentMethod, notes } = req.body;
       if (!Array.isArray(items) || items.length === 0) {
-        return res.status(400).json({ error: 'Nenhum produto adicionado à venda.' });
+        return res.status(400).json({ error: 'no_products_added_to_the_sale'.tr });
       }
       const products = await messageService.firestoreRepo.getAllProducts();
       const productsById = new Map(products.map((product) => [String(product.id), product]));
@@ -1361,11 +1370,11 @@ function createApp({
           !Number.isFinite(quantity) ||
           quantity <= 0
         ) {
-          return res.status(400).json({ error: 'Produto ou quantidade inválida na venda.' });
+          return res.status(400).json({ error: 'invalid_product_or_quantity_in_sale'.tr });
         }
         normalizedItems.push({
           productId: String(product.id),
-          name: product.name || product.descricao || 'Produto',
+          name: product.name || product.descricao || 'product'.tr,
           price: Number(product.price || product.valor_num || 0),
           quantity,
           unit: product.unit || product.unidade || 'UN',
@@ -1392,9 +1401,9 @@ function createApp({
       const receiptText = formatOrderReceipt(order);
       order.receiptText = receiptText;
       await messageService.firestoreRepo.saveOrderReceipt(order.id, receiptText).catch((error) => {
-        Logger.warn('Venda registrada; a cópia persistente do recibo ficou indisponível.', { orderId: order.id, error: error.message });
+        Logger.warn('sale_registered_the_persistent_copy_of_the_receipt_became_unavailable'.tr, { orderId: order.id, error: error.message });
       });
-      let receiptDelivery = { sent: false, reason: 'Envio não solicitado.' };
+      let receiptDelivery = { sent: false, reason: 'shipping_not_requested'.tr };
       if (resolvedPaymentMethod === 'PIX') {
         receiptDelivery = await sendCustomerOrderReceipt(
           messageService.whatsappClient,
@@ -1402,7 +1411,7 @@ function createApp({
           receiptText,
         );
         if (!receiptDelivery.sent) {
-          Logger.warn('Venda manual PIX criada; não foi possível enviar o recibo ao cliente.', {
+          Logger.warn('manual_pix_sale_created_unable_to_send_receipt_to_customer'.tr, {
             orderId: order.id,
             reason: receiptDelivery.reason,
           });
@@ -1411,7 +1420,7 @@ function createApp({
 
       // Notificação para todos os usuários ADMIN sobre a venda manual no balcão
       await messageService.firestoreRepo.notifyAllAdminUsersOfSale(order, { source: 'CAIXA_MANUAL' }).catch((err) => {
-        Logger.warn('Aviso: falha ao notificar administradores sobre venda manual no caixa', { error: err.message });
+        Logger.warn('warning_failed_to_notify_administrators_about_manual_sale_at_the_register'.tr, { error: err.message });
       });
 
       res.status(200).json({
@@ -1420,7 +1429,7 @@ function createApp({
         receiptDelivery,
       });
     } catch (err) {
-      Logger.error('Erro ao lançar pedido manual no caixa', err);
+      Logger.error('error_posting_manual_order_at_the_register'.tr, err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1445,7 +1454,7 @@ function createApp({
   messageService.orderIntake.procurement.pdv = app.locals.pdv.service;
   require('./order-intake.routes').installOrderIntakeRoutes(app, messageService.orderIntake);
   app.use('/pdv-assets/dist', express.static(require('node:path').resolve(__dirname, '../../public/pdv/dist'), {
-    setHeaders: (res, file) => res.setHeader('Cache-Control', /[/\\][a-f0-9]{16}\.(?:js|css)$/.test(file) ? 'public, max-age=31536000, immutable' : 'no-cache, must-revalidate'),
+    setHeaders: (res, file) => res.setHeader('Cache-Control', /[/\\][a-f0-9]{16}\.(?:js|css)$/.test(file) ? 'public, max-age=31536000, immutable' : 'no_cache_must_revalidate'.tr),
   }));
   app.use('/guias', express.static(require('node:path').resolve(__dirname, '../../public/guias')));
 
@@ -1458,9 +1467,9 @@ function createApp({
         .map((p) => {
           const imageCandidates = getCashierProductImageCandidates(p);
           const imageUrl = imageCandidates[0] || '';
-          const name = p.name || p.descricao || 'Produto';
+          const name = p.name || p.descricao || 'product'.tr;
           const savedUnit = String(p.saleUnit?.code || p.unit || p.unidade || '').trim().toUpperCase();
-          const unit = savedUnit || (/(^|[^A-Z])KG([^A-Z]|$)/i.test(name) ? 'KG' : 'UN');
+          const unit = savedUnit || (/(^|[^A-Z])KG([^A-Z]|$)/i.test(name) ? 'kg_88ed32099f'.tr : 'UN');
 
           return {
             id: p.id,
@@ -1471,7 +1480,7 @@ function createApp({
             unit,
             saleUnit: {
               code: unit,
-              label: p.saleUnit?.label || (unit === 'UN' ? 'unidade' : unit),
+              label: p.saleUnit?.label || (unit === 'UN' ? 'unit_a9959d28d9'.tr : unit),
               minimum: Number(p.saleUnit?.minimum) || (unit === 'KG' ? 0.1 : 1),
               increment: Number(p.saleUnit?.increment) || (unit === 'KG' ? 0.1 : 1),
             },
@@ -1515,7 +1524,7 @@ function createApp({
       const notes = String(req.body?.notes || '').trim().slice(0, 250);
 
       if (!name) {
-        return res.status(400).json({ error: 'Informe pelo menos o nome do cliente.' });
+        return res.status(400).json({ error: 'please_enter_at_least_the_customer_s_name'.tr });
       }
 
       const customerKey = phoneDigits.length >= 8 ? phoneDigits : `cli-${Date.now()}`;
@@ -1544,7 +1553,7 @@ function createApp({
   });
   app.put('/api/admin/inventory-settings', async (req, res, next) => {
     if (typeof req.body?.stockControlEnabled !== 'boolean') {
-      return res.status(400).json({ error: 'Informe uma opção válida de controle de estoque.' });
+      return res.status(400).json({ error: 'please_select_a_valid_inventory_control_option'.tr });
     }
     try {
       res.json(await messageService.firestoreRepo.saveInventorySettings(req.body));
@@ -1566,7 +1575,7 @@ function createApp({
       const result = await messageService.firestoreRepo.quickAddStock(productId, quantityAdded);
       res.status(200).json(result);
     } catch (err) {
-      Logger.error('Erro na entrada rápida de estoque', err);
+      Logger.error('error_in_quick_stock_entry'.tr, err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1575,7 +1584,7 @@ function createApp({
     const { productId, operation, quantity, reason } = req.body || {};
     const requestId = String(req.body?.requestId || '').trim();
     if (!/^[a-zA-Z0-9_-]{8,100}$/.test(requestId)) {
-      return res.status(400).json({ error: 'Identificador de ajuste inválido. Atualize a tela e tente novamente.' });
+      return res.status(400).json({ error: 'invalid_adjustment_identifier_refresh_the_screen_and_try_again'.tr });
     }
     try {
       const movement = await messageService.firestoreRepo.adjustStock({
@@ -1589,13 +1598,13 @@ function createApp({
       });
       if (movement.operation === 'EXIT' && !movement.duplicate) {
         await messageService.firestoreRepo.notifyAllAdminUsersOfStockAdjustment(movement).catch((error) => {
-          Logger.warn('Baixa registrada, mas não foi possível notificar os administradores.', { error: error.message });
+          Logger.warn('stock_decrease_registered_but_administrators_could_not_be_notified'.tr, { error: error.message });
         });
       }
       res.status(200).json(movement);
     } catch (error) {
       const status = /não encontrado/i.test(error.message) ? 404 : /insuficiente|estoque mudou|reservadas/i.test(error.message) ? 409 : 400;
-      res.status(status).json({ error: error.message || 'Não foi possível ajustar o estoque.' });
+      res.status(status).json({ error: error.message || 'unable_to_adjust_inventory'.tr });
     }
   });
 
@@ -1612,7 +1621,7 @@ function createApp({
       }
       res.status(200).json({ success: true, product });
     } catch (err) {
-      Logger.error('Erro ao salvar produto no admin', err);
+      Logger.error('error_saving_product_in_admin'.tr, err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1623,7 +1632,7 @@ function createApp({
       const { id } = req.params;
       const rawPhoto = Buffer.isBuffer(req.body) ? req.body : null;
       const body = rawPhoto ? {} : (req.body || {});
-      const prod = (await messageService.firestoreRepo.getProductById(id)) || { id, name: req.headers['x-product-name'] || 'Produto' };
+      const prod = (await messageService.firestoreRepo.getProductById(id)) || { id, name: req.headers['x-product-name'] || 'product'.tr };
 
       const { photoBase64, photosBase64, photos, contentType, maxWidth, maxHeight, quality, format, append } = body;
       const incomingList = rawPhoto
@@ -1634,7 +1643,7 @@ function createApp({
       const shouldAppend = rawPhoto ? req.headers['x-photo-append'] === 'true' : append;
 
       if (!incomingList || incomingList.length === 0) {
-        return res.status(400).json({ error: 'Envie os dados da foto em base64.' });
+        return res.status(400).json({ error: 'please_send_photo_data_in_base64'.tr });
       }
 
       const { buildOptimizedFirestorePhotoDocument } = require('../catalog/product-photo.service');
@@ -1728,7 +1737,7 @@ function createApp({
         product: updatedProduct,
       });
     } catch (err) {
-      Logger.error('Erro no upload de foto para o Firebase Storage', err);
+      Logger.error('error_uploading_photo_to_firebase_storage'.tr, err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1761,7 +1770,7 @@ function createApp({
     try {
       const { imageBase64, maxWidth, maxHeight, quality, format } = req.body || {};
       if (!imageBase64 || typeof imageBase64 !== 'string') {
-        return res.status(400).json({ error: 'Envie imageBase64 para compressão.' });
+        return res.status(400).json({ error: 'please_send_imagebase64_for_compression'.tr });
       }
 
       const { compressImageBase64 } = require('../catalog/image-compressor');
@@ -1777,7 +1786,7 @@ function createApp({
         ...result,
       });
     } catch (err) {
-      Logger.error('Erro na compressão de imagem no servidor', err);
+      Logger.error('error_in_server_image_compression'.tr, err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1789,19 +1798,19 @@ function createApp({
       await messageService.firestoreRepo.deleteProduct(id);
       res.status(200).json({ success: true });
     } catch (err) {
-      Logger.error('Erro ao excluir produto no admin', err);
+      Logger.error('error_deleting_product_in_admin'.tr, err);
       res.status(500).json({ error: err.message });
     }
   });
 
   // System Diagnostics & Connection Status API (Exclusivo Admin)
   app.get('/api/admin/system-status', async (_req, res) => {
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Cache-Control', 'no_cache_no_store_must_revalidate'.tr);
     try {
       const status = await systemStatusService.getSystemStatus();
       res.status(200).json(status);
     } catch (err) {
-      Logger.error('Erro ao coletar status do sistema', err);
+      Logger.error('error_collecting_system_status'.tr, err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1811,16 +1820,16 @@ function createApp({
     try {
       const { idToken } = req.body || {};
       if (typeof idToken !== 'string' || !idToken.trim()) {
-        return res.status(401).json({ success: false, error: 'Token Firebase obrigatório.' });
+        return res.status(401).json({ success: false, error: 'firebase_token_required'.tr });
       }
       let identity;
       try {
         identity = await verifyGoogleToken(idToken);
       } catch {
-        return res.status(401).json({ success: false, error: 'Sessão Google inválida ou expirada. Entre novamente.' });
+        return res.status(401).json({ success: false, error: 'invalid_or_expired_google_session_please_sign_in_again'.tr });
       }
-      if (!identity.email || identity.email_verified !== true || identity.firebase?.sign_in_provider !== 'google.com') {
-        return res.status(401).json({ success: false, error: 'Use uma conta Google com e-mail verificado.' });
+      if (!identity.email || typeof identity.uid !== 'string' || !identity.uid || identity.uid.length > 128 || identity.email_verified !== true || identity.firebase?.sign_in_provider !== 'google.com') {
+        return res.status(401).json({ success: false, error: 'use_a_google_account_with_a_verified_email'.tr });
       }
       const { email, name, picture, uid } = identity;
 
@@ -1828,17 +1837,17 @@ function createApp({
       const users = await messageService.firestoreRepo.getAllUsers();
       const existingUser = users.find((u) => u.email && u.email.toLowerCase().trim() === normalizedEmail);
 
-      if (existingUser?.active === false) {return res.status(403).json({ error: 'Usuário inativo.' });}
+      if (existingUser?.active === false) {return res.status(403).json({ error: 'inactive_user'.tr });}
 
       // Edmar Júnio ou qualquer usuário previamente cadastrado com perfil ADMIN
       const isSuperAdmin = normalizedEmail === 'edmarjuniob@gmail.com' || (existingUser && existingUser.role === 'ADMIN');
       const role = isSuperAdmin ? 'ADMIN' : (existingUser ? existingUser.role : 'CLIENTE');
 
       const user = {
-        id: existingUser ? existingUser.id : `usr-g-${uid}`,
+        id: existingUser ? existingUser.id : `usr-g-${createHash('sha256').update(String(uid)).digest('hex').slice(0, 40)}`,
         name: name || (existingUser ? existingUser.name : normalizedEmail.split('@')[0]),
         email: normalizedEmail,
-        picture: picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || normalizedEmail)}&background=15803d&color=fff`,
+        picture: picture || '',
         role,
         authProvider: 'GOOGLE',
         firebaseUid: uid,
@@ -1850,7 +1859,7 @@ function createApp({
       await sessions.issue(req, res, user);
       res.status(200).json({ success: true, user: safeUser(user) });
     } catch (err) {
-      Logger.error('Erro na autenticação Google', err);
+      Logger.error('google_authentication_error'.tr, err);
       res.status(500).json({ success: false, error: err.message });
     }
   });
@@ -1866,7 +1875,7 @@ function createApp({
       await sessions.issue(req, res, result.user);
       res.status(200).json(result);
     } catch (err) {
-      Logger.error('Erro no cadastro de usuário', err);
+      Logger.error('user_registration_error'.tr, err);
       res.status(500).json({ success: false, error: err.message });
     }
   });
@@ -1882,7 +1891,7 @@ function createApp({
       await sessions.issue(req, res, result.user);
       res.status(200).json(result);
     } catch (err) {
-      Logger.error('Erro no login de usuário', err);
+      Logger.error('user_login_error'.tr, err);
       res.status(500).json({ success: false, error: err.message });
     }
   });
@@ -1899,7 +1908,7 @@ function createApp({
       }
       res.status(200).json(result);
     } catch (err) {
-      Logger.error('Erro ao atualizar perfil do usuário', err);
+      Logger.error('error_updating_user_profile'.tr, err);
       res.status(500).json({ success: false, error: err.message });
     }
   });
@@ -1915,7 +1924,7 @@ function createApp({
       await sessions.issue(req, res, result.user);
       res.status(200).json(result);
     } catch (err) {
-      Logger.error('Erro no login admin', err);
+      Logger.error('admin_login_error'.tr, err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1924,9 +1933,9 @@ function createApp({
   app.get('/api/admin/auth/users', async (req, res) => {
     try {
       const users = await messageService.firestoreRepo.getAllUsers();
-      res.status(200).json(req.user?.role === 'ADMIN' ? users.map(safeUser) : users.filter(u => u.active !== false && ['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(u.role)).map(u => ({ id: u.id, name: u.name, role: u.role })));
+      res.status(200).json(req.user?.role === 'ADMIN' ? users.map(safeUser) : users.filter(u => u.active !== false && ['ADMIN', "CAIXA", 'VENDEDOR', 'ENTREGADOR'].includes(u.role)).map(u => ({ id: u.id, name: u.name, role: u.role })));
     } catch (err) {
-      Logger.error('Erro ao listar usuários', err);
+      Logger.error('error_listing_users'.tr, err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1938,7 +1947,7 @@ function createApp({
       const saved = await messageService.firestoreRepo.saveUser(userData);
       res.status(200).json({ success: true, user: safeUser(saved) });
     } catch (err) {
-      Logger.error('Erro ao salvar colaborador', err);
+      Logger.error('error_saving_collaborator'.tr, err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1950,7 +1959,7 @@ function createApp({
       const deleted = await messageService.firestoreRepo.deleteUser(id);
       res.status(200).json({ success: deleted });
     } catch (err) {
-      Logger.error('Erro ao excluir colaborador', err);
+      Logger.error('error_deleting_collaborator'.tr, err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1961,7 +1970,7 @@ function createApp({
       const alterations = await messageService.firestoreRepo.getAllOrderAlterations();
       res.status(200).json(alterations);
     } catch (err) {
-      Logger.error('Erro ao buscar alterações', err);
+      Logger.error('error_fetching_changes'.tr, err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1971,7 +1980,7 @@ function createApp({
     try {
       const { orderId, originalOrder, proposedOrder, reason } = req.body;
       if (!orderId || !proposedOrder) {
-        return res.status(400).json({ error: 'Dados da solicitação incompletos.' });
+        return res.status(400).json({ error: 'incomplete_request_data'.tr });
       }
       const requestObj = await messageService.firestoreRepo.createOrderAlterationRequest({
         orderId,
@@ -1983,7 +1992,7 @@ function createApp({
       });
       res.status(200).json({ success: true, request: requestObj });
     } catch (err) {
-      Logger.error('Erro ao criar solicitação de alteração', err);
+      Logger.error('error_creating_change_request'.tr, err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -2001,7 +2010,7 @@ function createApp({
       });
       res.status(200).json(result);
     } catch (err) {
-      Logger.error('Erro ao revisar alteração', err);
+      Logger.error('error_reviewing_change'.tr, err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -2019,16 +2028,16 @@ function createApp({
     try {
       const { action, rejectionReason = '' } = req.body || {};
       if (!['APPROVED', 'REJECTED'].includes(action)) {
-        return res.status(400).json({ error: 'Ação de auditoria inválida.' });
+        return res.status(400).json({ error: 'invalid_audit_action'.tr });
       }
       if (action === 'REJECTED' && !String(rejectionReason).trim()) {
-        return res.status(400).json({ error: 'Informe o motivo da recusa.' });
+        return res.status(400).json({ error: 'please_provide_the_reason_for_refusal'.tr });
       }
 
       const repo = messageService.firestoreRepo;
       const approval = await repo.getDiscountApproval(req.params.id);
-      if (!approval) {return res.status(404).json({ error: 'Solicitação não encontrada.' });}
-      if (approval.status !== 'PENDING') {return res.status(409).json({ error: 'Esta solicitação já foi revisada.' });}
+      if (!approval) {return res.status(404).json({ error: 'request_not_found'.tr });}
+      if (approval.status !== 'PENDING') {return res.status(409).json({ error: 'this_request_has_already_been_reviewed'.tr });}
 
       if (action === 'REJECTED') {
         const reason = String(rejectionReason).trim().slice(0, 500);
@@ -2044,7 +2053,7 @@ function createApp({
             type: 'DISCOUNT_APPROVAL_REJECTED',
             approvalId: approval.id,
             title: 'Desconto recusado pelo administrador',
-            message: `A solicitação de ${approval.discountPercent}% foi recusada. Motivo: ${reason}`,
+            message: `${'the_request_from'.tr} ${approval.discountPercent}% foi recusada. Motivo: ${reason}`,
             reason,
           });
         }
@@ -2061,7 +2070,7 @@ function createApp({
 
       const isPix = approval.paymentMethod === 'PIX';
       if (isPix) {
-        return res.status(409).json({ error: 'Esta solicitação usa o fluxo antigo. Refaça a venda no Caixa para registrar Pix manual com conferência e comprovante.' });
+        return res.status(409).json({ error: 'this_request_uses_the_old_flow_redo_the_sale_at_the_register_to_record_manual_pix_wit'.tr });
       }
       const ticketNumber = String(Math.floor(100 + Math.random() * 900));
       const orderId = randomUUID();
@@ -2079,9 +2088,9 @@ function createApp({
       const receiptText = formatOrderReceipt(order);
       order.receiptText = receiptText;
       await messageService.firestoreRepo.saveOrderReceipt(order.id, receiptText).catch((error) => {
-        Logger.warn('Venda registrada; a cópia persistente do recibo ficou indisponível.', { orderId: order.id, error: error.message });
+        Logger.warn('sale_registered_the_persistent_copy_of_the_receipt_became_unavailable'.tr, { orderId: order.id, error: error.message });
       });
-      let receiptDelivery = { sent: false, reason: 'Envio não solicitado.' };
+      let receiptDelivery = { sent: false, reason: 'shipping_not_requested'.tr };
       const orderWithReceipt = { ...order, receiptText };
       if (isPix) {
         receiptDelivery = await sendCustomerOrderReceipt(
@@ -2090,7 +2099,7 @@ function createApp({
           receiptText,
         );
         if (!receiptDelivery.sent) {
-          Logger.warn('Desconto aprovado; não foi possível enviar o recibo PIX ao cliente.', {
+          Logger.warn('discount_approved_unable_to_send_pix_receipt_to_customer'.tr, {
             orderId: order.id,
             reason: receiptDelivery.reason,
           });
@@ -2110,12 +2119,12 @@ function createApp({
           approvalId: approval.id,
           orderId: order.id,
           title: 'Desconto aprovado pelo administrador',
-          message: `Pedido #${order.ticketNumber} aprovado. Total: R$ ${Number(order.total).toFixed(2).replace('.', ',')}.`,
+          message: `${'order_033893'.tr}${order.ticketNumber} ${'approved_total_r'.tr} ${Number(order.total).toFixed(2).replace('.', ',')}.`,
         });
       }
       res.status(200).json({ success: true, approval: reviewed, order: orderWithReceipt });
     } catch (err) {
-      Logger.error('Erro ao revisar aprovação de desconto', err);
+      Logger.error('error_reviewing_discount_approval'.tr, err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -2127,7 +2136,7 @@ function createApp({
       const notifs = await messageService.firestoreRepo.getUserNotifications(userId);
       res.status(200).json(notifs);
     } catch (err) {
-      Logger.error('Erro ao buscar notificações', err);
+      Logger.error('error_fetching_notifications'.tr, err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -2139,7 +2148,7 @@ function createApp({
       await messageService.firestoreRepo.markNotificationRead(id);
       res.status(200).json({ success: true });
     } catch (err) {
-      Logger.error('Erro ao atualizar notificação', err);
+      Logger.error('error_updating_notification'.tr, err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -2157,7 +2166,7 @@ function createApp({
       });
       res.status(200).json(metrics);
     } catch (err) {
-      Logger.error('Erro ao buscar métricas diárias', err);
+      Logger.error('error_fetching_daily_metrics'.tr, err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -2169,8 +2178,8 @@ function createApp({
       const metrics = await messageService.firestoreRepo.getDailyExecutiveMetrics({ date });
       res.status(200).json(metrics);
     } catch (err) {
-      Logger.error('Erro ao buscar métricas executivas diárias', err);
-      const statusCode = String(err.message || '').startsWith('Data inválida') ? 400 : 500;
+      Logger.error('error_fetching_daily_executive_metrics'.tr, err);
+      const statusCode = String(err.message || '').startsWith('invalid_date'.tr) ? 400 : 500;
       res.status(statusCode).json({ error: err.message });
     }
   });
@@ -2184,36 +2193,36 @@ function createApp({
       });
       res.status(200).json(metrics);
     } catch (err) {
-      Logger.error('Erro ao buscar métricas executivas por período', err);
+      Logger.error('error_fetching_executive_metrics_by_period'.tr, err);
       const statusCode = /período máximo|período inválido|datas válidas/i.test(String(err.message || '')) ? 400 : 503;
-      res.status(statusCode).json({ error: err.message || 'Não foi possível consultar o período.' });
+      res.status(statusCode).json({ error: err.message || 'unable_to_query_the_period'.tr });
     }
   });
 
   // Envio manual do relatório diário para o WhatsApp do Júnior. O endpoint é protegido como ação ADMIN.
   app.post('/api/admin/executive-metrics/send-whatsapp', async (req, res) => {
-    if (req.user?.role !== 'ADMIN') { return res.status(403).json({ error: 'Somente ADMIN pode enviar o relatório.' }); }
+    if (req.user?.role !== 'ADMIN') { return res.status(403).json({ error: 'only_admin_can_send_the_report'.tr }); }
     const ownerPhone = normalizeWhatsAppNumber(process.env.OWNER_WHATSAPP_NUMBER || config.whatsapp?.ownerNumber);
-    if (!ownerPhone) { return res.status(503).json({ error: 'Configure o WhatsApp do Júnior em OWNER_WHATSAPP_NUMBER.' }); }
-    if (!messageService.whatsappClient?.sendTextMessage) { return res.status(503).json({ error: 'Integração oficial do WhatsApp indisponível.' }); }
+    if (!ownerPhone) { return res.status(503).json({ error: 'configure_junior_s_whatsapp_in_owner_whatsapp_number'.tr }); }
+    if (!messageService.whatsappClient?.sendTextMessage) { return res.status(503).json({ error: 'official_whatsapp_integration_unavailable'.tr }); }
 
     try {
       const date = String(req.body?.date || getBusinessDate(new Date()));
-      if (!isValidReportDate(date)) { return res.status(400).json({ error: 'Data inválida. Selecione uma data válida.' }); }
+      if (!isValidReportDate(date)) { return res.status(400).json({ error: 'invalid_date_select_a_valid_date'.tr }); }
       const metrics = await messageService.firestoreRepo.getDailyExecutiveMetrics({ date });
       const messages = formatDailyExecutiveReport(metrics);
       let messagesSent = 0;
       for (const text of messages) {
         const result = await messageService.whatsappClient.sendTextMessage(ownerPhone, text);
         if (result?.mock || !result?.messages?.length) {
-          throw new Error('O WhatsApp não confirmou o envio da mensagem.');
+          throw new Error('whatsapp_did_not_confirm_message_delivery'.tr);
         }
         messagesSent++;
       }
       return res.status(200).json({ success: true, messagesSent, date });
     } catch (error) {
-      Logger.error('Falha ao enviar relatório diário ao WhatsApp do Júnior', error);
-      return res.status(502).json({ error: error.message || 'Não foi possível enviar o relatório.' });
+      Logger.error('failed_to_send_daily_report_to_junior_s_whatsapp'.tr, error);
+      return res.status(502).json({ error: error.message || 'unable_to_send_report'.tr });
     }
   });
 
@@ -2222,7 +2231,7 @@ function createApp({
     try {
       const { date, counted, receiptProofUrl, notes } = req.body || {};
       const closingDate = date || getBusinessDate(new Date());
-      if (!isValidReportDate(closingDate)) { return res.status(400).json({ error: 'Data inválida. Selecione uma data válida.' }); }
+      if (!isValidReportDate(closingDate)) { return res.status(400).json({ error: 'invalid_date_select_a_valid_date'.tr }); }
       const result = await messageService.firestoreRepo.closeCashierDay({
         date: closingDate,
         requestId: req.body.requestId,
@@ -2241,7 +2250,7 @@ function createApp({
       result.whatsappQueued = true;
       res.status(200).json(result);
     } catch (err) {
-      Logger.error('Erro no fechamento do caixa diário', err);
+      Logger.error('error_in_daily_register_closing'.tr, err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -2259,10 +2268,10 @@ function createApp({
   app.use((error, req, res, _next) => {
     if (res.headersSent) return _next(error);
     const status = error.type === 'entity.too.large' ? 413 : error.type === 'entity.parse.failed' ? 400 : Number(error.status) || 500;
-    if (status >= 500) Logger.error('Falha na requisição', error, { requestId: req.requestId });
-    else Logger.warn('Requisição inválida', { requestId: req.requestId, status });
+    if (status >= 500) Logger.error('request_failed'.tr, error, { requestId: req.requestId });
+    else Logger.warn('invalid_request'.tr, { requestId: req.requestId, status });
     res.locals.errorCaptured = true;
-    res.status(status >= 400 && status <= 599 ? status : 500).json({ error: status === 400 ? 'Dados inválidos. Confira o formulário.' : status === 413 ? 'Arquivo ou formulário muito grande.' : 'Não foi possível concluir a operação. Tente novamente.', requestId: req.requestId });
+    res.status(status >= 400 && status <= 599 ? status : 500).json({ error: status === 400 ? 'invalid_data_check_the_form'.tr : status === 413 ? 'file_or_form_too_large'.tr : 'unable_to_complete_the_operation_please_try_again'.tr, requestId: req.requestId });
   });
   return app;
 }

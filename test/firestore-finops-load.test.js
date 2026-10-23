@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 const { mkdirSync, writeFileSync } = require('node:fs');
 const { meteredFirestore } = require('./helpers/metered-firestore');
-const { FirestoreRepository } = require('../src/database/firestore.repository');
+const { FirestoreRepository } = require('./helpers/repository-fixture');
 const { normalizeExistingCheckout } = require('../src/storefront/existing-store');
 const { StorefrontAnalyticsService } = require('../src/services/storefront-analytics.service');
 const { IncomingMessageService } = require('../src/services/incoming-message.service');
@@ -17,6 +17,7 @@ const stats = db => ({ reads: db.metrics.reads, writes: db.metrics.writes, delet
 async function webCheckouts(count, fullScan) {
   const db = meteredFirestore(Object.fromEntries(Array.from({ length: 1000 }, (_, i) => [`products/p${i}`, { id: `p${i}`, name: `Produto ${i}`, price: 10, unit: 'UN', stockQuantity: 10000, status: 'ATIVO' }])));
   const repo = new FirestoreRepository({ firestoreInstance: db, isInMemory: true });
+  if (!db.data.has('store_settings/storefront')) db.data.set('store_settings/storefront', repo.storefrontSettings);
   repo.getAllProducts = async () => (await db.collection('products').get()).docs.map(doc => ({ ...doc.data(), id: doc.id }));
   if (fullScan) repo.getProductsByIds = undefined;
   const started = performance.now();
@@ -40,6 +41,7 @@ test('incremental FinOps load: web checkouts, navigation/search and WhatsApp at 
     assert.equal(after.writes, 0);
     const db = meteredFirestore();
     const repo = new FirestoreRepository({ firestoreInstance: db, isInMemory: true });
+  if (!db.data.has('store_settings/storefront')) db.data.set('store_settings/storefront', repo.storefrontSettings);
     const eventCount = salesPerDay * 5 * 6;
     const legacy = new StorefrontAnalyticsService(repo, { env: {} });
     await batches(eventCount, 50, () => legacy.record({ id: randomUUID(), eventName: 'view_item', productId: 'p0' }));

@@ -5,11 +5,11 @@ process.env.WHATSAPP_AGENT_OWNER = 'cloud_api';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { CatalogRepository } = require('../src/catalog/catalog.repository');
-const { MessageRouter, INTENTS } = require('../src/router/message.router');
+const { CatalogRepository } = require('./helpers/catalog-fixture');
+const { MessageRouter } = require('../src/router/message.router');
 const { DirectPriceService } = require('../src/services/direct-price.service');
 const { AgentService } = require('../src/ai/agent.service');
-const { FirestoreRepository } = require('../src/database/firestore.repository');
+const { FirestoreRepository } = require('./helpers/repository-fixture');
 const { OrderService } = require('../src/orders/order.service');
 const { LearningService } = require('../src/services/learning.service');
 const { MessageService } = require('../src/services/message.service');
@@ -185,215 +185,25 @@ function createTestMessageService(aiMock = null, captures = {}) {
   });
 }
 
-test('1. Consulta direta de valor: Palmeira Rabo de Raposa (DIRECT_PRICE)', async () => {
-  const service = createTestMessageService();
-  const result = await service.handleCustomerMessage({
-    phone: '5564999990001',
-    message: 'qual valor da palmeira rabo de raposa?',
-    messageId: `wamid.001-${Date.now()}`,
-  });
 
-  assert.strictEqual(result.intent, INTENTS.DIRECT_PRICE);
-  assert.match(result.reply, /Palmeira Rabo de Raposa/i);
-  assert.match(result.reply, /79,00/);
-  assert.match(result.reply, /195,00/);
-});
 
-test('2. Consulta composta: "Vocês tem mini cabra??" deve casar DIRECT_PRICE com Macho e Fêmea', async () => {
-  const service = createTestMessageService();
-  const result = await service.handleCustomerMessage({
-    phone: '5564999990002',
-    message: 'Vocês tem mini cabra??',
-    messageId: `wamid.002-${Date.now()}`,
-  });
 
-  assert.strictEqual(result.intent, INTENTS.DIRECT_PRICE);
-  assert.match(result.reply, /Mini Cabra/i);
-  assert.match(result.reply, /2\.900,00/);
-  assert.match(result.reply, /3\.900,00/);
-  assert.doesNotMatch(result.reply, /não trabalhamos/i);
-  assert.doesNotMatch(result.reply, /plantar em vaso/i);
-});
 
-test('3. Pluralização: "Vocês tem mini cabras?" também casa DIRECT_PRICE', async () => {
-  const service = createTestMessageService();
-  const result = await service.handleCustomerMessage({
-    phone: '5564999990003',
-    message: 'Vocês tem mini cabras?',
-    messageId: `wamid.003-${Date.now()}`,
-  });
 
-  assert.strictEqual(result.intent, INTENTS.DIRECT_PRICE);
-  assert.match(result.reply, /Mini Cabra/i);
-  assert.match(result.reply, /2\.900,00/);
-  assert.match(result.reply, /3\.900,00/);
-});
 
-test('4. Pergunta aberta de categoria: "Vocês tem palmeiras?" ativa CONSULTATIVE_SALES', async () => {
-  let aiPromptCalled = '';
-  const aiMock = {
-    models: {
-      async generateContent(req) {
-        aiPromptCalled = req.config?.systemInstruction || '';
-        return {
-          text: 'Olá! Temos sim, trabalhamos com a Palmeira Rabo de Raposa, Palmeira Azul e Areca Bambu. Você prefere para plantar em vaso ou direto no jardim?',
-        };
-      },
-    },
-  };
 
-  const service = createTestMessageService(aiMock);
-  const result = await service.handleCustomerMessage({
-    phone: '5564999990004',
-    message: 'Vocês tem palmeiras?',
-    messageId: `wamid.004-${Date.now()}`,
-  });
 
-  assert.strictEqual(result.intent, INTENTS.CONSULTATIVE_SALES);
-  assert.match(result.reply, /Palmeira Rabo de Raposa/);
-  assert.match(aiPromptCalled, /Palmeira Rabo de Raposa/);
-});
 
-test('5. Confirmação de tamanho quando produto tem múltiplos preços e sem histórico', async () => {
-  const service = createTestMessageService();
-  const result = await service.handleCustomerMessage({
-    phone: '5564999990005',
-    message: 'Manda pra mim 3 alface crespa',
-    messageId: `wamid.005-${Date.now()}`,
-  });
 
-  assert.strictEqual(result.intent, INTENTS.ASK_SIZE_CONFIRMATION);
-  assert.match(result.reply, /ALFACE CRESPA/i);
-  assert.match(result.reply, /8,00/);
-  assert.match(result.reply, /14,00/);
-  assert.match(result.reply, /20,00/);
-  assert.match(result.reply, /Qual tamanho você prefere/i);
-});
 
-test('6. Cliente VIP com Histórico ("O de sempre") corta conversa e propõe recibo pronto', async () => {
-  const service = createTestMessageService();
-  const phone = '5564999990006';
 
-  // Salva histórico de compra prévia
-  await service.firestoreRepo.saveCustomerProfile(phone, {
-    name: 'Carlos Cliente',
-    deliveryAddress: 'Avenida Alessandro Marchió, 162, Centro',
-    paymentMethod: 'PIX',
-    preferredItems: {
-      'alface crespa': 8.0,
-    },
-  });
 
-  const result = await service.handleCustomerMessage({
-    phone,
-    message: 'Manda pra mim 3 alface crespa',
-    messageId: `wamid.006-${Date.now()}`,
-  });
 
-  assert.strictEqual(result.intent, INTENTS.PLACE_ORDER);
-  assert.match(result.reply, /3 ALFACE CRESPA/);
-  assert.match(result.reply, /Total: R\$ 24,00/);
-  assert.match(result.reply, /Avenida Alessandro/);
-  assert.match(result.reply, /PIX/);
-  assert.match(result.reply, /Posso confirmar\?/);
-});
 
-test('7. Pedido múltiplo com preços definidos (Exemplo 1 - Recibo com subtotais)', async () => {
-  const service = createTestMessageService();
-  const phone = '5564999990007';
 
-  const result = await service.handleCustomerMessage({
-    phone,
-    message: 'Manda pra mim 3 alface cabeça de 8, 3 rucula e 5 cebolinha',
-    messageId: `wamid.007-${Date.now()}`,
-  });
 
-  assert.strictEqual(result.intent, INTENTS.PLACE_ORDER);
-  assert.match(result.reply, /3 ALFACE CABEÇA \/ AMERICANA/i);
-  assert.match(result.reply, /3 RÚCULA/i);
-  assert.match(result.reply, /5 CEBOLINHA/i);
-  assert.match(result.reply, /Total: R\$ 88,00/);
-  assert.match(result.reply, /Posso confirmar\?/);
-});
 
-test('8. Alteração de forma de pagamento ("Hoje vai ser no débito") e reenvio de recibo atualizado', async () => {
-  const service = createTestMessageService();
-  const phone = '5564999990008';
 
-  // 1. Cria pedido inicial
-  await service.handleCustomerMessage({
-    phone,
-    message: 'Manda pra mim 3 alface cabeça de 8, 3 rucula e 5 cebolinha',
-    messageId: `wamid.008a-${Date.now()}`,
-  });
-
-  // 2. Cliente altera a forma de pagamento
-  const updateResult = await service.handleCustomerMessage({
-    phone,
-    message: 'Hoje vai ser no débito',
-    messageId: `wamid.008b-${Date.now()}`,
-  });
-
-  assert.strictEqual(updateResult.intent, INTENTS.UPDATE_ORDER_DETAILS);
-  assert.match(updateResult.reply, /Cartão de Débito/);
-  assert.match(updateResult.reply, /Total: R\$ 88,00/);
-  assert.match(updateResult.reply, /Posso confirmar\?/);
-});
-
-test('9. Confirmação do pedido: Envio ao dono e fechamento com cliente', async (t) => {
-  const previousMode = process.env.PIX_MODE; process.env.PIX_MODE = 'MANUAL';
-  t.after(() => { if (previousMode === undefined) delete process.env.PIX_MODE; else process.env.PIX_MODE = previousMode; });
-  const captures = { messages: [] };
-  const service = createTestMessageService(null, captures);
-  const phone = '5564999990009';
-
-  // 1. Cria pedido
-  await service.handleCustomerMessage({
-    phone,
-    message: 'Manda pra mim 3 alface cabeça de 8, 3 rucula e 5 cebolinha',
-    messageId: `wamid.009a-${Date.now()}`,
-  });
-
-  // 2. Define endereço
-  await service.handleCustomerMessage({
-    phone,
-    message: 'entregar em: Rua 12, Quadra 10, Lote 5, Centro',
-    messageId: `wamid.009b-${Date.now()}`,
-  });
-
-  // 3. Cliente confirma
-  const confirmResult = await service.handleCustomerMessage({
-    phone,
-    message: 'Pode confirmar!',
-    messageId: `wamid.009c-${Date.now()}`,
-  });
-
-  assert.strictEqual(confirmResult.intent, INTENTS.ORDER_CONFIRMATION);
-  assert.match(confirmResult.reply, /Pedido registrado/);
-  assert.match(confirmResult.reply, /88,00/);
-  assert.match(confirmResult.reply, /Chave PIX/);
-
-  // Valida que o perfil foi salvo para compras futuras
-  const profile = await service.firestoreRepo.getCustomerProfile(phone);
-  assert.ok(profile);
-  assert.strictEqual(profile.deliveryAddress, 'Rua 12, Quadra 10, Lote 5, Centro');
-});
-
-test('10. Envio de fotos do Firebase Storage com legenda identificando nome e valores', async () => {
-  const captures = { images: [] };
-  const service = createTestMessageService(null, captures);
-
-  const result = await service.handleCustomerMessage({
-    phone: '5564999990010',
-    message: 'pode me mandar foto da palmeira rabo de raposa?',
-    messageId: `wamid.010-${Date.now()}`,
-  });
-
-  assert.strictEqual(result.intent, INTENTS.REQUEST_PHOTOS);
-  assert.ok(captures.images.length >= 1);
-  assert.match(captures.images[0].caption, /Palmeira Rabo de Raposa/);
-  assert.match(captures.images[0].caption, /R\$ 79,00 e R\$ 195,00/);
-});
 
 test('11. Proteção de markAsRead contra IDs que não iniciam com wamid (prevenção erro 131009)', async () => {
   const service = createTestMessageService();

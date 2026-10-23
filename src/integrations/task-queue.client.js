@@ -19,7 +19,7 @@ class TaskQueueClient {
     this.client = null;
     this.queuePath = null;
 
-    if (config.tasks.serviceUrl && process.env.NODE_ENV !== 'test') {
+    if (config.tasks.serviceUrl && process.env.NODE_ENV === 'production') {
       try {
         const tasks = getCloudTasksModule();
         if (tasks && tasks.CloudTasksClient) {

@@ -1,4 +1,4 @@
-const { getMissingProductInformation } = require('./product-information');
+
 const { normalizeText } = require('../shared/string.util');
 
 function firstText(...values) {
@@ -12,7 +12,7 @@ function firstText(...values) {
 }
 
 function getCashierProductDetails(product = {}) {
-  const defaults = getMissingProductInformation(product);
+  const defaults = {};
   const savedDescription = firstText(product.descriptionAi, product.descricao_ia, product.description, product.descricaoProduto);
   const normalizedDescription = normalizeText(savedDescription);
   const isGenericDescription = !savedDescription
@@ -20,7 +20,7 @@ function getCashierProductDetails(product = {}) {
     || normalizedDescription.includes('faz parte da categoria')
     || normalizedDescription.includes('orientacoes abaixo ajudam na escolha');
   const fields = [
-    ['Descrição', isGenericDescription ? defaults.descriptionAi : savedDescription],
+    ['Descrição', isGenericDescription ? '' : savedDescription],
     ['Especificações', firstText(product.specifications, product.especificacoes, product.especificações, product.specs, product.detalhes, defaults.especificacoes)],
     ['Cuidados', firstText(product.cuidados_basicos, product.cuidadosBasicos, product.cuidados, product.careTips, product.dicas_cuidado, product.dicasCuidado, defaults.cuidados_basicos)],
     ['O que gosta', firstText(product.preferences, product.o_que_gosta, product.oQueGosta, product.gosta_de, product.gostaDe, defaults.preferences)],

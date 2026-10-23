@@ -8,7 +8,7 @@ async function verifyFirebaseToken(idToken) {
     projectId: config.firebase.projectId,
     credential: config.gcp.keyFilename ? cert(config.gcp.keyFilename) : applicationDefault(),
   }, 'conflora-auth');
-  return getAuth(app).verifyIdToken(idToken);
+  return getAuth(app).verifyIdToken(idToken, true);
 }
 
 module.exports = { verifyFirebaseToken };

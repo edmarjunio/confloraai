@@ -5,7 +5,7 @@ export function createSearchAutocomplete(state) {
   const container = input.closest('form');
   const list = document.createElement('div');
   list.id = 'searchSuggestions'; list.className = 'search-suggestions'; list.hidden = true;
-  list.setAttribute('role', 'listbox'); list.setAttribute('aria-label', 'Sugestões de busca');
+  list.setAttribute('role', 'listbox'); list.setAttribute('aria-label', 'search_suggestions'.tr);
   container.append(list);
   input.setAttribute('role', 'combobox'); input.setAttribute('aria-autocomplete', 'list');
   input.setAttribute('aria-controls', list.id); input.setAttribute('aria-expanded', 'false');

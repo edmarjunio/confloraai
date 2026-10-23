@@ -1,3 +1,4 @@
+require('../i18n/default');
 const config = require('../config/env');
 
 function renderFirebaseAuthScript() {
@@ -7,7 +8,7 @@ function renderFirebaseAuthScript() {
     try {
       const firebaseConfig = ${publicConfig};
       if (!firebaseConfig.apiKey || !firebaseConfig.authDomain) {
-        throw new Error('Login Google indisponível: configure o Firebase Authentication.');
+        throw new Error('google_login_unavailable_configure_firebase_authentication'.tr);
       }
       const [{ initializeApp }, { getAuth, GoogleAuthProvider, signInWithPopup, signOut, setPersistence, browserSessionPersistence }] = await Promise.all([
         import('https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js'),
@@ -17,7 +18,9 @@ function renderFirebaseAuthScript() {
       await setPersistence(auth, browserSessionPersistence);
       window.signOutGoogle = () => signOut(auth);
       window.authenticateGoogle = async () => {
-        const result = await signInWithPopup(auth, new GoogleAuthProvider());
+        const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: 'select_account' });
+        const result = await signInWithPopup(auth, provider);
         const idToken = await result.user.getIdToken();
         const response = await window.ConfloraSession.apiFetch('/api/auth/google', {
           method: 'POST',
@@ -27,14 +30,14 @@ function renderFirebaseAuthScript() {
         const data = await response.json();
         if (!response.ok || !data.success) {
           await signOut(auth);
-          throw new Error(data.error || 'Não foi possível autenticar sua conta.');
+          throw new Error(data.error || 'could_not_authenticate_your_account'.tr);
         }
         return data;
       };
       buttons.forEach(button => { button.disabled = false; });
     } catch (error) {
       document.querySelectorAll('[data-google-status]').forEach(element => {
-        element.textContent = error.message || 'Não foi possível carregar o login Google. Recarregue a página.';
+        element.textContent = error.message || 'unable_to_load_google_login_reload_the_page'.tr;
       });
     }
   </script>`;

@@ -11,7 +11,7 @@ test("main storefront API returns safe JSON when a service fails", async (t) => 
   const app = express();
   app.use(express.json());
   installExistingStore(app, {
-    repository: { getAllProducts: async () => [], storefrontSettings: {config:{ ...require('../config/stores/conflora.example.json'), assistant: {enabled:true,mode:'AI'} }} },
+    repository: { getAllProducts: async () => [], storefrontSettings: {config:{ ...require('../config/stores/conflora.json'), assistant: {enabled:true,mode:'AI'} }} },
     assistant: {
       recommend: async () => {
         throw new Error("private provider details");
@@ -64,7 +64,7 @@ test("main catalogue uses a thematic photo only when a product has no registered
     category: "Hortifrutti",
   });
   assert.equal(illustrative.imageIsIllustrative, true);
-  assert.match(illustrative.imageUrl, /images\.unsplash\.com/);
+  assert.equal(illustrative.imageUrl, '/store-assets/placeholder.svg');
 
   const registered = toProduct({
     id: "avocado-photo",
@@ -97,6 +97,7 @@ test("untracked stock allows zero-stock sales but never inactive products", asyn
   let enabled = false;
   let status = "ATIVO";
   const repository = {
+    storefrontSettings: new (require('./helpers/repository-fixture').FirestoreRepository)({ isInMemory: true }).storefrontSettings,
     getInventorySettings: async () => ({ stockControlEnabled: enabled }),
     getAllProducts: async () => [{ id: "plant", name: "Planta", price: 6, stockQuantity: 0, status }],
   };
@@ -116,6 +117,7 @@ test("untracked stock allows zero-stock sales but never inactive products", asyn
 
 test("new main checkout uses authoritative legacy prices and rejects excessive combined quantities", async () => {
   const repository = {
+    storefrontSettings: new (require('./helpers/repository-fixture').FirestoreRepository)({ isInMemory: true }).storefrontSettings,
     getInventorySettings: async () => ({ stockControlEnabled: true }),
     getAllProducts: async () => [
       { id: "plant", name: "Manjericão", price: 6, stockQuantity: 3 },

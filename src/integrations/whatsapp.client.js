@@ -13,10 +13,7 @@ class WhatsAppClient {
    * @param {string} text - Corpo da mensagem
    */
   async sendTextMessage(to, text) {
-    if (!this.token || !config.whatsapp.phoneNumberId) {
-      Logger.info(`[WhatsApp Mock Texto] Para: ${to} | Mensagem: ${text}`);
-      return { mock: true, success: true };
-    }
+
 
     const payload = {
       messaging_product: 'whatsapp',
@@ -36,10 +33,7 @@ class WhatsAppClient {
    * @param {string} caption - Legenda com o nome do produto e valores
    */
   async sendImageMessage(to, imageUrl, caption = '') {
-    if (!this.token || !config.whatsapp.phoneNumberId) {
-      Logger.info(`[WhatsApp Mock Imagem] Para: ${to} | Imagem: ${imageUrl} | Legenda: ${caption}`);
-      return { mock: true, success: true };
-    }
+
 
     const payload = {
       messaging_product: 'whatsapp',
@@ -116,10 +110,7 @@ class WhatsAppClient {
    * @param {Array<Object>} [components=[]]
    */
   async sendTemplate(to, templateName, languageCode = 'pt_BR', components = []) {
-    if (!this.token || !config.whatsapp.phoneNumberId) {
-      Logger.info(`[WhatsApp Template Mock] Para: ${to} | Template: ${templateName}`);
-      return { mock: true, success: true };
-    }
+
 
     const payload = {
       messaging_product: 'whatsapp',
@@ -165,10 +156,7 @@ class WhatsAppClient {
    * Envia uma mensagem interativa de lista (opções nativas no WhatsApp)
    */
   async sendInteractiveList(to, { headerText = '', bodyText, footerText = '', buttonText = 'Ver opções', sections }) {
-    if (!this.token || !config.whatsapp.phoneNumberId) {
-      Logger.info(`[WhatsApp Mock Lista] Para: ${to} | Botão: ${buttonText} | Seções: ${sections?.length}`);
-      return { mock: true, success: true };
-    }
+
 
     const interactive = {
       type: 'list',
@@ -208,10 +196,7 @@ class WhatsAppClient {
    * Envia botões interativos rápidos nativos no WhatsApp (até 3 botões)
    */
   async sendInteractiveButtons(to, { bodyText, buttons, headerText = '', footerText = '' }) {
-    if (!this.token || !config.whatsapp.phoneNumberId) {
-      Logger.info(`[WhatsApp Mock Botões] Para: ${to} | Botões: ${buttons?.map((b) => b.title).join(', ')}`);
-      return { mock: true, success: true };
-    }
+
 
     const interactive = {
       type: 'button',
@@ -259,12 +244,12 @@ class WhatsAppClient {
    */
   async markAsRead(messageId) {
     if (!this.token || !config.whatsapp.phoneNumberId || !messageId) {
-      return { mock: true };
+      return { skipped: true, reason: 'not_configured_or_missing_id' };
     }
 
     // Proteção contra erro 131009 da Meta Graph API para IDs de teste local (ex: local-...)
     if (typeof messageId !== 'string' || !messageId.startsWith('wamid.')) {
-      return { mock: true, skippedNonMetaId: true };
+      return { skipped: true, reason: 'invalid_message_id' };
     }
 
     const payload = {
@@ -289,6 +274,9 @@ class WhatsAppClient {
   }
 
   async postRequest(endpoint, body) {
+    if (!this.token || !config.whatsapp.phoneNumberId) {
+      throw Object.assign(new Error('WhatsApp não configurado.'), { status: 503, definitelyNotSent: true });
+    }
     if (body?.to) {
       body.to = this.formatRecipient(body.to);
     }

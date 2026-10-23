@@ -10,7 +10,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createHmac } = require('node:crypto');
 const { createApp } = require('../src/http/app');
-const { FirestoreRepository } = require('../src/database/firestore.repository');
+const { FirestoreRepository } = require('./helpers/repository-fixture');
 const { WhatsAppClient } = require('../src/integrations/whatsapp.client');
 
 test('WhatsApp receives a signed message and rejects forged webhooks without external services', { timeout: 10000 }, async t => {
@@ -209,13 +209,14 @@ test('MessageService handles WhatsApp native flow: Atendente, Montar Sacola, and
   assert.equal(repeatedMenuRes.intent, 'MAIN_MENU_SENT');
 
   // 1. O botão de atendente conversa com o agente virtual, sem abrir handoff humano.
+  await service.handleCustomerMessage({ phone: '5564999990001', message: 'Oi' });
   const atendenteRes = await service.handleCustomerMessage({
     phone: '5564999990001',
     message: '',
     interactiveId: 'btn_atendente',
   });
   assert.equal(atendenteRes.intent, 'AGENT_ASSISTANCE');
-  assert.equal(atendenteRes.reply, 'Qual produto você procura?');
+  assert.equal(atendenteRes.reply, 'Certo! Pode me dizer quais produtos você procura ou como posso te ajudar?');
   assert.equal(sentTexts.at(-1)[0], '5564999990001');
 
   // Conversas antigas pausadas por pedido de atendente voltam ao agente no próximo contato.
@@ -226,6 +227,7 @@ test('MessageService handles WhatsApp native flow: Atendente, Montar Sacola, and
   assert.equal((await conversationAutomation(firestoreRepo, '5564999990003')).automation, 'active');
 
   // 2. Montar Sacola
+  await service.handleCustomerMessage({ phone: '5564999990000', message: 'Oi' });
   const sacolaRes = await service.handleCustomerMessage({
     phone: '5564999990000',
     message: 'Montar Sacola',

@@ -39,7 +39,7 @@
         '</div></header>';
       this.header = this.querySelector('header');
       this.input = this.querySelector('input');
-      this.input.placeholder = this.getAttribute('search-placeholder') || 'O que você procura?';
+      this.input.placeholder = this.getAttribute('search-placeholder') || 'header_search_placeholder'.tr;
       this.input.value = this.getAttribute('search-value') || '';
       this.querySelector('form').onsubmit = event => {
         event.preventDefault();
@@ -112,13 +112,13 @@
       this.identityUser = user;
       const role = user.role || '';
       const identity = this.querySelector('.cf-topbar-identity');
-      identity.querySelector('strong').textContent = user.name || trSafe('Entrar');
+      identity.querySelector('strong').textContent = user.name || trSafe('header_login'.tr);
       identity.querySelector('small').textContent = role;
-      identity.title = user.name || trSafe('Sua conta');
+      identity.title = user.name || trSafe('your_account'.tr);
       const photo = identity.querySelector('img'); photo.hidden = !user.picture;
       if (user.picture) photo.src = user.picture;
       const guide = this.querySelector('.cf-topbar-guide');
-      const isTeam = ['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(role);
+      const isTeam = ['ADMIN', "CAIXA", 'VENDEDOR', 'ENTREGADOR'].includes(role);
       if (guide) {
         guide.hidden = !isTeam;
         if (isTeam) {
@@ -130,18 +130,18 @@
           };
           guide.href = guideMap[role] || '/guias/index.html';
           guide.title = `Guia Operacional - ${role}`;
-          guide.setAttribute('aria-label', `Guia Operacional de ${role}`);
+          guide.setAttribute('aria-label', `${'operational_guide_of'.tr} ${role}`);
         }
       }
       const cashier = this.querySelector('.cf-topbar-cashier');
       cashier.querySelector('svg').outerHTML = icon(role === 'ENTREGADOR' ? 'truck' : 'cashier');
-      cashier.hidden = this.hasAttribute('hide-cashier') || !['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(role);
-      cashier.querySelector('span').textContent = trSafe(role === 'ENTREGADOR' ? 'ENTREGAS' : 'CAIXA');
-      cashier.setAttribute('aria-label', trSafe(role === 'ENTREGADOR' ? 'Minhas entregas' : 'Caixa'));
+      cashier.hidden = this.hasAttribute('hide-cashier') || !['ADMIN', "CAIXA", 'VENDEDOR', 'ENTREGADOR'].includes(role);
+      cashier.querySelector('span').textContent = trSafe(role === 'ENTREGADOR' ? 'deliveries'.tr : "CAIXA");
+      cashier.setAttribute('aria-label', trSafe(role === 'ENTREGADOR' ? 'header_my_deliveries'.tr : 'checkout'.tr));
       const primary = this.querySelector('[data-primary]');
       primary.href = role === 'ADMIN' ? '/admin-gerencial' : '/?sacola=1';
-      const label = role === 'ADMIN' ? (trSafe('Painel Gerencial') || 'Painel Gerencial') : (trSafe('Sacola') || 'Sacola');
-      primary.innerHTML = icon(role === 'ADMIN' ? 'chart' : 'cart') + '<span>' + (label && label !== 'undefined' ? label : (role === 'ADMIN' ? 'Painel Gerencial' : 'Sacola')) + '</span>';
+      const label = role === 'ADMIN' ? (trSafe('manager_dashboard'.tr) || 'manager_dashboard'.tr) : (trSafe('header_cart'.tr) || 'header_cart'.tr);
+      primary.innerHTML = icon(role === 'ADMIN' ? 'chart' : 'cart') + '<span>' + (label && label !== 'undefined' ? label : (role === 'ADMIN' ? 'manager_dashboard'.tr : 'header_cart'.tr)) + '</span>';
 
     }
   }

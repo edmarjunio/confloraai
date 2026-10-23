@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { writeFileSync } = require('node:fs');
 const { meteredFirestore } = require('./helpers/metered-firestore');
-const { FirestoreRepository } = require('../src/database/firestore.repository');
+const { FirestoreRepository } = require('./helpers/repository-fixture');
 const { PdvRepository } = require('../src/orders/pdv.repository');
 
 test('shared commercial core: 100/500/1000 sales, 20 concurrent requests, replay and payment', async () => {

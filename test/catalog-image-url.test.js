@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { CatalogRepository } = require('../src/catalog/catalog.repository');
+const { CatalogRepository } = require('./helpers/catalog-fixture');
 
 test('catalog accepts Firebase Storage images and ignores external image sources', () => {
   const repository = new CatalogRepository({

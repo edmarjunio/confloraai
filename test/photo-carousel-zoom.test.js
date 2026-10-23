@@ -2,7 +2,7 @@ process.env.NODE_ENV = 'test';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const sharp = require('sharp');
-const { FirestoreRepository } = require('../src/database/firestore.repository');
+const { FirestoreRepository } = require('./helpers/repository-fixture');
 const {
   buildMultipleOptimizedFirestorePhotoDocuments,
 } = require('../src/catalog/product-photo.service');

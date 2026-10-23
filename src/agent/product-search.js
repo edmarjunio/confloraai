@@ -34,7 +34,7 @@ function categoryKey(value) {
  * Expira em `ttlMs`; se a atualização falhar, não há fallback para um índice vencido.
  */
 class ProductIndex {
-  constructor({ source, now = () => Date.now(), ttlMs = 5 * 60_000, minRefreshGapMs = 15_000, maxEntries = 20_000 }) {
+  constructor({ source, now = () => Date.now(), ttlMs = 0, minRefreshGapMs = 0, maxEntries = 20_000 }) {
     this.source = source;
     this.now = now;
     this.ttlMs = ttlMs;

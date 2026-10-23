@@ -4236,16 +4236,52 @@ body {
   margin: 0 auto !important;
   padding: 1px 4px !important;
   border-radius: 8px !important;
-  background: #ffffff !important;
+  background: transparent !important;
 }
 
 .cart-drawer .choices label.is-choice-pix .cart-pix-official-logo,
 #checkoutForm .choices label.is-choice-pix .cart-pix-official-logo {
+  mix-blend-mode: multiply;
   display: block !important;
   width: 96px !important;
   max-width: 100% !important;
   height: 34px !important;
   object-fit: contain !important;
+  mix-blend-mode: multiply;
+}
+
+/* Destaque Pix: verde claro e sombra com os tons da marca. */
+.cart-drawer .choices label.is-choice-pix,
+#checkoutForm .choices label.is-choice-pix {
+  background: #ffffff !important;
+  border-color: #bbf7d0 !important;
+  box-shadow: 0 4px 0 #86efac, 0 3px 8px rgba(20, 83, 45, 0.08) !important;
+}
+
+.cart-drawer .choices label.is-choice-pix:has(input:checked),
+#checkoutForm .choices label.is-choice-pix:has(input:checked) {
+  background: rgba(47, 184, 166, 0.28) !important;
+  color: #075c54 !important;
+  border-color: #2fb8a6 !important;
+  box-shadow: 0 4px 0 #16877d, 0 8px 20px rgba(47, 184, 166, 0.36), 0 0 0 4px rgba(47, 184, 166, 0.16) !important;
+}
+
+.cart-drawer .choices label.is-choice-pix:has(input:checked) .cart-pix-official-logo,
+#checkoutForm .choices label.is-choice-pix:has(input:checked) .cart-pix-official-logo {
+  animation: pix-icon-pulse 1.8s ease-in-out infinite;
+  transform-origin: center;
+}
+
+@keyframes pix-icon-pulse {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 1px rgba(47, 184, 166, 0.2)); }
+  50% { transform: scale(1.06); filter: drop-shadow(0 0 5px rgba(47, 184, 166, 0.55)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cart-drawer .choices label.is-choice-pix:has(input:checked) .cart-pix-official-logo,
+  #checkoutForm .choices label.is-choice-pix:has(input:checked) .cart-pix-official-logo {
+    animation: none;
+  }
 }
 
 .cart-drawer #pixBox {

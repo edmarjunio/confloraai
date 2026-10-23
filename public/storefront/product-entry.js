@@ -15,7 +15,7 @@ export function createProductEntry(state, onSaved) {
       element("button", {
         type: "button",
         class: `pe-tab-btn ${currentTab === "product" ? "active" : ""}`,
-        text: editingProduct ? "✏️ Editar Produto" : "+ Novo Produto",
+        text: editingProduct ? 'edit_product_4c6c90'.tr : 'new_product_657bcd'.tr,
         onclick: () => {
           currentTab = "product";
           render();
@@ -24,7 +24,7 @@ export function createProductEntry(state, onSaved) {
       element("button", {
         type: "button",
         class: `pe-tab-btn ${currentTab === "stock" ? "active" : ""}`,
-        text: "⚡ Entrada Rápida de Estoque",
+        text: 'quick_stock_entry'.tr,
         onclick: () => {
           currentTab = "stock";
           render();
@@ -65,12 +65,12 @@ export function createProductEntry(state, onSaved) {
       type: "text",
       name: "name",
       required: "",
-      placeholder: "Ex: Ração Golden 15kg, Vaso Cerâmica, Camiseta Polo...",
+      placeholder: 'ex_golden_dog_food_15kg_ceramic_vase_polo_shirt'.tr,
       value: editingProduct?.name || "",
     });
     form.append(
       element("label", { class: "pe-label" }, [
-        element("span", { text: "Nome do Produto *" }),
+        element("span", { text: 'product_name'.tr }),
         nameInput,
       ]),
     );
@@ -80,24 +80,24 @@ export function createProductEntry(state, onSaved) {
       type: "text",
       name: "category",
       list: "categorySuggestions",
-      placeholder: "Selecione ou digite nova categoria",
+      placeholder: 'select_or_type_new_category'.tr,
       value: editingProduct?.categoryName || editingProduct?.category || "",
     });
     const subcatInput = element("input", {
       type: "text",
       name: "subcategory",
-      placeholder: "Subcategoria (opcional)",
+      placeholder: 'product_entry_subcategory'.tr,
       value: editingProduct?.subcategoryName || editingProduct?.subcategory || "",
     });
 
     form.append(
       element("div", { class: "pe-row" }, [
         element("label", { class: "pe-label" }, [
-          element("span", { text: "Categoria *" }),
+          element("span", { text: 'category'.tr }),
           catInput,
         ]),
         element("label", { class: "pe-label" }, [
-          element("span", { text: "Subcategoria" }),
+          element("span", { text: 'subcategory'.tr }),
           subcatInput,
         ]),
       ]),
@@ -125,13 +125,13 @@ export function createProductEntry(state, onSaved) {
       value: String(stockVal),
     });
     const unitSelect = element("select", { name: "unit" }, [
-      element("option", { value: "UN", text: "UN (Unidade)" }),
-      element("option", { value: "KG", text: "KG (Quilo)" }),
-      element("option", { value: "L", text: "L (Litro)" }),
-      element("option", { value: "PCT", text: "PCT (Pacote)" }),
-      element("option", { value: "CX", text: "CX (Caixa)" }),
-      element("option", { value: "M", text: "M (Metro)" }),
-      element("option", { value: "FD", text: "FD (Fardo)" }),
+      element("option", { value: "UN", text: 'un_unit'.tr }),
+      element("option", { value: "KG", text: 'kg_kilogram'.tr }),
+      element("option", { value: "L", text: 'l_liter'.tr }),
+      element("option", { value: "PCT", text: 'pkg_package'.tr }),
+      element("option", { value: "CX", text: 'box_box'.tr }),
+      element("option", { value: "M", text: 'm_meter'.tr }),
+      element("option", { value: "FD", text: 'bale_bale'.tr }),
     ]);
     if (editingProduct?.saleUnit?.code || editingProduct?.unit) {
       unitSelect.value = editingProduct.saleUnit?.code || editingProduct.unit;
@@ -140,15 +140,15 @@ export function createProductEntry(state, onSaved) {
     form.append(
       element("div", { class: "pe-row pe-row-3" }, [
         element("label", { class: "pe-label" }, [
-          element("span", { text: "Preço de Venda (R$) *" }),
+          element("span", { text: 'selling_price'.tr }),
           priceInput,
         ]),
         element("label", { class: "pe-label" }, [
-          element("span", { text: "Estoque Inicial" }),
+          element("span", { text: 'initial_stock'.tr }),
           stockInput,
         ]),
         element("label", { class: "pe-label" }, [
-          element("span", { text: "Unidade" }),
+          element("span", { text: 'unit_208f2c'.tr }),
           unitSelect,
         ]),
       ]),
@@ -156,15 +156,15 @@ export function createProductEntry(state, onSaved) {
 
     // Status selector
     const statusSelect = element("select", { name: "status" }, [
-      element("option", { value: "ATIVO", text: "🟢 ATIVO (Visível e liberado para venda)" }),
-      element("option", { value: "INATIVO", text: "🔴 INATIVO (Oculto / Bloqueado para venda)" }),
+      element("option", { value: "ATIVO", text: 'active_visible_and_available_for_sale'.tr }),
+      element("option", { value: "INATIVO", text: 'inactive_hidden_blocked_for_sale'.tr }),
     ]);
     if (editingProduct?.status) {
       statusSelect.value = editingProduct.status;
     }
     form.append(
       element("label", { class: "pe-label" }, [
-        element("span", { text: "Status do Produto" }),
+        element("span", { text: 'product_status'.tr }),
         statusSelect,
       ]),
     );
@@ -179,7 +179,7 @@ export function createProductEntry(state, onSaved) {
     const previewImg = element("img", {
       class: "pe-preview-img",
       src: editingProduct?.imageUrl || "/store-assets/placeholder.svg",
-      alt: "Prévia da foto",
+      alt: 'photo_preview'.tr,
     });
     imageInput.addEventListener("input", () => {
       previewImg.src = imageInput.value.trim() || "/store-assets/placeholder.svg";
@@ -187,7 +187,7 @@ export function createProductEntry(state, onSaved) {
 
     form.append(
       element("label", { class: "pe-label" }, [
-        element("span", { text: "Foto do Produto (URL)" }),
+        element("span", { text: 'product_photo_url'.tr }),
         element("div", { class: "pe-img-row" }, [imageInput, previewImg]),
       ]),
     );
@@ -196,12 +196,12 @@ export function createProductEntry(state, onSaved) {
     const descTextarea = element("textarea", {
       name: "description",
       rows: "2",
-      placeholder: "Breve descrição ou características do item...",
+      placeholder: 'brief_description_or_item_features'.tr,
       value: editingProduct?.description || "",
     });
     form.append(
       element("label", { class: "pe-label" }, [
-        element("span", { text: "Descrição" }),
+        element("span", { text: 'description'.tr }),
         descTextarea,
       ]),
     );
@@ -213,12 +213,12 @@ export function createProductEntry(state, onSaved) {
     const tagsInput = element("input", {
       type: "text",
       name: "tags",
-      placeholder: "palavras-chave separadas por vírgula (ex: premium, promoção)",
+      placeholder: 'keywords_separated_by_comma_e_g_premium_sale'.tr,
       value: tagsVal,
     });
     form.append(
       element("label", { class: "pe-label" }, [
-        element("span", { text: "Tags de busca" }),
+        element("span", { text: 'search_tags'.tr }),
         tagsInput,
       ]),
     );
@@ -227,7 +227,7 @@ export function createProductEntry(state, onSaved) {
     const submitBtn = element("button", {
       type: "submit",
       class: "primary pe-submit-btn",
-      text: editingProduct ? "💾 Salvar Alterações" : "✅ Cadastrar Produto",
+      text: editingProduct ? 'save_changes'.tr : 'register_product_127061'.tr,
     });
 
     const buttonsRow = element("div", { class: "pe-actions-row" }, [submitBtn]);
@@ -238,8 +238,8 @@ export function createProductEntry(state, onSaved) {
         class: "quiet pe-toggle-btn",
         text:
           editingProduct.status === "INATIVO"
-            ? "🟢 Reativar Produto"
-            : "🔴 Desativar Produto",
+            ? 'reactivate_product'.tr
+            : 'deactivate_product'.tr,
         onclick: async () => {
           try {
             toggleStatusBtn.disabled = true;
@@ -249,7 +249,7 @@ export function createProductEntry(state, onSaved) {
               method: "PUT",
               body: { status: target },
             });
-            notify(`Produto alterado para ${target}!`);
+            notify(`${'product_changed_to'.tr} ${target}!`);
             dialog.close();
             if (onSaved) {await onSaved();}
           } catch (err) {
@@ -267,7 +267,7 @@ export function createProductEntry(state, onSaved) {
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       submitBtn.disabled = true;
-      submitBtn.textContent = "Salvando...";
+      submitBtn.textContent = 'product_entry_saving'.tr;
 
       try {
         const payload = {
@@ -292,7 +292,7 @@ export function createProductEntry(state, onSaved) {
           body: payload,
         });
 
-        notify("Produto salvo com sucesso no catálogo!");
+        notify('product_successfully_saved_to_catalog'.tr);
         dialog.close();
         if (onSaved) {await onSaved();}
       } catch (err) {
@@ -300,8 +300,8 @@ export function createProductEntry(state, onSaved) {
       } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = editingProduct
-          ? "💾 Salvar Alterações"
-          : "✅ Cadastrar Produto";
+          ? 'save_changes'.tr
+          : 'register_product_127061'.tr;
       }
     });
 
@@ -335,7 +335,7 @@ export function createProductEntry(state, onSaved) {
 
     form.append(
       element("label", { class: "pe-label" }, [
-        element("span", { text: "Produto para entrada *" }),
+        element("span", { text: 'product_for_stock_entry'.tr }),
         prodSelect,
       ]),
     );
@@ -346,7 +346,7 @@ export function createProductEntry(state, onSaved) {
       min: "1",
       step: "1",
       required: "",
-      placeholder: "Ex: 10, 50, 100",
+      placeholder: 'ex_10_50_100'.tr,
       value: "10",
     });
 
@@ -366,7 +366,7 @@ export function createProductEntry(state, onSaved) {
 
     form.append(
       element("label", { class: "pe-label" }, [
-        element("span", { text: "Quantidade a Adicionar ao Estoque *" }),
+        element("span", { text: 'quantity_to_add_to_stock'.tr }),
         qtyInput,
         presets,
       ]),
@@ -375,7 +375,7 @@ export function createProductEntry(state, onSaved) {
     const submitBtn = element("button", {
       type: "submit",
       class: "primary pe-submit-btn",
-      text: "⚡ Confirmar Entrada de Estoque",
+      text: 'confirm_stock_entry'.tr,
     });
 
     form.append(submitBtn);
@@ -383,17 +383,17 @@ export function createProductEntry(state, onSaved) {
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       if (!prodSelect.value) {
-        notify("Selecione um produto.");
+        notify('select_a_product'.tr);
         return;
       }
       const qty = parseFloat(qtyInput.value) || 0;
       if (qty <= 0) {
-        notify("Informe uma quantidade válida.");
+        notify('enter_a_valid_quantity'.tr);
         return;
       }
 
       submitBtn.disabled = true;
-      submitBtn.textContent = "Atualizando estoque...";
+      submitBtn.textContent = 'updating_stock'.tr;
 
       try {
         await state.api("/stock/quick-entry", {
@@ -404,14 +404,14 @@ export function createProductEntry(state, onSaved) {
           },
         });
 
-        notify(`Entrada de +${qty} unidades realizada com sucesso!`);
+        notify(`${'entry_of'.tr}${qty} ${'units_successfully_completed'.tr}`);
         dialog.close();
         if (onSaved) {await onSaved();}
       } catch (err) {
         notify("Erro ao dar entrada no estoque: " + err.message);
       } finally {
         submitBtn.disabled = false;
-        submitBtn.textContent = "⚡ Confirmar Entrada de Estoque";
+        submitBtn.textContent = 'confirm_stock_entry'.tr;
       }
     });
 

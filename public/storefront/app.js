@@ -20,9 +20,9 @@ import {
   onLanguageChange,
 } from "./i18n/index.js";
 import { appStore } from "./store/index.js";
-import { storeQueries, queryClient } from "./query/tanstackQuery.js";
+import { queryClient } from "./query/tanstackQuery.js";
 import { renderOrderReceipt } from "./receipt.js";
-import { createPublicCache, PUBLIC_FRESH_TIME } from "./public-cache.mjs";
+import { clearLegacyBusinessStorage } from "./storage-cleanup.js";
 import { startPerformanceMonitor } from "./performance.mjs";
 import { createPurchaseInsights } from "./purchase-insights.mjs";
 import { createOrderFeedback } from "./order-feedback.js";
@@ -34,14 +34,8 @@ const slug = existingStore
   ? "conflora"
   : decodeURIComponent(location.pathname.split("/")[2]);
 const basePath = existingStore ? "" : `/shop/${slug}`;
-try {
-  localStorage.removeItem("conflora:public-catalog:v1:main:conflora");
-  localStorage.removeItem("conflora:public-catalog:v1:tenant:conflora");
-  localStorage.removeItem("conflora:public-catalog:v1:main:conflora:v3");
-  localStorage.removeItem("conflora_catalog_cache");
-  localStorage.removeItem("conflora_catalog_cache_v2");
-} catch {}
-const publicCache = createPublicCache(existingStore ? "main:conflora:v4" : `tenant:${slug}:v4`);
+clearLegacyBusinessStorage();
+const PUBLIC_FRESH_TIME = 15000;
 
 const state = {
   existingStore,
@@ -57,7 +51,6 @@ const transport = state.api;
 state.api = async (path, options = {}) => {
   const result = await transport(path, options);
   if (options.method && !['GET', 'HEAD'].includes(options.method) && /(?:products|stock|orders|config|inventory)/.test(path)) {
-    publicCache.invalidate();
     catalogRevision++;
     queryClient.invalidateQueries({ queryKey: ['catalog', slug] });
     // Keep the receipt/checkout in place; refresh the public display in the background.
@@ -138,7 +131,7 @@ if (existingStore) {
     client_id: analyticsVisitorId,
     page_location: location.origin + "/",
     page_referrer: "",
-    page_title: "Catálogo Conflora",
+    page_title: 'conflora_catalog'.tr,
     campaign_source: /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(analyticsCampaign.get("utm_source") || "") && !/\d{7}/.test(analyticsCampaign.get("utm_source")) ? analyticsCampaign.get("utm_source") : "",
     campaign_medium: /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(analyticsCampaign.get("utm_medium") || "") && !/\d{7}/.test(analyticsCampaign.get("utm_medium")) ? analyticsCampaign.get("utm_medium") : "",
     campaign_name: /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(analyticsCampaign.get("utm_campaign") || "") && !/\d{7}/.test(analyticsCampaign.get("utm_campaign")) ? analyticsCampaign.get("utm_campaign") : "",
@@ -191,14 +184,14 @@ function updateHeaderActions() {
   cashierShortcut.hidden = !allowedCashierRoles.includes(role);
   const deliveryRole = role === 'ENTREGADOR';
   cashierShortcut.querySelector('span:first-child').replaceChildren(icon(deliveryRole ? 'truck' : 'register'));
-  cashierShortcut.querySelector('span:last-child').textContent = (deliveryRole ? 'ENTREGAS' : 'CAIXA').tr;
-  cashierShortcut.setAttribute('aria-label', (deliveryRole ? 'Minhas entregas' : 'Caixa').tr);
-  cashierShortcut.title = (deliveryRole ? 'Minhas entregas' : 'Caixa').tr;
+  cashierShortcut.querySelector('span:last-child').textContent = (deliveryRole ? 'deliveries'.tr : "CAIXA").tr;
+  cashierShortcut.setAttribute('aria-label', (deliveryRole ? 'header_my_deliveries'.tr : 'checkout'.tr).tr);
+  cashierShortcut.title = (deliveryRole ? 'header_my_deliveries'.tr : 'checkout'.tr).tr;
 
   const guideText = guideShortcut?.querySelector('span:last-child');
-  if (guideText) guideText.textContent = 'GUIA'.tr;
+  if (guideText) guideText.textContent = 'header_guide'.tr;
   const custAccountText = $("#customerAccountShortcut")?.querySelector('span:last-child');
-  if (custAccountText) custAccountText.textContent = 'MINHA CONTA'.tr;
+  if (custAccountText) custAccountText.textContent = 'header_my_account'.tr;
   if (guideShortcut) {
     const isTeamMember = isLoggedIn && allowedCashierRoles.includes(role);
     guideShortcut.hidden = !isTeamMember;
@@ -212,17 +205,17 @@ function updateHeaderActions() {
       const targetGuide = guideMap[role] || '/guias/index.html';
       guideShortcut.href = targetGuide;
       guideShortcut.title = `Guia Operacional - ${role}`;
-      guideShortcut.setAttribute('aria-label', `Guia Operacional de ${role}`);
+      guideShortcut.setAttribute('aria-label', `${'operational_guide_of'.tr} ${role}`);
     }
   }
 
   if (isLoggedIn) {
     $("#headerAccountName").textContent =
-      state.user.name || state.user.email || "Usuário";
+      state.user.name || state.user.email || 'user'.tr;
     $("#headerAccountRole").textContent = role;
     identity.setAttribute(
       "aria-label",
-      `Abrir conta de ${state.user.name || "usuário"} (${role})`,
+      `${'open_account_of'.tr} ${state.user.name || 'user_c41973'.tr} (${role})`,
     );
   }
 }
@@ -282,7 +275,7 @@ async function route() {
   $("#catalogView").hidden = isAdmin || isProduct;
   $("#productView").hidden = !isProduct;
   $("#adminView").hidden = !isAdmin;
-  document.title = state.config.identity?.name || "Loja";
+  document.title = state.config.identity?.name || 'store'.tr;
   try {
     if (isAdmin) {
       admin ||= import("./admin.js").then(({ createAdmin }) => createAdmin(state));
@@ -341,7 +334,7 @@ function applyConfig() {
     }
   }
 
-  $("#storeName").textContent = config.identity?.name || "Loja";
+  $("#storeName").textContent = config.identity?.name || 'store'.tr;
   $("#subtitle").textContent = config.identity?.subtitle || "";
   $("#region").textContent = [config.identity?.city, config.identity?.region]
     .filter(Boolean)
@@ -362,7 +355,7 @@ function applyConfig() {
     $("#brand").classList.remove("has-logo");
   };
   logo.src = logoUrl;
-  logo.alt = existingStore ? "Conflora Horta e Viveiro" : config.identity?.name || "";
+  logo.alt = existingStore ? 'conflora_garden_nursery'.tr : config.identity?.name || "";
   $("#storeIcon").href = config.branding?.iconUrl || "data:,";
   $("#brand").href = basePath || "/";
 
@@ -372,32 +365,31 @@ function applyConfig() {
 }
 
 state.applyConfig = applyConfig;
-state.persistPublicSnapshot = () => publicCache.write(state);
+
 state.refreshCatalog = () => catalog?.render();
 state.reloadProducts = async () => {
   queryClient.invalidateQueries({ queryKey: ["catalog"] });
-  publicCache.invalidate();
   return refreshPublicCatalog();
 };
 
 function editOwnProfile() {
   if (!state.user || !existingStore) return;
-  $('#accountTitle').textContent = 'Editar meu perfil';
-  $('#accountSubtitle').textContent = 'Atualize seus dados pessoais. O e-mail continua vinculado ao seu login.';
+  $('#accountTitle').textContent = 'edit_my_profile'.tr;
+  $('#accountSubtitle').textContent = 'update_your_personal_details_your_email_remains_linked_to_your_login'.tr;
   const form = element('form', { class: 'account-profile-form' });
-  for (const [name, label, type] of [['name', 'Nome completo', 'text'], ['phone', 'WhatsApp com DDD', 'tel'], ['address', 'Endereço', 'text']]) {
+  for (const [name, label, type] of [['name', 'full_name'.tr, 'text'], ['phone', 'whatsapp_with_area_code'.tr, 'tel'], ['address', 'address'.tr, 'text']]) {
     const input = element('input', { name, type, value: state.user[name] || '', ...(name === 'name' ? { required: '', maxlength: '120' } : {}) });
     form.append(element('label', { text: label }, [input]));
   }
   const status = element('p', { role: 'status' });
-  const save = element('button', { type: 'submit', class: 'cf-button', text: 'Salvar meu perfil' });
+  const save = element('button', { type: 'submit', class: 'cf-button', text: 'save_my_profile'.tr });
   form.append(status, save);
   form.onsubmit = async event => {
     event.preventDefault(); save.disabled = true; status.textContent = '';
     try {
       const data = await state.api('/auth/profile', { method: 'PATCH', body: Object.fromEntries(new FormData(form)) });
       state.user = data.user; appStore.getState().setUser(data.user); updateHeaderActions();
-      status.className = ''; status.textContent = 'Perfil atualizado.';
+      status.className = ''; status.textContent = 'profile_updated'.tr;
     } catch (error) { status.className = 'cf-error-banner'; status.textContent = error.message; }
     finally { save.disabled = false; }
   };
@@ -409,20 +401,20 @@ async function account() {
   content.replaceChildren();
   $("#googleAccount").hidden = !existingStore || !!state.user;
   if (state.user) {
-    $("#accountTitle").textContent = "Sua conta";
-    $("#accountSubtitle").textContent = "Escolha o que você precisa fazer agora.";
+    $("#accountTitle").textContent = 'your_account'.tr;
+    $("#accountSubtitle").textContent = 'choose_what_you_need_to_do_now'.tr;
     content.className = "account-content account-signed-in";
-    const name = state.user.name || state.user.email || "Cliente Conflora";
+    const name = state.user.name || state.user.email || 'conflora_customer'.tr;
     const role = String(state.user.role || "CLIENTE").toUpperCase();
     const initials = name.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
     const avatar = element("div", { class: "account-avatar", "aria-hidden": "true" }, [element("span", { text: initials })]);
     if (/^https:\/\//i.test(state.user.picture || '')) {
-      const photo = element("img", { src: state.user.picture, alt: "", referrerpolicy: "no-referrer" });
+      const photo = element("img", { src: state.user.picture, alt: "", referrerpolicy: 'no_referrer'.tr });
       photo.onerror = () => photo.remove(); avatar.append(photo);
     }
     content.append(element("section", { class: "account-profile" }, [avatar,
       element("div", { class: "account-profile-copy" }, [
-        element("span", { class: "account-profile-eyebrow", text: "VOCÊ ESTÁ CONECTADO" }),
+        element("span", { class: "account-profile-eyebrow", text: 'you_are_logged_in'.tr }),
         element("strong", { class: "account-greeting", text: name }),
         ...(state.user.email ? [element("span", { class: "account-email", text: state.user.email })] : []),
         element("span", { class: "account-role", text: role }),
@@ -438,15 +430,15 @@ async function account() {
       actions.append(button);
     };
     const openCashier = () => { $("#accountDialog").close(); location.assign("/caixa"); };
-    if (existingStore && role === 'ENTREGADOR') addShortcut("Minhas entregas", "Aceite pedidos, abra a rota e confirme a entrega.", "truck", openCashier, true);
-    else if (existingStore && ['ADMIN', 'CAIXA', 'VENDEDOR'].includes(role)) addShortcut(role === 'VENDEDOR' ? "Criar comanda" : "Ir para o caixa", "Acesse os produtos, comandas e atendimentos.", "register", openCashier, true);
-    if (existingStore) addShortcut("Minha conta: saldo e histórico", "Consulte suas compras, pagamentos e saldo.", "history", () => { $("#accountDialog").close(); openPurchaseHistory(); }, role === 'CLIENTE');
-    if (role === 'ADMIN' || (existingStore && role === 'CAIXA')) addShortcut(role === 'ADMIN' ? "Painel administrativo" : "Painel de vendas", role === 'ADMIN' ? "Gerencie produtos, equipe e resultados da loja." : "Acompanhe seus atendimentos e recebimentos.", "menu", () => existingStore ? location.assign('/admin') : navigate(`${basePath}/admin`));
+    if (existingStore && role === 'ENTREGADOR') addShortcut('header_my_deliveries'.tr, 'accept_orders_open_the_route_and_confirm_delivery'.tr, "truck", openCashier, true);
+    else if (existingStore && ['ADMIN', "CAIXA", 'VENDEDOR'].includes(role)) addShortcut(role === 'VENDEDOR' ? "Criar comanda" : 'go_to_checkout'.tr, 'access_products_tabs_and_customer_service'.tr, "register", openCashier, true);
+    if (existingStore) addShortcut('my_account_balance_and_history'.tr, "Consulte suas compras, pagamentos e saldo.", "history", () => { $("#accountDialog").close(); openPurchaseHistory(); }, role === 'CLIENTE');
+    if (role === 'ADMIN' || (existingStore && role === 'CAIXA')) addShortcut(role === 'ADMIN' ? "Painel administrativo" : 'sales_dashboard'.tr, role === 'ADMIN' ? 'manage_products_team_and_store_results'.tr : "Acompanhe seus atendimentos e recebimentos.", "menu", () => existingStore ? location.assign('/admin') : navigate(`${basePath}/admin`));
     content.append(actions);
     content.append(element("div", { class: "account-session-footer" }, [
-      element("span", { text: "Acesso pessoal à Conflora" }),
+      element("span", { text: 'personal_access_to_conflora'.tr }),
       element("button", {
-        class: "account-logout", type: "button", text: "team.logout".tr,
+        class: "account-logout", type: "button", text: 'team_logout'.tr,
         onclick: async (event) => {
           const button = event.currentTarget; button.disabled = true;
           try {
@@ -460,21 +452,21 @@ async function account() {
       }),
     ]));
   } else {
-    $("#accountTitle").textContent = "Entrar na sua conta";
-    $("#accountSubtitle").textContent = "Acesse seus pedidos e aproveite uma compra mais prática.";
+    $("#accountTitle").textContent = 'sign_in_to_your_account'.tr;
+    $("#accountSubtitle").textContent = 'access_your_orders_and_enjoy_a_more_practical_shopping_experience'.tr;
     content.className = "account-content account-signed-out";
     const form = element("form", { class: "account-form" });
-    const mode = element("select", { "aria-label": "header.login".tr }, [
-      element("option", { value: "login", text: "header.login".tr }),
-      element("option", { value: "register", text: "Cadastrar" }),
+    const mode = element("select", { "aria-label": 'header_login'.tr }, [
+      element("option", { value: "login", text: 'header_login'.tr }),
+      element("option", { value: "register", text: 'register_779d4c'.tr }),
     ]);
     const name = element("input", {
       name: "name",
-      placeholder: "cart.name_label".tr,
+      placeholder: 'cart_name_label'.tr,
       autocomplete: "name",
       maxlength: "100",
     });
-    const nameLabel = element("label", { text: "cart.name_label".tr }, [name]);
+    const nameLabel = element("label", { text: 'cart_name_label'.tr }, [name]);
     nameLabel.hidden = true;
     const email = element("input", {
       type: "email",
@@ -495,20 +487,20 @@ async function account() {
       name.required = mode.value === "register";
       password.autocomplete =
         mode.value === "register" ? "new-password" : "current-password";
-      button.textContent = mode.value === "register" ? "Criar minha conta" : "Entrar";
+      button.textContent = mode.value === "register" ? 'create_my_account'.tr : 'header_login'.tr;
     });
     const button = element("button", {
       type: "submit",
       class: "primary",
-      text: "Entrar",
+      text: 'header_login'.tr,
     });
     mode.classList.add("account-mode");
     const errorLabel = element("p", { class: "error", role: "alert" });
     form.append(
       mode,
       nameLabel,
-      element("label", { text: "E-mail" }, [email]),
-      element("label", { text: "Senha" }, [password]),
+      element("label", { text: 'e_mail'.tr }, [email]),
+      element("label", { text: 'password'.tr }, [password]),
       errorLabel,
       button,
     );
@@ -552,11 +544,11 @@ $("#googleAccountButton").addEventListener("click", async () => {
   const status = $("[data-google-status]");
   if (button.disabled || typeof window.authenticateGoogle !== "function") return;
   button.disabled = true;
-  status.textContent = "Conectando com sua conta Google…";
+  status.textContent = 'connecting_with_your_google_account'.tr;
   try {
     const result = await window.authenticateGoogle();
     if (!result?.success || !result.user) {
-      throw new Error(result?.error || "Não foi possível autenticar sua conta.");
+      throw new Error(result?.error || 'could_not_authenticate_your_account'.tr);
     }
     state.user = result.user;
     appStore.getState().setUser(state.user);
@@ -566,7 +558,7 @@ $("#googleAccountButton").addEventListener("click", async () => {
     $("#accountDialog").close();
     route();
   } catch (error) {
-    status.textContent = error.message || "Não foi possível entrar com Google. Tente novamente.";
+    status.textContent = error.message || 'could_not_sign_in_with_google_please_try_again'.tr;
   } finally {
     button.disabled = false;
   }
@@ -577,7 +569,7 @@ const historyList = $("#historyList");
 const historySentinel = $("#historyLoadSentinel");
 const historyState = { buffer: [], cursor: "", hasMore: false, loading: false, failed: false, loaded: false };
 
-const spendingSection = element('section', { class: 'spending-trends', 'aria-label': 'Tendências de Gastos' });
+const spendingSection = element('section', { class: 'spending-trends', 'aria-label': 'spending_trends'.tr });
 let disposeSpendingChart;
 let spendingRevision = 0;
 async function renderSpendingTrends() {
@@ -585,38 +577,38 @@ async function renderSpendingTrends() {
   const owner = state.user?.id;
   disposeSpendingChart?.();
   disposeSpendingChart = undefined;
-  spendingSection.replaceChildren(element('h3', { text: 'Tendências de Gastos'.tr }), element('p', { role: 'status', text: 'Carregando seus gastos...'.tr }));
+  spendingSection.replaceChildren(element('h3', { text: 'spending_trends'.tr }), element('p', { role: 'status', text: 'loading_your_spending'.tr }));
   try {
     const [insights, chart] = await Promise.all([state.purchaseInsights.load(), import('./dist/spending-chart.js')]);
     if (revision !== spendingRevision || owner !== state.user?.id || !historyDialog.open) return;
     const host = element('div', { class: 'spending-chart' });
-    const values = element('details', { class: 'spending-values' }, [element('summary', { text: 'Ver valores por mês'.tr }),
+    const values = element('details', { class: 'spending-values' }, [element('summary', { text: 'view_monthly_amounts'.tr }),
       ...insights.months.map(month => element('p', { text: month.label + ': ' + money(month.amountMinor) })),
     ]);
-    spendingSection.replaceChildren(element('h3', { text: 'Tendências de Gastos'.tr }),
-      element('p', { class: 'muted', text: 'Últimos 6 meses, incluindo o mês atual. Compras confirmadas, incluindo fiado; cancelamentos não entram.'.tr }), host, values);
-    if (!insights.months.some(month => month.amountMinor > 0)) spendingSection.append(element('p', { text: 'Nenhum gasto registrado neste período.'.tr }));
+    spendingSection.replaceChildren(element('h3', { text: 'spending_trends'.tr }),
+      element('p', { class: 'muted', text: 'last_6_months_including_the_current_month_confirmed_purchases_including_store_credit_'.tr }), host, values);
+    if (!insights.months.some(month => month.amountMinor > 0)) spendingSection.append(element('p', { text: 'no_spending_recorded_in_this_period'.tr }));
     disposeSpendingChart = chart.mountSpendingChart(host, insights.months);
   } catch (error) {
     if (revision !== spendingRevision || owner !== state.user?.id) return;
-    spendingSection.replaceChildren(element('h3', { text: 'Tendências de Gastos'.tr }), element('p', { role: 'status', text: error.message }), element('button', { type: 'button', class: 'quiet', text: 'Tentar novamente'.tr, onclick: renderSpendingTrends }));
+    spendingSection.replaceChildren(element('h3', { text: 'spending_trends'.tr }), element('p', { role: 'status', text: error.message }), element('button', { type: 'button', class: 'quiet', text: 'Tentar novamente'.tr, onclick: renderSpendingTrends }));
   }
 }
 historyDialog.addEventListener('close', () => { spendingRevision++; disposeSpendingChart?.(); disposeSpendingChart = undefined; });
 
 function renderPurchase(order) {
-  const createdAt = order.createdAt ? new Date(order.createdAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "Data não informada";
+  const createdAt = order.createdAt ? new Date(order.createdAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : 'date_not_provided'.tr;
   const items = Array.isArray(order.items) ? order.items : [];
   const total = Number.isFinite(order.totalMinor) ? order.totalMinor : Math.round(Number(order.total || 0) * 100);
   const details = element("details", { class: "history-order-details" }, [
-    element("summary", { text: "Ver detalhes da compra" }),
+    element("summary", { text: 'view_purchase_details'.tr }),
     element("div", { class: "history-order-meta" }, [
-      element("span", { text: `Pagamento: ${order.paymentMethod || "Não informado"}` }),
-      element("span", { text: order.paymentStatus === "ON_ACCOUNT" ? "Compra fiada — saldo registrado na conta" : order.paidAt ? `Pago em: ${new Date(order.paidAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}` : "Pagamento ainda não confirmado" }),
-      element("span", { text: `Entrega: ${order.fulfillment === "delivery" ? "Endereço" : order.fulfillment === "pickup" ? "Retirada" : order.deliveryAddress || "Não informado"}` }),
-      ...(order.serviceArea ? [element("span", { text: `Região: ${order.serviceArea}` })] : []),
-      ...(order.deliveryAddress || order.address ? [element("span", { text: `Endereço: ${order.deliveryAddress || order.address}` })] : []),
-      ...items.map((item) => element("span", { text: `${item.quantity || 1} × ${item.name || "Produto"} · ${money(Math.round(Number(item.price || 0) * Number(item.quantity || 1) * 100))}` })),
+      element("span", { text: `${'payment_b27182'.tr} ${order.paymentMethod || 'not_informed'.tr}` }),
+      element("span", { text: order.paymentStatus === "ON_ACCOUNT" ? 'store_credit_purchase_balance_recorded_on_account'.tr : order.paidAt ? `${'paid_on'.tr} ${new Date(order.paidAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}` : 'payment_not_yet_confirmed'.tr }),
+      element("span", { text: `${'delivery_cdbdf1'.tr} ${order.fulfillment === "delivery" ? 'address'.tr : order.fulfillment === "pickup" ? 'cart_pickup_option'.tr : order.deliveryAddress || 'not_informed'.tr}` }),
+      ...(order.serviceArea ? [element("span", { text: `${'region'.tr} ${order.serviceArea}` })] : []),
+      ...(order.deliveryAddress || order.address ? [element("span", { text: `${'address_e432ad'.tr} ${order.deliveryAddress || order.address}` })] : []),
+      ...items.map((item) => element("span", { text: `${item.quantity || 1} × ${item.name || 'product'.tr} · ${money(Math.round(Number(item.price || 0) * Number(item.quantity || 1) * 100))}` })),
       renderOrderReceipt(order),
     ]),
   ]);
@@ -624,15 +616,15 @@ function renderPurchase(order) {
   return element("article", { class: "history-order-card", "data-order-id": order.id }, [
     element("div", { class: "history-order-summary" }, [
       element("div", {}, [
-        element("strong", { text: `Pedido #${order.ticketNumber || String(order.id || "").slice(-8).toUpperCase()}` }),
+        element("strong", { text: `${'order_033893'.tr}${order.ticketNumber || String(order.id || "").slice(-8).toUpperCase()}` }),
         element("span", { class: "muted", text: createdAt }),
       ]),
-      element("div", { class: "history-order-total" }, [
+      element("div", { class: 'history_order_total'.tr }, [
         element("strong", { text: money(total) }),
         element("span", { class: "badge", text: window.ConfloraOrderDisplay.status(order) }),
       ]),
     ]),
-    element("p", { class: "history-order-items", text: `${items.length} ${items.length === 1 ? "item" : "itens"} · ${items.slice(0, 3).map((item) => item.name || "Produto").join(", ")}${items.length > 3 ? "…" : ""}` }),
+    element("p", { class: "history-order-items", text: `${items.length} ${items.length === 1 ? "item" : 'mobile_cart_items'.tr} · ${items.slice(0, 3).map((item) => item.name || 'product'.tr).join(", ")}${items.length > 3 ? "…" : ""}` }),
     feedbackSection,
     details,
   ]);
@@ -650,7 +642,7 @@ function renderHistoryBatch() {
     }
   }
   if (!historyList.querySelector(".history-order-card") && !historyState.loading && !historyState.hasMore && !historyState.failed) {
-    historyList.insertBefore(element("p", { class: "muted", text: "Você ainda não tem compras vinculadas a esta conta." }), historySentinel);
+    historyList.insertBefore(element("p", { class: "muted", text: 'you_have_no_purchases_linked_to_this_account_yet'.tr }), historySentinel);
   }
   if (historyState.focusOrderId && historyState.buffer.length) window.setTimeout(renderHistoryBatch, 0);
   if (!historyState.buffer.length && historyState.hasMore && !historyState.loading) loadHistoryPage();
@@ -661,7 +653,7 @@ async function loadHistoryPage() {
   if (historyState.loading || (!historyState.hasMore && historyState.loaded)) return;
   const version = accountVersion;
   historyState.loading = true;
-  historySentinel.textContent = "Carregando mais compras…";
+  historySentinel.textContent = 'loading_more_purchases'.tr;
   try {
     const query = new URLSearchParams({ limit: "12" });
     if (historyState.cursor) query.set("cursor", historyState.cursor);
@@ -681,7 +673,7 @@ async function loadHistoryPage() {
   } catch (error) {
     if (version !== accountVersion) return;
     historyState.failed = true;
-    historySentinel.replaceChildren(element("button", { type: "button", class: "quiet", text: "Tentar novamente", onclick: () => { historyState.failed = false; loadHistoryPage(); } }));
+    historySentinel.replaceChildren(element("button", { type: "button", class: "quiet", text: 'try_again'.tr, onclick: () => { historyState.failed = false; loadHistoryPage(); } }));
     if (!historyList.querySelector(".history-order-card")) historyList.insertBefore(element("p", { class: "error", text: error.message }), historySentinel);
   } finally {
     if (version === accountVersion) {
@@ -695,7 +687,7 @@ async function loadHistoryPage() {
 function openPurchaseHistory(orderId = "") {
   historyState.focusOrderId = typeof orderId === "string" ? orderId : "";
   if (!state.user) {
-    notify("Entre na sua conta para consultar seu histórico.");
+    notify('sign_in_to_your_account_to_view_your_history'.tr);
     return;
   }
   historyState.buffer = [];
@@ -704,8 +696,8 @@ function openPurchaseHistory(orderId = "") {
   historyState.loading = false;
   historyState.failed = false;
   historyState.loaded = false;
-  historyList.replaceChildren(state.orderNotifications.button(), spendingSection, ledgerContent, element("h3", { class: "ledger-section-title", text: "Histórico de compras" }), historySentinel);
-  historySentinel.textContent = "Carregando suas compras…";
+  historyList.replaceChildren(state.orderNotifications.button(), spendingSection, ledgerContent, element("h3", { class: "ledger-section-title", text: 'purchase_history'.tr }), historySentinel);
+  historySentinel.textContent = 'loading_your_purchases_088d4c'.tr;
   openDialog(historyDialog);
   ledgerContent.hidden = !state.existingStore;
   if (state.existingStore) loadCustomerLedger();
@@ -735,10 +727,10 @@ function renderDebtPayment(ledger) {
   const version = accountVersion;
   const section = element('section', { class: 'ledger-payment' });
   if (Number(ledger.balance) > 0 && state.config?.checkout?.pix?.mode !== 'SICREDI') {
-    section.append(element('p', { role: 'status', text: 'Para quitar sua dívida por Pix, fale com a loja. O caixa confere o recebimento e atualiza seu saldo.' }));
+    section.append(element('p', { role: 'status', text: 'to_pay_your_debt_via_pix_contact_the_store_cashier_will_check_the_receipt_and_update_'.tr }));
   }
   if (Number(ledger.balance) > 0 && state.config?.checkout?.pix?.mode === 'SICREDI') {
-    const amount = element('input', { type: 'number', min: '0.01', max: String(ledger.balance), step: '0.01', value: Number(ledger.balance).toFixed(2), 'aria-label': 'Valor da dívida a pagar' });
+    const amount = element('input', { type: 'number', min: '0.01', max: String(ledger.balance), step: '0.01', value: Number(ledger.balance).toFixed(2), 'aria-label': 'debt_amount_to_pay'.tr });
     const status = element('p', { role: 'status', class: 'muted' });
     const result = element('div');
     let operation;
@@ -748,28 +740,28 @@ function renderDebtPayment(ledger) {
         const { charge } = await state.api('/customer/debt-pix/' + id);
         if (version !== accountVersion) return;
         if (charge.status === 'PAID') {
-          status.textContent = 'Pagamento confirmado pelo Sicredi. Seu saldo foi atualizado.';
+          status.textContent = 'payment_confirmed_by_sicredi_your_balance_has_been_updated'.tr;
           clearTimeout(debtPixTimer);
           await loadCustomerLedger();
-          ledgerContent.prepend(element('p', { class: 'ledger-balance ledger-balance--clear', role: 'status', text: 'Pagamento confirmado! Dívida atualizada automaticamente.' }));
+          ledgerContent.prepend(element('p', { class: 'ledger-balance ledger-balance--clear', role: 'status', text: 'payment_confirmed_balance_updated_automatically'.tr }));
           return;
         }
-      } catch { status.textContent = 'Aguardando confirmação. Você pode reabrir Minha conta para conferir o saldo.'; }
+      } catch { status.textContent = 'waiting_for_confirmation_you_can_reopen_my_account_to_check_your_balance'.tr; }
       debtPixTimer = setTimeout(() => poll(id), 5000);
     };
-    const pay = element('button', { type: 'button', class: 'primary', text: 'Pagar dívida com Pix', onclick: async () => {
+    const pay = element('button', { type: 'button', class: 'primary', text: 'pay_debt_with_pix'.tr, onclick: async () => {
       const value = Number(amount.value);
-      if (!Number.isFinite(value) || value <= 0 || value > Number(ledger.balance)) { status.textContent = 'Informe um valor entre R$ 0,01 e o saldo devedor.'; return; }
+      if (!Number.isFinite(value) || value <= 0 || value > Number(ledger.balance)) { status.textContent = 'enter_an_amount_between_r_0_01_and_the_outstanding_balance'.tr; return; }
       pay.disabled = true;
       amount.disabled = true;
       if (!operation || operation.amount !== value) operation = { amount: value, requestId: crypto.randomUUID() };
-      status.textContent = 'Gerando cobrança Sicredi…';
+      status.textContent = 'generating_sicredi_charge'.tr;
       try {
         const { charge } = await state.api('/customer/debt-pix', { method: 'POST', body: operation });
         if (version !== accountVersion) return;
         if (charge.status === 'PAID') { await poll(charge.id); return; }
-        result.replaceChildren(element('img', { src: charge.pixData.qrCodeBase64, alt: 'QR Code Pix para pagamento da dívida', width: '220', height: '220' }), element('textarea', { readonly: '', 'aria-label': 'Pix copia e cola da dívida', text: charge.pixData.pixCopiaECola }), element('button', { type: 'button', class: 'quiet', text: 'Copiar Pix', onclick: () => navigator.clipboard.writeText(charge.pixData.pixCopiaECola).then(() => { status.textContent = 'Pix copiado. Aguardando pagamento.'; }).catch(() => { status.textContent = 'Selecione e copie o código acima.'; }) }));
-        status.textContent = 'Pague pelo seu banco. A baixa será automática após a confirmação do Sicredi.';
+        result.replaceChildren(element('img', { src: charge.pixData.qrCodeBase64, alt: 'pix_qr_code_for_debt_payment'.tr, width: '220', height: '220' }), element('textarea', { readonly: '', 'aria-label': 'pix_copy_and_paste_for_the_debt'.tr, text: charge.pixData.pixCopiaECola }), element('button', { type: 'button', class: 'quiet', text: 'copy_pix'.tr, onclick: () => navigator.clipboard.writeText(charge.pixData.pixCopiaECola).then(() => { status.textContent = 'pix_copied_waiting_for_payment'.tr; }).catch(() => { status.textContent = 'select_and_copy_the_code_above'.tr; }) }));
+        status.textContent = 'pay_through_your_bank_the_charge_will_be_cleared_automatically_after_sicredi_confirms'.tr;
         poll(charge.id);
       } catch (error) {
         status.textContent = error.message;
@@ -777,12 +769,12 @@ function renderDebtPayment(ledger) {
         amount.disabled = false;
       }
     } });
-    section.append(element('label', { text: 'Quanto deseja pagar? (R$)' }, [amount]), pay, status, result);
+    section.append(element('label', { text: 'how_much_would_you_like_to_pay_r'.tr }, [amount]), pay, status, result);
   }
   const phone = String(ledger.supportPhone || state.config?.checkout?.contactPhone || '').replace(/\D/g, '');
-  section.append(element('p', { class: 'muted', text: 'Encontrou algo errado no saldo ou em uma compra?' }));
-  if (/^\d{10,15}$/.test(phone)) section.append(element('a', { class: 'quiet', text: 'Falar com a loja', href: `https://wa.me/${phone.length <= 11 ? '55' + phone : phone}?text=${encodeURIComponent('Olá! Preciso de ajuda para conferir minha conta e histórico na Conflora.')}`, target: '_blank', rel: 'noopener noreferrer' }));
-  else section.append(element('p', { class: 'muted', text: 'Peça a um representante da loja para conferir seu cadastro e as movimentações.' }));
+  section.append(element('p', { class: 'muted', text: 'found_something_wrong_with_the_balance_or_a_purchase'.tr }));
+  if (/^\d{10,15}$/.test(phone)) section.append(element('a', { class: 'quiet', text: 'talk_to_the_store'.tr, href: `https://wa.me/${phone.length <= 11 ? '55' + phone : phone}?text=${encodeURIComponent('hello_i_need_help_checking_my_account_and_history_at_conflora'.tr)}`, target: '_blank', rel: 'noopener noreferrer' }));
+  else section.append(element('p', { class: 'muted', text: 'ask_a_store_representative_to_check_your_registration_and_transactions'.tr }));
   ledgerContent.append(section);
 }
 
@@ -791,17 +783,17 @@ function renderCustomerLedger(ledger) {
   clearTimeout(debtPixTimer);
   ledgerContent.replaceChildren();
   const balance = Number(ledger.balance || 0);
-  const balanceTitle = balance > 0 ? "Saldo devedor" : balance < 0 ? "Crédito a seu favor" : "Saldo quitado";
+  const balanceTitle = balance > 0 ? "Saldo devedor" : balance < 0 ? 'credit_in_your_favor'.tr : "Saldo quitado";
   const balanceTone = balance > 0 ? "ledger-balance--debt" : balance < 0 ? "ledger-balance--credit" : "ledger-balance--clear";
   ledgerContent.append(element("section", { class: `ledger-balance ${balanceTone}` }, [
-    element("span", { class: "muted", text: `Olá, ${ledger.customerName || state.user?.name || "cliente"}` }),
+    element("span", { class: "muted", text: `${'hello'.tr} ${ledger.customerName || state.user?.name || 'customer_a60b85'.tr}` }),
     element("strong", { text: balanceTitle }),
     element("span", { class: "ledger-balance-value", text: money(Math.abs(Math.round(balance * 100))) }),
   ]));
   const creditBalance = Number(ledger.creditBalance || 0);
   if (creditBalance > 0) ledgerContent.append(element("section", { class: 'ledger-balance ledger-balance--credit' }, [
-    element("span", { class: "muted", text: "Valores recebidos antecipadamente" }),
-    element("strong", { text: creditBalance > 0 ? "Crédito a seu favor" : "Crédito disponível" }),
+    element("span", { class: "muted", text: 'amounts_received_in_advance'.tr }),
+    element("strong", { text: creditBalance > 0 ? 'credit_in_your_favor'.tr : 'available_credit_228a53'.tr }),
     element("span", { class: "ledger-balance-value", text: money(Math.max(0, Math.round(creditBalance * 100))) }),
   ]));
   renderDebtPayment(ledger);
@@ -809,9 +801,9 @@ function renderCustomerLedger(ledger) {
   const transactions = [...(ledger.transactions || [])].sort((left, right) =>
     String(right.createdAt || "").localeCompare(String(left.createdAt || "")),
   );
-  ledgerContent.append(element("h3", { class: "ledger-section-title", text: "Movimentações" }));
+  ledgerContent.append(element("h3", { class: "ledger-section-title", text: 'transactions'.tr }));
   if (!transactions.length) {
-    ledgerContent.append(element("p", { class: "muted", text: "Ainda não há compras fiadas ou recebimentos vinculados a este cadastro." }));
+    ledgerContent.append(element("p", { class: "muted", text: 'there_are_no_store_credit_purchases_or_payments_linked_to_this_profile_yet'.tr }));
     return;
   }
   for (const transaction of transactions) {
@@ -819,10 +811,10 @@ function renderCustomerLedger(ledger) {
     const isCredit = transaction.entryType === "CREDITO_CLIENTE" || transaction.type === "CREDITO_CLIENTE";
     const isCreditUse = transaction.entryType === "USO_CREDITO" || transaction.type === "USO_CREDITO";
     const amount = Math.abs(Math.round(Number(transaction.amount || 0) * 100));
-    const title = isDebt ? "Compra fiada" : isCredit ? "Crédito recebido" : isCreditUse ? "Crédito usado em compra" : "Recebimento de fiado";
+    const title = isDebt ? "Compra fiada" : isCredit ? 'credit_received'.tr : isCreditUse ? 'credit_used_in_purchase'.tr : 'store_credit_payment'.tr;
     const prefix = isDebt || isCredit ? "+ " : "− ";
-    const date = transaction.createdAt ? new Date(transaction.createdAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "Data não informada";
-    const meta = [date, transaction.paymentMethod, transaction.ticketNumber ? `Venda #${transaction.ticketNumber}` : transaction.orderId ? `Pedido #${String(transaction.orderId).slice(-8).toUpperCase()}` : "", transaction.receivedBy ? `Atendido por ${transaction.receivedBy}` : ""]
+    const date = transaction.createdAt ? new Date(transaction.createdAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : 'date_not_provided'.tr;
+    const meta = [date, transaction.paymentMethod, transaction.ticketNumber ? `${'sale'.tr}${transaction.ticketNumber}` : transaction.orderId ? `${'order_033893'.tr}${String(transaction.orderId).slice(-8).toUpperCase()}` : "", transaction.receivedBy ? `${'served_by'.tr} ${transaction.receivedBy}` : ""]
       .filter(Boolean).join(" · ");
     const card = element("article", { class: "ledger-transaction" }, [
       element("div", {}, [element("strong", { text: title }), element("span", { class: "muted", text: meta })]),
@@ -832,11 +824,11 @@ function renderCustomerLedger(ledger) {
       card.append(element("span", { class: "ledger-transaction-items", text: transaction.items.map((item) => `${item.quantity} ${item.unit || "UN"} · ${item.name}`).join(" · ") }));
     }
     if (transaction.type === "QUITACAO_FIADO") {
-      card.append(element("span", { class: "muted", text: `Saldo devedor após o pagamento: ${money(Math.round(Number(transaction.newBalance || 0) * 100))}` }));
+      card.append(element("span", { class: "muted", text: `${'outstanding_balance_after_payment'.tr} ${money(Math.round(Number(transaction.newBalance || 0) * 100))}` }));
     }
     if (transaction.receiptText) {
       card.append(element("details", { class: "ledger-receipt" }, [
-        element("summary", { text: "Ver recibo da compra" }),
+        element("summary", { text: 'view_purchase_receipt'.tr }),
         window.ConfloraOrderDisplay.renderText(transaction.receiptText),
       ]));
     }
@@ -846,11 +838,11 @@ function renderCustomerLedger(ledger) {
 
 async function loadCustomerLedger() {
   if (!state.user) {
-    notify("Entre na sua conta para consultar seu saldo.");
+    notify('log_in_to_your_account_to_check_your_balance'.tr);
     return;
   }
   const version = accountVersion;
-  ledgerContent.replaceChildren(element("p", { class: "muted", text: "Carregando seu saldo…" }));
+  ledgerContent.replaceChildren(element("p", { class: "muted", text: 'loading_your_balance'.tr }));
   try {
     const ledger = await state.api("/customer/ledger");
     if (version !== accountVersion) return;
@@ -859,9 +851,9 @@ async function loadCustomerLedger() {
     if (version !== accountVersion) return;
     ledgerContent.replaceChildren(element("p", { class: "error", role: "alert", text: error.message }));
     if (error.status === 404) {
-      ledgerContent.append(element("p", { class: "muted", text: "Para vincular sua conta, informe ao caixa o mesmo e-mail usado no seu login. A equipe consegue atualizar o cadastro na tela do caixa." }));
+      ledgerContent.append(element("p", { class: "muted", text: 'to_link_your_account_inform_the_cashier_of_the_same_email_used_for_your_login_the_sta'.tr }));
     } else {
-      ledgerContent.append(element("button", { type: "button", class: "quiet", text: "Tentar novamente", onclick: loadCustomerLedger }));
+      ledgerContent.append(element("button", { type: "button", class: "quiet", text: 'try_again'.tr, onclick: loadCustomerLedger }));
     }
   }
 }
@@ -1049,7 +1041,6 @@ async function refreshPublicCatalog() {
       state.api("/config"), state.api("/products"),
     ]);
     if (revision !== catalogRevision) return;
-    publicCache.write({ config, products });
     lastCatalogRefresh = Date.now();
     const configChanged = JSON.stringify(state.config) !== JSON.stringify(config);
     const productsChanged = JSON.stringify(state.products) !== JSON.stringify(products);
@@ -1075,20 +1066,11 @@ try {
   applyHtmlTranslations();
 
   const session = state.api("/me").catch(() => ({ user: null }));
-  const saved = publicCache.read();
-  const savedIsFresh = publicCache.isFresh();
-  performanceMonitor.count(saved ? 'catalogCacheHits' : 'catalogCacheMisses');
-  if (saved) {
-    state.config = saved.config;
-    state.products = saved.products;
-    queryClient.setQueryData(["catalog", slug], saved.products);
-  } else {
-    [state.config, state.products] = await Promise.all([
-      state.api("/config"), storeQueries.getCatalog(slug, state.api),
-    ]);
-    publicCache.write(state);
-    lastCatalogRefresh = Date.now();
-  }
+  [state.config, state.products] = await Promise.all([
+    state.api("/config"), state.api("/products"),
+  ]);
+  queryClient.setQueryData(["catalog", slug], state.products);
+  lastCatalogRefresh = Date.now();
 
   catalog = createCatalog(
     state,
@@ -1127,14 +1109,12 @@ try {
   }
 
   performanceMonitor.markCatalogReady();
-  if (savedIsFresh) lastCatalogRefresh = Date.now() - publicCache.age();
-  if (saved && !savedIsFresh) refreshPublicCatalog().catch(() => {});
   // Login resolution does not block the public catalogue or its first render.
   session.then(async ({ user }) => {
     state.user = user || null;
     appStore.getState().setUser(state.user);
     updateHeaderActions();
-    if (topbarIntent.has('sacola')) cart.open();
+    if (topbarIntent.has('bag'.tr)) cart.open();
       if (topbarIntent.has('conta')) account().then(() => { if (topbarIntent.has('editar')) editOwnProfile(); }).catch(error => notify(error.message));
     catalog.refreshPurchases();
     const notificationOrder = new URLSearchParams(location.search).get("order");
@@ -1173,12 +1153,6 @@ try {
   scheduleCatalogRefresh();
   window.addEventListener('pagehide', () => clearTimeout(catalogTimer));
   window.addEventListener('pageshow', () => { refreshOnReturn(); scheduleCatalogRefresh(); });
-  window.addEventListener('storage', event => {
-    if ((event.key === publicCache.key || event.key === null) && !event.newValue) {
-      lastCatalogRefresh = 0;
-      refreshOnReturn();
-    }
-  });
   if ("serviceWorker" in navigator && window.isSecureContext) {
     navigator.serviceWorker.register("/storefront/sw.js", { scope: "/", updateViaCache: "none" }).catch(() => {});
   }
@@ -1187,19 +1161,19 @@ try {
   }
 } catch (error) {
   $('#products').removeAttribute('aria-busy');
-  $("#storeName").textContent = "Loja Conflora";
+  $("#storeName").textContent = 'conflora_store'.tr;
   $("#logo").src = shellLogoUrl;
-  $("#logo").alt = "Conflora Horta e Viveiro";
+  $("#logo").alt = 'conflora_garden_nursery'.tr;
   $("#logo").hidden = false;
   $("#brand").classList.add("has-logo");
   const isNetwork = error.message?.includes("fetch") || error.name === "TypeError";
   const errorMessage = isNetwork
-    ? "Conectando ao catálogo... Se não carregar em instantes, clique para tentar novamente."
+    ? 'connecting_to_catalog_if_it_doesn_t_load_shortly_click_to_try_again'.tr
     : error.message;
   $("#products").replaceChildren(
     element("p", { text: errorMessage, class: "error" }),
     element("button", {
-      text: "common.retry".tr,
+      text: 'common_retry'.tr,
       onclick: () => location.reload(),
     }),
   );

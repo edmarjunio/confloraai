@@ -7,3 +7,4 @@ process.env.PIX_MODE ||= 'SICREDI';
 
 process.env.PIX_KEY ||= '52998224725';
 process.env.PIX_TITULAR ||= 'Loja de teste';
+require('../src/i18n/default');

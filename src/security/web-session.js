@@ -4,7 +4,7 @@ const { readSessionToken, sessionCookie } = require("./session-cookie");
 function isOwnerAccount(user) {
   if (!user) return false;
   const email = String(user.email || "").trim().toLowerCase();
-  return user.id === "usr-edmar" || email === "edmarjuniob@gmail.com";
+  return user.role === 'ADMIN' && (user.id === "usr-edmar" || email === "edmarjuniob@gmail.com");
 }
 
 function safeUser(user, activeRoleOverride = null) {

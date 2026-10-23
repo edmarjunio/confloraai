@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { FirestoreRepository } = require('../src/database/firestore.repository');
+const { FirestoreRepository } = require('./helpers/repository-fixture');
 
 test('ajustes de estoque são registrados uma única vez por requestId', async () => {
   const repository = new FirestoreRepository({ isInMemory: true });

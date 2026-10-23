@@ -3,17 +3,17 @@
     static get observedAttributes() { return ['scope-label']; }
     attributeChangedCallback() {
       const hint = this.querySelector('div p');
-      if (hint) hint.textContent = (this.getAttribute('scope-label') || 'Recebimentos até agora') + '. Envio para o WhatsApp da loja.';
+      if (hint) hint.textContent = (this.getAttribute('scope-label') || 'payments_so_far'.tr) + '. Envio para o WhatsApp da loja.';
     }
     connectedCallback() {
       if (this.childElementCount) return;
       this.className = 'cashier-report-actions';
       const description = document.createElement('div');
-      const title = document.createElement('strong'); title.textContent = 'Relatório do caixa';
-      const hint = document.createElement('p'); hint.textContent = (this.getAttribute('scope-label') || 'Recebimentos até agora') + '. Envio para o WhatsApp da loja.';
+      const title = document.createElement('strong'); title.textContent = 'cashier_report'.tr;
+      const hint = document.createElement('p'); hint.textContent = (this.getAttribute('scope-label') || 'payments_so_far'.tr) + '. Envio para o WhatsApp da loja.';
       description.append(title, hint);
       const actions = document.createElement('div'); actions.className = 'cashier-report-buttons';
-      for (const [label, action] of [['Baixar PDF', 'download'], ['Enviar PDF no WhatsApp', 'send']]) {
+      for (const [label, action] of [['Baixar PDF', 'download'], ['send_pdf_on_whatsapp'.tr, 'send']]) {
         const button = document.createElement('button'); button.type = 'button';
         button.className = 'cf-button'; button.dataset.variant = action === 'download' ? 'secondary' : 'primary';
         button.textContent = label; button.onclick = () => this.run(action); actions.appendChild(button);
@@ -26,23 +26,23 @@
       if (this.busy) return;
       this.busy = true;
       this.querySelectorAll('button').forEach(button => { button.disabled = true; });
-      this.message.textContent = action === 'download' ? 'Preparando PDF…' : 'Enviando PDF…';
+      this.message.textContent = action === 'download' ? 'preparing_pdf'.tr : 'sending_pdf'.tr;
       const params = Object.fromEntries(['from', 'to'].map(key => [key, this.getAttribute(key)]).filter(([, value]) => value));
       try {
         const response = await window.ConfloraSession.apiFetch(action === 'download' ? '/api/caixa/report.pdf?' + new URLSearchParams(params) : '/api/caixa/report/send-whatsapp', action === 'send' ? {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params),
         } : {});
         if (!response.ok) {
-          const data = await response.json(); throw new Error(data.error || 'Não foi possível gerar o relatório.');
+          const data = await response.json(); throw new Error(data.error || 'could_not_generate_the_report'.tr);
         }
         if (action === 'download') {
           const url = URL.createObjectURL(await response.blob());
-          const link = document.createElement('a'); link.href = url; link.download = 'relatorio-caixa.pdf'; link.click();
+          const link = document.createElement('a'); link.href = url; link.download = 'cashier_report_pdf'.tr; link.click();
           setTimeout(() => URL.revokeObjectURL(url), 60000);
-          this.message.textContent = 'PDF pronto para baixar.';
+          this.message.textContent = 'pdf_ready_to_download'.tr;
         } else this.message.textContent = (await response.json()).message;
       } catch (error) {
-        this.message.textContent = error instanceof TypeError ? 'Falha de conexão. Tente novamente.' : error.message;
+        this.message.textContent = error instanceof TypeError ? 'connection_failure_please_try_again'.tr : error.message;
       } finally {
         this.busy = false;
         this.querySelectorAll('button').forEach(button => { button.disabled = false; });

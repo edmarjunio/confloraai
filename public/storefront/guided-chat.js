@@ -30,7 +30,7 @@ export function createGuidedChat(state, catalog) {
       element("div", { class: "guided-results-heading" }, [
         element("strong", {
           class: "guided-results-title",
-          text: heading || (path.length ? path.join(" · ") : "Produtos encontrados"),
+          text: heading || (path.length ? path.join(" · ") : 'products_found'.tr),
         }),
         count,
       ]),
@@ -38,7 +38,7 @@ export function createGuidedChat(state, catalog) {
         type: "button",
         class: "guided-clear-filters",
         "aria-label": "Limpar filtros e escolher outra categoria",
-        title: "Limpar filtros",
+        title: 'clear_filters'.tr,
         onclick: () => {
           path = [];
           messages.replaceChildren();
@@ -50,7 +50,7 @@ export function createGuidedChat(state, catalog) {
     const grid = element("div", { class: "guided-results-grid chat-product-grid" });
     const empty = element("p", {
       class: "guided-results-empty",
-      text: "Nenhum produto encontrado nesta seleção.",
+      text: 'no_products_found_in_this_selection'.tr,
       hidden: "",
     });
     const more = element("button", {
@@ -60,7 +60,7 @@ export function createGuidedChat(state, catalog) {
     });
     const panel = element("section", { class: "guided-results" }, [
       toolbar,
-      element('p', { class: 'muted', text: 'Digite um nome no chat para buscar em todos os produtos da loja.' }),
+      element('p', { class: 'muted', text: 'type_a_name_in_the_chat_to_search_across_all_store_products'.tr }),
       grid,
       empty,
       more,
@@ -79,10 +79,10 @@ export function createGuidedChat(state, catalog) {
       grid.replaceChildren(
         ...matchingProducts.slice(0, visibleCount).map((product) => catalog.card(product, { chat: true })),
       );
-      count.textContent = `${matchingProducts.length} ${matchingProducts.length === 1 ? "produto" : "produtos"}`;
+      count.textContent = `${matchingProducts.length} ${matchingProducts.length === 1 ? 'catalog_product_singular'.tr : 'catalog_products'.tr}`;
       empty.hidden = matchingProducts.length > 0;
       more.hidden = matchingProducts.length <= visibleCount;
-      more.textContent = `Mostrar mais produtos (${matchingProducts.length - visibleCount})`;
+      more.textContent = `${'show_more_products'.tr}${matchingProducts.length - visibleCount})`;
     };
     more.addEventListener("click", () => {
       const previousCount = visibleCount;
@@ -92,7 +92,7 @@ export function createGuidedChat(state, catalog) {
         ...matchingProducts.slice(previousCount, visibleCount).map((product) => catalog.card(product, { chat: true })),
       );
       more.hidden = matchingProducts.length <= visibleCount;
-      more.textContent = `Mostrar mais produtos (${matchingProducts.length - visibleCount})`;
+      more.textContent = `${'show_more_products'.tr}${matchingProducts.length - visibleCount})`;
     });
     renderProducts();
     panel.scrollIntoView({ block: 'start' });
@@ -101,11 +101,11 @@ export function createGuidedChat(state, catalog) {
     const prevScrollTop = messages.scrollTop;
     messages.querySelector('.chat-next-search')?.remove();
     const actions = element('div', { class: 'suggestions chat-next-search' }, [
-      element('p', { text: `${event.detail.product.name} adicionado. Quer pesquisar outro produto ou manter esta seleção?` }),
-      element('button', { text: 'Limpar e pesquisar outro', onclick: () => {
+      element('p', { text: `${event.detail.product.name} ${'added_do_you_want_to_search_for_another_product_or_keep_this_selection'.tr}` }),
+      element('button', { text: 'clear_and_search_another'.tr, onclick: () => {
         path = []; messages.replaceChildren(); clearResults(); browse();
       } }),
-      element('button', { text: 'Manter filtro atual', onclick: () => { actions.remove(); } }),
+      element('button', { text: 'keep_current_filter'.tr, onclick: () => { actions.remove(); } }),
     ]);
     messages.append(actions);
     // Mantém a tela 100% estática ao adicionar produto
@@ -118,7 +118,7 @@ export function createGuidedChat(state, catalog) {
     say(
       currentPath.length
         ? `${currentPath.join(" → ")}. Qual opção você procura?`
-        : "Do que você precisa?",
+        : 'what_do_you_need'.tr,
     );
     if (choices.length) {
       const container = element(
@@ -143,7 +143,7 @@ export function createGuidedChat(state, catalog) {
         messages.append(
           element("div", { class: "suggestions guided-choices" }, [
             element("button", {
-              text: "Ver todos desta categoria",
+              text: 'view_all_in_this_category'.tr,
               onclick: () => results(pool()),
             }),
           ]),
@@ -164,20 +164,20 @@ export function createGuidedChat(state, catalog) {
     );
     if (!matches.length) {
       say(
-        "Podemos encomendar! Fale com a Conflora pelo WhatsApp para registrar.",
+        'we_can_order_it_talk_to_conflora_via_whatsapp_to_register'.tr,
       );
       clearResults();
       const fallbackChoices = element("div", { class: "suggestions guided-choices" }, [
-        element("button", { text: "Escolher categoria", onclick: () => { path = []; browse(); } }),
-        element("button", { text: "Ver todos os produtos", onclick: () => results(source, "Todos os produtos") }),
+        element("button", { text: 'choose_category'.tr, onclick: () => { path = []; browse(); } }),
+        element("button", { text: 'view_all_products'.tr, onclick: () => results(source, 'all_products'.tr) }),
       ]);
       messages.append(fallbackChoices);
       return;
     }
     if (matches.some((match) => match.approximate)) {
-      say("Encontrei nomes parecidos. Confira qual deles você procura:");
+      say('i_found_similar_names_check_which_one_you_are_looking_for'.tr);
     }
-    results(matches.map((match) => match.product), `Resultados para “${query}”`);
+    results(matches.map((match) => match.product), `${'results_for'.tr}${query}”`);
   }
   $("#chatForm").addEventListener("submit", (event) => {
     event.preventDefault();
@@ -203,18 +203,18 @@ export function createGuidedChat(state, catalog) {
   function configure() {
     $("#aiFab").hidden = !state.config.assistant.enabled;
     $("#chatTitle").textContent = $("#aiName").textContent =
-      "Assistente de compras";
+      'shopping_assistant'.tr;
     $(".chat-note").textContent =
-      "Respostas baseadas nas informações cadastradas pela loja.";
-    $(".fab-caption").textContent = "Encontre seu produto";
+      'answers_based_on_information_registered_by_the_store'.tr;
+    $(".fab-caption").textContent = 'find_your_product'.tr;
     $("#chatInput").placeholder =
-      "Digite o nome ou uma dúvida sobre o produto…";
+      'type_the_name_or_a_question_about_the_product'.tr;
     $("#chatSuggestions").replaceChildren(
       element("button", {
         text: "↻",
         class: "chat-action-restart cf-btn-3d cf-btn-3d--sm",
-        "aria-label": "Começar de novo",
-        title: "Começar de novo",
+        "aria-label": 'start_over'.tr,
+        title: 'start_over'.tr,
         onclick: () => {
           path = [];
           clearResults();
@@ -226,7 +226,7 @@ export function createGuidedChat(state, catalog) {
         text: "🗑",
         class: "chat-action-clear cf-btn-3d cf-btn-3d--sm",
         "aria-label": "Limpar conversa",
-        title: "Limpar conversa",
+        title: 'clear_chat'.tr,
         onclick: () => {
           path = [];
           clearResults();

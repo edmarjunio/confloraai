@@ -18,13 +18,13 @@ export function createAdmin(state) {
   const view = $("#adminView");
   let configDraft;
   async function render() {
-    view.replaceChildren(element("h1", { text: "Gerenciar loja" }));
+    view.replaceChildren(element("h1", { text: 'manage_store'.tr }));
     if (state.existingStore && state.user?.role === 'CAIXA') {
       await orderRequests(view); return;
     }
     if (state.user?.role !== "ADMIN") {
       view.append(
-        element("p", { text: "Entre com a conta administrativa desta loja." }),
+        element("p", { text: 'log_in_with_this_store_s_admin_account'.tr }),
       );
       return;
     }
@@ -33,9 +33,9 @@ export function createAdmin(state) {
     for (const [label, action] of state.existingStore
       ? [["Personalizar loja", () => settings(panel)], ["Encomendas", () => orderRequests(panel)]]
       : [
-          ["Configurações", () => settings(panel)],
-          ["Produtos", () => products(panel)],
-          ["Pedidos", () => orders(panel)],
+          ['settings'.tr, () => settings(panel)],
+          ['products_595f74'.tr, () => products(panel)],
+          ['orders'.tr, () => orders(panel)],
         ]) {
       const activate = () => {
         action().then(() => {
@@ -52,7 +52,7 @@ export function createAdmin(state) {
       view.append(
         element("a", {
           href: "/admin",
-          text: "Gerenciar produtos, pedidos e estoque",
+          text: 'manage_products_orders_and_stock'.tr,
         }),
       );
     }
@@ -70,13 +70,13 @@ export function createAdmin(state) {
     const form = element("form", { class: "admin-form" });
     const preview = state.existingStore ? null : element("img", {
       src: config.branding.logoUrl || "/store-assets/placeholder.svg",
-      alt: "Prévia do logo",
+      alt: 'logo_preview'.tr,
       style: "max-width:220px;max-height:100px;object-fit:contain",
     });
     const upload = state.existingStore ? null : element("input", {
       type: "file",
       accept: "image/png,image/jpeg,image/webp",
-      "aria-label": "Escolher logo do computador",
+      "aria-label": 'choose_logo_from_computer'.tr,
     });
     upload?.addEventListener("change", async () => {
       const file = upload.files[0];
@@ -88,7 +88,7 @@ export function createAdmin(state) {
           !["image/png", "image/jpeg", "image/webp"].includes(file.type) ||
           file.size > 10000000
         ) {
-          throw new Error("Escolha PNG, JPEG ou WebP de até 10 MB.");
+          throw new Error('choose_png_jpeg_or_webp_up_to_10_mb'.tr);
         }
         const bitmap = await window.createImageBitmap(file);
         const canvas = document.createElement("canvas");
@@ -101,7 +101,7 @@ export function createAdmin(state) {
         bitmap.close();
         const url = canvas.toDataURL("image/webp", 0.85);
         if (url.length > 250000) {
-          throw new Error("Logo muito detalhada. Escolha uma imagem menor.");
+          throw new Error('logo_too_detailed_choose_a_smaller_image'.tr);
         }
         form.elements.logo.value = url;
         preview.src = url;
@@ -116,7 +116,7 @@ export function createAdmin(state) {
         ...categoryRows.map((category) => {
           const name = element("input", {
             value: category.name,
-            "aria-label": "Nome da categoria",
+            "aria-label": 'category_name'.tr,
             required: "",
           });
           name.addEventListener("input", () => {
@@ -136,30 +136,30 @@ export function createAdmin(state) {
     };
     drawCategories();
     form.append(
-      element("h2", { text: "Identidade visual" }),
-      field("Nome", "name", config.identity.name),
-      field("Subtítulo", "subtitle", config.identity.subtitle),
+      element("h2", { text: 'visual_identity'.tr }),
+      field('cart_name_label'.tr, "name", config.identity.name),
+      field('subtitle'.tr, "subtitle", config.identity.subtitle),
       field("Nicho / segmento", "niche", config.identity.niche),
       field("Cidade", "city", config.identity.city),
-      field("Estado / região", "region", config.identity.region),
+      field('state_region'.tr, "region", config.identity.region),
     );
     if (!state.existingStore) {
       form.append(
-        field("URL do logo (HTTPS)", "logo", config.branding.logoUrl),
-        field("URL do ícone (HTTPS)", "icon", config.branding.iconUrl),
+        field('logo_url_https'.tr, "logo", config.branding.logoUrl),
+        field('icon_url_https'.tr, "icon", config.branding.iconUrl),
       );
     }
     for (const [key, label] of [
-      ["primary", "Cor das ações"],
-      ["accent", "Cor dos destaques"],
-      ["text", "Cor do texto"],
-      ["background", "Cor de fundo"],
+      ["primary", 'action_color'.tr],
+      ["accent", 'highlight_color'.tr],
+      ["text", 'text_color'.tr],
+      ["background", 'background_color'.tr],
     ]) {
       form.append(inputField(label, key, config.branding.colors[key], "color"));
     }
     if (!state.existingStore) {
       form.append(
-        element("label", { text: "Escolher logo do computador" }, [upload]),
+        element("label", { text: 'choose_logo_from_computer'.tr }, [upload]),
         preview,
       );
       form.elements.logo.addEventListener("change", () => {
@@ -168,20 +168,20 @@ export function createAdmin(state) {
     }
     const mode = element(
       "select",
-      { name: "chatMode", "aria-label": "Modo do assistente" },
+      { name: "chatMode", "aria-label": 'assistant_mode'.tr },
       [
         element("option", {
           value: "GUIDED",
-          text: "Guia por categorias — sem IA",
+          text: 'category_guide_no_ai'.tr,
         }),
-        element("option", { value: "AI", text: "Consultoria por IA" }),
+        element("option", { value: "AI", text: 'ai_consultancy'.tr }),
       ],
     );
     mode.value = config.assistant.mode || "GUIDED";
     form.append(
-      element("label", { text: "Modo do assistente" }, [mode]),
+      element("label", { text: 'assistant_mode'.tr }, [mode]),
       textarea(
-        "Sinônimos: um grupo por linha, separado por vírgulas",
+        'synonyms_one_group_per_line_separated_by_commas'.tr,
         "synonyms",
         (config.assistant.synonyms || [])
           .map((group) => group.join(", "))
@@ -189,15 +189,15 @@ export function createAdmin(state) {
       ),
     );
     form.append(
-      element("h2", { text: "Categorias" }),
+      element("h2", { text: 'mobile_nav_categories'.tr }),
       element("p", {
         class: "muted",
-        text: "Renomeie sem perder os vínculos dos produtos. Desmarque para ocultar a categoria.",
+        text: 'rename_without_losing_product_links_uncheck_to_hide_category'.tr,
       }),
       categories,
       element("button", {
         type: "button",
-        text: "Adicionar categoria",
+        text: 'add_category'.tr,
         onclick: () => {
           categoryRows.push({
             id: crypto.randomUUID(),
@@ -210,41 +210,41 @@ export function createAdmin(state) {
       }),
     );
     form.append(
-      element("h2", { text: "Checkout e logística" }),
+      element("h2", { text: 'checkout_and_logistics'.tr }),
       field(
-        "WhatsApp da loja (país + DDD + número)",
+        'store_whatsapp_country_area_code_number'.tr,
         "phone",
         config.checkout.contactPhone,
       ),
       checkbox(
-        "Habilitar entrega",
+        'enable_delivery'.tr,
         "delivery",
         config.checkout.delivery.enabled,
       ),
       field(
-        "Nome da opção de entrega",
+        'delivery_option_name'.tr,
         "deliveryLabel",
         config.checkout.delivery.label,
       ),
       textarea(
-        "Regiões atendidas (uma por linha)",
+        'serviced_regions_one_per_line'.tr,
         "areas",
         config.checkout.delivery.serviceAreas.join("\n"),
       ),
       inputField(
-        "Taxa fixa de entrega (R$)",
+        'flat_delivery_fee_r'.tr,
         "fee",
         config.checkout.delivery.feeMinor / 100,
         "number",
       ),
-      checkbox("Habilitar retirada", "pickup", config.checkout.pickup.enabled),
+      checkbox('enable_pickup'.tr, "pickup", config.checkout.pickup.enabled),
       field(
-        "Nome da opção de retirada",
+        'pickup_option_name'.tr,
         "pickupLabel",
         config.checkout.pickup.label,
       ),
       field(
-        "Endereço da retirada",
+        'pickup_address'.tr,
         "pickupAddress",
         config.checkout.pickup.address,
       ),
@@ -253,9 +253,9 @@ export function createAdmin(state) {
     form.elements.fee.min = "0";
     for (const [method, label] of [
       ["PIX", "PIX"],
-      ["CASH", "Dinheiro"],
-      ["CREDITO", "Cartão de crédito"],
-      ["DEBITO", "Cartão de débito"],
+      ["CASH", 'cart_cash_option'.tr],
+      ["CREDITO", 'cart_card_option'.tr],
+      ["DEBITO", 'cart_debit_option'.tr],
     ]) {
       form.append(
         checkbox(
@@ -274,51 +274,51 @@ export function createAdmin(state) {
         config.checkout.pix.recipientName,
       ),
       checkbox(
-        "Oferecer envio ao WhatsApp após registrar pedido",
+        'offer_whatsapp_checkout_after_placing_order'.tr,
         "handoff",
         config.checkout.completionMode === "WHATSAPP_HANDOFF",
       ),
     );
     form.append(
-      element("h2", { text: "Consultor de vendas IA" }),
+      element("h2", { text: 'ai_sales_consultant'.tr }),
       checkbox("Habilitar assistente", "aiEnabled", config.assistant.enabled),
-      field("Nome do assistente", "aiName", config.assistant.displayName),
+      field('assistant_name'.tr, "aiName", config.assistant.displayName),
       textarea(
-        "Mensagem de boas-vindas",
+        'welcome_message'.tr,
         "welcome",
         config.assistant.welcomeMessage,
       ),
       textarea(
-        "Perguntas sugeridas (uma por linha)",
+        'suggested_questions_one_per_line'.tr,
         "suggestions",
         config.assistant.suggestedQuestions.join("\n"),
       ),
       textarea("Persona", "persona", assistant.persona || ""),
       textarea(
-        "Instruções para atendimento",
+        'service_instructions'.tr,
         "instructions",
         assistant.instructions || "",
       ),
       checkbox(
-        "Permitir pesquisa externa com fontes",
+        'allow_external_search_with_sources'.tr,
         "webSearch",
         assistant.webSearchEnabled,
       ),
       element("button", {
         type: "submit",
         class: "primary",
-        text: "Salvar configurações",
+        text: 'save_settings'.tr,
       }),
     );
     form.append(
-      element("h2", { text: "Integração de pedidos" }),
+      element("h2", { text: 'order_integration'.tr }),
       field(
-        "URL HTTPS do webhook (opcional)",
+        'webhook_https_url_optional'.tr,
         "webhookUrl",
         response.integrations?.orderWebhookUrl,
       ),
       field(
-        "Referência do segredo fornecida pelo operador",
+        'secret_reference_provided_by_operator'.tr,
         "webhookSecretRef",
         response.integrations?.webhookSecretRef,
       ),
@@ -399,13 +399,13 @@ export function createAdmin(state) {
           },
         });
         state.applyConfig();
-        state.persistPublicSnapshot?.();
+
         if (next.assistant.mode !== config.assistant.mode) {
           window.location.reload();
           return;
         }
         await settings(panel);
-        notify("Configurações salvas.");
+        notify('settings_saved'.tr);
       });
     });
     panel.replaceChildren(form);
@@ -415,9 +415,9 @@ export function createAdmin(state) {
     const editor = element("section");
     const rows = element("div", { class: "admin-products" });
     panel.replaceChildren(
-      element("h2", { text: "Produtos" }),
+      element("h2", { text: 'products_595f74'.tr }),
       element("button", {
-        text: "Cadastrar produto",
+        text: 'register_product'.tr,
         onclick: () => editProduct(editor, null, () => products(panel)),
       }),
       rows,
@@ -430,11 +430,11 @@ export function createAdmin(state) {
             text: `${product.name} · ${money(product.price.amountMinor)} · ${product.isAvailable ? "Ativo" : "Oculto"}`,
           }),
           element("button", {
-            text: "Editar",
+            text: 'common_edit'.tr,
             onclick: () => editProduct(editor, product, () => products(panel)),
           }),
           element("button", {
-            text: "Ocultar",
+            text: 'hide'.tr,
             onclick: async () => {
               try {
                 await state.api(`/admin/products/${product.id}`, {
@@ -454,66 +454,66 @@ export function createAdmin(state) {
   function editProduct(container, product, reload) {
     const form = element("form", { class: "admin-form" });
     form.append(
-      element("h2", { text: product ? "Editar produto" : "Novo produto" }),
-      field("Nome", "name", product?.name),
+      element("h2", { text: product ? 'edit_product'.tr : 'new_product'.tr }),
+      field('cart_name_label'.tr, "name", product?.name),
       field("Subcategoria", "subcategoryName", product?.subcategoryName),
-      textarea("Descrição", "description", product?.description),
+      textarea('description'.tr, "description", product?.description),
       inputField(
-        "Preço (R$)",
+        'price_r'.tr,
         "price",
         (product?.price.amountMinor || 0) / 100,
         "number",
       ),
-      field("URL da foto principal", "image", product?.imageUrl),
+      field('main_photo_url'.tr, "image", product?.imageUrl),
       textarea(
-        "Fotos adicionais (uma URL HTTPS por linha)",
+        'additional_photos_one_https_url_per_line'.tr,
         "images",
         product?.images.map((i) => i.url).join("\n") || "",
       ),
       textarea(
-        "Tags (separadas por vírgula)",
+        'tags_comma_separated'.tr,
         "tags",
         product?.tags.join(", ") || "",
       ),
       textarea(
-        "Especificações (uma por linha: nome: valor)",
+        'specifications_one_per_line_name_value'.tr,
         "specs",
         Object.values(product?.specifications || {})
           .map((s) => `${s.label}: ${s.value} ${s.unit || ""}`.trim())
           .join("\n"),
       ),
       textarea(
-        "Informações e cuidados (uma seção por linha: título: conteúdo)",
+        'information_and_care_one_section_per_line_title_content'.tr,
         "sections",
         product?.contentSections
           .map((s) => `${s.title}: ${s.body}`)
           .join("\n") || "",
       ),
       checkbox(
-        "Produto disponível",
+        'product_available'.tr,
         "available",
         product?.isAvailable !== false,
       ),
-      checkbox("Controlar estoque", "tracked", !!product?.stock.tracked),
-      inputField("Estoque", "stock", product?.stock.quantity || 0, "number"),
+      checkbox('manage_inventory'.tr, "tracked", !!product?.stock.tracked),
+      inputField('stock'.tr, "stock", product?.stock.quantity || 0, "number"),
       field(
-        "Código da unidade (UN, KG, M...)",
+        'unit_code_un_kg_m'.tr,
         "unit",
         product?.saleUnit.code || "UN",
       ),
       field(
-        "Nome da unidade",
+        'unit_name'.tr,
         "unitLabel",
-        product?.saleUnit.label || "unidade",
+        product?.saleUnit.label || 'unit_a9959d28d9'.tr,
       ),
       inputField(
-        "Quantidade mínima",
+        'minimum_quantity'.tr,
         "minimum",
         product?.saleUnit.minimum || 1,
         "number",
       ),
       inputField(
-        "Incremento de quantidade",
+        'quantity_increment'.tr,
         "increment",
         product?.saleUnit.increment || 1,
         "number",
@@ -524,7 +524,7 @@ export function createAdmin(state) {
       form.elements[name].min = "0";
     }
     const categories = element("fieldset", {}, [
-      element("legend", { text: "Categorias" }),
+      element("legend", { text: 'mobile_nav_categories'.tr }),
     ]);
     for (const category of state.config.categories) {
       const label = checkbox(
@@ -540,7 +540,7 @@ export function createAdmin(state) {
       element("button", {
         class: "primary",
         type: "submit",
-        text: "Salvar produto",
+        text: 'save_product'.tr,
       }),
     );
     form.elements.name.required = true;
@@ -551,7 +551,7 @@ export function createAdmin(state) {
         .map((line) => {
           const separator = line.indexOf(":");
           if (separator < 1) {
-            throw new Error("Use título: conteúdo em cada linha.");
+            throw new Error('use_title_content_on_each_line'.tr);
           }
           return [
             line.slice(0, separator).trim(),
@@ -608,7 +608,7 @@ export function createAdmin(state) {
         await state.api(`/admin/products/${id}`, { method: "PUT", body: data });
         await state.reloadProducts();
         await reload();
-        notify("Produto salvo.");
+        notify('product_saved'.tr);
       });
     });
     container.replaceChildren(form);
@@ -616,7 +616,7 @@ export function createAdmin(state) {
   }
   async function orders(panel) {
     const list = await state.api("/admin/orders");
-    panel.replaceChildren(element("h2", { text: "Pedidos" }));
+    panel.replaceChildren(element("h2", { text: 'orders'.tr }));
     const transitions = {
       PENDING: ["CONFIRMED", "CANCELLED"],
       CONFIRMED: ["DELIVERED", "CANCELLED"],
@@ -625,7 +625,7 @@ export function createAdmin(state) {
     };
     const labels = {
       PENDING: "Pendente",
-      CONFIRMED: "Em separação",
+      CONFIRMED: 'being_prepared'.tr,
       DELIVERED: "Entregue",
       CANCELLED: "Cancelado",
     };
@@ -637,7 +637,7 @@ export function createAdmin(state) {
           text: `#${order.id.slice(0, 8)} · ${order.customer.name}`,
         }),
         element("p", {
-          text: `${order.customer.phone} · ${order.address || "Retirada"} · ${money(order.totalMinor)}`,
+          text: `${order.customer.phone} · ${order.address || 'cart_pickup_option'.tr} · ${money(order.totalMinor)}`,
         }),
         element("span", { class: "badge", text: labels[order.status] }),
         ...order.items.map((i) =>
@@ -666,7 +666,7 @@ export function createAdmin(state) {
       panel.append(row);
     }
     if (!list.length) {
-      panel.append(element("p", { text: "Nenhum pedido recebido." }));
+      panel.append(element("p", { text: 'no_orders_received'.tr }));
     }
   }
   async function submit(form, operation) {

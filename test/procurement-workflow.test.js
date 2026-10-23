@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
-const { FirestoreRepository } = require('../src/database/firestore.repository');
+const { FirestoreRepository } = require('./helpers/repository-fixture');
 const { OrderIntakeService } = require('../src/services/order-intake.service');
 const { PdvService } = require('../src/orders/pdv.service');
 const { payableTotal } = require('../src/orders/procurement-payment');

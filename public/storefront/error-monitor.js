@@ -40,7 +40,7 @@
     if (event.message) report(event.message, event.error, event.filename, event.lineno);
   }, true);
   window.addEventListener('unhandledrejection', event => {
-    const message = event.reason?.message || String(event.reason || 'Falha inesperada no navegador');
+    const message = event.reason?.message || String(event.reason || 'unexpected_browser_failure'.tr);
     if (isExtensionError(message, '', event.reason?.stack)) {
       event.stopImmediatePropagation();
       event.preventDefault();

@@ -2,7 +2,7 @@ process.env.NODE_ENV = 'test';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { prepareImport, ProductImportService, CSV_TEMPLATE } = require('../src/catalog/product-import');
-const { FirestoreRepository } = require('../src/database/firestore.repository');
+const { FirestoreRepository } = require('./helpers/repository-fixture');
 const { createApp } = require('../src/http/app');
 const sample = 'codigo;nome;preco;categoria;unidade;estoque\r\n001;"Alface; orgânica";4,50;Horta;UN;10\r\n002;Tomate;8.90;Horta;KG;12,345';
 
@@ -82,16 +82,16 @@ test('importa formato exato da planilha operacional com R$, milhar US, SKU com e
   const caja = plan.products[0];
   assert.equal(caja.sku, 'b99bcb59');
   assert.equal(caja.price, 95);
-  assert.equal(caja.stockQuantity, 50); // padrão quando vazio
-  assert.ok(caja.imageUrl.startsWith('https://images.unsplash.com/'));
-  assert.ok(caja.cuidados_basicos.length > 0);
-  assert.ok(caja.descriptionAi.length > 0);
+  assert.equal(caja.stockQuantity, 0); // Missing stock never creates inventory.
+  assert.equal(caja.imageUrl, '');
+  assert.equal(caja.cuidados_basicos, '');
+  assert.equal(caja.descriptionAi, '');
 
   const palmeira = plan.products[1];
   assert.equal(palmeira.sku, 'palmeira-1');
   assert.equal(palmeira.price, 1000);
   assert.equal(palmeira.stockQuantity, 25);
-  assert.ok(palmeira.imageUrl.length > 0);
+  assert.equal(palmeira.imageUrl, '');
 
   const tuia = plan.products[2];
   assert.equal(tuia.sku, 'Tuia stritica');

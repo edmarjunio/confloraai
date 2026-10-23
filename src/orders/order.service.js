@@ -74,6 +74,7 @@ class OrderService {
       if (current?.status !== ORDER_STATUS.AWAITING_CONFIRMATION) return null;
       const changes = {};
       for (const field of ['deliveryAddress', 'paymentMethod', 'orderType']) if (fields[field]) changes[field] = fields[field];
+      if (Number.isSafeInteger(fields.confirmedDeliveryFeeMinor)) changes.confirmedDeliveryFeeMinor = fields.confirmedDeliveryFeeMinor;
       return { ...current, ...changes };
     });
     return result?.status === ORDER_STATUS.AWAITING_CONFIRMATION ? result : null;
@@ -168,7 +169,12 @@ class OrderService {
       if (line.price !== Number(item.price)) throw Object.assign(new Error('O preço mudou. Revise sua sacola antes de confirmar.'), { status: 409 });
       return { ...line, subtotal: line.subtotalMinor / 100 };
     });
-    const total = items.reduce((sum, item) => sum + item.subtotalMinor, 0) / 100;
+    const delivery = await this.getDeliveryOptions();
+    if (orderType === 'DELIVERY' && !delivery.enabled) throw new Error('Entrega indisponível. Escolha retirada.');
+    const deliveryFeeMinor = orderType === 'DELIVERY' ? delivery.feeMinor : 0;
+    if (deliveryFeeMinor !== Number(draft.confirmedDeliveryFeeMinor || 0)) throw Object.assign(new Error('A taxa de entrega mudou. Confirme o novo total.'), { status: 409 });
+    const subtotal = items.reduce((sum, item) => sum + item.subtotalMinor, 0) / 100;
+    const total = subtotal + deliveryFeeMinor / 100;
     if (total <= 0) throw new Error('Pedido sem valor comercial válido.');
     const manualPix = paymentMethod === 'PIX' && pixMode() === 'MANUAL' ? manualPixSettings() : null;
     const automatic = paymentMethod === 'PIX' && !manualPix;
@@ -177,7 +183,7 @@ class OrderService {
     const order = await this.firestoreRepo.createDirectOrder({
       id, orderId: id, ticketNumber: id.replaceAll('-', '').slice(0, 10).toUpperCase(), source: 'WHATSAPP_BOT',
       customerPhone: phone, phone, customerName: customerName || 'Cliente WhatsApp',
-      items, subtotal: total, total, discount: 0, paymentMethod, paymentParts: [{ method: paymentMethod, amount: total }],
+      items, subtotal, deliveryFee: deliveryFeeMinor / 100, total, discount: 0, paymentMethod, paymentParts: [{ method: paymentMethod, amount: total }],
       paymentStatus: 'PENDING', status: automatic ? 'CREATING_PIX' : 'AWAITING_PAYMENT',
       orderType, deliveryAddress: draft.deliveryAddress || '',
       ...(orderType === 'DELIVERY' ? { deliveryStatus: paymentMethod === 'PIX' ? 'PENDING_DISPATCH' : 'PENDING_DELIVERY' } : {}),
@@ -187,6 +193,13 @@ class OrderService {
       ...(automatic ? { pixData: { txid: id.replaceAll('-', '').toUpperCase(), provider: 'SICREDI' }, pixProvider: 'SICREDI' } : {}),
     }, { reserveInventory: true, conversationDraft: { phone, version: draft.version } });
     return this.prepareCommercialOrder(order);
+  }
+
+  async getDeliveryOptions() {
+    const saved = await require('../storefront/existing-store').readStoreSettings(this.firestoreRepo);
+    const delivery = saved?.config?.checkout?.delivery;
+    return { enabled: delivery?.enabled === true && Number.isSafeInteger(delivery.feeMinor) && delivery.feeMinor >= 0,
+      feeMinor: delivery?.feeMinor ?? 0 };
   }
 
   async prepareCommercialOrder(order) {

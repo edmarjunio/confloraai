@@ -1,8 +1,6 @@
 const { createHash } = require('node:crypto');
 const { PdvRepository } = require('../orders/pdv.repository');
-const { resolveHdProductImage, isKgProduct } = require('./image-resolver');
-const { getProductCareDetails } = require('./product-care');
-const { buildProductInformation } = require('./product-information');
+const { isKgProduct } = require('./image-resolver');
 
 const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
 
@@ -111,7 +109,7 @@ function prepareImport(csv) {
       const price = decimal(row.price, 2, 'Preço');
       if (price <= 0) throw invalid('Preço deve ser maior que zero.');
       
-      const rawStock = row.stock !== undefined && row.stock !== null && String(row.stock).trim() !== '' ? row.stock : (row.status === 'INATIVO' ? '0' : '50');
+      const rawStock = row.stock !== undefined && row.stock !== null && String(row.stock).trim() !== '' ? row.stock : '0';
       const stock = decimal(rawStock, unit === 'KG' ? 3 : 0, 'Estoque');
       
       const status = (row.status || 'ATIVO').toUpperCase();
@@ -119,10 +117,7 @@ function prepareImport(csv) {
       
       const id = 'prd-' + createHash('sha256').update(key).digest('hex').slice(0, 32);
       const subcategory = String(row.subcategory || '').slice(0, 80);
-      const hdPhoto = resolveHdProductImage(row.name, row.category, subcategory);
-      const care = getProductCareDetails({ name: row.name, category: row.category, subcategory });
-      const info = buildProductInformation({ name: row.name, category: row.category, subcategory });
-      const desc = info.descriptionAi || `${row.name} está disponível na Conflora Horta e Viveiro.`;
+
 
       products.push({
         id,
@@ -154,18 +149,18 @@ function prepareImport(csv) {
         reservedQuantity: 0,
         status,
         STATUS: status,
-        images: hdPhoto ? [hdPhoto] : [],
-        imageUrl: hdPhoto || '',
-        imagePathCache: hdPhoto || '',
+        images: [],
+        imageUrl: '',
+        imagePathCache: '',
         source: 'CSV_IMPORT',
-        cuidados_basicos: care.cuidados_basicos || info.cuidados_basicos || '',
-        ambiente_ideal: care.ambiente_ideal || '',
-        dicas_armazenamento: care.dicas_armazenamento || '',
-        durabilidade: care.durabilidade || '',
-        descriptionAi: desc,
-        descricao_ia: desc,
-        iluminacao: info.iluminacao || '',
-        rega: info.rega || '',
+        cuidados_basicos: '',
+        ambiente_ideal: '',
+        dicas_armazenamento: '',
+        durabilidade: '',
+        descriptionAi: '',
+        descricao_ia: '',
+        iluminacao: '',
+        rega: '',
       });
     } catch (error) { if (errors.length < 100) errors.push({ line: index + 2, error: error.message }); }
   });

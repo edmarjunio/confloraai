@@ -18,7 +18,7 @@ test('catalogue and cashier use Storage paths and only create image proxies for 
 
   const missing = getProductImageCandidates({ id: 'no-photo', name: 'Abiu Amarelo', category: 'Frutífera' });
   assert.equal(missing.length, 1);
-  assert.match(missing[0], /^https:\/\/images\.unsplash\.com\//);
+  assert.equal(missing[0], '/store-assets/placeholder.svg');
   assert.deepEqual(getProductImageCandidates({ id: 'legacy-photo', imageFileId: 'photo-doc' }), ['/api/images/photo-doc']);
 });
 

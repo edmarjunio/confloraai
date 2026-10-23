@@ -2,7 +2,7 @@ process.env.WHATSAPP_AI_ENABLED = 'true';
 process.env.WHATSAPP_AGENT_OWNER = 'cloud_api';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { FirestoreRepository } = require('../src/database/firestore.repository');
+const { FirestoreRepository } = require('./helpers/repository-fixture');
 const { OrderIntakeService, parseRequest } = require('../src/services/order-intake.service');
 const { ORDER_OFFER, ARRIVAL_PENDING, PRICE_PENDING, briefReply } = require('../src/services/customer-service-policy');
 const { PdvRepository } = require('../src/orders/pdv.repository');
@@ -228,13 +228,14 @@ test('a quantity answer completes an already accepted mixed request without drop
   assert.deepEqual(saved.items.map(item => item.fulfillment), ['IMMEDIATE', 'PROCUREMENT']);
 });
 
-test('WhatsApp receives, confirms and records unknown items before any menu or free-form model response', async () => {
+test('legacy intake registers unknown items after the customer selected a conversation channel', async () => {
   const { repo } = fixture();
   const sent = [];
   const { MessageService } = require('../src/services/message.service');
   const service = new MessageService({ firestoreRepo: repo, whatsappClient: { sendTextMessage: async (_phone, text) => {
     sent.push(text); return { messages: [{ id: 'wamid.' + sent.length }] };
   } } });
+  await require('../src/services/conversation-automation').setConversationChannel(repo, phone, 'catalog');
   const offer = await service.handleCustomerMessage({ phone, message: 'Quero 2 galos combatentes e 3 galinhas da angola', messageId: 'offer', customerName: 'Cliente' });
   assert.equal(offer.intent, 'ORDER_INTAKE_CONFIRM');
   assert.match(offer.reply, /2 galos combatentes e 3 galinhas da angola/);

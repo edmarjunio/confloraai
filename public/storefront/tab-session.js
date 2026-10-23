@@ -75,7 +75,7 @@
       controller = new AbortController();
       try {
         const response = await apiFetch(url, { signal: controller.signal, headers: { Accept: 'text/event-stream' } });
-        if (!response.ok) throw new Error('Não foi possível acompanhar atualizações.');
+        if (!response.ok) throw new Error('could_not_track_updates'.tr);
         const reader = response.body.getReader(); const decoder = new window.TextDecoder(); let buffer = '';
         while (!closed) {
           const { value, done } = await reader.read(); if (done) break;
@@ -118,10 +118,10 @@
     if (preview) preview.opener = null;
     try {
       const response = await apiFetch(url);
-      if (!response.ok) throw new Error('Não foi possível abrir o comprovante.');
+      if (!response.ok) throw new Error('could_not_open_receipt'.tr);
       const objectUrl = URL.createObjectURL(await response.blob());
       if (preview) preview.location.href = objectUrl;
-      else { URL.revokeObjectURL(objectUrl); throw new Error('Permita abrir uma nova janela para visualizar o comprovante.'); }
+      else { URL.revokeObjectURL(objectUrl); throw new Error('allow_opening_a_new_window_to_view_the_receipt'.tr); }
       setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
     } catch (error) { preview?.close(); throw error; }
   }

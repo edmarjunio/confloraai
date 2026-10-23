@@ -48,7 +48,7 @@ class SystemStatusService {
       webhookRoute: '/webhook',
       phoneNumberId: phoneId
         ? `${phoneId.slice(0, 4)}...${phoneId.slice(-4)}`
-        : 'Emulador Local (5564999351616)',
+        : 'Não configurado',
       hasAccessToken: hasToken,
       hasVerifyToken: hasVerifyToken,
       lastReceivedAt: this.webhookStats.lastReceivedAt || 'Nenhuma mensagem recente',

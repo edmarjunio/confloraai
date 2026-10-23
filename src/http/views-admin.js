@@ -1,3 +1,4 @@
+require('../i18n/default');
 const { renderFirebaseAuthScript } = require('./firebase-client');
 const { createHash } = require('node:crypto');
 const { readFileSync } = require('node:fs');
@@ -20,12 +21,13 @@ const productAssetsVersion = createHash('sha256')
 
 function renderAdminHtml(storeConfig) {
   const escape = value => String(value || '').replace(/[&<>"']/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[character]);
-  const name = escape(storeConfig?.identity.name || 'Administração');
+  const name = escape(storeConfig?.identity.name || 'administration'.tr);
   const colors = storeConfig?.branding.colors || {};
   const color = (key, fallback) => /^#[0-9a-f]{6}$/i.test(colors[key]) ? colors[key] : fallback;
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
+<script src="/store-assets/i18n-runtime.js"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${name} — Administração</title>
@@ -49,7 +51,7 @@ function renderAdminHtml(storeConfig) {
   <style>
     .header-actions { flex-wrap: wrap; justify-content: flex-end; }
     button, .header-btn { transition: transform .18s ease, box-shadow .18s ease, filter .18s ease, background-color .18s ease; }
-    button:hover, .header-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(15, 23, 42, .14); }
+    button:hover, .header-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(15, 23, 42, .12); }
     button:focus-visible, .header-btn:focus-visible { outline: 3px solid rgba(46, 147, 72, .28); outline-offset: 2px; }
     button:disabled, .header-btn:disabled { transform: none; box-shadow: none; cursor: not-allowed; }
     .admin-cashier-link { background: var(--accent); color: #111827; border-color: #eab308; font-weight: 800; }
@@ -866,6 +868,12 @@ function renderAdminHtml(storeConfig) {
       <div id="adminStatusDashboardContainer">
         <div style="padding:30px; text-align:center; color:#64748b;">Carregando diagnósticos em tempo real...</div>
       </div>
+      <section id="sicrediPixMonitorSection" style="margin-top:28px">
+        <h2>Teste do Pix Sicredi</h2>
+        <p>Valida QR Code, conferência bancária e baixa do estoque em uma simulação isolada, sem pagamento nem dados reais.</p>
+        <button type="button" id="runSicrediSimulation" class="action-btn btn-green">Executar simulação</button>
+        <p id="sicrediSimulationStatus" role="status"></p>
+      </section>
       <section style="margin-top:28px" aria-label="Histórico de erros">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><h2>Histórico de erros</h2><button type="button" id="errorHistoryRefresh" class="action-btn btn-gray">Atualizar histórico</button></div>
         <p style="font-size:13px;color:#64748b">Falhas do servidor e do navegador. Acesso exclusivo do administrador.</p>
@@ -921,7 +929,7 @@ function renderAdminHtml(storeConfig) {
     <div class="modal-card">
       <h3 style="margin-bottom:8px;">Solicitar Correção de Venda</h3>
       <p style="font-size:12px; color:#64748b; margin-bottom:12px;">
-        Caso tenha errado no lançamento, informe o que mudou e o motivo. Edmar receberá uma notificação estilo Git Diff para aprovar.
+        Informe a correção e o motivo. O administrador vai conferir a solicitação.
       </p>
       <input type="hidden" id="altOrderId" />
       <div style="margin-bottom:10px;">
@@ -947,7 +955,7 @@ function renderAdminHtml(storeConfig) {
       </div>
       <div style="display:flex; justify-content:flex-end; gap:8px;">
         <button class="action-btn btn-gray" onclick="closeAlterationModal()">Cancelar</button>
-        <button class="action-btn btn-amber" onclick="submitAlterationRequest()">Enviar para Edmar (Git Diff)</button>
+        <button class="action-btn btn-amber" onclick="submitAlterationRequest()">Enviar para análise</button>
       </div>
     </div>
   </div>
@@ -1021,7 +1029,7 @@ function renderAdminHtml(storeConfig) {
         </div>
         <div style="margin-bottom:10px;">
           <label style="font-size:12px; font-weight:bold;">E-mail / Usuário:</label>
-          <input type="email" id="uEmail" required style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="maria@conflora.com.br" />
+          <input type="email" id="uEmail" required style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="E-mail do cliente" />
         </div>
         <div style="margin-bottom:10px;">
           <label style="font-size:12px; font-weight:bold;">Cargo / Nível de Acesso:</label>
@@ -1087,10 +1095,10 @@ function renderAdminHtml(storeConfig) {
           currentUser = data.user;
           applyUserRoleUI();
         } else {
-          alert(data.error || 'Erro ao alternar perfil de teste.');
+          alert(data.error || 'error_switching_test_profile'.tr);
         }
       } catch {
-        alert('Erro de conexão ao alternar perfil.');
+        alert('connection_error_when_switching_profile'.tr);
       }
     }
 
@@ -1112,10 +1120,10 @@ function renderAdminHtml(storeConfig) {
       if (currentUser?.picture) photo.src = currentUser.picture;
       else photo.removeAttribute('src');
       if (!currentUser || !['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(currentUser.role)) {
-        document.getElementById('loggedUserName').innerText = 'Não autenticado';
+        document.getElementById('loggedUserName').innerText = 'not_authenticated'.tr;
         const roleEl = document.getElementById('loggedUserRole');
         roleEl.innerText = 'BLOQUEADO';
-        roleEl.className = 'role-badge caixa';
+        roleEl.className = 'role_badge_cashier'.tr;
 
         // Esconde todas as abas até que haja login
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
@@ -1128,13 +1136,13 @@ function renderAdminHtml(storeConfig) {
         return;
       }
 
-      document.getElementById('loggedUserName').innerText = currentUser.name || currentUser.email || 'Operador';
+      document.getElementById('loggedUserName').innerText = currentUser.name || currentUser.email || 'team_operator'.tr;
       const roleEl = document.getElementById('loggedUserRole');
       roleEl.innerText = currentUser.role || 'OPERADOR';
       roleEl.className = 'role-badge ' + (currentUser.role === 'CAIXA' ? 'caixa' : '');
 
       document.getElementById('adminCashierReport').hidden = !['ADMIN', 'CAIXA'].includes(currentUser.role);
-      document.getElementById('adminCashierReport').setAttribute('scope-label', currentUser.role === 'ADMIN' ? 'Caixa geral da loja · hoje' : 'Somente o seu caixa · hoje');
+      document.getElementById('adminCashierReport').setAttribute('scope-label', currentUser.role === 'ADMIN' ? 'Caixa geral da loja · hoje' : 'only_your_register_today'.tr);
       const isAdmin = currentUser.role === 'ADMIN';
       const isDriver = currentUser.role === 'ENTREGADOR';
 
@@ -1169,8 +1177,8 @@ function renderAdminHtml(storeConfig) {
         if (options.replace || location.search === url.search) history.replaceState({ confloraNavigation: true }, '', url);
         else history.pushState({ confloraNavigation: true }, '', url);
       }
-      const names = { cashier: 'Caixa/Vendas', orders: 'Comandas', stock: 'Estoque', products: 'Produtos', team: 'Equipe', status: 'Sistema e erros', analytics: 'Eventos', notifs: 'Notificações', price: 'Preços', diff: 'Solicitações de correção' };
-      document.getElementById('adminPageLabel').textContent = names[tab] || 'Administração';
+      const names = { cashier: 'register_sales'.tr, orders: 'Comandas', stock: 'stock'.tr, products: 'products_595f74'.tr, team: 'header_team_menu'.tr, status: 'Sistema e erros', analytics: 'Eventos', notifs: 'notifications'.tr, price: 'prices'.tr, diff: 'correction_requests'.tr };
+      document.getElementById('adminPageLabel').textContent = names[tab] || 'administration'.tr;
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
       document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
       
@@ -1200,7 +1208,7 @@ function renderAdminHtml(storeConfig) {
         const days = Number(document.getElementById('analyticsPeriod').value || 30);
         const res = await window.ConfloraSession.apiFetch('/api/admin/analytics/events?days=' + encodeURIComponent(days));
         const metrics = await res.json();
-        if (!res.ok) throw new Error(metrics.error || 'Não foi possível carregar os eventos.');
+        if (!res.ok) throw new Error(metrics.error || 'could_not_load_events'.tr);
         const number = value => Number(value || 0).toLocaleString('pt-BR');
         const currency = value => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         document.getElementById('analyticsVisitors').textContent = number(metrics.visitors);
@@ -1215,7 +1223,7 @@ function renderAdminHtml(storeConfig) {
         topEl.replaceChildren(...(topProducts.length ? topProducts.map((product, index) => {
           const row = document.createElement('div');
           row.style.marginBottom = '7px';
-          row.textContent = (index + 1) + '. ' + product.name + ' · ' + number(product.views) + ' visualizações · ' + number(product.adds) + ' adições · ' + number(product.purchases) + ' vendidos';
+          row.textContent = (index + 1) + '. ' + product.name + ' · ' + number(product.views) + 'views'.tr + number(product.adds) + 'additions'.tr + number(product.purchases) + ' vendidos';
           return row;
         }) : [Object.assign(document.createElement('p'), { textContent: 'Ainda não há eventos de produto neste período.' })]));
         const campaignEl = document.getElementById('analyticsCampaigns');
@@ -1223,21 +1231,21 @@ function renderAdminHtml(storeConfig) {
         campaignEl.replaceChildren(...(campaigns.length ? campaigns.map(campaign => {
           const row = document.createElement('div');
           row.style.marginBottom = '8px';
-          row.textContent = campaign.name + ' · ' + number(campaign.visits) + ' visitas' + (metrics.attributedFinancialsUnavailable ? ' · atribuição financeira não disponível' : ' · ' + number(campaign.purchases) + ' pedidos · ' + currency(campaign.revenue));
+          row.textContent = campaign.name + ' · ' + number(campaign.visits) + ' visitas' + (metrics.attributedFinancialsUnavailable ? ' · atribuição financeira não disponível' : ' · ' + number(campaign.purchases) + 'orders_c26495'.tr + currency(campaign.revenue));
           return row;
         }) : [Object.assign(document.createElement('p'), { textContent: 'Nenhuma campanha UTM registrada ainda. Use utm_source, utm_medium e utm_campaign nos links de anúncios.' })]));
-        status.textContent = number(metrics.collectedEvents) + ' eventos nos últimos ' + days + ' dias (' + (metrics.navigationSource || 'Firestore') + '). Faturamento: recebimentos confirmados no Firestore. Conversão: pedidos pagos por visitante. Tráfego pode levar até 60 segundos para atualizar.';
+        status.textContent = number(metrics.collectedEvents) + 'events_in_the_last'.tr + days + ' dias (' + (metrics.navigationSource || 'Firestore') + 'revenue_confirmed_receipts_in_firestore_conversion_paid_orders_per_visitor_traffic_ma'.tr;
       } catch (err) {
-        status.textContent = err.message || 'Erro ao carregar eventos do catálogo.';
+        status.textContent = err.message || 'error_loading_catalog_events'.tr;
       }
     }
 
     function testGaEvent() {
       if (typeof gtag === 'function') {
         gtag('event', 'admin_analytics_test', { event_category: 'admin' });
-        alert('Evento de teste colocado na fila do Google Analytics 4. Confira a chegada no DebugView do GA4.');
+        alert('test_event_queued_in_google_analytics_4_check_for_arrival_in_ga4_debugview'.tr);
       } else {
-        alert('A biblioteca do Google Analytics não foi carregada nesta página.');
+        alert('the_google_analytics_library_was_not_loaded_on_this_page'.tr);
       }
     }
 
@@ -1254,7 +1262,7 @@ function renderAdminHtml(storeConfig) {
         const url = '/api/admin/daily-metrics' + (operator ? '?operator=' + encodeURIComponent(operator) + '&operatorName=' + encodeURIComponent(selectedOperatorName) : '');
         const res = await window.ConfloraSession.apiFetch(url);
         const m = await res.json();
-        if (!res.ok) throw new Error(m.error || 'Não foi possível carregar as vendas.');
+        if (!res.ok) throw new Error(m.error || 'could_not_load_sales'.tr);
 
         const fmt = val => 'R$ ' + Number(val || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         const cashVal = Number(m.byPayment?.DINHEIRO || 0);
@@ -1274,7 +1282,7 @@ function renderAdminHtml(storeConfig) {
         document.getElementById('cashierDebtToday').innerText = fmt(debtVal);
         document.getElementById('cashierCashToday').innerText = fmt(cashVal);
         const orderCountEl = document.getElementById('cashierOrdersCountToday');
-        if (orderCountEl) orderCountEl.innerText = (m.todayOrdersCount || (m.todayOrders || []).length) + ' vendas realizadas';
+        if (orderCountEl) orderCountEl.innerText = (m.todayOrdersCount || (m.todayOrders || []).length) + 'completed_sales'.tr;
 
         // Atualizar Linhas da Conferência (Apurado Sistema)
         document.getElementById('rowSysCash').innerText = fmt(cashVal);
@@ -1298,7 +1306,7 @@ function renderAdminHtml(storeConfig) {
             const value = id || (name ? 'name:' + name : '');
             if (value && !operators.has(value)) operators.set(value, name || id);
           }
-          select.replaceChildren(new Option('Todos', ''), ...[...operators].sort((a, b) => a[1].localeCompare(b[1], 'pt-BR')).map(([value, label]) => new Option(label, value)));
+          select.replaceChildren(new Option('all_bd02b9a7d7'.tr, ''), ...[...operators].sort((a, b) => a[1].localeCompare(b[1], 'pt-BR')).map(([value, label]) => new Option(label, value)));
           select.value = selectedValue;
         }
 
@@ -1325,7 +1333,7 @@ function renderAdminHtml(storeConfig) {
           <td>\${itemsTxt}</td>
           <td>\${escapeHtml(o.paymentMethod || 'PIX')}</td>
           <td><strong>R$ \${Number(o.total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></td>
-          <td><span class="badge \${o.status === 'CONFIRMED' ? 'badge-confirmed' : 'badge-pending'}">\${escapeHtml(({ AWAITING_PAYMENT: 'AGUARDANDO PAGAMENTO', AWAITING_CASHIER: 'AGUARDANDO PAGAMENTO', AWAITING_PIX: 'AGUARDANDO PAGAMENTO PIX', CREATING_PIX: 'PREPARANDO PIX', AWAITING_CONFIRMATION: 'AGUARDANDO CONFIRMAÇÃO', CONFIRMED: 'CONFIRMADO', PAID_CONFIRMED: 'PAGO', DELIVERED: 'ENTREGUE', CANCELLED: 'CANCELADO', PENDING: 'PENDENTE' })[o.status] || 'EM ANDAMENTO')}</span></td>
+          <td><span class="badge \${o.status === 'CONFIRMED' ? 'badge-confirmed' : 'badge-pending'}">\${escapeHtml(({ AWAITING_PAYMENT: 'awaiting_payment_49c236'.tr, AWAITING_CASHIER: 'awaiting_payment_49c236'.tr, AWAITING_PIX: 'awaiting_pix_payment_4fd77b'.tr, CREATING_PIX: 'PREPARANDO PIX', AWAITING_CONFIRMATION: 'awaiting_confirmation_05b361'.tr, CONFIRMED: 'CONFIRMADO', PAID_CONFIRMED: 'PAGO', DELIVERED: 'ENTREGUE', CANCELLED: 'CANCELADO', PENDING: 'PENDENTE' })[o.status] || 'in_progress_66a062'.tr)}</span></td>
           <td>
             <button class="action-btn btn-amber" style="padding:4px 8px;" onclick="openAlterationModal('\${o.id}')" title="Corrigir se errou no lançamento">✏️ Corrigir Venda</button>
           </td>
@@ -1438,9 +1446,9 @@ function renderAdminHtml(storeConfig) {
         const btnSubmit = document.getElementById('btnSubmitCloseCash');
         if (json.closing && json.closing.status === 'CLOSED') {
           badge.className = 'conf-badge-closed';
-          badge.textContent = '🔒 Fechado por ' + (json.closing.closedBy || 'Operador') + ' às ' + new Date(json.closing.closedAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          badge.textContent = 'closed_by_ecc035'.tr + (json.closing.closedBy || 'team_operator'.tr) + 'at'.tr + new Date(json.closing.closedAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           if (btnSubmit) {
-            btnSubmit.textContent = '🔒 Caixa de Hoje Já Fechado (Atualizar)';
+            btnSubmit.textContent = 'today_s_register_already_closed_refresh'.tr;
             btnSubmit.className = 'action-btn btn-gray';
           }
           if (json.closing.notes && !document.getElementById('cashierClosingNotes').value) {
@@ -1448,9 +1456,9 @@ function renderAdminHtml(storeConfig) {
           }
         } else {
           badge.className = 'conf-badge-open';
-          badge.textContent = 'Caixa Aberto (Em Conferência)';
+          badge.textContent = 'open_cash_register_under_reconciliation'.tr;
           if (btnSubmit) {
-            btnSubmit.textContent = '🔒 Registrar Fechamento do Caixa';
+            btnSubmit.textContent = 'register_cash_closing'.tr;
             btnSubmit.className = 'action-btn btn-green';
           }
         }
@@ -1475,7 +1483,7 @@ function renderAdminHtml(storeConfig) {
       const notes = document.getElementById('cashierClosingNotes')?.value || '';
       const todayStr = new Date().toISOString().slice(0, 10);
 
-      if (!window.confirm('Confirmar e registrar o fechamento do caixa de hoje (' + todayStr.split('-').reverse().join('/') + ')?')) {
+      if (!window.confirm('confirm_and_register_today_s_register_closing'.tr + todayStr.split('-').reverse().join('/') + ')?')) {
         return;
       }
 
@@ -1500,7 +1508,7 @@ function renderAdminHtml(storeConfig) {
             const proofData = await proofRes.json();
             receiptUrl = proofData.url || proofData.proofUrl || '';
           } catch (e) {
-            console.warn('Falha ao subir imagem do comprovante:', e);
+            console.warn('failed_to_upload_receipt_image'.tr, e);
           }
         }
 
@@ -1518,15 +1526,15 @@ function renderAdminHtml(storeConfig) {
 
         const data = await res.json();
         if (res.ok && data.success) {
-          alert('✅ Fechamento de caixa registrado com sucesso!');
+          alert('register_closing_successfully_recorded'.tr);
           await loadCashierDaily();
         } else {
-          alert('Erro ao registrar fechamento: ' + (data.error || 'Falha no servidor.'));
+          alert('error_recording_closing'.tr + (data.error || 'server_failure'.tr));
         }
       } catch (err) {
-        alert('Erro ao comunicar com servidor: ' + err.message);
+        alert('error_communicating_with_server'.tr + err.message);
       } finally {
-        if (btn) { btn.disabled = false; btn.textContent = '🔒 Registrar Fechamento do Caixa'; }
+        if (btn) { btn.disabled = false; btn.textContent = 'register_cash_closing'.tr; }
       }
     }
 
@@ -1568,7 +1576,7 @@ function renderAdminHtml(storeConfig) {
           card.innerHTML = \`
             <div class="diff-header">
               <div>
-                <strong>Pedido #\${(alt.orderId || '').slice(-6)}</strong> • Solicitado por: <strong>\${alt.requestedByName || 'Caixa'}</strong> em \${new Date(alt.createdAt).toLocaleTimeString()}
+                <strong>Pedido #\${(alt.orderId || '').slice(-6)}</strong> • Solicitado por: <strong>\${alt.requestedByName || 'checkout'.tr}</strong> em \${new Date(alt.createdAt).toLocaleTimeString()}
               </div>
               <div>
                 <span class="badge \${alt.status === 'APPROVED' ? 'badge-confirmed' : (alt.status === 'REJECTED' ? 'badge-cancelled' : 'badge-pending')}">
@@ -1578,7 +1586,7 @@ function renderAdminHtml(storeConfig) {
             </div>
 
             <div class="diff-reason-box">
-              <strong>💬 Justificativa do Atendente:</strong> "\${alt.reason || 'Correção de erro'}"
+              <strong>💬 Justificativa do Atendente:</strong> "\${alt.reason || 'bug_fix'.tr}"
               \${alt.rejectionReason ? \`<div style="margin-top:6px; color:#991b1b;"><strong>❌ Motivo do Cancelamento de Edmar:</strong> "\${alt.rejectionReason}"</div>\` : ''}
             </div>
 
@@ -1596,12 +1604,12 @@ function renderAdminHtml(storeConfig) {
           container.appendChild(card);
         });
       } catch (err) {
-        container.innerHTML = 'Erro ao carregar alterações: ' + escapeHtml(err.message);
+        container.innerHTML = 'error_loading_changes'.tr + escapeHtml(err.message);
       }
     }
 
     async function approveAlteration(requestId) {
-      if (!confirm('Deseja consolidar esta alteração no pedido e atualizar o estoque?')) return;
+      if (!confirm('do_you_want_to_consolidate_this_change_in_the_order_and_update_inventory'.tr)) return;
       const res = await window.ConfloraSession.apiFetch('/api/admin/alterations/' + requestId + '/review', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1609,7 +1617,7 @@ function renderAdminHtml(storeConfig) {
       });
       const data = await res.json();
       if (data.success) {
-        alert('✅ Alteração consolidada no Firestore com sucesso! Notificação enviada para o caixa.');
+        alert('change_successfully_consolidated_in_firestore_notification_sent_to_the_cashier'.tr);
         loadAlterations();
         loadCashierDaily();
       }
@@ -1628,7 +1636,7 @@ function renderAdminHtml(storeConfig) {
     async function confirmRejectAlteration() {
       const id = document.getElementById('rejectRequestId').value;
       const reason = document.getElementById('rejectionReasonText').value.trim();
-      if (!reason) { alert('Por favor, informe o motivo do cancelamento para o atendente.'); return; }
+      if (!reason) { alert('please_provide_the_reason_for_cancellation_to_the_attendant'.tr); return; }
 
       const res = await window.ConfloraSession.apiFetch('/api/admin/alterations/' + id + '/review', {
         method: 'POST',
@@ -1637,7 +1645,7 @@ function renderAdminHtml(storeConfig) {
       });
       const data = await res.json();
       if (data.success) {
-        alert('Solicitação recusada. A notificação com o motivo foi enviada diretamente para o atendente do caixa.');
+        alert('request_declined_the_notification_with_the_reason_was_sent_directly_to_the_cashier_at'.tr);
         closeRejectModal();
         loadAlterations();
       }
@@ -1673,7 +1681,7 @@ function renderAdminHtml(storeConfig) {
       const newTot = parseFloat(document.getElementById('altTotal').value);
       const reason = document.getElementById('altReason').value.trim();
 
-      if (!reason) { alert('Informe a justificativa do erro para que Edmar possa avaliar.'); return; }
+      if (!reason) { alert('explain_the_reason_for_the_correction'.tr); return; }
 
       const proposed = { ...orig, customerName: newCust, paymentMethod: newPay, total: newTot };
 
@@ -1690,7 +1698,7 @@ function renderAdminHtml(storeConfig) {
         })
       });
 
-      alert('🚀 Solicitação de alteração enviada para o Administrador! Ele analisará as diferenças no visualizador Git Diff.');
+      alert('change_request_sent_to_the_administrator_they_will_review_the_differences_in_the_git_'.tr);
       closeAlterationModal();
       loadAlterations();
     }
@@ -1712,7 +1720,7 @@ function renderAdminHtml(storeConfig) {
         if (notifications.length === 0) {
           const empty = document.createElement('p');
           empty.className = 'muted';
-          empty.textContent = 'Nenhuma notificação no momento.';
+          empty.textContent = 'no_notifications_at_the_moment'.tr;
           container.appendChild(empty);
         }
 
@@ -1721,7 +1729,7 @@ function renderAdminHtml(storeConfig) {
           const isSale = n.type === 'SALE_COMPLETED';
           div.className = 'notif-card ' + (n.type === 'REJECTED' ? 'rejected' : (isSale ? 'sale' : (n.type === 'APPROVED' ? 'approved' : '')));
           const heading = document.createElement('strong');
-          heading.textContent = n.title || 'Aviso da Administração';
+          heading.textContent = n.title || 'administration_notice'.tr;
           const timestamp = document.createElement('time');
           timestamp.dateTime = n.createdAt || '';
           timestamp.textContent = n.createdAt ? new Date(n.createdAt).toLocaleString('pt-BR') : '';
@@ -1741,7 +1749,7 @@ function renderAdminHtml(storeConfig) {
             const ordersButton = document.createElement('button');
             ordersButton.type = 'button';
             ordersButton.className = 'action-btn btn-green';
-            ordersButton.textContent = 'Ver pedidos';
+            ordersButton.textContent = 'view_orders'.tr;
             ordersButton.addEventListener('click', () => showTab('orders'));
             div.appendChild(ordersButton);
           }
@@ -1763,7 +1771,7 @@ function renderAdminHtml(storeConfig) {
           await renderDiscountApprovals(container);
         }
       } catch (err) {
-        container.textContent = 'Erro ao carregar notificações: ' + err.message;
+        container.textContent = 'error_loading_notifications'.tr + err.message;
       }
     }
 
@@ -1777,25 +1785,25 @@ function renderAdminHtml(storeConfig) {
       panel.id = 'discountApprovalsPanel';
       panel.className = 'discount-approvals-panel';
       const title = document.createElement('h2');
-      title.textContent = 'Aprovações de desconto pendentes';
+      title.textContent = 'pending_discount_approvals'.tr;
       panel.appendChild(title);
 
       approvals.forEach((approval) => {
         const card = document.createElement('article');
         card.className = 'discount-approval-card';
         const heading = document.createElement('h3');
-        heading.textContent = 'Venda para ' + (approval.customerName || 'Cliente');
+        heading.textContent = 'sale_to'.tr + (approval.customerName || 'customer'.tr);
         const meta = document.createElement('p');
         meta.className = 'muted';
-        meta.textContent = (approval.operatorName || 'Operador') + ' · ' + (approval.customerPhone || 'Sem telefone');
+        meta.textContent = (approval.operatorName || 'team_operator'.tr) + ' · ' + (approval.customerPhone || 'no_phone'.tr);
         const items = document.createElement('ul');
         items.className = 'discount-approval-items';
         (approval.items || []).forEach((item) => {
           const row = document.createElement('li');
           const quantity = Number(item.quantity) || 0;
           const subtotal = Number(item.price || 0) * quantity;
-          row.title = item.name || 'Produto';
-          row.textContent = quantity + ' × ' + (item.name || 'Produto') + ' · ' + Number(item.price || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) + ' un · ' + subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+          row.title = item.name || 'product'.tr;
+          row.textContent = quantity + ' × ' + (item.name || 'product'.tr) + ' · ' + Number(item.price || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) + ' un · ' + subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
           items.appendChild(row);
         });
         const totals = document.createElement('div');
@@ -1805,7 +1813,7 @@ function renderAdminHtml(storeConfig) {
         const discountLine = document.createElement('p');
         discountLine.textContent = 'Desconto: ' + Number(approval.discountPercent || 0) + '% · − ' + Number(approval.discountAmount || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         const totalLine = document.createElement('strong');
-        totalLine.textContent = 'Total da venda: ' + Number(approval.total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        totalLine.textContent = 'sale_total'.tr + Number(approval.total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         totals.append(subtotalLine, discountLine, totalLine);
         const actions = document.createElement('div');
         actions.className = 'discount-review-actions';
@@ -1831,7 +1839,7 @@ function renderAdminHtml(storeConfig) {
     async function reviewDiscountApproval(approvalId, action, button, alternateButton) {
       let rejectionReason = '';
       if (action === 'REJECTED') {
-        rejectionReason = window.prompt('Informe o motivo da recusa:') || '';
+        rejectionReason = window.prompt('enter_the_reason_for_refusal'.tr) || '';
         if (!rejectionReason.trim()) {
           if (rejectionReason !== '') alert('O motivo da recusa é obrigatório.');
           return;
@@ -1846,7 +1854,7 @@ function renderAdminHtml(storeConfig) {
           body: JSON.stringify({ action, rejectionReason }),
         });
         const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Não foi possível revisar o desconto.');
+        if (!response.ok) throw new Error(result.error || 'could_not_review_the_discount'.tr);
         await loadNotifications();
       } catch (error) {
         button.disabled = false;
@@ -1877,7 +1885,7 @@ function renderAdminHtml(storeConfig) {
           allProducts = [];
         }
       } catch (e) {
-        console.warn('Falha na consulta de preços:', e);
+        console.warn('price_lookup_failed'.tr, e);
         allProducts = [];
       }
       if (!Array.isArray(allProducts)) allProducts = [];
@@ -1916,7 +1924,7 @@ function renderAdminHtml(storeConfig) {
           <td><strong>\${escapeHtml(p.descricao || p.name)}</strong></td>
           <td>\${escapeHtml(p.categoria || p.category || '')} • \${escapeHtml(p.subcategoria || '')}</td>
           <td><strong style="color:#15803d; font-size:15px;">R$ \${Number(p.valor_num || p.price || 0).toFixed(2).replace('.', ',')}</strong></td>
-          <td><span style="font-weight:bold;">\${p.stockQuantity ?? p.estoque ?? 0}</span> \${getAdminProductSaleUnit(p) === 'KG' ? 'kg' : 'un.'} em estoque</td>
+          <td><span style="font-weight:bold;">\${p.stockQuantity ?? p.estoque ?? 0}</span> \${getAdminProductSaleUnit(p) === 'KG' ? 'kg' : 'unit'.tr} em estoque</td>
         \`;
         tbody.appendChild(tr);
       });
@@ -1933,7 +1941,7 @@ function renderAdminHtml(storeConfig) {
         const tr = document.createElement('tr');
         const role = u.role || 'CLIENTE';
         tr.innerHTML = \`
-          <td><strong>\${escapeHtml(u.name || 'Sem nome')}</strong></td>
+          <td><strong>\${escapeHtml(u.name || 'unnamed'.tr)}</strong></td>
           <td>\${escapeHtml(u.email)}</td>
           <td>
             <select onchange="changeUserRole('\${u.id}', this.value)" style="padding:4px 8px; border-radius:6px; font-weight:700; font-size:12px; border:1px solid #cbd5e1; background:\${role === 'ADMIN' ? '#dcfce7' : (role === 'CAIXA' ? '#e0f2fe' : '#f8fafc')}; color:\${role === 'ADMIN' ? '#166534' : (role === 'CAIXA' ? '#0369a1' : '#475569')}; cursor:pointer;" \${u.id === 'usr-edmar' ? 'disabled' : ''}>
@@ -1963,14 +1971,14 @@ function renderAdminHtml(storeConfig) {
         });
         const data = await res.json();
         if (data.success) {
-          alert('✅ Perfil atualizado para ' + newRole + ' com sucesso!');
+          alert('profile_updated_to'.tr + newRole + 'successfully'.tr);
           loadTeam();
         } else {
-          alert('Erro ao alterar perfil: ' + (data.error || 'Falha'));
+          alert('error_changing_profile'.tr + (data.error || 'Falha'));
           loadTeam();
         }
       } catch (err) {
-        alert('Erro ao conectar com servidor: ' + err.message);
+        alert('error_connecting_to_server'.tr + err.message);
         loadTeam();
       }
     }
@@ -2002,13 +2010,13 @@ function renderAdminHtml(storeConfig) {
         body: JSON.stringify({ id, name, email, role, pin, active: true })
       });
 
-      alert('Colaborador cadastrado com sucesso!');
+      alert('employee_registered_successfully'.tr);
       closeUserModal();
       loadTeam();
     }
 
     async function deleteUser(id) {
-      if (!confirm('Deseja excluir o acesso deste funcionário?')) return;
+      if (!confirm('do_you_want_to_delete_this_employee_s_access'.tr)) return;
       await window.ConfloraSession.apiFetch('/api/admin/users/' + id, { method: 'DELETE' });
       loadTeam();
     }
@@ -2063,13 +2071,11 @@ function renderAdminHtml(storeConfig) {
       const data = await res.json();
       if (data.success) {
         currentUser = data.user;
-        localStorage.setItem('conflora_user', JSON.stringify(currentUser));
-        localStorage.setItem('conflora_op', JSON.stringify(currentUser));
         closeLoginModal();
         applyUserRoleUI();
         alert('Bem-vindo(a), ' + currentUser.name + ' (' + currentUser.role + ')!');
       } else {
-        alert('Erro ao autenticar: ' + (data.error || 'PIN incorreto.'));
+        alert('error_authenticating'.tr + (data.error || 'PIN incorreto.'));
       }
     }
 
@@ -2081,29 +2087,27 @@ function renderAdminHtml(storeConfig) {
         const data = await window.authenticateGoogle();
         if (data.success && data.user) {
           currentUser = data.user;
-          localStorage.setItem('conflora_user', JSON.stringify(currentUser));
-          localStorage.setItem('conflora_op', JSON.stringify(currentUser));
           closeLoginModal();
           applyUserRoleUI();
           if (currentUser.role === 'ADMIN') {
-            alert('🌿 Autenticado com sucesso como Administrador Google! Painel e configurações liberados.');
+            alert('successfully_authenticated_as_google_administrator_dashboard_and_settings_unlocked'.tr);
           } else {
             alert('🌿 Bem-vindo(a), ' + currentUser.name + '! Perfil identificado: ' + currentUser.role);
           }
         } else {
-          alert('Erro ao autenticar via Google: ' + (data.error || 'Tente novamente'));
+          alert('error_authenticating_via_google'.tr + (data.error || 'Tente novamente'));
         }
       } catch (err) {
-        alert(err.code === 'auth/popup-closed-by-user' ? 'Login cancelado.' : err.code === 'auth/popup-blocked' ? 'Permita pop-ups para entrar com o Google.' : 'Erro ao autenticar: ' + err.message);
+        alert(err.code === 'auth/popup-closed-by-user' ? 'Login cancelado.' : err.code === 'auth/popup-blocked' ? 'Permita pop-ups para entrar com o Google.' : 'error_authenticating'.tr + err.message);
       } finally {
         button.disabled = false;
       }
     }
 
     async function logoutAdmin() {
-      if (confirm('Deseja realmente sair da sua conta administrativa?')) {
+      if (confirm('do_you_really_want_to_sign_out_of_your_administrative_account'.tr)) {
         if (window.signOutGoogle) {
-          try { await window.signOutGoogle(); } catch (error) { alert('Erro ao sair: ' + error.message); return; }
+          try { await window.signOutGoogle(); } catch (error) { alert('error_signing_out'.tr + error.message); return; }
         }
         await window.ConfloraSession.apiFetch('/api/auth/logout', { method: 'POST' });
         currentUser = null;
@@ -2121,7 +2125,7 @@ function renderAdminHtml(storeConfig) {
       try {
         const response = await window.ConfloraSession.apiFetch('/api/admin/system-status');
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Falha ao consultar o diagnóstico.');
+        if (!response.ok) throw new Error(data.error || 'failed_to_check_diagnostics'.tr);
         const cards = [
           ['WhatsApp', data.whatsapp],
           ['Cloud Firestore', data.firestore],
@@ -2151,15 +2155,15 @@ function renderAdminHtml(storeConfig) {
       button.setAttribute('aria-pressed', String(stockControlActive === true));
       document.getElementById('stockControlBanner').dataset.enabled = String(stockControlActive === true);
       button.className = 'action-btn ' + (stockControlActive ? 'btn-green' : 'btn-amber');
-      button.textContent = stockControlActive === null ? 'Verificar controle de estoque' : stockControlActive ? '✓ Estoque ativo · Desativar' : 'Venda livre · Ativar estoque';
+      button.textContent = stockControlActive === null ? 'Verificar controle de estoque' : stockControlActive ? '✓ Estoque ativo · Desativar' : 'free_sale_enable_inventory'.tr;
       document.getElementById('stockControlHelp').textContent = stockControlActive === null ? 'Não foi possível consultar o controle de estoque.' : stockControlActive
         ? 'Estoque ativo: as vendas exigem saldo disponível e a baixa ocorre na confirmação do pagamento.'
-        : 'Venda livre: venda sem cadastrar entradas de estoque, inclusive no Pix. Reservas anteriores continuam protegidas.';
+        : 'free_sale_sell_without_registering_inventory_entries_including_via_pix_previous_reser'.tr;
     }
     async function loadStockControl() {
       try {
         const response = await window.ConfloraSession.apiFetch('/api/admin/inventory-settings');
-        if (!response.ok) throw new Error('Falha ao consultar o estoque.');
+        if (!response.ok) throw new Error('failed_to_check_inventory'.tr);
         const settings = await response.json();
         stockControlActive = settings.stockControlEnabled;
       } catch { stockControlActive = null; }
@@ -2173,7 +2177,7 @@ function renderAdminHtml(storeConfig) {
       try {
         const response = await window.ConfloraSession.apiFetch('/api/admin/inventory-settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stockControlEnabled: !stockControlActive }) });
         const settings = await response.json();
-        if (!response.ok) throw new Error(settings.error || 'Não foi possível salvar o controle de estoque.');
+        if (!response.ok) throw new Error(settings.error || 'could_not_save_inventory_control'.tr);
         stockControlActive = settings.stockControlEnabled;
       } catch (error) { alert(error.message); }
       finally { renderStockControl(); }
@@ -2190,7 +2194,7 @@ function renderAdminHtml(storeConfig) {
           allProducts = [];
         }
       } catch (e) {
-        console.warn('Falha ao carregar estoque:', e);
+        console.warn('failed_to_load_inventory'.tr, e);
         allProducts = [];
       }
       if (!Array.isArray(allProducts)) allProducts = [];
@@ -2244,23 +2248,23 @@ function renderAdminHtml(storeConfig) {
       if (!form || !modal || !select) return;
       const kind = String(operation || 'ENTRY').toUpperCase();
       document.getElementById('stockAdjustmentOperation').value = kind;
-      document.getElementById('stockAdjustmentTitle').textContent = kind === 'ENTRY' ? 'Entrada de estoque' : kind === 'EXIT' ? 'Baixa de estoque' : 'Contagem e ajuste de estoque';
-      document.getElementById('stockAdjustmentHelp').textContent = kind === 'SET' ? 'Informe a quantidade física contada. O saldo será substituído por esse valor.' : 'Registre a quantidade movimentada. A operação ficará no histórico de estoque.';
-      document.getElementById('stockAdjustmentQuantityLabel').textContent = kind === 'SET' ? 'Novo estoque contado' : 'Quantidade';
+      document.getElementById('stockAdjustmentTitle').textContent = kind === 'ENTRY' ? 'Entrada de estoque' : kind === 'EXIT' ? 'Baixa de estoque' : 'inventory_count_and_adjustment'.tr;
+      document.getElementById('stockAdjustmentHelp').textContent = kind === 'SET' ? 'Informe a quantidade física contada. O saldo será substituído por esse valor.' : 'record_the_moved_quantity_the_operation_will_be_added_to_the_inventory_history'.tr;
+      document.getElementById('stockAdjustmentQuantityLabel').textContent = kind === 'SET' ? 'Novo estoque contado' : 'product_quantity'.tr;
       document.getElementById('stockAdjustmentQuantity').value = kind === 'SET' ? '0' : '1';
       document.getElementById('stockAdjustmentReasonWrap').hidden = kind === 'ENTRY';
       reason.required = kind !== 'ENTRY';
       reason.value = '';
       document.getElementById('stockAdjustmentError').hidden = true;
-      select.replaceChildren(new Option('Selecione um produto', ''));
+      select.replaceChildren(new Option('select_a_product_578b3d'.tr, ''));
       [...allProducts].sort((a, b) => String(a.name || a.descricao || '').localeCompare(String(b.name || b.descricao || ''), 'pt-BR'))
-        .forEach(product => select.add(new Option(\`\${product.name || product.descricao || 'Produto'} — estoque \${product.stockQuantity ?? product.estoque ?? 0}\`, product.id)));
+        .forEach(product => select.add(new Option(\`\${product.name || product.descricao || 'product'.tr} — estoque \${product.stockQuantity ?? product.estoque ?? 0}\`, product.id)));
       if (productId) select.value = productId;
       const quantityInput = document.getElementById('stockAdjustmentQuantity');
       const updateQuantityUnit = () => {
         const product = allProducts.find(row => String(row.id) === String(select.value));
         const isKg = getAdminProductSaleUnit(product) === 'KG';
-        document.getElementById('stockAdjustmentQuantityLabel').textContent = (kind === 'SET' ? 'Novo estoque contado' : 'Quantidade') + (isKg ? ' (kg)' : ' (unidades)');
+        document.getElementById('stockAdjustmentQuantityLabel').textContent = (kind === 'SET' ? 'Novo estoque contado' : 'product_quantity'.tr) + (isKg ? ' (kg)' : ' (unidades)');
         quantityInput.step = isKg ? '0.001' : '1';
         quantityInput.inputMode = isKg ? 'decimal' : 'numeric';
       };
@@ -2289,7 +2293,7 @@ function renderAdminHtml(storeConfig) {
         ? Math.abs(quantity - Number(quantity.toFixed(3))) < 0.000001
         : Number.isInteger(quantity));
       if (!productId || !quantityValid || (operation !== 'SET' && quantity === 0) || (requiresReason && reason.length < 3)) {
-        errorMessage.textContent = 'Confira o produto, a quantidade e o motivo da operação.';
+        errorMessage.textContent = 'check_the_product_quantity_and_reason_for_the_operation'.tr;
         errorMessage.hidden = false;
         return;
       }
@@ -2301,12 +2305,12 @@ function renderAdminHtml(storeConfig) {
           body: JSON.stringify({ productId, operation, quantity, reason, requestId: createStockRequestId() }),
         });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Não foi possível salvar a movimentação.');
+        if (!response.ok) throw new Error(data.error || 'could_not_save_the_movement'.tr);
         updateStockBalance(productId, data.newStock);
         closeStockAdjustment();
         await loadStockMovements();
       } catch (error) {
-        errorMessage.textContent = error.message || 'Não foi possível salvar a movimentação.';
+        errorMessage.textContent = error.message || 'could_not_save_the_movement'.tr;
         errorMessage.hidden = false;
       } finally {
         submitButton.disabled = false;
@@ -2319,21 +2323,21 @@ function renderAdminHtml(storeConfig) {
       try {
         const response = await window.ConfloraSession.apiFetch('/api/admin/stock/movements?limit=20');
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Não foi possível carregar as movimentações.');
+        if (!response.ok) throw new Error(data.error || 'could_not_load_movements'.tr);
         const movements = Array.isArray(data.movements) ? data.movements : [];
-        if (!movements.length) { container.textContent = 'Nenhuma movimentação registrada.'; return; }
+        if (!movements.length) { container.textContent = 'no_movements_recorded'.tr; return; }
         const list = document.createElement('div');
         list.style.display = 'grid';
         list.style.gap = '8px';
         movements.forEach(movement => {
           const row = document.createElement('div');
           row.className = 'stock-movement-row';
-          row.textContent = \`\${new Date(movement.createdAt || Date.now()).toLocaleString('pt-BR')} · \${movement.productName || 'Produto'} · \${movement.operation || movement.type || 'Movimento'} · \${movement.quantity} un · \${movement.reason || movement.actorName || 'Venda'}\`;
+          row.textContent = \`\${new Date(movement.createdAt || Date.now()).toLocaleString('pt-BR')} · \${movement.productName || 'product'.tr} · \${movement.operation || movement.type || 'Movimento'} · \${movement.quantity} un · \${movement.reason || movement.actorName || 'sale_83fe1f'.tr}\`;
           list.appendChild(row);
         });
         container.replaceChildren(list);
       } catch (error) {
-        container.textContent = error.message || 'Não foi possível carregar as movimentações.';
+        container.textContent = error.message || 'could_not_load_movements'.tr;
       }
     }
     // 10. CADASTRO DE PRODUTOS
@@ -2460,7 +2464,7 @@ function renderAdminHtml(storeConfig) {
         return tag;
       };
 
-      container.appendChild(makeTag('Todas', selectedAdminCategories.length === 0, 'all', '', () => setAdminCategoryFilter('')));
+      container.appendChild(makeTag('all'.tr, selectedAdminCategories.length === 0, 'all', '', () => setAdminCategoryFilter('')));
 
       sortedCats.forEach(([catName]) => {
         const isActive = selectedAdminCategories.includes(catName);
@@ -2489,7 +2493,7 @@ function renderAdminHtml(storeConfig) {
         if (subMap.size > 0) {
           const badge = document.createElement('span');
           badge.style.cssText = 'font-size:11px; font-weight:800; color:#14532d; text-transform:uppercase; padding:0 6px;';
-          badge.textContent = 'Subcategorias:';
+          badge.textContent = 'subcategories'.tr;
           subContainer.appendChild(badge);
           Array.from(subMap.entries()).sort((a, b) => a[1].name.localeCompare(b[1].name, 'pt-BR')).forEach(([key, sub]) => {
             subContainer.appendChild(makeTag(sub.name, selectedAdminSubcategories.includes(key), '', sub.parent, () => toggleAdminSubcategoryFilter(key)));
@@ -2512,7 +2516,7 @@ function renderAdminHtml(storeConfig) {
           allProducts = [];
         }
       } catch (e) {
-        console.warn('Falha ao carregar produtos:', e);
+        console.warn('failed_to_load_products'.tr, e);
         allProducts = [];
       }
       if (!Array.isArray(allProducts)) allProducts = [];
@@ -2587,7 +2591,7 @@ function renderAdminHtml(storeConfig) {
         if (productCategoryFilter) filterDetails.push('Categoria: ' + productCategoryFilter);
         if (productSearchQuery) filterDetails.push('Busca: "' + productSearchQuery + '"');
         const extra = filterDetails.length ? ' • ' + filterDetails.join(' • ') : '';
-        countEl.textContent = visible.length + ' produto(s) · ' + statusLabel + extra;
+        countEl.textContent = visible.length + 'item_s'.tr + statusLabel + extra;
       }
 
       // 6. Mensagem de vazio se nada corresponder
@@ -2613,7 +2617,7 @@ function renderAdminHtml(storeConfig) {
     }
 
     function slugifyClient(text) {
-      if (!text) return 'produto';
+      if (!text) return 'catalog_product_singular'.tr;
       return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'produto';
     }
 
@@ -2636,13 +2640,13 @@ function renderAdminHtml(storeConfig) {
           const preview = document.createElement('button');
           preview.type = 'button';
           preview.style.cssText = 'grid-column:1/-1;background:white;padding:12px;border:0;border-radius:12px';
-          preview.setAttribute('aria-label', 'Ampliar imagem exibida no catálogo');
+          preview.setAttribute('aria-label', 'enlarge_image_shown_in_catalog'.tr);
           const image = document.createElement('img');
           image.src = previewProduct.imageFallbackUrl || '/store-assets/placeholder.svg';
-          image.alt = previewProduct.name || previewProduct.descricao || 'Imagem do produto';
+          image.alt = previewProduct.name || previewProduct.descricao || 'product_image'.tr;
           image.style.cssText = 'display:block;width:100%;height:240px;object-fit:contain';
           const caption = document.createElement('p');
-          caption.textContent = 'Imagem ilustrativa do catálogo. Adicione fotos reais para definir a capa deste produto.';
+          caption.textContent = 'illustrative_catalog_image_add_real_photos_to_set_the_cover_for_this_product'.tr;
           preview.append(image, caption);
           preview.onclick = () => openProductPhoto(image.src, image.alt);
           grid.appendChild(preview);
@@ -2713,7 +2717,7 @@ function renderAdminHtml(storeConfig) {
 
     function openProductPhoto(url, label) {
       const dialog = document.createElement('dialog');
-      dialog.setAttribute('aria-label', 'Foto ampliada do produto');
+      dialog.setAttribute('aria-label', 'enlarged_product_photo'.tr);
       dialog.style.cssText = 'position:fixed;inset:0;margin:auto;width:100vw;height:100dvh;max-width:none;max-height:none;padding:20px;border:0;background:#101810;color:white';
       const close = document.createElement('button');
       close.type = 'button';
@@ -2766,11 +2770,11 @@ function renderAdminHtml(storeConfig) {
       if (!files || files.length === 0) return;
       event.target.value = '';
 
-      const name = document.getElementById('formProdName').value || 'produto';
+      const name = document.getElementById('formProdName').value || 'catalog_product_singular'.tr;
       const id = document.getElementById('formProdId').value || 'novo';
       const oversizedFile = files.find((file) => file.size > 20 * 1024 * 1024);
       if (oversizedFile) {
-        alert('Cada foto deve ter até 20 MB. O arquivo original será preservado.');
+        alert('each_photo_must_be_up_to_20_mb_the_original_file_will_be_preserved'.tr);
         return;
       }
       const tagsInput = document.getElementById('formProdTags');
@@ -2851,7 +2855,7 @@ function renderAdminHtml(storeConfig) {
       });
       renderPendingPhotosGrid();
 
-      document.getElementById('productFormTitle').textContent = 'Editar Produto #' + p.id;
+      document.getElementById('productFormTitle').textContent = 'edit_product_6c8ac6'.tr + p.id;
       document.getElementById('productEditorDialog').showModal();
     }
 
@@ -2860,7 +2864,7 @@ function renderAdminHtml(storeConfig) {
       returnToStock = false;
       showTab('products');
       resetProdForm();
-      document.getElementById('productFormTitle').textContent = 'Novo produto no catálogo';
+      document.getElementById('productFormTitle').textContent = 'new_product_in_the_catalog'.tr;
       document.getElementById('productEditorDialog').showModal();
       document.getElementById('formProdName').focus();
     }
@@ -2883,15 +2887,15 @@ function renderAdminHtml(storeConfig) {
       document.getElementById('formProdPhotoBase64').value = '';
       document.getElementById('formProdTags').value = '';
       clearAllPendingPhotos();
-      document.getElementById('productFormTitle').textContent = 'Novo Produto no Catálogo';
+      document.getElementById('productFormTitle').textContent = 'new_product_in_catalog'.tr;
     }
 
     async function deleteProduct(id) {
-      if (!confirm('Deseja excluir este produto e suas fotos?')) return;
+      if (!confirm('do_you_want_to_delete_this_product_and_its_photos'.tr)) return;
       const response = await window.ConfloraSession.apiFetch('/api/admin/products/' + id, { method: 'DELETE' });
       const result = await response.json();
       if (!response.ok) {
-        alert('Não foi possível excluir o produto: ' + (result.error || 'Falha ao remover o produto.'));
+        alert('could_not_delete_product'.tr + (result.error || 'failed_to_remove_product'.tr));
         return;
       }
       closeProductEditorDialog();
@@ -2960,7 +2964,7 @@ function renderAdminHtml(storeConfig) {
             });
             const photoResult = await photoResponse.json();
             if (!photoResponse.ok || !photoResult.success) {
-              throw new Error(photoResult.error || 'Não foi possível enviar uma das fotos.');
+              throw new Error(photoResult.error || 'could_not_upload_one_of_the_photos'.tr);
             }
             if (upload.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(upload.previewUrl);
             upload.url = photoResult.photos?.[0]?.url || photoResult.photo?.url || '';
@@ -2985,22 +2989,22 @@ function renderAdminHtml(storeConfig) {
           });
           const finalResult = await finalResponse.json();
           if (!finalResponse.ok || !finalResult.success) {
-            throw new Error(finalResult.error || 'Não foi possível concluir a substituição das fotos.');
+            throw new Error(finalResult.error || 'could_not_complete_photo_replacement'.tr);
           }
         } catch (error) {
           renderPendingPhotosGrid();
           loadAdminProducts();
-          alert('Produto salvo, mas não foi possível concluir o ciclo das fotos: ' + error.message + '. Tente novamente.');
+          alert('product_saved_but_could_not_complete_the_photo_cycle'.tr + error.message + '. Tente novamente.');
           return;
         }
-        if (!returnToStock) alert('✅ Produto salvo e fotos enviadas ao Firebase Storage em alta qualidade para zoom!');
+        if (!returnToStock) alert('product_saved_and_photos_uploaded_to_firebase_storage_in_high_quality_for_zoom'.tr);
         document.getElementById('productEditorDialog').close();
         resetProdForm();
         loadAdminProducts();
         loadPriceProducts();
         if (returnToStock) { returnToStock = false; showTab('stock'); }
       } else {
-        alert('Erro ao salvar no Firestore: ' + (data.error || 'Falha'));
+        alert('error_saving_to_firestore'.tr + (data.error || 'Falha'));
       }
     }
 
@@ -3022,9 +3026,9 @@ function renderAdminHtml(storeConfig) {
           const itemsTxt = (o.items || []).map(i => i.name + ' (' + (i.quantity || 1) + 'x)').join(', ');
           div.innerHTML = \`
             <div>
-              <strong>#\${(o.id || '').slice(-6)} — \${o.customerName || 'Cliente'}</strong> (\${o.customerPhone || 'Presencial'})<br>
+              <strong>#\${(o.id || '').slice(-6)} — \${o.customerName || 'customer'.tr}</strong> (\${o.customerPhone || 'Presencial'})<br>
               <span style="font-size:12px; color:#64748b;">Itens: \${itemsTxt}</span><br>
-              <span style="font-size:12px; color:#64748b;">\${o.deliveryAddress || 'Retirada'} • \${o.paymentMethod || 'PIX'} • \${new Date(o.createdAt).toLocaleString()}</span>
+              <span style="font-size:12px; color:#64748b;">\${o.deliveryAddress || 'cart_pickup_option'.tr} • \${o.paymentMethod || 'PIX'} • \${new Date(o.createdAt).toLocaleString()}</span>
             </div>
             <div style="text-align:right;">
               <span class="badge \${o.status === 'CONFIRMED' ? 'badge-confirmed' : (o.status === 'DELIVERED' ? 'badge-delivered' : 'badge-pending')}">\${o.status}</span>
@@ -3034,7 +3038,7 @@ function renderAdminHtml(storeConfig) {
           container.appendChild(div);
         });
       } catch (err) {
-        container.innerHTML = 'Erro ao carregar histórico: ' + escapeHtml(err.message);
+        container.innerHTML = 'error_loading_history'.tr + escapeHtml(err.message);
       }
     }
 
@@ -3044,10 +3048,10 @@ function renderAdminHtml(storeConfig) {
         try {
           const response = await window.ConfloraSession.apiFetch('/api/inventory');
           const data = await response.json();
-          if (!response.ok) throw new Error(data.error || 'Não foi possível carregar os produtos.');
+          if (!response.ok) throw new Error(data.error || 'could_not_load_products_637303'.tr);
           allProducts = safeExtractProductsAdmin(data);
         } catch (error) {
-          alert(error.message || 'Não foi possível carregar os produtos para a venda.');
+          alert(error.message || 'could_not_load_products_for_sale'.tr);
           return;
         }
       }
@@ -3060,7 +3064,7 @@ function renderAdminHtml(storeConfig) {
         select.appendChild(opt);
       });
       if (!allProducts.length) {
-        alert('Não há produtos disponíveis para registrar a venda.');
+        alert('no_products_available_to_register_the_sale'.tr);
         return;
       }
       document.getElementById('manualOrderModal').classList.add('open');
@@ -3090,26 +3094,30 @@ function renderAdminHtml(storeConfig) {
           body: JSON.stringify({ customerName: name, customerPhone: phone, items, paymentMethod: pay })
         });
         const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Não foi possível registrar a venda.');
+        if (!response.ok) throw new Error(result.error || 'could_not_register_the_sale'.tr);
 
-        alert(result.order?.paymentMethod === 'PIX' ? 'Pedido registrado. Abra a comanda para acompanhar ou conferir o Pix.' : 'Venda registrada com sucesso no caixa!');
+        alert(result.order?.paymentMethod === 'PIX' ? 'Pedido registrado. Abra a comanda para acompanhar ou conferir o Pix.' : 'sale_successfully_registered_at_the_cash_register'.tr);
         closeManualOrderModal();
         loadCashierDaily();
       } catch (error) {
-        alert(error.message || 'Não foi possível registrar a venda.');
+        alert(error.message || 'could_not_register_the_sale'.tr);
       }
     }
 
-    async function seedDefaultConflora() {
-      if (!confirm('Deseja restaurar o catálogo oficial da Conflora Horta e Viveiro no Firestore?')) return;
-      const res = await window.ConfloraSession.apiFetch('/api/admin/seed-catalog', { method: 'POST' });
-      const d = await res.json();
-      if (d.success) {
-        alert('Catálogo completo sincronizado no Firestore com sucesso!');
-        loadAdminProducts();
-        loadCashierDaily();
-      }
-    }
+    document.getElementById('runSicrediSimulation').addEventListener('click', async event => {
+      const button = event.currentTarget;
+      const status = document.getElementById('sicrediSimulationStatus');
+      button.disabled = true;
+      status.textContent = 'validating_simulation'.tr;
+      try {
+        const response = await window.ConfloraSession.apiFetch('/api/admin/sicredi-pix/simulate', { method: 'POST',
+          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ unitPrice: 45, quantity: 2 }) });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.error || 'simulation_failed'.tr);
+        status.textContent = 'simulation_completed_fixed_qr_code_payment_verified_stock_deducted_once_no_real_data_'.tr;
+      } catch (error) { status.textContent = error.message; }
+      finally { button.disabled = false; }
+    });
 
     // INICIALIZAÇÃO
     applyUserRoleUI();

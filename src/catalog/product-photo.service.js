@@ -1,51 +1,4 @@
-const { normalizeText } = require('../shared/string.util');
-
-/**
- * Conflora Standard Botanical & Agricultural Keyword Dictionary
- * Mapeamento enriquecido para manter o mesmo padrão de tags e nomes da Conflora
- */
-const BOTANICAL_TAG_DICTIONARY = {
-  'rabo de raposa': ['wodyetia bifurcata', 'palmeira australiana', 'paisagismo', 'sol pleno'],
-  'palmeira azul': ['bismarckia nobilis', 'palmeira bismarckia', 'palmeira de bismarck', 'ornamental azul'],
-  'bismarckia': ['bismarckia nobilis', 'palmeira azul', 'paisagismo nobre'],
-  'areca': ['dypsis lutescens', 'areca bambu', 'cerca viva', 'meia sombra'],
-  'bouganville': ['tres marias', 'três marias', 'flor de papel', 'primavera', 'bougainvillea', 'trepadeira'],
-  'primavera': ['bougainvillea', 'tres marias', 'flor de papel', 'trepadeira florida'],
-  'alface': ['horta fresca', 'salada', 'folhosas', 'sem agrotoxico', 'hidroponica'],
-  'rucula': ['salada', 'horta fresca', 'folhosa picante', 'sem agrotoxico'],
-  'cebolinha': ['cheiro verde', 'tempero fresco', 'horta caseira', 'aromaticas'],
-  'coentro': ['cheiro verde', 'tempero nordestino', 'horta fresca'],
-  'hortela': ['cha medicinal', 'tempero', 'aromatica'],
-  'manjericao': ['erva fina', 'tempero italiano', 'pesto', 'aromatica'],
-  'couve': ['couve manteiga', 'folhosa verde', 'suco verde', 'horta'],
-  'mini cabra': ['caprino pet', 'bode anao', 'animal docil', 'sitio e chacara'],
-  'jabuticaba': ['plinia cauliflora', 'frutifera nativa', 'muda enxertada', 'produzindo'],
-  'laranja': ['citricos', 'fruta doce', 'muda enxertada', 'pomar'],
-  'limao': ['citrico', 'limao taiti', 'tempero', 'pomar'],
-  'amora': ['frutas vermelhas', 'muda enxertada', 'pomar'],
-  'abacate': ['fruta', 'hortifruti', 'cremoso'],
-  'abacaxi': ['fruta tropical', 'hortifruti', 'doce'],
-  'banana': ['fruta', 'potassio', 'hortifruti'],
-  'cenoura': ['legume', 'hortifruti', 'rico em vitamina a'],
-  'batata': ['tuberculo', 'hortifruti', 'raiz'],
-  'cebola': ['tempero', 'condimento', 'hortifruti'],
-  'tomate': ['legume', 'salada', 'hortifruti'],
-  'eucalipto': ['agromadeira', 'madeira tratada', 'poste', 'mourao', 'cerca rural'],
-  'mourao': ['agromadeira', 'poste de cerca', 'madeira roliça', 'rural'],
-  'grama': ['gramado', 'jardim', 'paisagismo', 'tapete de grama'],
-  'adubo': ['fertilizante organico', 'substrato', 'nutrientes', 'terra vegetal'],
-  'terra': ['terra vegetal', 'substrato fertil', 'adubo'],
-  'rosa do deserto': ['adenium obesum', 'suculenta com flor', 'cacto ornamental'],
-  'costela': ['monstera deliciosa', 'costela de adao', 'folhagem interna'],
-  'zamioculca': ['planta de sombra', 'planta resistente', 'decoracao interna'],
-  'samambaia': ['planta pendente', 'meia sombra', 'avenca'],
-  'orquidea': ['flor nobre', 'phalaenopsis', 'epifita'],
-};
-
-/**
- * Normaliza um texto para slug sem caracteres especiais
- * Exemplo: "Palmeira Rabo de Raposa (Muda Média)" -> "palmeira-rabo-de-raposa-muda-media"
- */
+/** Safe filenames for uploaded product photos. */
 function slugify(text) {
   if (!text || typeof text !== 'string') {
     return 'produto';
@@ -101,16 +54,7 @@ function generateStandardTags(product = {}) {
     tagsSet.add(variation.toLowerCase());
   }
 
-  // 3. Enriquecimento botânico/agrícola baseado no dicionário Conflora
-  const normalizedFullName = normalizeText(`${name} ${category} ${subcategory}`);
-  for (const [key, extraTags] of Object.entries(BOTANICAL_TAG_DICTIONARY)) {
-    const normKey = normalizeText(key);
-    if (normalizedFullName.includes(normKey)) {
-      extraTags.forEach((t) => tagsSet.add(t.toLowerCase()));
-    }
-  }
-
-  // 4. Se o usuário já tiver tags salvas anteriormente, preserva-as
+  // Se o usuário já tiver tags salvas anteriormente, preserva-as
   const existingTags = product.tagsAi || product.tags_ia || product.tags || '';
   if (typeof existingTags === 'string' && existingTags.trim()) {
     existingTags
@@ -145,12 +89,7 @@ function generateStandardDescription(product = {}) {
     return product.descricao_ia.trim();
   }
 
-  const name = product.name || product.descricao || 'Produto Conflora';
-  const cat = product.category || product.categoria || 'Viveiro e Horta';
-  const sub = product.subcategory || product.subcategoria || '';
-  const subText = sub ? ` (${sub})` : '';
-
-  return `${name} selecionado(a) com padrão de qualidade Conflora Horta & Viveiro${subText}. Categoria: ${cat}.`;
+  return typeof product.description === 'string' ? product.description.trim() : '';
 }
 
 /**
@@ -193,8 +132,9 @@ function buildFirestorePhotoDocument(product, {
   const description = generateStandardDescription(product);
   const now = new Date().toISOString();
 
-  const finalBase64 = base64Data || createConfloraSvgFallback(productName, product.category || product.categoria);
-  const finalContentType = base64Data ? contentType : 'image/svg+xml';
+  if (!base64Data) throw new Error('Envie uma foto real do produto.');
+  const finalBase64 = base64Data;
+  const finalContentType = contentType;
   const dataUrl = `data:${finalContentType};base64,${finalBase64}`;
 
   return {
@@ -300,7 +240,6 @@ const {
 } = require('./image-compressor');
 
 module.exports = {
-  BOTANICAL_TAG_DICTIONARY,
   slugify,
   generateStandardPhotoName,
   generateStandardTags,

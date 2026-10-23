@@ -9,7 +9,7 @@
     const shopItems = [
       {
         id: 'home',
-        label: 'Catálogo & Loja'.tr,
+        label: 'catalog_store'.tr,
         subtitle: 'Mudas, flores, hortifruti e vasos'.tr,
         icon: '🌿',
         iconBg: '#dcfce7',
@@ -18,36 +18,36 @@
       },
     ];
 
-    if (['ADMIN', 'CAIXA', 'VENDEDOR'].includes(role)) {
+    if (['ADMIN', "CAIXA", 'VENDEDOR'].includes(role)) {
       shopItems.push({
         id: 'pos',
-        label: 'Frente de Caixa (PDV)'.tr,
-        subtitle: 'Vendas balcão, caixa rápido e troco'.tr,
+        label: 'cashier_pos'.tr,
+        subtitle: 'counter_sales_quick_checkout_and_change'.tr,
         icon: '⚡',
         iconBg: '#fef9c3',
         href: '/caixa',
-        roles: ['ADMIN', 'CAIXA', 'VENDEDOR'],
+        roles: ['ADMIN', "CAIXA", 'VENDEDOR'],
       });
       shopItems.push({
         id: 'orders',
-        label: 'Comandas & Pedidos'.tr,
-        subtitle: 'Acompanhe pedidos em tempo real'.tr,
+        label: 'tabs_orders'.tr,
+        subtitle: 'track_orders_in_real_time'.tr,
         icon: '📋',
         iconBg: '#e0f2fe',
         href: role === 'ADMIN' ? '/admin?tab=orders' : '/caixa?view=commands',
-        roles: ['ADMIN', 'CAIXA', 'VENDEDOR'],
+        roles: ['ADMIN', "CAIXA", 'VENDEDOR'],
       });
     }
 
-    if (['ADMIN', 'CAIXA', 'ENTREGADOR'].includes(role)) {
+    if (['ADMIN', "CAIXA", 'ENTREGADOR'].includes(role)) {
       shopItems.push({
         id: 'deliveries',
-        label: 'Entregas & Expedição'.tr,
-        subtitle: 'Check verde na horta, rotas e GPS'.tr,
+        label: 'deliveries_dispatch'.tr,
+        subtitle: 'green_check_at_nursery_routes_gps'.tr,
         icon: '🛵',
         iconBg: '#ccfbf1',
         href: '/caixa?view=deliveries',
-        roles: ['ADMIN', 'CAIXA', 'ENTREGADOR'],
+        roles: ['ADMIN', "CAIXA", 'ENTREGADOR'],
       });
     }
 
@@ -59,12 +59,12 @@
     // --- SEÇÃO 2: GESTÃO DO NEGÓCIO (Exclusivo ADMIN / Gestores) ---
     if (role === 'ADMIN') {
       sections.push({
-        title: 'Gestão & Finanças'.tr,
+        title: 'management_finance'.tr,
         items: [
           {
             id: 'executive',
-            label: 'Resultados da Loja (HOJE)'.tr,
-            subtitle: 'Faturamento, DRE e WhatsApp dos sócios'.tr,
+            label: 'store_results_today'.tr,
+            subtitle: 'revenue_p_l_and_partner_whatsapp_updates'.tr,
             icon: '📈',
             iconBg: '#f3e8ff',
             href: '/admin-gerencial',
@@ -72,8 +72,8 @@
           },
           {
             id: 'cashier-audit',
-            label: 'Conferência de Caixas'.tr,
-            subtitle: 'Auditoria de fechamentos e comprovantes'.tr,
+            label: 'cashier_audit_closings'.tr,
+            subtitle: 'closing_audit_and_receipts'.tr,
             icon: '💰',
             iconBg: '#ecfdf5',
             href: '/admin?tab=cashier',
@@ -81,8 +81,8 @@
           },
           {
             id: 'stock',
-            label: 'Controle de Estoque'.tr,
-            subtitle: 'Inventário, contagem e baixas'.tr,
+            label: 'inventory_stock_control'.tr,
+            subtitle: 'inventory_counts_and_write_offs'.tr,
             icon: '📦',
             iconBg: '#ffedd5',
             href: '/admin?tab=stock',
@@ -90,8 +90,8 @@
           },
           {
             id: 'products',
-            label: 'Catálogo de Produtos'.tr,
-            subtitle: 'Ordenação A-Z, preços e importação'.tr,
+            label: 'product_catalog'.tr,
+            subtitle: 'a_z_sort_pricing_and_bulk_import'.tr,
             icon: '🏷️',
             iconBg: '#e0e7ff',
             href: '/admin?tab=products',
@@ -100,7 +100,7 @@
           {
             id: 'team',
             label: 'Equipe & Colaboradores'.tr,
-            subtitle: 'Gestão de acessos, cargos e PINs'.tr,
+            subtitle: 'manage_access_roles_and_pins'.tr,
             icon: '👥',
             iconBg: '#fef3c7',
             href: '/admin?tab=team',
@@ -109,7 +109,7 @@
           {
             id: 'store-settings',
             label: 'Personalizar Loja'.tr,
-            subtitle: 'Identidade visual, horários e banners'.tr,
+            subtitle: 'branding_hours_and_banners'.tr,
             icon: '🎨',
             iconBg: '#fce7f3',
             href: '/configuracoes',
@@ -117,8 +117,8 @@
           },
           {
             id: 'system-status',
-            label: 'Sistema & Diagnósticos'.tr,
-            subtitle: 'Conexões WhatsApp, Pix e logs'.tr,
+            label: 'system_diagnostics'.tr,
+            subtitle: 'whatsapp_pix_connections_and_logs'.tr,
             icon: '🛡️',
             iconBg: '#f1f5f9',
             href: '/admin?tab=status',
@@ -126,18 +126,18 @@
           },
         ],
       });
-    } else if (['CAIXA'].includes(role)) {
+    } else if (["CAIXA"].includes(role)) {
       sections.push({
-        title: 'Finanças do Caixa'.tr,
+        title: 'cashier_finances'.tr,
         items: [
           {
             id: 'cashier-report',
-            label: 'Conferência do Meu Caixa'.tr,
-            subtitle: 'Fechamento do turno e comprovantes'.tr,
+            label: 'my_cashier_audit'.tr,
+            subtitle: 'shift_closing_and_receipts'.tr,
             icon: '💰',
             iconBg: '#ecfdf5',
             href: '/admin?tab=cashier',
-            roles: ['CAIXA'],
+            roles: ["CAIXA"],
           },
         ],
       });
@@ -145,7 +145,7 @@
 
     // --- SEÇÃO 3: CONTA & ACESSO ---
     const accountItems = [];
-    const teamRoles = ['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'];
+    const teamRoles = ['ADMIN', "CAIXA", 'VENDEDOR', 'ENTREGADOR'];
     if (teamRoles.includes(role)) {
       const guideMap = {
         ADMIN: '/guias/admin.html',
@@ -156,7 +156,7 @@
       accountItems.push({
         id: 'guides',
         label: (`Guia Operacional (${role})`).tr,
-        subtitle: 'Passo a passo didático com prints da sua função'.tr,
+        subtitle: 'step_by_step_visual_guides_with_screenshots'.tr,
         icon: '📖',
         iconBg: '#ecfdf5',
         href: guideMap[role] || '/guias/index.html',
@@ -165,8 +165,8 @@
     }
     accountItems.push({
       id: 'profile',
-      label: role ? 'Meu Perfil'.tr : 'Entrar na Minha Conta'.tr,
-      subtitle: role ? 'Seus dados e segurança'.tr : 'Acesse seus pedidos e histórico'.tr,
+      label: role ? 'my_profile'.tr : 'sign_in_to_my_account'.tr,
+      subtitle: role ? 'your_information_and_security'.tr : 'access_your_orders_and_history'.tr,
       icon: '👤',
       iconBg: '#f0fdf4',
       href: role ? '/?conta=1&editar=1' : '/?conta=1',
@@ -174,7 +174,7 @@
     });
 
     sections.push({
-      title: 'Minha Conta'.tr,
+      title: 'my_account'.tr,
       items: accountItems,
     });
 
@@ -185,7 +185,7 @@
     button.disabled = true;
     try {
       const response = await window.ConfloraSession.apiFetch('/api/auth/logout', { method: 'POST' });
-      if (!response.ok) throw new Error('Não foi possível sair. Tente novamente.');
+      if (!response.ok) throw new Error('could_not_sign_out_please_try_again'.tr);
       if (window.signOutGoogle) await window.signOutGoogle().catch(() => {});
       location.assign('/');
     } catch (error) {
@@ -219,12 +219,12 @@
     
     const roleLabels = {
       ADMIN: 'Dono / Administrador'.tr,
-      CAIXA: 'Operador de Caixa'.tr,
-      VENDEDOR: 'Vendedor Balcão'.tr,
+      CAIXA: 'cashier_operator'.tr,
+      VENDEDOR: 'counter_salesperson'.tr,
       ENTREGADOR: 'Entregador'.tr,
-      CLIENTE: 'Cliente Amigo'.tr
+      CLIENTE: 'friendly_customer'.tr
     };
-    badge.textContent = roleLabels[user?.role] || 'Cliente Amigo'.tr;
+    badge.textContent = roleLabels[user?.role] || 'friendly_customer'.tr;
 
     info.append(name, badge);
     card.append(avatar, info);
@@ -237,7 +237,7 @@
       dialog = document.createElement('dialog');
       dialog.id = 'siteNavigationDrawer';
       dialog.className = 'cf-navigation-drawer';
-      dialog.setAttribute('aria-label', 'Navegação da loja'.tr);
+      dialog.setAttribute('aria-label', 'nav_menu_title'.tr);
       document.body.append(dialog);
     }
     dialog.replaceChildren();
@@ -247,13 +247,13 @@
     heading.className = 'cf-navigation-heading';
 
     const title = document.createElement('h2');
-    title.textContent = 'Menu & Navegação'.tr;
+    title.textContent = 'menu_navigation'.tr;
 
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'cf-drawer-close';
     close.innerHTML = '<span aria-hidden="true">»</span>';
-    close.setAttribute('aria-label', 'Fechar navegação'.tr);
+    close.setAttribute('aria-label', 'close_navigation'.tr);
     close.onclick = () => dialog.close();
 
     heading.append(title, close);
@@ -267,7 +267,7 @@
 
     // Seções de Navegação com Cards Modernos
     const nav = document.createElement('nav');
-    nav.setAttribute('aria-label', 'Páginas da loja'.tr);
+    nav.setAttribute('aria-label', 'store_pages'.tr);
 
     const sections = getNavigationSections(user);
 
@@ -362,7 +362,7 @@
 
       const profileOptions = [
         ['ADMIN', '👑 Admin', '#854d0e', '#fef08a'],
-        ['CAIXA', '💵 Caixa', '#1e40af', '#dbeafe'],
+        ["CAIXA", 'cash_register'.tr, '#1e40af', '#dbeafe'],
         ['VENDEDOR', '🛍️ Vendedor', '#9a3412', '#ffedd5'],
         ['ENTREGADOR', '🛵 Entregador', '#115e59', '#ccfbf1'],
       ];
@@ -385,7 +385,7 @@
               body: JSON.stringify({ role }),
             });
             const data = await res.json();
-            if (!res.ok || !data.success) throw new Error(data.error || 'Erro ao alternar perfil.');
+            if (!res.ok || !data.success) throw new Error(data.error || 'error_switching_profile'.tr);
             location.reload();
           } catch (err) {
             btn.disabled = false;
@@ -404,7 +404,7 @@
       const exit = document.createElement('button');
       exit.type = 'button';
       exit.className = 'cf-danger-button cf-nav-logout-btn';
-      exit.innerHTML = `<span>🚪</span><span>${'Sair da Conta'.tr}</span>`;
+      exit.innerHTML = `<span>🚪</span><span>${'sign_out'.tr}</span>`;
       exit.onclick = () => logout(exit);
       footer.append(exit);
     }

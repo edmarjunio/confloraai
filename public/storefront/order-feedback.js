@@ -1,27 +1,27 @@
 import { element, openDialog, notify } from "./ui.js";
 
 const RATING_LABELS = {
-  1: "Precisa melhorar",
-  2: "Regular",
-  3: "Bom",
-  4: "Muito bom",
-  5: "Excelente",
+  1: 'needs_improvement'.tr,
+  2: 'fair'.tr,
+  3: 'good'.tr,
+  4: 'very_good'.tr,
+  5: 'excellent'.tr,
 };
 
 const FEEDBACK_TYPES = [
-  { id: "ELOGIO", label: "🌸 Elogio" },
-  { id: "SUGESTAO", label: "💡 Sugestão" },
-  { id: "RECLAMACAO", label: "⚠️ Reclamação" },
-  { id: "DUVIDA", label: "💬 Outro" },
+  { id: "ELOGIO", label: 'praise_compliment'.tr },
+  { id: "SUGESTAO", label: 'suggestion'.tr },
+  { id: "RECLAMACAO", label: 'complaint_issue'.tr },
+  { id: "DUVIDA", label: 'other'.tr },
 ];
 
 const FEEDBACK_HIGHLIGHTS = [
-  "Produtos impecáveis e bem protegidos",
-  "Entrega pontual",
-  "Cuidado no transporte",
-  "Atendimento atencioso",
-  "Plantas saudáveis e viçosas",
-  "Fácil de comprar no site",
+  'flawless_well_protected_plants'.tr,
+  'on_time_delivery'.tr,
+  'careful_transport'.tr,
+  'attentive_customer_care'.tr,
+  'healthy_vibrant_plants'.tr,
+  'easy_to_buy_on_the_website'.tr,
 ];
 
 export function isOrderDelivered(order) {
@@ -72,7 +72,7 @@ export function createOrderFeedback(state) {
       const btn = element("button", {
         type: "button",
         class: `cf-feedback-star-btn ${i <= current ? "active" : ""}`,
-        "aria-label": `${label}: ${i} ${i === 1 ? "estrela".tr : "estrelas".tr} (${(RATING_LABELS[i] || "").tr})`,
+        "aria-label": `${label}: ${i} ${i === 1 ? 'star'.tr : 'stars'.tr} (${(RATING_LABELS[i] || "").tr})`,
         "aria-pressed": String(i === current),
         text: i <= current ? "★" : "☆",
         onclick: () => updateStars(i),
@@ -105,16 +105,16 @@ export function createOrderFeedback(state) {
     const nameInput = element("input", {
       type: "text",
       class: "cf-feedback-input",
-      placeholder: "Seu nome (opcional)".tr,
-      "aria-label": "Seu nome".tr,
+      placeholder: 'your_name_optional'.tr,
+      "aria-label": 'your_name'.tr,
     });
     nameInput.value = state.user?.name || "";
 
     const contactInput = element("input", {
       type: "text",
       class: "cf-feedback-input",
-      placeholder: "WhatsApp ou e-mail de contato (opcional)".tr,
-      "aria-label": "WhatsApp ou e-mail".tr,
+      placeholder: 'whatsapp_or_contact_email_optional'.tr,
+      "aria-label": 'whatsapp_or_email'.tr,
     });
     contactInput.value = state.user?.phone || state.user?.email || "";
 
@@ -137,8 +137,8 @@ export function createOrderFeedback(state) {
       class: "cf-feedback-textarea",
       rows: "3",
       maxlength: "600",
-      placeholder: "Conte sua experiência com o site, elogio, sugestão ou reclamação para o dono da Conflora...".tr,
-      "aria-label": "Mensagem ou reclamação".tr,
+      placeholder: 'tell_us_about_your_experience_praise_suggestion_or_complaint_for_conflora_s_owner'.tr,
+      "aria-label": 'message_or_complaint_e2a096d90d'.tr,
     });
 
     const highlightButtons = FEEDBACK_HIGHLIGHTS.map((item) => {
@@ -166,40 +166,40 @@ export function createOrderFeedback(state) {
     const submitButton = element("button", {
       type: "submit",
       class: "primary cf-feedback-submit-btn",
-      text: "Enviar avaliação".tr,
+      text: 'submit_review'.tr,
     });
 
     const cancelButton = element("button", {
       type: "button",
       class: "quiet",
-      text: "Agora não".tr,
+      text: 'not_now'.tr,
       onclick: () => dialog.close(),
     });
 
     const form = element("form", { class: "cf-feedback-form" }, [
       element("div", { class: "cf-feedback-field" }, [
-        element("strong", { text: "Tipo de avaliação".tr }),
+        element("strong", { text: 'feedback_type'.tr }),
         typeContainer,
       ]),
       renderStarSelector({
-        label: "Avaliação geral do site e atendimento".tr,
-        subtitle: "Sua nota nos ajuda a melhorar cada vez mais a experiência na Conflora.".tr,
+        label: 'overall_rating_for_site_service'.tr,
+        subtitle: 'your_rating_helps_us_continually_improve_your_shopping_experience'.tr,
         initialValue: rating,
         onChange: (val) => {
           rating = val;
         },
       }),
       element("div", { class: "cf-feedback-field" }, [
-        element("strong", { text: "Sua identificação (opcional)".tr }),
+        element("strong", { text: 'your_details_optional'.tr }),
         nameInput,
         contactInput,
       ]),
       element("div", { class: "cf-feedback-field" }, [
-        element("strong", { text: "O que mais se destacou? (opcional)".tr }),
-        element("div", { class: "cf-feedback-highlights", role: "group", "aria-label": "Destaques".tr }, highlightButtons),
+        element("strong", { text: 'what_stood_out_most_optional'.tr }),
+        element("div", { class: "cf-feedback-highlights", role: "group", "aria-label": 'highlights'.tr }, highlightButtons),
       ]),
       element("label", { class: "cf-feedback-field" }, [
-        element("strong", { text: "Mensagem ou Reclamação".tr }),
+        element("strong", { text: 'message_or_complaint'.tr }),
         commentInput,
       ]),
       errorBanner,
@@ -210,7 +210,7 @@ export function createOrderFeedback(state) {
       event.preventDefault();
       errorBanner.hidden = true;
       submitButton.disabled = true;
-      submitButton.textContent = "Enviando…".tr;
+      submitButton.textContent = 'sending'.tr;
 
       try {
         const typeObj = FEEDBACK_TYPES.find((t) => t.id === selectedType);
@@ -227,7 +227,7 @@ export function createOrderFeedback(state) {
         });
 
         dialog.close();
-        notify("Obrigado! Sua avaliação foi enviada diretamente para o responsável pela Conflora.".tr);
+        notify('thank_you_your_feedback_has_been_sent_directly_to_conflora_s_owner'.tr);
 
         // Se houver link direto do WhatsApp do proprietário, abre no WhatsApp
         if (response?.ownerWhatsappUrl) {
@@ -236,27 +236,27 @@ export function createOrderFeedback(state) {
           } catch {}
         }
       } catch (err) {
-        errorBanner.textContent = err.message || "Não foi possível enviar sua avaliação.".tr;
+        errorBanner.textContent = err.message || 'could_not_submit_your_feedback'.tr;
         errorBanner.hidden = false;
         submitButton.disabled = false;
-        submitButton.textContent = "Enviar avaliação".tr;
+        submitButton.textContent = 'submit_review'.tr;
       }
     });
 
     dialog.replaceChildren(
       element("div", { class: "dialog-header cf-feedback-dialog-header" }, [
         element("div", {}, [
-          element("span", { class: "product-info-eyebrow", text: "Conflora Horta e Viveiro".tr }),
-          element("h2", { id: "orderFeedbackTitle", text: "Como foi sua experiência com a Conflora?".tr }),
+          element("span", { class: "product-info-eyebrow", text: 'conflora_garden_nursery'.tr }),
+          element("h2", { id: "orderFeedbackTitle", text: 'how_was_your_experience_with_conflora'.tr }),
           element("p", {
             class: "muted",
-            text: "Sua avaliação chega diretamente ao WhatsApp do proprietário. Envie elogios, sugestões ou sua reclamação.".tr,
+            text: 'your_feedback_goes_directly_to_the_owner_s_whatsapp_send_compliments_suggestions_or_c'.tr,
           }),
         ]),
         element("button", {
           type: "button",
           class: "product-info-close",
-          "aria-label": "Fechar".tr,
+          "aria-label": 'common_close'.tr,
           text: "×",
           onclick: () => dialog.close(),
         }),
@@ -280,13 +280,13 @@ export function createOrderFeedback(state) {
         id: "siteFeedbackFab",
         type: "button",
         class: "site-feedback-fab",
-        "aria-label": "Avaliar o site".tr,
-        title: "Avaliar o site".tr,
+        "aria-label": 'review_our_site'.tr,
+        title: 'review_our_site'.tr,
         onclick: () => openSiteFeedbackModal(),
       },
       [
         element("span", { class: "site-feedback-star", "aria-hidden": "true", text: "⭐" }),
-        element("span", { class: "site-feedback-text", text: "Avaliar o site".tr }),
+        element("span", { class: "site-feedback-text", text: 'review_our_site'.tr }),
       ],
     );
     document.body.append(triggerNode);
@@ -321,7 +321,7 @@ export function createOrderFeedback(state) {
     if (!isOrderDelivered(order)) return null;
     const container = element("section", {
       class: "cf-order-card-feedback",
-      "aria-label": "Avaliação do site e atendimento".tr,
+      "aria-label": 'site_customer_service_review'.tr,
     });
 
     const paint = () => {
@@ -329,17 +329,17 @@ export function createOrderFeedback(state) {
       container.append(
         element("div", { class: "cf-order-feedback-prompt" }, [
           element("div", { class: "cf-order-feedback-prompt-copy" }, [
-            element("strong", { text: "Como foi sua experiência com este pedido e atendimento?".tr }),
+            element("strong", { text: 'how_was_your_experience_with_this_order_and_service'.tr }),
             element("p", {
               class: "muted",
-              text: "Avalie o atendimento, envie elogios ou faça uma reclamação direta ao proprietário.".tr,
+              text: 'rate_our_service_send_praise_or_file_a_direct_complaint_to_the_owner'.tr,
             }),
           ]),
           element("div", { class: "cf-order-feedback-prompt-controls" }, [
             element("button", {
               type: "button",
               class: "primary cf-feedback-open-btn",
-              text: "Avaliar experiência".tr,
+              text: 'review_experience'.tr,
               onclick: () => openSiteFeedbackModal(),
             }),
           ]),

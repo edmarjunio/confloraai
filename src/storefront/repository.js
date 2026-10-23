@@ -5,7 +5,7 @@ const { ensure, identifier, digest } = require("./validation");
 class StoreRepository {
   constructor({ firestore = null } = {}) {
     ensure(
-      firestore || process.env.NODE_ENV !== "production",
+      firestore || process.env.NODE_ENV === "test",
       "Firestore obrigatório em produção.",
       503,
     );

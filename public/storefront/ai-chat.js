@@ -25,14 +25,14 @@ export function createChat(state, catalog) {
     const config = state.config.assistant;
     let controls = document.querySelector('.chat-ai-controls');
     if (!controls) {
-      const reset = () => { if (busy) return; messages.replaceChildren(); history.length = 0; bubble('Qual produto você procura?', 'assistant'); };
+      const reset = () => { if (busy) return; messages.replaceChildren(); history.length = 0; bubble('what_product_are_you_looking_for'.tr, 'assistant'); };
       controls = element('div', { class: 'suggestions chat-ai-controls' }, [
         element('button', {
           type: 'button',
           class: 'chat-action-restart cf-btn-3d cf-btn-3d--sm',
           text: '↻',
-          'aria-label': 'Começar de novo',
-          title: 'Começar de novo',
+          'aria-label': 'start_over'.tr,
+          title: 'start_over'.tr,
           onclick: reset,
         }),
         element('button', {
@@ -40,24 +40,24 @@ export function createChat(state, catalog) {
           class: 'chat-action-clear cf-btn-3d cf-btn-3d--sm',
           text: '🗑',
           'aria-label': 'Limpar conversa',
-          title: 'Limpar conversa',
+          title: 'clear_chat'.tr,
           onclick: reset,
         }),
       ]);
       form.before(controls);
     }
     $("#aiFab").hidden = !config.enabled;
-    $("#aiName").textContent = $("#chatTitle").textContent = config.displayName || "assistant.drawer_title".tr;
+    $("#aiName").textContent = $("#chatTitle").textContent = config.displayName || 'assistant_drawer_title'.tr;
     if (!messages.children.length) {
-      bubble(config.welcomeMessage || "assistant.welcome_message".tr, "assistant");
+      bubble(config.welcomeMessage || 'assistant_welcome_message'.tr, "assistant");
     }
     const defaultSuggestions = [
-      "assistant.chip_shade".tr,
-      "assistant.chip_fruit".tr,
-      "assistant.chip_pet".tr,
-      "assistant.chip_herbs".tr,
-      "assistant.chip_fertilizer".tr,
-      "assistant.chip_sun".tr,
+      'assistant_chip_shade'.tr,
+      'assistant_chip_fruit'.tr,
+      'assistant_chip_pet'.tr,
+      'assistant_chip_herbs'.tr,
+      'assistant_chip_fertilizer'.tr,
+      'assistant_chip_sun'.tr,
     ];
     const questions = (config.suggestedQuestions && config.suggestedQuestions.length)
       ? config.suggestedQuestions
@@ -87,7 +87,7 @@ export function createChat(state, catalog) {
     $("#chatInput").value = "";
     bubble(message, "user");
     const pending = bubble(
-      "common.loading".tr,
+      'common_loading'.tr,
       "assistant",
     );
     try {
@@ -109,7 +109,7 @@ export function createChat(state, catalog) {
         }
         messages.append(grid);
       }
-      if (response.products?.length) bubble('Digite no campo abaixo o produto específico que procura para refinar a busca.', 'assistant');
+      if (response.products?.length) bubble('type_the_specific_product_you_are_looking_for_in_the_field_below_to_refine_your_searc'.tr, 'assistant');
       for (const source of response.sources || []) {
         messages.append(
           element("a", {

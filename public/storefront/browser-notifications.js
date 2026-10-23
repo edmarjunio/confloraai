@@ -4,14 +4,14 @@ export function notificationSupport() {
   return window.isSecureContext && 'Notification' in window;
 }
 
-export function permissionButton(label = 'Ativar notificações de pedidos', onGranted = () => {}) {
+export function permissionButton(label = 'enable_order_notifications'.tr, onGranted = () => {}) {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'quiet order-notification-permission';
   const paint = () => {
     button.hidden = !notificationSupport() || window.Notification.permission === 'granted';
     button.disabled = notificationSupport() && window.Notification.permission === 'denied';
-    button.textContent = button.disabled ? 'Notificações bloqueadas nas configurações do navegador' : label;
+    button.textContent = button.disabled ? 'notifications_blocked_in_browser_settings'.tr : label;
   };
   button.addEventListener('click', async () => {
     if (!notificationSupport()) return;
@@ -43,7 +43,7 @@ export function orderNotice({ title, body, onDetails }) {
     host = document.createElement('aside');
     host.id = 'orderNotificationStack';
     host.className = 'order-notification-stack';
-    host.setAttribute('aria-label', 'Atualizações de pedidos');
+    host.setAttribute('aria-label', 'order_updates'.tr);
     document.body.append(host);
   }
   const card = document.createElement('section');
@@ -51,9 +51,9 @@ export function orderNotice({ title, body, onDetails }) {
   card.setAttribute('role', 'status');
   const heading = document.createElement('strong'); heading.textContent = title;
   const description = document.createElement('p'); description.textContent = body;
-  const details = document.createElement('button'); details.type = 'button'; details.textContent = 'VER DETALHES DO PEDIDO';
+  const details = document.createElement('button'); details.type = 'button'; details.textContent = 'view_order_details'.tr;
   details.addEventListener('click', () => { card.remove(); onDetails(); });
-  const close = document.createElement('button'); close.type = 'button'; close.className = 'order-notification-close'; close.textContent = '×'; close.setAttribute('aria-label', 'Dispensar notificação');
+  const close = document.createElement('button'); close.type = 'button'; close.className = 'order-notification-close'; close.textContent = '×'; close.setAttribute('aria-label', 'dismiss_notification'.tr);
   close.addEventListener('click', () => card.remove());
   card.append(heading, description, details, close);
   host.prepend(card);
@@ -62,24 +62,24 @@ export function orderNotice({ title, body, onDetails }) {
 }
 
 export function createCashierNotifications(user, onDetails) {
-  if (!['ADMIN', 'CAIXA'].includes(user?.role)) return () => {};
+  if (!['ADMIN', "CAIXA"].includes(user?.role)) return () => {};
   if (navigator.serviceWorker?.register && window.isSecureContext) navigator.serviceWorker.register('/storefront/sw.js', { scope: '/', updateViaCache: 'none' }).catch(() => {});
   let closed = false;
   let fallbackTimer;
   let loading = false;
   const tracker = createOrderTracker('cashier');
   const dismissals = [];
-  const control = permissionButton('Ativar notificações do caixa');
+  const control = permissionButton('enable_cashier_notifications'.tr);
   control.classList.add('cashier-notification-permission');
   document.body.append(control);
   const observe = orders => {
     if (closed) return;
     for (const { order } of tracker.observe(orders)) {
-      const body = `Acabou de chegar o pedido #${order.ticketNumber || String(order.id).slice(-8).toUpperCase()}.`;
+      const body = `${'order_just_arrived'.tr}${order.ticketNumber || String(order.id).slice(-8).toUpperCase()}.`;
       const open = () => { if (!closed) onDetails(order.id); };
-      dismissals.push(orderNotice({ title: 'Novo pedido recebido', body, onDetails: open }));
+      dismissals.push(orderNotice({ title: 'new_order_received'.tr, body, onDetails: open }));
       if (dismissals.length > 5) dismissals.shift()();
-      showBrowserNotification({ title: 'Novo pedido recebido', body, tag: `cashier:${user.id}:${order.id}`, url: `/caixa?view=commands&order=${encodeURIComponent(order.id)}`, onClick: open, allowed: () => !closed });
+      showBrowserNotification({ title: 'new_order_received'.tr, body, tag: `cashier:${user.id}:${order.id}`, url: `/caixa?view=commands&order=${encodeURIComponent(order.id)}`, onClick: open, allowed: () => !closed });
     }
   };
   const refresh = async () => {

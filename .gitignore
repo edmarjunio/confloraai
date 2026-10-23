@@ -26,5 +26,6 @@ public/pdv/dist/
 public/storefront/dist/
 public/storefront/shell.html
 public/storefront/sw-built.js
+public/storefront/i18n-runtime.js
 
 tmp/logo-*

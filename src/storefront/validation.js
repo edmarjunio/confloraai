@@ -76,12 +76,12 @@ function validateConfig(input, tenantId) {
   const payments = checkout.enabledPayments;
   ensure(
     Array.isArray(payments) &&
-      payments.length > 0 &&
+      payments.length <= 6 &&
       payments.every((p) => ["PIX", "CARD", "CASH", "CREDITO", "DEBITO", "FIADO"].includes(p)),
     "Selecione formas de pagamento válidas.",
   );
   ensure(
-    checkout.delivery?.enabled || checkout.pickup?.enabled,
+    payments.length === 0 || checkout.delivery?.enabled || checkout.pickup?.enabled,
     "Habilite entrega ou retirada.",
   );
   ensure(

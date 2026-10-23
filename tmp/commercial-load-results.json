@@ -9,8 +9,8 @@
   "scenarios": [
     {
       "salesEquivalent": 100,
-      "durationMs": 46,
-      "p95ServiceMs": 12.06,
+      "durationMs": 84,
+      "p95ServiceMs": 30.56,
       "documentReads": 1133,
       "documentWrites": 1433,
       "transactions": 300,
@@ -18,8 +18,8 @@
     },
     {
       "salesEquivalent": 500,
-      "durationMs": 162,
-      "p95ServiceMs": 8.59,
+      "durationMs": 305,
+      "p95ServiceMs": 27.45,
       "documentReads": 5666,
       "documentWrites": 7166,
       "transactions": 1500,
@@ -27,8 +27,8 @@
     },
     {
       "salesEquivalent": 1000,
-      "durationMs": 272,
-      "p95ServiceMs": 7.72,
+      "durationMs": 426,
+      "p95ServiceMs": 12.59,
       "documentReads": 11333,
       "documentWrites": 14333,
       "transactions": 3000,

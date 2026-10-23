@@ -4,6 +4,9 @@ const { createHash } = require('node:crypto');
 const { execFileSync } = require('node:child_process');
 const esbuild = require('esbuild');
 const root = resolve(__dirname, '..');
+esbuild.buildSync({ entryPoints: [resolve(root, 'public/storefront/i18n/runtime.js')],
+  outfile: resolve(root, 'public/storefront/i18n-runtime.js'), bundle: true, format: 'iife', minify: true,
+  target: ['es2022'], logLevel: 'warning' });
 const destination = resolve(root, 'public/pdv/dist');
 mkdirSync(destination, { recursive: true });
 const files = ['order-card.styles.js', 'components.jsx', 'delivery.jsx', 'app.jsx'];

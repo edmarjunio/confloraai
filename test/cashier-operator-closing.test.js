@@ -4,7 +4,7 @@ process.env.OWNER_WHATSAPP_NUMBER = '5564999994321';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
-const { FirestoreRepository } = require('../src/database/firestore.repository');
+const { FirestoreRepository } = require('./helpers/repository-fixture');
 const { createApp } = require('../src/http/app');
 
 const admin = { id: 'usr-admin', name: 'Júnior', email: 'junior@conflora.test', role: 'ADMIN', pin: '0000' };

@@ -1,7 +1,7 @@
 process.env.NODE_ENV = 'test';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { FirestoreRepository } = require('../src/database/firestore.repository');
+const { FirestoreRepository } = require('./helpers/repository-fixture');
 const { createApp } = require('../src/http/app');
 
 test('ADMIN NOTIFICATIONS: Notifica todos os usuários com papel ADMIN quando uma venda é finalizada', async () => {

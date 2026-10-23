@@ -8,7 +8,7 @@ const {
   validateProduct,
 } = require("../src/storefront/validation");
 const { createApp } = require("../src/http/app");
-const { FirestoreRepository } = require("../src/database/firestore.repository");
+const { FirestoreRepository } = require("./helpers/repository-fixture");
 const { seedStores } = require("./storefront-fixture");
 const { deliverOrder } = require("../src/storefront/order-delivery");
 

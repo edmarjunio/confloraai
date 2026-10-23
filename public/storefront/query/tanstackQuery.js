@@ -93,20 +93,13 @@ export class QueryClient {
     this.inFlight = new Map();
     this.defaultOptions = options.defaultOptions || {
       queries: {
-        staleTime: 1000 * 60 * 2, // 2 min
+        staleTime: 0,
         retry: 1,
       },
     };
   }
 
   async fetchQuery({ queryKey, queryFn, staleTime }) {
-    const cached = this.cache.get(queryKey);
-    const isStale = this.cache.isStale(queryKey);
-
-    // Return fresh cached data if available
-    if (cached && !isStale) {
-      return cached.data;
-    }
     const hash = this.cache.hashKey(queryKey);
     if (this.inFlight.has(hash)) return this.inFlight.get(hash);
 
@@ -117,14 +110,7 @@ export class QueryClient {
           staleTime: staleTime ?? this.defaultOptions.queries.staleTime,
         });
         return data;
-      } catch (err) {
-        if (cached) {
-          // Return stale data on error as fallback
-          console.warn('TanStack Query: fetch failed, returning stale cache:', err);
-          return cached.data;
-        }
-        throw err;
-      }
+      } catch (err) { throw err; }
     })();
     this.inFlight.set(hash, pending);
     try {

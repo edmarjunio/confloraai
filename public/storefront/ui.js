@@ -1,7 +1,7 @@
 export const $ = (selector) => document.querySelector(selector);
 export async function readJsonResponse(response) {
   const message =
-    "O serviço está temporariamente indisponível. Tente novamente em instantes.";
+    'the_service_is_temporarily_unavailable_please_try_again_shortly'.tr;
   if (!response.headers.get("content-type")?.includes("application/json")) {
     throw new Error(message);
   }
@@ -108,9 +108,9 @@ export function storageSet(key, value) {
 export async function copyText(value) {
   try {
     await navigator.clipboard.writeText(value);
-    notify("Chave PIX copiada.");
+    notify('pix_key_copied_3ab8fd'.tr);
   } catch {
-    notify("Não foi possível copiar. Selecione a chave exibida.");
+    notify('could_not_copy_select_the_displayed_key'.tr);
   }
 }
 export function createApi(slug) {
@@ -136,12 +136,12 @@ export function createApi(slug) {
       );
       const data = await readJsonResponse(response);
       if (!response.ok) {
-        throw new Error(data.error || "Não foi possível concluir.");
+        throw new Error(data.error || 'could_not_complete'.tr);
       }
       return data;
     } catch (error) {
       if (error.name === "AbortError") {
-        throw new Error("A solicitação demorou. Tente novamente.");
+        throw new Error('the_request_took_too_long_please_try_again'.tr);
       }
       throw error;
     } finally {

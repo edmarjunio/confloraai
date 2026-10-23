@@ -3,10 +3,10 @@ const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 const { writeFileSync, mkdirSync } = require('node:fs');
 const { meteredFirestore } = require('./helpers/metered-firestore');
-const { FirestoreRepository } = require('../src/database/firestore.repository');
+const { FirestoreRepository } = require('./helpers/repository-fixture');
 const { PdvRepository } = require('../src/orders/pdv.repository');
 const { PdvService } = require('../src/orders/pdv.service');
-const { CatalogRepository } = require('../src/catalog/catalog.repository');
+const { CatalogRepository } = require('./helpers/catalog-fixture');
 const { IncomingMessageService } = require('../src/services/incoming-message.service');
 const { StorefrontAnalyticsService } = require('../src/services/storefront-analytics.service');
 

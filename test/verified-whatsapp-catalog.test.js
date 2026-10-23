@@ -11,7 +11,7 @@ const { HandoffStore, CartStore, customerKeyFor } = require('../src/agent/agent-
 const { MessageService } = require('../src/services/message.service');
 const { PdvRepository } = require('../src/orders/pdv.repository');
 const { PdvService } = require('../src/orders/pdv.service');
-const { FirestoreRepository } = require('../src/database/firestore.repository');
+const { FirestoreRepository } = require('./helpers/repository-fixture');
 const { createMetaAgentRoutes } = require('../src/http/meta-agent.routes');
 const { SignatureValidator } = require('../src/security/signature.validator');
 const { verifiedProductImage } = require('../src/agent/product-image');
@@ -116,6 +116,11 @@ function deliveryFixture(f, send) {
   pdv.catalogAgent = f.agent;
   const messages = new MessageService({ firestoreRepo: repo, whatsappClient: { sendTextMessage: send } });
   messages.metaAgentService = f.agent;
+  const handle = messages.handleCustomerMessage.bind(messages);
+  messages.handleCustomerMessage = async input => {
+    await require('../src/services/conversation-automation').setConversationChannel(repo, input.phone, 'catalog');
+    return handle(input);
+  };
   return { repo, pdv, messages };
 }
 
@@ -232,7 +237,9 @@ test('27 expired identity index refresh failure cannot serve old catalog', async
 test('traits revoked after identification are rejected on fresh document read', async () => {
   const f = fixture(); await f.index.ensureFresh();
   await f.db.doc('products/b').update({ botanical: { approved: false } });
-  silent(await f.ask('Tem plantas pra sol?'));
+  const result = await f.ask('Tem plantas pra sol?');
+  assert.deepEqual(result.data.products, []);
+  assert.equal(result.data.kind, 'ORDER_INTAKE');
 });
 
 test('AI descriptions and unknown/negative qualifiers are never botanical evidence', async () => {

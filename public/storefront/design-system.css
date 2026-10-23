@@ -999,3 +999,166 @@ button-3d svg,
   line-height: 1 !important;
   white-space: nowrap !important;
 }
+
+/* Consistent controls across storefront, administration and cashier screens. */
+:root {
+  --cf-button-radius: 12px;
+  --cf-button-height: 40px;
+  --cf-button-border: #d7e2da;
+  --cf-button-text: #24352a;
+  --cf-button-surface: #ffffff;
+  --cf-button-primary: #198b48;
+  --cf-button-primary-hover: #14743b;
+  --cf-button-focus: rgb(25 139 72 / 28%);
+  --cf-button-shadow: 0 1px 2px rgb(15 56 30 / 8%);
+  --cf-button-shadow-hover: 0 4px 12px rgb(15 56 30 / 14%);
+}
+
+:where(button, a[role="button"], input[type="button"], input[type="submit"], input[type="reset"]) {
+  box-sizing: border-box;
+  min-height: var(--cf-button-height);
+  padding: 8px 14px;
+  border: 1px solid var(--cf-button-border);
+  border-radius: var(--cf-button-radius);
+  background: var(--cf-button-surface);
+  color: var(--cf-button-text);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.25;
+  text-align: center;
+  text-decoration: none;
+  box-shadow: var(--cf-button-shadow);
+  transition: transform 140ms ease, box-shadow 140ms ease, background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:not(.cart-fab):not(.ai-fab) {
+  min-height: var(--cf-button-height) !important;
+  border-radius: var(--cf-button-radius) !important;
+}
+
+.cart-fab,
+.ai-fab {
+  border-radius: 50% !important;
+}
+
+.quantity-control button:not(.cart-fab):not(.ai-fab) {
+  min-height: 36px !important;
+  border-radius: 50% !important;
+}
+
+:where(button, a[role="button"], input[type="button"], input[type="submit"], input[type="reset"]):hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--cf-button-shadow-hover);
+}
+
+:where(button, a[role="button"], input[type="button"], input[type="submit"], input[type="reset"]):active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: var(--cf-button-shadow);
+}
+
+:where(button, a[role="button"], input[type="button"], input[type="submit"], input[type="reset"]):focus-visible {
+  outline: 3px solid var(--cf-button-focus);
+  outline-offset: 2px;
+}
+
+:where(button, input[type="button"], input[type="submit"], input[type="reset"]):disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Legacy action classes use the same size, shape and restrained elevation. */
+:is(.action-btn, .header-btn, .btn-action, .nav-btn, .admin-cashier-link, .admin-add-product, .btn-checkout, .btn-green, .btn-blue, .btn-red, .btn-amber, .btn-gray, .cf-back-button, .cf-danger-button, .primary, .secondary, .cf-btn-3d, .cf-button-3d, .cf-button) {
+  min-height: var(--cf-button-height);
+  padding: 8px 14px;
+  border-radius: var(--cf-button-radius) !important;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.25;
+  box-shadow: var(--cf-button-shadow);
+  transition: transform 140ms ease, box-shadow 140ms ease, background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+:is(button[type="submit"], input[type="submit"], .btn-green, .primary, .action-btn.primary, .btn-action.primary, .admin-cashier-link, .admin-add-product, .btn-checkout, .cf-btn-3d--primary, button-3d[variant="primary"], .cf-button[data-variant="primary"]) {
+  border: 1px solid var(--cf-button-primary);
+  background: var(--cf-button-primary);
+  color: #ffffff;
+  box-shadow: 0 2px 5px rgb(25 139 72 / 18%);
+}
+
+:is(button[type="submit"], input[type="submit"], .btn-green, .primary, .action-btn.primary, .btn-action.primary, .admin-cashier-link, .admin-add-product, .btn-checkout, .cf-btn-3d--primary, button-3d[variant="primary"], .cf-button[data-variant="primary"]):hover:not(:disabled) {
+  background: var(--cf-button-primary-hover);
+  border-color: var(--cf-button-primary-hover);
+  box-shadow: 0 4px 12px rgb(25 139 72 / 24%);
+}
+
+:is(.action-btn:not(.primary), .header-btn, .btn-action:not(.primary), .nav-btn, .btn-gray, .btn-blue, .secondary, .cf-back-button, .cf-btn-3d--secondary, button-3d[variant="secondary"], .cf-button[data-variant="secondary"]) {
+  border: 1px solid var(--cf-button-border);
+  background: #ffffff;
+  color: #334b3a;
+  box-shadow: var(--cf-button-shadow);
+}
+
+:is(.action-btn:not(.primary), .header-btn, .btn-action:not(.primary), .nav-btn, .btn-gray, .btn-blue, .secondary, .cf-back-button, .cf-btn-3d--secondary, button-3d[variant="secondary"], .cf-button[data-variant="secondary"]):hover:not(:disabled) {
+  border-color: #b8d8c2;
+  background: #f6faf7;
+  color: #173c25;
+}
+
+:is(.btn-red, .cf-danger-button, .cf-btn-3d--danger, button-3d[variant="danger"], .cf-button[data-variant="danger"]) {
+  border: 1px solid #d92d38;
+  background: #d92d38;
+  color: #ffffff;
+  box-shadow: 0 2px 5px rgb(217 45 56 / 18%);
+}
+
+:is(.btn-red, .cf-danger-button, .cf-btn-3d--danger, button-3d[variant="danger"], .cf-button[data-variant="danger"]):hover:not(:disabled) {
+  border-color: #b4232c;
+  background: #b4232c;
+  box-shadow: 0 4px 12px rgb(217 45 56 / 24%);
+}
+
+:is(.btn-amber, .cf-btn-3d--warning, button-3d[variant="warning"], .cf-button[data-variant="warning"]) {
+  border: 1px solid #e7b93d;
+  background: #fff8df;
+  color: #684b08;
+  box-shadow: var(--cf-button-shadow);
+}
+
+:is(.icon-button, .notification-button, .cf-icon-button) {
+  min-width: var(--cf-button-height);
+  width: var(--cf-button-height);
+  height: var(--cf-button-height);
+  padding: 0;
+  border-radius: 12px !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(button, a[role="button"], input[type="button"], input[type="submit"], input[type="reset"]) {
+    transition-duration: 0.01ms;
+  }
+}
+
+/* Keep the search submit button joined to the header input. */
+body .cf-topbar-layout .cf-topbar-search {
+  gap: 0 !important;
+  padding-right: 0 !important;
+  overflow: hidden;
+}
+body .cf-topbar-layout .cf-topbar-search > button[type="submit"] {
+  min-height: 34px !important;
+  height: 34px !important;
+  margin-left: 8px;
+  padding-inline: 16px !important;
+  border: 0 !important;
+  border-radius: 0 999px 999px 0 !important;
+  box-shadow: none !important;
+}
+body .cf-topbar-layout .cf-topbar-search > button[type="submit"]:hover:not(:disabled) {
+  transform: none !important;
+  box-shadow: none !important;
+}

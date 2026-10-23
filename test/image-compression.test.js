@@ -13,7 +13,7 @@ const {
   buildFirestorePhotoDocument,
   buildOptimizedFirestorePhotoDocument,
 } = require('../src/catalog/product-photo.service');
-const { FirestoreRepository } = require('../src/database/firestore.repository');
+const { FirestoreRepository } = require('./helpers/repository-fixture');
 const { createApp } = require('../src/http/app');
 
 // Gera uma imagem sintética colorida de teste (1600x1200 pixels)
@@ -127,7 +127,8 @@ test('5. buildOptimizedFirestorePhotoDocument integra compressão com padrão Co
 
   assert.equal(doc.id, 'img_prod-opt-02');
   assert.equal(doc.fileName, 'palmeira-azul-bismarckia_prod-opt-02.jpg');
-  assert.ok(doc.tagsAi.includes('bismarckia nobilis'));
+  assert.ok(doc.tagsAi.includes('palmeira azul'));
+  assert.ok(!doc.tagsAi.includes('bismarckia nobilis'));
   assert.ok(doc.compression, 'Deve conter metadados de compressão');
   assert.ok(doc.compression.savingsPercent > 50);
   assert.equal(doc.width, 800);

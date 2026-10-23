@@ -4,7 +4,7 @@ process.env.WHATSAPP_AGENT_OWNER = 'cloud_api';
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { FirestoreRepository } = require('../src/database/firestore.repository');
+const { FirestoreRepository } = require('./helpers/repository-fixture');
 const { PdvRepository } = require('../src/orders/pdv.repository');
 const { MessageService } = require('../src/services/message.service');
 const { recognizeGreeting } = require('../src/shared/greeting');
@@ -65,15 +65,11 @@ test('greetings never resume a conversation paused for human review', async () =
   assert.equal(sends.length, 0);
 });
 
-test('a greeting followed by a product request continues through order intake unchanged', async () => {
+test('any first message opens the three choices before processing products', async () => {
   const { service, sends } = fixture();
   const message = 'Boa noite, tem alface?';
   assert.equal(recognizeGreeting(message), null);
-  service.orderIntake.handle = async input => {
-    assert.equal(input.message, message);
-    return { reply: 'Alface: R$ 5,00.', intent: 'VERIFIED_PRODUCT_PRICE' };
-  };
   const result = await service.handleCustomerMessage({ phone, message });
-  assert.equal(result.intent, 'VERIFIED_PRODUCT_PRICE');
-  assert.equal(sends[0].kind, 'text');
+  assert.equal(result.intent, 'MAIN_MENU_SENT');
+  assert.equal(sends[0].kind, 'menu');
 });

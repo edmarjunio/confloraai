@@ -58,7 +58,7 @@ function loadCustomerMonitor() {
     } },
   };
   const code = esbuild.buildSync({ entryPoints: [path.resolve('public/storefront/customer-order-notifications.js')], bundle: true, platform: 'browser', format: 'cjs', write: false }).outputFiles[0].text;
-  vm.runInNewContext(code, { window, navigator: {}, document: { addEventListener() {}, removeEventListener() {} }, module, exports: module.exports });
+  vm.runInNewContext(require('./helpers/browser-i18n').script + code, { window, navigator: {}, document: { addEventListener() {}, removeEventListener() {} }, module, exports: module.exports });
   return { api: module.exports, shown, streams, window };
 }
 

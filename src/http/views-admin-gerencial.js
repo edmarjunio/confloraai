@@ -1,9 +1,11 @@
+require('../i18n/default');
 // Painel gerencial diário da Conflora, usado para revisão e fechamento do caixa.
 
 function renderAdminGerencialHtml() {
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
+<script src="/store-assets/i18n-runtime.js"></script>
   <meta charset="UTF-8">
   <script src="/store-assets/error-monitor.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -1219,10 +1221,10 @@ function renderAdminGerencialHtml() {
           await Promise.all([loadPeriodMetrics(), loadSeasonalMetrics(), loadExecutiveMetrics(), checkClosingStatus(getBusinessToday())]);
           return;
         }
-        showToast('Painel disponível somente para ADMIN.');
+        showToast('dashboard_available_for_admin_only'.tr);
         document.querySelector('.main-container').innerHTML = '<div class="panel-card"><strong>Acesso restrito</strong><span>Entre com uma conta ADMIN para consultar o fechamento diário.</span></div>';
       } catch (_) {
-        showToast('Não foi possível validar seu acesso. Entre novamente.');
+        showToast('could_not_validate_your_access_please_log_in_again'.tr);
       }
     }
 
@@ -1260,10 +1262,10 @@ function renderAdminGerencialHtml() {
     }
 
     function comparisonText(change, unit = '') {
-      if (!change) return 'Comparação indisponível';
-      if (change.percent === null) return change.absolute > 0 ? 'Acima do período anterior, sem base comparável' : 'Sem vendas no período anterior';
+      if (!change) return 'comparison_unavailable'.tr;
+      if (change.percent === null) return change.absolute > 0 ? 'Acima do período anterior, sem base comparável' : 'no_sales_in_previous_period'.tr;
       const arrow = change.absolute > 0 ? '▲ ' : change.absolute < 0 ? '▼ ' : '';
-      const value = unit === 'vendas'
+      const value = unit === 'sales_0ec6c3'.tr
         ? Math.abs(change.absolute) + ' ' + unit
         : formatCurrency(Math.abs(change.absolute));
       return arrow + (change.absolute > 0 ? '+' : change.absolute < 0 ? '−' : '') + Math.abs(change.percent).toLocaleString('pt-BR') + '% · ' + value + ' vs período anterior';
@@ -1283,23 +1285,23 @@ function renderAdminGerencialHtml() {
       document.getElementById('periodReceivedChange').textContent = comparisonText(comparison.totalCashIn);
       document.getElementById('periodOnAccountChange').textContent = comparisonText(comparison.onAccountSales);
       document.getElementById('periodAdvanceCreditChange').textContent = comparisonText(comparison.advanceCreditReceived);
-      document.getElementById('periodOrdersChange').textContent = comparisonText(comparison.orderCount, 'vendas');
+      document.getElementById('periodOrdersChange').textContent = comparisonText(comparison.orderCount, 'sales_0ec6c3'.tr);
       document.getElementById('periodTicketChange').textContent = comparisonText(comparison.averageTicket);
       const rangeText = result.range.from === result.range.to
         ? formatReportDate(result.range.from)
         : formatReportDate(result.range.from) + ' a ' + formatReportDate(result.range.to);
       const previousText = formatReportDate(result.range.previousFrom) + ' a ' + formatReportDate(result.range.previousTo);
-      document.getElementById('periodStatus').textContent = rangeText + ' · comparação com ' + previousText;
+      document.getElementById('periodStatus').textContent = rangeText + 'comparison_with'.tr + previousText;
 
       const strongest = current.strongestWeekday;
-      document.getElementById('periodStrongestWeekday').textContent = strongest?.name || 'Sem vendas neste período';
+      document.getElementById('periodStrongestWeekday').textContent = strongest?.name || 'no_sales_in_this_period'.tr;
       document.getElementById('periodWeekdayNote').textContent = strongest
-        ? 'Média de ' + formatCurrency(strongest.averageSales) + ' por ocorrência · ' + strongest.sampleDays + ' dia(s) · ' + strongest.orderCount + ' venda(s). Inclui fiado.'
-        : 'Compara os dias da semana no período selecionado.';
+        ? 'average_of'.tr + formatCurrency(strongest.averageSales) + 'per_occurrence'.tr + strongest.sampleDays + ' dia(s) · ' + strongest.orderCount + ' venda(s). Inclui fiado.'
+        : 'compares_days_of_the_week_in_the_selected_period'.tr;
 
       const methods = [
-        ['PIX', 'Pix'], ['DINHEIRO', 'Dinheiro'], ['DEBITO', 'Débito'],
-        ['CREDITO', 'Crédito'], ['CARTAO', 'Cartão'], ['FIADO', 'Fiado'], ['SALDO_CLIENTE', 'Saldo do cliente'], ['OUTROS', 'Outros'],
+        ['PIX', 'Pix'], ['DINHEIRO', 'cart_cash_option'.tr], ['DEBITO', 'debit'.tr],
+        ['CREDITO', 'credit'.tr], ['CARTAO', 'card'.tr], ['FIADO', 'cart_fiado_option'.tr], ['SALDO_CLIENTE', 'customer_balance'.tr], ['OUTROS', 'Outros'],
       ];
       const paymentRows = methods.map(([key, label]) => ({ key, label, ...(current.byPayment?.[key] || {}) }))
         .filter((payment) => Number(payment.sales || 0) > 0 || Number(payment.receipts || 0) > 0);
@@ -1314,7 +1316,7 @@ function renderAdminGerencialHtml() {
       renderPeriodProducts('periodProductsValue', rankings.mostByRevenue || []);
       renderPeriodProducts('periodLeastQuantity', rankings.leastByQuantity || []);
       renderPeriodProducts('periodLeastValue', rankings.leastByRevenue || []);
-      document.getElementById('unsoldProductsNote').textContent = (rankings.unsoldCount || 0) + ' produto(s) ativo(s) sem venda neste período. ' + (rankings.unsoldWithStock || 0) + ' com estoque; ' + (rankings.unsoldWithoutStock || 0) + ' sem estoque. Saldo atual não informa a disponibilidade histórica.';
+      document.getElementById('unsoldProductsNote').textContent = (rankings.unsoldCount || 0) + 'active_product_s_without_sale_in_this_period'.tr + (rankings.unsoldWithStock || 0) + 'in_stock'.tr + (rankings.unsoldWithoutStock || 0) + 'out_of_stock_current_balance_does_not_show_historical_availability'.tr;
 
       let series = Array.isArray(current.daily) ? current.daily : [];
       if (series.length > 31) {
@@ -1327,7 +1329,7 @@ function renderAdminGerencialHtml() {
             const weekday = (date.getUTCDay() + 6) % 7;
             const start = addCalendarDays(day.date, -weekday);
             key = start;
-            label = 'Semana de ' + formatReportDate(start);
+            label = 'week_of'.tr + formatReportDate(start);
           } else {
             key = day.date.slice(0, 7);
             label = key.split('-').reverse().join('/');
@@ -1349,7 +1351,7 @@ function renderAdminGerencialHtml() {
 
     function renderPeriodProducts(id, products) {
       const host = document.getElementById(id); host.replaceChildren();
-      if (!products.length) { host.textContent = 'Nenhum produto neste período.'; return; }
+      if (!products.length) { host.textContent = 'no_products_in_this_period'.tr; return; }
       products.forEach((product, index) => {
         const row = document.createElement('div'); row.className = 'product-number-row';
         const name = document.createElement('span'); name.textContent = (index + 1) + '. ' + product.name;
@@ -1370,14 +1372,14 @@ function renderAdminGerencialHtml() {
       const version = ++seasonalRequestVersion;
       const year = Number(document.getElementById('seasonalYear').value);
       const status = document.getElementById('seasonalStatus');
-      if (!Number.isInteger(year) || year < 2000 || year > 2100) { status.textContent = 'Escolha um ano entre 2000 e 2100.'; return; }
-      status.textContent = 'Carregando histórico mensal…';
+      if (!Number.isInteger(year) || year < 2000 || year > 2100) { status.textContent = 'choose_a_year_between_2000_and_2100'.tr; return; }
+      status.textContent = 'loading_monthly_history'.tr;
       try {
         const today = getBusinessToday();
         const to = year === Number(today.slice(0,4)) ? today : year + '-12-31';
         const response = await window.ConfloraSession.apiFetch('/api/admin/executive-period-metrics?from=' + year + '-01-01&to=' + to + '&comparisonMode=year');
         const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Não foi possível carregar o histórico.');
+        if (!response.ok) throw new Error(result.error || 'could_not_load_history'.tr);
         if (version !== seasonalRequestVersion) return;
         document.getElementById('yearSales').textContent = formatCurrency(result.current.sales);
         document.getElementById('yearSalesChange').textContent = comparisonText(result.comparison.sales);
@@ -1388,13 +1390,13 @@ function renderAdminGerencialHtml() {
           const key = year + '-' + String(number).padStart(2,'0');
           const month = current.get(key); const before = previous.get(key.slice(5));
           const quantity = month?.rankings.mostByQuantity[0]; const value = month?.rankings.mostByRevenue[0];
-          const change = before?.sales ? ((Number(month?.sales || 0) - before.sales) / before.sales * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '% vs ' + (year - 1) : 'Sem base anterior';
+          const change = before?.sales ? ((Number(month?.sales || 0) - before.sales) / before.sales * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '% vs ' + (year - 1) : 'no_previous_base'.tr;
           const label = new Date(Date.UTC(year, number - 1, 1)).toLocaleDateString('pt-BR', { month: 'long', timeZone:'UTC' });
           const values = [label, formatCurrency(month?.sales || 0), key > today.slice(0,7) ? 'Ainda não realizado' : change, quantity ? quantity.name + ' · ' + quantity.quantity.toLocaleString('pt-BR') + ' ' + quantity.unit : 'Sem vendas', value ? value.name + ' · ' + formatCurrency(value.revenue) : 'Sem vendas'];
           const row = document.createElement('tr');
           values.forEach(text => { const cell = document.createElement('td'); cell.textContent = text; row.append(cell); }); host.append(row);
         }
-        status.textContent = 'Comparação com o ano anterior até a mesma data. Meses em andamento são parciais; valores de vendas incluem frete, ranking de produtos não.';
+        status.textContent = 'comparison_with_the_previous_year_up_to_the_same_date_ongoing_months_are_partial_sale'.tr;
       } catch (error) { if (version === seasonalRequestVersion) status.textContent = error.message; }
     }
 
@@ -1403,16 +1405,16 @@ function renderAdminGerencialHtml() {
       const from = document.getElementById('periodFrom').value;
       const to = document.getElementById('periodTo').value;
       if (!from || !to || from > to) {
-        document.getElementById('periodStatus').textContent = 'Selecione um intervalo de datas válido.';
+        document.getElementById('periodStatus').textContent = 'select_a_valid_date_range'.tr;
         return;
       }
       const button = document.getElementById('periodRefresh');
       button.disabled = true;
-      document.getElementById('periodStatus').textContent = 'Carregando vendas e recebimentos…';
+      document.getElementById('periodStatus').textContent = 'loading_sales_and_receipts'.tr;
       try {
         const response = await window.ConfloraSession.apiFetch('/api/admin/executive-period-metrics?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to) + '&comparisonMode=' + periodComparisonMode);
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Não foi possível carregar o período.');
+        if (!response.ok) throw new Error(data.error || 'could_not_load_the_period'.tr);
         if (requestVersion === periodRequestVersion) renderPeriodMetrics(data);
       } catch (error) {
         if (requestVersion === periodRequestVersion) document.getElementById('periodStatus').textContent = error.message;
@@ -1427,7 +1429,7 @@ function renderAdminGerencialHtml() {
       const todayButton = document.getElementById('dateTodayButton');
       document.getElementById('dateButtonLabel').textContent = isToday ? 'HOJE' : formatReportDate(date);
       todayButton.setAttribute('aria-label', isToday ? 'Hoje. Clique para atualizar o dia atual.' : 'Data ' + formatReportDate(date) + '. Clique para voltar para hoje.');
-      todayButton.title = isToday ? 'Atualizar para hoje' : 'Voltar para hoje';
+      todayButton.title = isToday ? 'Atualizar para hoje' : 'back_to_today'.tr;
     }
 
     function setReportDateToday() {
@@ -1483,14 +1485,14 @@ function renderAdminGerencialHtml() {
       try {
         const res = await window.ConfloraSession.apiFetch('/api/admin/executive-metrics?date=' + encodeURIComponent(date));
         if (res.status === 401 || res.status === 403) {
-          showToast('Acesso restrito ao Administrador.');
+          showToast('access_restricted_to_administrator'.tr);
           return;
         }
         const data = await res.json();
-        if (!res.ok) { throw new Error(data.error || 'Não foi possível carregar o resumo.'); }
+        if (!res.ok) { throw new Error(data.error || 'could_not_load_summary'.tr); }
         renderMetrics(data);
       } catch (err) {
-        showToast('Erro ao carregar dados do dia: ' + err.message);
+        showToast('error_loading_day_data'.tr + err.message);
       } finally {
         document.querySelector('.main-container').classList.remove('metric-loading');
         refreshButton.disabled = false;
@@ -1591,7 +1593,7 @@ function renderAdminGerencialHtml() {
       document.getElementById('inputCountedDebit').value = Number(currentSystemTotals.debit || 0).toFixed(2);
       document.getElementById('inputCountedOnAccount').value = Number(currentSystemTotals.onAccount || 0).toFixed(2);
       calculateDifferences();
-      showToast('✓ Valores preenchidos com os dados apurados do sistema.');
+      showToast('values_filled_with_system_calculated_data'.tr);
     }
 
     async function handleMachineReceiptUpload(input) {
@@ -1618,7 +1620,7 @@ function renderAdminGerencialHtml() {
           const json = await res.json();
           if (res.ok && json.url) {
             currentUploadedProofUrl = json.url;
-            showToast('✓ Comprovante da maquininha anexado!');
+            showToast('card_machine_receipt_attached'.tr);
           }
         } catch (e) {
           console.warn('Falha upload comprovante:', e);
@@ -1685,7 +1687,7 @@ function renderAdminGerencialHtml() {
         const pdfBtn = document.getElementById('btnDownloadClosingPdf');
         if (json && json.closing) {
           badge.className = 'closing-badge closed';
-          badge.textContent = '🏁 Fechado por ' + (json.closing.closedBy || 'Admin') + ' às ' + new Date(json.closing.closedAt).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+          badge.textContent = 'closed_by'.tr + (json.closing.closedBy || 'Admin') + 'at'.tr + new Date(json.closing.closedAt).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
           if (json.closing.reportFileName) {
             pdfBtn.href = '/reports/' + json.closing.reportFileName;
             pdfBtn.hidden = false;
@@ -1700,7 +1702,7 @@ function renderAdminGerencialHtml() {
           }
         } else {
           badge.className = 'closing-badge open';
-          badge.textContent = 'Caixa Aberto (Em Conferência)';
+          badge.textContent = 'open_cash_register_under_reconciliation'.tr;
           if (pdfBtn) pdfBtn.hidden = true;
         }
       } catch (_) {}
@@ -1708,10 +1710,10 @@ function renderAdminGerencialHtml() {
 
     function renderPaymentBreakdown(metrics) {
       const methods = [
-        ['PIX', 'Pix', 'var(--pix)'], ['DINHEIRO', 'Dinheiro', 'var(--cash)'],
-        ['DEBITO', 'Cartão de débito', '#86b991'], ['CREDITO', 'Cartão de crédito', '#b2d3b8'],
-        ['FIADO', 'Fiado', '#d4e6d7'], ['SALDO_CLIENTE', 'Saldo do cliente', '#a9c6eb'],
-        ['CARTAO', 'Cartão (não especificado)', 'var(--card)'],
+        ['PIX', 'Pix', 'var(--pix)'], ['DINHEIRO', 'cart_cash_option'.tr, 'var(--cash)'],
+        ['DEBITO', 'cart_debit_option'.tr, '#86b991'], ['CREDITO', 'cart_card_option'.tr, '#b2d3b8'],
+        ['FIADO', 'cart_fiado_option'.tr, '#d4e6d7'], ['SALDO_CLIENTE', 'customer_balance'.tr, '#a9c6eb'],
+        ['CARTAO', 'card_unspecified'.tr, 'var(--card)'],
       ];
       const payments = metrics.byPayment || {};
       const total = Number(metrics.totalRevenue || 0);
@@ -1722,7 +1724,7 @@ function renderAdminGerencialHtml() {
       document.getElementById('paymentBreakdown').innerHTML = methods.map(([key, label, color]) => {
         const payment = payments[key] || { total: 0, count: 0 };
         const percent = total > 0 ? Math.round((Number(payment.total || 0) / total) * 100) : 0;
-        return '<div class="legend-item"><div class="legend-title"><span class="legend-dot" style="background:' + color + ';"></span>' + label + '</div><div class="legend-val">' + formatCurrency(payment.total) + '</div><div class="legend-sub">' + (payment.count || 0) + ' venda(s) · ' + percent + '%</div></div>';
+        return '<div class="legend-item"><div class="legend-title"><span class="legend-dot" style="background:' + color + ';"></span>' + label + '</div><div class="legend-val"> + formatCurrency(payment.total) + </div><div class="legend-sub">' + (payment.count || 0) + ' venda(s) · ' + percent + '%</div></div>';
       }).join('');
     }
 
@@ -1732,7 +1734,7 @@ function renderAdminGerencialHtml() {
         container.innerHTML = '<div class="metric-empty">Nenhum colaborador cadastrado.</div>';
         return;
       }
-      container.innerHTML = collabs.map((person, index) => '<div class="ranking-row"><div class="ranking-info"><span class="ranking-rank">' + (index + 1) + 'º</span><div><div class="ranking-name">' + escapeHtml(person.name) + '</div><div class="ranking-meta">' + escapeHtml(person.role) + ' · ' + (person.count || 0) + ' venda(s) · ' + (person.percentage || 0) + '% das vendas · recebeu ' + (person.receivedCount || 0) + ' vez(es)</div></div></div><div class="ranking-values"><div class="ranking-val">' + formatCurrency(person.total) + '</div><div class="ranking-meta">Recebeu ' + formatCurrency(person.receivedTotal) + '</div></div></div>').join('');
+      container.innerHTML = collabs.map((person, index) => '<div class="ranking-row"><div class="ranking-info"><span class="ranking-rank">' + (index + 1) + 'º</span><div><div class="ranking-name">' + escapeHtml(person.name) + '</div><div class="ranking-meta">' + escapeHtml(person.role) + ' · ' + (person.count || 0) + ' venda(s) · ' + (person.percentage || 0) + '% das vendas · recebeu ' + (person.receivedCount || 0) + ' vez(es)</div></div></div><div class="ranking-values"><div class="ranking-val"> + formatCurrency(person.total) + </div><div class="ranking-meta">Recebeu ' + formatCurrency(person.receivedTotal) + '</div></div></div>').join('');
     }
 
     function renderProducts(containerId, products) {
@@ -1761,10 +1763,10 @@ function renderAdminGerencialHtml() {
           body: JSON.stringify({ date: document.getElementById('reportDate').value }),
         });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Falha ao enviar o relatório.');
-        showToast('✓ Relatório enviado para Júnior pelo WhatsApp.');
+        if (!response.ok) throw new Error(data.error || 'failed_to_send_report'.tr);
+        showToast('report_sent_to_junior_via_whatsapp'.tr);
       } catch (err) {
-        showToast('Não foi possível enviar: ' + err.message);
+        showToast('could_not_send_955d6b'.tr + err.message);
       } finally {
         if (activeBtn) {
           activeBtn.innerHTML = originalText;
@@ -1775,7 +1777,7 @@ function renderAdminGerencialHtml() {
 
     async function registerCashClosing() {
       const date = document.getElementById('reportDate').value;
-      if (!date || !window.confirm('Confirmar e registrar o fechamento do caixa de ' + date.split('-').reverse().join('/') + '?')) return;
+      if (!date || !window.confirm('confirm_and_record_cash_register_closure_for'.tr + date.split('-').reverse().join('/') + '?')) return;
       const button = document.getElementById('btnCloseCash');
       const originalText = button.innerHTML;
       button.disabled = true;
@@ -1808,8 +1810,8 @@ function renderAdminGerencialHtml() {
           }),
         });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Não foi possível registrar o fechamento.');
-        showToast('✓ Fechamento de ' + date.split('-').reverse().join('/') + ' registrado com sucesso!');
+        if (!response.ok) throw new Error(data.error || 'could_not_record_closure'.tr);
+        showToast('closure_of'.tr + date.split('-').reverse().join('/') + ' registrado com sucesso!');
         if (data.pdfUrl) {
           const pdfBtn = document.getElementById('btnDownloadClosingPdf');
           if (pdfBtn) {
@@ -1819,7 +1821,7 @@ function renderAdminGerencialHtml() {
         }
         checkClosingStatus(date);
       } catch (error) {
-        showToast('Não foi possível registrar: ' + error.message);
+        showToast('could_not_record'.tr + error.message);
       } finally {
         button.innerHTML = originalText;
         button.disabled = false;

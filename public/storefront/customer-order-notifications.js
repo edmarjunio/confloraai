@@ -12,7 +12,7 @@ export function createCustomerOrderNotifications(state, onDetails) {
   function schedule() { window.clearTimeout(timer); timer = window.setTimeout(poll, document.visibilityState === 'hidden' ? 60000 : 30000); }
   function announce(changes, currentVersion) {
     for (const { order, status } of changes) showBrowserNotification({
-      title: status, body: `Pedido #${order.ticketNumber || String(order.id).slice(-8).toUpperCase()} · Conflora`,
+      title: status, body: `${'order_033893'.tr}${order.ticketNumber || String(order.id).slice(-8).toUpperCase()} · Conflora`,
       tag: `customer:${owner}:${order.id}`, url: `${state.basePath || '/'}?order=${encodeURIComponent(order.id)}`,
       onClick: () => onDetails(order.id), allowed: () => currentVersion === version && owner === state.user?.id,
     });
@@ -47,7 +47,7 @@ export function createCustomerOrderNotifications(state, onDetails) {
     stream.addEventListener('stream-fallback', fallback);
   }
   function setUser(user) {
-    const nextOwner = user && !['ADMIN', 'CAIXA', 'VENDEDOR'].includes(user.role) ? user.id : null;
+    const nextOwner = user && !['ADMIN', "CAIXA", 'VENDEDOR'].includes(user.role) ? user.id : null;
     if (owner === nextOwner) return;
     version++; owner = nextOwner; window.clearTimeout(timer); stream?.close(); stream = undefined; streamConnected = false; tracker = createOrderTracker();
     start();
@@ -59,5 +59,5 @@ export function createCustomerOrderNotifications(state, onDetails) {
   }
   const visible = () => { if (document.visibilityState === 'visible') { start(); if (!streamConnected) poll(); } };
   document.addEventListener('visibilitychange', visible);
-  return { setUser, received, button: () => permissionButton('Ativar notificações de pedidos', start), dispose: () => { version++; owner = null; stream?.close(); window.clearTimeout(timer); document.removeEventListener('visibilitychange', visible); } };
+  return { setUser, received, button: () => permissionButton('enable_order_notifications'.tr, start), dispose: () => { version++; owner = null; stream?.close(); window.clearTimeout(timer); document.removeEventListener('visibilitychange', visible); } };
 }

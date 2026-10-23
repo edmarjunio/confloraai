@@ -94,6 +94,13 @@ class MessageService {
     if (!whatsappConfig.assistantEnabled) return { reply: '', intent: 'AUTOMATION_DISABLED', imagesSent: 0, latencyMs: 0 };
     if (whatsappConfig.agentOwner !== 'cloud_api') return { reply: '', intent: 'AUTOMATION_DISABLED', imagesSent: 0, latencyMs: 0 };
 
+    if (/^(?:menu|quero ver as op[cç][oõ]es)[!,.?\s]*$/i.test(String(message || '').trim())) return this.sendMainMenu(phone, whatsapp, startTime);
+
+    const initialChoice = ['catalogo_virtual', 'montar_sacola', 'btn_sacola', 'btn_atendente'].includes(interactiveId);
+    if (!conversation.channel || (conversation.channel === 'menu' && !initialChoice)) {
+      return this.sendMainMenu(phone, whatsapp, startTime);
+    }
+
     const isAgentSelection = interactiveId === 'btn_atendente';
     const isCartSelection = ['montar_sacola', 'btn_sacola'].includes(interactiveId) ||
       /^(cat_|sub_|add_|order_|pay_)/.test(interactiveId);
@@ -101,6 +108,7 @@ class MessageService {
     if (isCartSelection) conversation = await setConversationChannel(this.firestoreRepo, phone, 'cart');
 
     if (interactiveId === 'catalogo_virtual') {
+      await setConversationChannel(this.firestoreRepo, phone, 'menu');
       const catalogUrl = whatsappConfig.catalogUrl;
       const reply = `Acesse o Catálogo Virtual da Conflora: ${catalogUrl}`;
       if (whatsapp) await whatsapp.sendTextMessage(phone, reply);
@@ -109,7 +117,7 @@ class MessageService {
     }
 
     if (isAgentSelection) {
-      const reply = 'Qual produto você procura?';
+      const reply = 'Certo! Pode me dizer quais produtos você procura ou como posso te ajudar?';
       if (whatsapp) await whatsapp.sendTextMessage(phone, reply);
       await this.firestoreRepo.appendMessage(phone, 'assistant', reply);
       return { reply, intent: 'AGENT_ASSISTANCE', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
@@ -141,6 +149,21 @@ class MessageService {
       }
       await this.firestoreRepo.appendMessage(phone, 'assistant', reply);
       return { reply, intent: 'MAIN_MENU_SENT', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
+    }
+
+    const cartCheckout = isActiveCart && ['order_entrega', 'order_retirada'].includes(interactiveId);
+    const salesInput = isActiveAgent || isActiveCart && (cartCheckout || interactiveId.startsWith('sales_') || !interactiveId);
+    if (salesInput && typeof this.agentService?.extractSalesIntent === 'function') {
+      this.salesConversation ||= new (require('./sales-conversation.service').SalesConversationService)({
+        repository: this.firestoreRepo, agent: this.agentService, orders: this.orderService,
+        intake: this.orderIntake,
+      });
+      const result = cartCheckout ? await this.salesConversation.startCart(phone, interactiveId === 'order_entrega' ? 'DELIVERY' : 'PICKUP')
+        : await this.salesConversation.handle({ phone, message, interactiveId, customerName });
+      await this.firestoreRepo.appendMessage(phone, 'assistant', result.reply, { requirePersistence: true, messageId });
+      if (whatsapp && result.buttons?.length) await whatsapp.sendInteractiveButtons(phone, { bodyText: result.reply, buttons: result.buttons });
+      else if (whatsapp && result.reply) await whatsapp.sendTextMessage(phone, result.reply);
+      return { ...result, imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
     }
 
     if (!interactiveId && this.firestoreRepo.getAllProducts && this.firestoreRepo.getInventorySettings) {
@@ -227,8 +250,14 @@ class MessageService {
       /\b(montar sacola|fazer pedido|comprar|fazer compras|abrir sacola)\b/i.test(trimmed);
 
     if (isMontarSacola) {
-      await this.catalogRepo.refreshCatalog().catch(() => {});
+      await this.catalogRepo.refreshCatalog();
       const categories = this.catalogRepo.getCategories();
+      if (!categories.length) {
+        const reply = 'O catálogo está vazio no momento. Me diga qual produto você procura.';
+        if (whatsapp) await whatsapp.sendTextMessage(phone, reply);
+        await this.firestoreRepo.appendMessage(phone, 'assistant', reply, { requirePersistence: true, messageId });
+        return { reply, intent: 'NATIVE_PRODUCTS_EMPTY', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
+      }
       const sections = [
         {
           title: 'Categorias Conflora',
@@ -262,7 +291,7 @@ class MessageService {
     // 4. Opção 2 — 100% Nativo no WhatsApp: Seleção de Categoria -> Subcategorias
     const isCategorySelection = interactiveId.startsWith('cat_');
     if (isCategorySelection) {
-      await this.catalogRepo.refreshCatalog().catch(() => {});
+      await this.catalogRepo.refreshCatalog();
       const categoryName = interactiveId.replace('cat_', '');
       const subcategories = this.catalogRepo.getSubcategories(categoryName);
 
@@ -304,7 +333,7 @@ class MessageService {
     // 5. Opção 2 — 100% Nativo no WhatsApp: Seleção de Subcategoria -> Produtos
     const isSubcategorySelection = interactiveId.startsWith('sub_');
     if (isSubcategorySelection) {
-      await this.catalogRepo.refreshCatalog().catch(() => {});
+      await this.catalogRepo.refreshCatalog();
       const subcategoryName = interactiveId.replace('sub_', '');
       const products = this.catalogRepo.getProductsBySubcategory(subcategoryName);
       return this.sendNativeProductsList(phone, subcategoryName, products, startTime, whatsapp);
@@ -313,22 +342,12 @@ class MessageService {
     // 6. Opção 2 — 100% Nativo no WhatsApp: Adicionar Produto à Sacola
     const isAddProduct = interactiveId.startsWith('add_');
     if (isAddProduct) {
-      await this.catalogRepo.refreshCatalog().catch(() => {});
+      await this.catalogRepo.refreshCatalog();
       const productId = interactiveId.replace('add_', '');
       const product = this.catalogRepo.items.find((i) => String(i.id) === productId) ||
-        this.catalogRepo.findProductByName(message);
+        null;
 
       if (product) {
-        this.orderIntake ||= new (require('./order-intake.service').OrderIntakeService)(this.firestoreRepo, {
-          catalog: this.catalogRepo,
-          notify: id => this.orderService?.commerce?.pdv?.deliver(id),
-        });
-        const intake = await this.orderIntake.handle({ phone, message: `Quero 1 ${product.name}`, messageId, customerName });
-        if (intake) {
-          await this.firestoreRepo.appendMessage(phone, 'assistant', intake.reply, { requirePersistence: true, messageId });
-          if (whatsapp) await whatsapp.sendTextMessage(phone, intake.reply);
-          return { ...intake, imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
-        }
         const pendingOrder = await this.orderService.addProductToDraft(phone, product.id, messageId);
         const existingItems = pendingOrder.items;
         const total = existingItems.reduce((acc, it) => acc + (it.price || 0) * (it.quantity || 1), 0);
@@ -568,6 +587,18 @@ class MessageService {
       imagesSent: imagesSentCount,
       latencyMs,
     };
+  }
+
+  async sendMainMenu(phone, whatsapp, startTime) {
+    await require('./conversation-automation').setConversationChannel(this.firestoreRepo, phone, 'menu');
+    const reply = 'Como posso te ajudar?';
+    if (whatsapp) await whatsapp.sendInteractiveButtons(phone, { bodyText: reply, buttons: [
+      { id: 'catalogo_virtual', title: 'Catálogo virtual' },
+      { id: 'montar_sacola', title: 'Montar minha sacola' },
+      { id: 'btn_atendente', title: 'Falar com atendente' },
+    ] });
+    await this.firestoreRepo.appendMessage(phone, 'assistant', reply, { requirePersistence: true });
+    return { reply, intent: 'MAIN_MENU_SENT', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
   }
 
   async sendNativeProductsList(phone, title, products, startTime, whatsapp = this.whatsappClient) {

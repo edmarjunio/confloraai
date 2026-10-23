@@ -21,7 +21,7 @@ export function createExistingApi() {
         }
         const data = await readJsonResponse(response);
         if (!response.ok || data.success === false) {
-          const error = new Error(data.error || data.message || "Não foi possível concluir.");
+          const error = new Error(data.error || data.message || 'could_not_complete'.tr);
           error.status = response.status;
           error.code = data.code || "";
           throw error;
@@ -138,6 +138,6 @@ export function createExistingApi() {
       const result = await request("/api/customer/orders");
       return (result.orders || []).map(order);
     }
-    throw new Error("Use o painel administrativo da loja para esta operação.");
+    throw new Error('use_the_store_s_admin_panel_for_this_operation'.tr);
   };
 }

@@ -46,12 +46,9 @@ const { useState, useEffect, useRef, useMemo } = React;
         <rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/>
       </IconBase>
     );
-    const PixIcon = ({ className = "w-4 h-4", ...props }) => (
-      <svg viewBox="535 24 80 80" className={className} fill="currentColor" aria-hidden="true" {...props}>
-        <path d="M 596.82737,86.620206 c -3.08045,0 -5.97782,-1.19944 -8.15622,-3.37679 l -11.77678,-11.77713 c -0.82691,-0.82903 -2.26801,-0.82656 -3.09456,0 l -11.81982,11.82017 c -2.17841,2.17734 -5.07577,3.37679 -8.15623,3.37679 h -2.32092 l 14.9158,14.915444 c 4.65807,4.65808 12.21069,4.65808 16.86912,0 l 14.95813,-14.958484 z"/>
-        <path d="M 553.82362,44.963326 c 3.08046,0 5.97782,1.19944 8.15622,3.37679 l 11.81982,11.82193 c 0.85125,0.85161 2.2412,0.85479 3.09457,-10e-4 l 11.77678,-11.77784 c 2.1784,-2.17735 5.07576,-3.37679 8.15622,-3.37679 h 1.41852 l -14.95778,-14.95813 c -4.65878,-4.658432 -12.2114,-4.658432 -16.86948,0 l -14.91509,14.91509 z"/>
-        <path d="M 610.61844,57.378776 -9.03922,-9.03922 c -0.19897,0.0797 -0.41452,0.12946 -0.64206,0.12946 h -4.10986 c -2.12478,0 -4.20476,0.86184 -5.70618,2.36432 l -11.77643,11.77678 c -1.10207,1.10208 -2.55022,1.65347 -3.99697,1.65347 -1.44815,0 -2.89524,-0.55139 -3.99697,-1.65241 l -11.82088,-11.82088 c -1.50142,-1.50283 -3.5814,-2.36431 -5.70618,-2.36431 h -5.05354 c -0.21555,0 -0.41698,-0.0508 -0.60713,-0.12242 l -9.07521,9.07521 c -4.65843,4.65843 -4.65843,12.2107 0,16.86913 l 9.07486,9.07485 c 0.1905,-0.0716 0.39193,-0.12241 0.60748,-0.12241 h 5.05354 c 2.12478,0 4.20476,-0.86148 5.70618,-2.36396 l 11.81982,-11.81982 c 2.13643,-2.13466 5.8607,-2.13537 7.995,0.001 l 11.77643,11.77573 c 1.50142,1.50248 3.5814,2.36431 5.70618,2.36431 h 4.10986 c 0.22754,0 0.44309,0.0497 0.64206,0.12947 l 9.03922,-9.03922 c 4.65808,-4.65843 4.65808,-12.2107 0,-16.86913 z"/>
-      </svg>
+    const PixIcon = ({ className = '', ...props }) => (
+      <img src="/storefront/images/pix-image.png" alt="Pix" width="82" height="35"
+        className={'cf-pix-logo ' + className} {...props} />
     );
 
     const QrCode = (p) => (
@@ -138,7 +135,7 @@ const { useState, useEffect, useRef, useMemo } = React;
 
     const CATEGORIES = [
       { id: 'atalhos', label: 'FAVORITOS', icon: '⭐' },
-      { id: 'todas', label: 'Todas', icon: '🌿' },
+      { id: 'todas', label: 'all'.tr, icon: '🌿' },
     ];
 
 
@@ -229,7 +226,7 @@ const { useState, useEffect, useRef, useMemo } = React;
       const [orderType, setOrderType] = useState('PICKUP');
 
       // Customer fields
-      const [customerName, setCustomerName] = useState('Cliente Balcão');
+      const [customerName, setCustomerName] = useState("Cliente Balcão");
       const [customerPhone, setCustomerPhone] = useState('');
       const [customerCpf, setCustomerCpf] = useState('');
       const [customerAddress, setCustomerAddress] = useState('');
@@ -321,7 +318,7 @@ const { useState, useEffect, useRef, useMemo } = React;
 
       useEffect(() => {
         window.ConfloraSession.apiFetch('/api/auth/me').then((res) => res.ok ? res.json() : null).then((data) => {
-          if (data?.user && ['ADMIN', 'CAIXA', 'VENDEDOR', 'ENTREGADOR'].includes(data.user.role)) setCurrentUser(data.user);
+          if (data?.user && ['ADMIN', "CAIXA", 'VENDEDOR', 'ENTREGADOR'].includes(data.user.role)) setCurrentUser(data.user);
         }).finally(() => setAuthReady(true));
       }, []);
       useEffect(() => {
@@ -330,7 +327,7 @@ const { useState, useEffect, useRef, useMemo } = React;
         window.ConfloraSession.apiFetch('/api/caixa/favorites')
           .then(async (response) => {
             const data = await response.json();
-            if (!response.ok) throw new Error(data.error || 'Não foi possível carregar os favoritos.');
+            if (!response.ok) throw new Error(data.error || 'could_not_load_favorites'.tr);
             return Array.isArray(data.favoriteProductIds) ? data.favoriteProductIds.map(String) : [];
           })
           .then((ids) => {
@@ -338,7 +335,7 @@ const { useState, useEffect, useRef, useMemo } = React;
             favoriteProductIdsRef.current = new Set(ids);
             setFavoriteProductIds(ids);
           })
-          .catch((error) => console.error('Falha ao carregar favoritos do usuário:', error));
+          .catch((error) => console.error('failed_to_load_user_favorites'.tr, error));
         return () => { cancelled = true; };
       }, [currentUser?.id]);
       useEffect(() => {
@@ -356,7 +353,7 @@ const { useState, useEffect, useRef, useMemo } = React;
       }, [favoriteProductIds]);
       useEffect(() => {
         if (!currentUser || currentUser.role === 'ENTREGADOR') return;
-        window.ConfloraSession.apiFetch('/api/caixa/products').then((res) => { if (!res.ok) throw new Error('Não foi possível carregar produtos.'); return res.json(); }).then((rows) => {
+        window.ConfloraSession.apiFetch('/api/caixa/products').then((res) => { if (!res.ok) throw new Error('could_not_load_products'.tr); return res.json(); }).then((rows) => {
           const storefrontImagesById = readStorefrontProductImages();
           setProducts(rows.map((item) => {
             const productId = String(item.id ?? item.productId ?? item.sku ?? '').trim();
@@ -438,15 +435,15 @@ const { useState, useEffect, useRef, useMemo } = React;
         setTempCustomerName(cust.name || ''); setTempCustomerPhone(cust.phone || '');
         setTempCustomerEmail(cust.email || ''); setTempCustomerAddress(cust.address || cust.deliveryAddress || '');
         setTempCustomerLocation(cust.deliveryLocation || null); setTempCustomerCpf(cust.cpfCnpj || ''); setTempCustomerNotes(cust.notes || '');
-        setCustomerSearchOpen(false); setCustomerNotification('Dados preenchidos. Confira e selecione o cliente.');
+        setCustomerSearchOpen(false); setCustomerNotification('data_filled_in_check_and_select_the_customer'.tr);
       };
 
       const handleQuickPurchaseCustomer = () => {
-        if (orderType === 'DELIVERY' && (!tempCustomerName.trim() || !/^\d{10,13}$/.test(tempCustomerPhone.replace(/\D/g, '')) || tempCustomerAddress.trim().length < 8)) { setCustomerError('Preencha nome, WhatsApp e endereço completo para entrega.'); return; }
+        if (orderType === 'DELIVERY' && (!tempCustomerName.trim() || !/^\d{10,13}$/.test(tempCustomerPhone.replace(/\D/g, '')) || tempCustomerAddress.trim().length < 8)) { setCustomerError('fill_in_name_whatsapp_and_complete_address_for_delivery'.tr); return; }
         setCustomerId('');
         setCustomerCreditBalance(0);
         setTempCustomerEmail('');
-        const name = tempCustomerName.trim() || 'Cliente Balcão';
+        const name = tempCustomerName.trim() || "Cliente Balcão";
         setCustomerName(name);
         setCustomerPhone(tempCustomerPhone.trim());
         setCustomerAddress(tempCustomerAddress.trim());
@@ -454,7 +451,7 @@ const { useState, useEffect, useRef, useMemo } = React;
         setCustomerCpf(tempCustomerCpf.trim());
         setCustomerNotes(tempCustomerNotes.trim());
 
-        setCustomerNotification('Cliente identificado para compra rápida (sem salvar na base).');
+        setCustomerNotification('customer_identified_for_quick_sale_not_saved_to_database'.tr);
         setTimeout(() => {
           setActiveModal(null);
         }, 600);
@@ -463,7 +460,7 @@ const { useState, useEffect, useRef, useMemo } = React;
       const handleSaveCustomerToDatabase = async () => {
         const name = tempCustomerName.trim();
         if (!name) {
-          alert('Por favor, informe ao menos o nome do cliente.');
+          alert('please_provide_at_least_the_customer_s_name'.tr);
           return;
         }
 
@@ -488,7 +485,7 @@ const { useState, useEffect, useRef, useMemo } = React;
 
           const saved = await res.json().catch(() => ({}));
           if (!res.ok) {
-            setCustomerError(saved.error || 'Não foi possível salvar o cadastro do cliente.');
+            setCustomerError(saved.error || 'could_not_save_customer_record'.tr);
             setIsSavingCustomer(false);
             return;
           }
@@ -501,22 +498,22 @@ const { useState, useEffect, useRef, useMemo } = React;
           setCustomerId(saved.customer.id);
           setCustomerCreditBalance(Number(saved.customer.creditBalance || 0));
           setTempCustomerEmail(saved.customer.email || tempCustomerEmail.trim());
-          setCustomerNotification(selectedCustomerId ? 'Cliente selecionado.' : 'Cliente adicionado.');
+          setCustomerNotification(selectedCustomerId ? 'customer_selected'.tr : 'customer_added'.tr);
           setTimeout(() => {
             setActiveModal(null);
             setIsSavingCustomer(false);
           }, 700);
         } catch (error) {
-          setCustomerError(error.message || 'Falha de conexão ao salvar o cliente.');
+          setCustomerError(error.message || 'connection_error_while_saving_customer'.tr);
           setIsSavingCustomer(false);
         }
       };
 
       const handleAddCustomer = async () => {
-        if (orderType === 'DELIVERY' && (!tempCustomerName.trim() || !/^\d{10,13}$/.test(tempCustomerPhone.replace(/\D/g, '')) || tempCustomerAddress.trim().length < 8)) { setCustomerError('Para entrega, informe nome, WhatsApp com DDD e endereço completo: rua, número, bairro e cidade.'); return; }
+        if (orderType === 'DELIVERY' && (!tempCustomerName.trim() || !/^\d{10,13}$/.test(tempCustomerPhone.replace(/\D/g, '')) || tempCustomerAddress.trim().length < 8)) { setCustomerError('for_delivery_please_provide_name_whatsapp_with_area_code_and_full_address_street_numb'.tr); return; }
         const name = tempCustomerName.trim();
         if (!name) {
-          alert('Por favor, informe ao menos o nome do cliente.');
+          alert('please_provide_at_least_the_customer_s_name'.tr);
           return;
         }
         if (shouldPersistCustomer) {
@@ -703,7 +700,7 @@ const { useState, useEffect, useRef, useMemo } = React;
             body: JSON.stringify({ favoriteProductIds: favoriteIds }),
           });
           const result = await response.json();
-          if (!response.ok) throw new Error(result.error || 'Não foi possível salvar este favorito.');
+          if (!response.ok) throw new Error(result.error || 'could_not_save_this_favorite'.tr);
         }).catch((error) => alert(error.message));
       };
 
@@ -730,13 +727,13 @@ const { useState, useEffect, useRef, useMemo } = React;
       };
 
       const handleCompleteSale = async () => {
-        if (orderType === 'DELIVERY' && (!customerName.trim() || customerName === 'Cliente Balcão' || !/^\d{10,13}$/.test(customerPhone.replace(/\D/g, '')) || customerAddress.trim().length < 8)) { openCustomerModal(); setCustomerNotification('Complete os dados obrigatórios para entrega.'); return; }
+        if (orderType === 'DELIVERY' && (!customerName.trim() || customerName === 'Cliente Balcão' || !/^\d{10,13}$/.test(customerPhone.replace(/\D/g, '')) || customerAddress.trim().length < 8)) { openCustomerModal(); setCustomerNotification('complete_the_mandatory_delivery_information'.tr); return; }
         if (cart.length === 0 || isSubmittingSale || !currentUser) return;
         setIsSubmittingSale(true);
         const isDelivery = orderType === 'DELIVERY';
 
         let normalizedPayMethod = 'DINHEIRO';
-        if (paymentMethod === 'pix') normalizedPayMethod = 'PIX';
+        if (paymentMethod === 'pix') normalizedPayMethod = "PIX";
         else if (paymentMethod === 'debito') normalizedPayMethod = 'DEBITO';
         else if (paymentMethod === 'credito') normalizedPayMethod = 'CREDITO';
         else if (paymentMethod === 'credito_cliente') normalizedPayMethod = 'SALDO_CLIENTE';
@@ -762,7 +759,7 @@ const { useState, useEffect, useRef, useMemo } = React;
             setCompletedOrder(data.order);
             setActiveModal('receipt');
           } else {
-            alert('Aviso: ' + (data.error || 'Não foi possível processar a venda.'));
+            alert('Aviso: ' + (data.error || 'could_not_process_the_sale'.tr));
           }
         } catch (err) {
           alert('Erro de conexão ao processar venda: ' + err.message);
@@ -783,7 +780,7 @@ const { useState, useEffect, useRef, useMemo } = React;
         setDiscountPercent(0);
         setCashReceived('');
         setOrderType('PICKUP');
-        setCustomerName('Cliente Balcão');
+        setCustomerName("Cliente Balcão");
         setCustomerPhone('');
         setCustomerAddress('');
         setCustomerLocation(null);
@@ -823,12 +820,9 @@ const { useState, useEffect, useRef, useMemo } = React;
                 <div className="w-full flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-[#109E46] animate-pulse" />
-                    <span className="text-xs font-extrabold text-slate-800 tracking-tight">
-                      Recibo em Tempo Real
-                    </span>
+                    <span className="text-xs font-extrabold text-slate-800 tracking-tight"> {'real_time_receipt'.tr} </span>
                     <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-800">
-                      {distinctItemsCount} {distinctItemsCount === 1 ? 'item' : 'itens'} • {totalUnitsCount} un.
-                    </span>
+                      {distinctItemsCount} {distinctItemsCount === 1 ? 'item' : 'mobile_cart_items'.tr} • {totalUnitsCount} {'unit'.tr} </span>
                   </div>
 
                   <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
@@ -838,14 +832,14 @@ const { useState, useEffect, useRef, useMemo } = React;
                       }
                       className="px-2 py-0.5 rounded-md text-[10px] font-bold text-slate-500 hover:bg-slate-100"
                     >
-                      {isCollapsed ? 'Ver itens' : 'Minimizar'}
+                      {isCollapsed ? 'view_items'.tr : 'minimize'.tr}
                     </button>
                     <button
                       onClick={() =>
                         setMobileSheetMode(isExpanded ? 'peek' : 'expanded')
                       }
                       className="p-1 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200"
-                      title={isExpanded ? 'Reduzir' : 'Expandir recibo'}
+                      title={isExpanded ? 'reduce'.tr : 'expand_receipt'.tr}
                     >
                       <ChevronDown
                         className={"w-3.5 h-3.5 transition-transform duration-200 " + (isExpanded ? 'rotate-0' : 'rotate-180')}
@@ -861,9 +855,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                   className={"px-3 overflow-y-auto divide-y divide-slate-100 border-t border-slate-100 transition-all duration-300 " + (isExpanded ? 'max-h-[46vh] py-1.5' : 'max-h-[135px] py-1')}
                 >
                   {cart.length === 0 ? (
-                    <div className="py-5 text-center text-xs text-slate-400 font-medium">
-                      Toque nos produtos acima para lançar no recibo em tempo real.
-                    </div>
+                    <div className="py-5 text-center text-xs text-slate-400 font-medium"> {'tap_the_products_above_to_add_them_to_the_real_time_receipt'.tr} </div>
                   ) : (
                     cart.map((item) => (
                       <div
@@ -939,7 +931,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                         ? 'bg-[#109E46] text-white border-[#109E46]'
                         : 'bg-white text-slate-700 border-slate-200')}
                     >
-                      <span>{orderType === 'DELIVERY' ? '🛵 Entrega' : '🏪 Retirada'}</span>
+                      <span>{orderType === 'DELIVERY' ? 'delivery'.tr : 'pickup'.tr}</span>
                     </button>
 
                     {/* Botão Adicionar Cliente */}
@@ -948,7 +940,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                       className="cf-button !px-3 !py-2 !rounded-full text-xs font-extrabold flex items-center gap-2 shrink-0 shadow-md transition hover:-translate-y-0.5"
                     >
                       <UserPlus className="w-3 h-3" />
-                      <span className="truncate max-w-[130px]">{customerId ? 'Selecionar cliente' : 'Adicionar cliente'}</span>
+                      <span className="truncate max-w-[130px]">{customerId ? 'select_customer'.tr : 'add_customer'.tr}</span>
                     </button>
 
                     <button
@@ -956,7 +948,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                       className="px-2.5 py-1 rounded-full bg-white border border-rose-200 text-rose-600 font-bold flex items-center gap-1 shrink-0 shadow-2xs"
                     >
                       <Percent className="w-3 h-3" />
-                      <span>Desc: {discountPercent}%</span>
+                      <span> {'disc'.tr} {discountPercent}%</span>
                     </button>
 
                     {orderType === 'DELIVERY' && (
@@ -965,7 +957,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                         className="px-2.5 py-1 rounded-full bg-white border border-emerald-200 text-emerald-700 font-bold flex items-center gap-1 shrink-0 shadow-2xs"
                       >
                         <Truck className="w-3 h-3" />
-                        <span>Entrega: {formatBRL(freightValue)}</span>
+                        <span>{'delivery_cdbdf1'.tr} {formatBRL(freightValue)}</span>
                       </button>
                     )}
                   </div>
@@ -976,7 +968,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                       className="text-[11px] font-semibold text-slate-400 hover:text-rose-600 flex items-center gap-1 shrink-0"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
-                      <span>Limpar</span>
+                      <span> {'clear'.tr} </span>
                     </button>
                   )}
                 </div>
@@ -985,8 +977,7 @@ const { useState, useEffect, useRef, useMemo } = React;
               {/* Bottom Sticky Pay Bar */}
               <div className="px-4 py-2.5 bg-white border-t border-slate-100 flex items-center justify-between gap-3">
                 <div>
-                  <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Total {orderType === 'DELIVERY' ? 'c/ Entrega' : 'a pagar'}
+                  <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400"> {'total'.tr} {orderType === 'DELIVERY' ? 'w_delivery'.tr : 'due'.tr}
                   </span>
                   <span className="text-xl font-black text-slate-900 leading-none">
                     {formatBRL(finalTotal)}
@@ -1016,10 +1007,9 @@ const { useState, useEffect, useRef, useMemo } = React;
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-bold text-slate-900 tracking-tight">
-                  {distinctItemsCount} {distinctItemsCount === 1 ? 'item' : 'itens'}
+                  {distinctItemsCount} {distinctItemsCount === 1 ? 'item' : 'mobile_cart_items'.tr}
                 </h2>
-                <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-800">
-                  Qtd: {totalUnitsCount}
+                <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-800"> {'qty'.tr} {totalUnitsCount}
                 </span>
               </div>
 
@@ -1027,7 +1017,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                 {cart.length > 0 && (
                   <button
                     onClick={() => setCart([])}
-                    title="Limpar caixa"
+                    title={'clear_register'.tr}
                     className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors text-xs font-medium flex items-center gap-1"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -1044,7 +1034,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                 aria-pressed={orderType === 'PICKUP'}
                 className={"flex-1 cf-btn-3d cf-btn-3d--sm !rounded-xl " + (orderType === 'PICKUP' ? 'cf-btn-3d--primary' : 'cf-btn-3d--secondary')}
               >
-                <span>🏪 Retirada</span>
+                <span>{'pickup'.tr}</span>
               </button>
               <button
                 type="button"
@@ -1055,7 +1045,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                 aria-pressed={orderType === 'DELIVERY'}
                 className={"flex-1 cf-btn-3d cf-btn-3d--sm !rounded-xl " + (orderType === 'DELIVERY' ? 'cf-btn-3d--primary' : 'cf-btn-3d--secondary')}
               >
-                <span>🛵 Entrega</span>
+                <span>{'delivery'.tr}</span>
               </button>
             </div>
 
@@ -1064,12 +1054,12 @@ const { useState, useEffect, useRef, useMemo } = React;
               <div className="min-w-0 flex-1">
                 <p className="text-xs text-slate-700 font-bold truncate flex items-center gap-1.5">
                   <User className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span className="truncate">{customerName || 'Cliente Balcão'}</span>
+                  <span className="truncate">{customerName || "Cliente Balcão"}</span>
                 </p>
                 {orderType === 'DELIVERY' && (
                   <p className="text-[11px] text-emerald-700 truncate flex items-center gap-1 mt-0.5">
                     <MapPin className="w-3 h-3 text-emerald-600 shrink-0" />
-                    <span className="truncate">{customerAddress || 'Endereço não informado'}</span>
+                    <span className="truncate">{customerAddress || 'address_not_provided'.tr}</span>
                   </p>
                 )}
               </div>
@@ -1080,7 +1070,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                 className="cf-btn-3d cf-btn-3d--secondary cf-btn-3d--sm !rounded-xl flex items-center gap-1.5 shrink-0"
               >
                 <UserPlus className="w-3.5 h-3.5" />
-                <span>{customerId ? 'Selecionar cliente' : 'Adicionar cliente'}</span>
+                <span>{customerId ? 'select_customer'.tr : 'add_customer'.tr}</span>
               </button>
             </div>
           </div>
@@ -1092,10 +1082,8 @@ const { useState, useEffect, useRef, useMemo } = React;
                 <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3">
                   <ShoppingBag className="w-7 h-7" />
                 </div>
-                <p className="text-sm font-semibold text-slate-700">Caixa livre</p>
-                <p className="text-xs text-slate-400 max-w-[210px] mt-1">
-                  Toque nos produtos do catálogo para iniciar a venda.
-                </p>
+                <p className="text-sm font-semibold text-slate-700">{'register_open'.tr}</p>
+                <p className="text-xs text-slate-400 max-w-[210px] mt-1"> {'tap_products_in_the_catalog_to_start_a_sale'.tr} </p>
               </div>
             ) : (
               cart.map((item) => (
@@ -1117,7 +1105,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                       <div className="flex items-center gap-1.5">
                         <span className="text-xs font-extrabold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-md">
                           {isSoldByKg(item)
-                            ? `${Number(item.quantity).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} kg`
+                            ? `${Number(item.quantity).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${'kg'.tr}`
                             : `${item.quantity} X`}
                         </span>
                         <p title={item.name} className="text-sm font-semibold text-slate-800 truncate">
@@ -1154,7 +1142,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                     <button
                       onClick={() => removeFromCart(item.id)}
                       className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                      title="Remover item"
+                      title={'remove_item'.tr}
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -1167,9 +1155,9 @@ const { useState, useEffect, useRef, useMemo } = React;
           {/* Nex-Style Summary & Totals Section */}
           <div className="border-t border-slate-100 bg-slate-50/70 px-5 py-3.5 space-y-1.5 text-right">
             <div className="flex items-center justify-between text-xs text-slate-600">
-              <span>Soma dos produtos</span>
+              <span>{'products_subtotal'.tr}</span>
               <span className="font-semibold text-slate-800">
-                {distinctItemsCount} {distinctItemsCount === 1 ? 'item' : 'itens'} : {formatBRL(itemsTotal)}
+                {distinctItemsCount} {distinctItemsCount === 1 ? 'item' : 'mobile_cart_items'.tr} : {formatBRL(itemsTotal)}
               </span>
             </div>
 
@@ -1178,21 +1166,18 @@ const { useState, useEffect, useRef, useMemo } = React;
                 onClick={() => setActiveModal('discount')}
                 className="text-rose-500 hover:text-rose-600 font-medium flex items-center gap-1 underline decoration-rose-300 underline-offset-2 shrink-0"
               >
-                <Percent className="w-3 h-3" />
-                Desconto
-              </button>
+                <Percent className="w-3 h-3" /> {'cart_discount'.tr} </button>
               <button
                 onClick={() => setActiveModal('discount')}
                 className="font-semibold text-rose-500 hover:text-rose-600 transition truncate text-right"
               >
-                {discountPercent}% (F4) : - {formatBRL(discountAmount)}
+                {discountPercent} {'f4'.tr} {formatBRL(discountAmount)}
               </button>
             </div>
 
             <div className="flex items-center justify-between text-xs text-slate-600">
-              <span>Subtotal parcial</span>
-              <span className="font-semibold text-slate-800">
-                Subtotal : {formatBRL(subtotalAfterDiscount)}
+              <span> {'partial_subtotal'.tr} </span>
+              <span className="font-semibold text-slate-800"> {'subtotal'.tr} {formatBRL(subtotalAfterDiscount)}
               </span>
             </div>
 
@@ -1201,14 +1186,11 @@ const { useState, useEffect, useRef, useMemo } = React;
                 onClick={() => setActiveModal('freight')}
                 className="text-emerald-700 hover:text-emerald-800 font-medium flex items-center gap-1 underline decoration-emerald-300 underline-offset-2 shrink-0"
               >
-                <Truck className="w-3 h-3" />
-                Entrega
-              </button>
+                <Truck className="w-3 h-3" /> {'cart_delivery_option'.tr} </button>
               <button
                 onClick={() => setActiveModal('freight')}
                 className="font-semibold text-slate-800 hover:text-emerald-700 transition truncate text-right"
-              >
-                (F8) : {formatBRL(freightValue)}
+              > {'f8'.tr} {formatBRL(freightValue)}
               </button>
             </div>
           </div>
@@ -1228,9 +1210,7 @@ const { useState, useEffect, useRef, useMemo } = React;
             </button>
 
             <div className="text-right">
-              <span className="block text-[11px] uppercase tracking-wider font-semibold text-slate-400">
-                Total a pagar
-              </span>
+              <span className="block text-[11px] uppercase tracking-wider font-semibold text-slate-400"> {'total_due'.tr} </span>
               <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
                 {formatBRL(finalTotal)}
               </span>
@@ -1259,19 +1239,19 @@ const { useState, useEffect, useRef, useMemo } = React;
               <div className="cf-page-toolbar cf-pos-context">
                 {/* Left group: Navigation & Title badge */}
                 <div className="cf-pos-group-left flex items-center gap-3">
-                  <button type="button" className="cf-back-button" onClick={() => window.ConfloraNavigation.back()}>← Voltar</button>
+                  <button type="button" className="cf-back-button" onClick={() => window.ConfloraNavigation.back()}>{'back_59dc92'.tr}</button>
                   <div className="flex items-center gap-2">
                     <span className="w-8 h-8 rounded-full bg-emerald-100 border-2 border-emerald-600 flex items-center justify-center text-sm shadow-[0_2px_0_#15803d]">🏬</span>
-                    <h1 className="text-base sm:text-lg font-black text-emerald-950 tracking-tight m-0">Caixa</h1>
+                    <h1 className="text-base sm:text-lg font-black text-emerald-950 tracking-tight m-0">{'checkout'.tr}</h1>
                   </div>
                 </div>
 
                 {/* Center group: Operational actions */}
                 <div className="cf-pos-group-center flex items-center gap-3">
-                  {['ADMIN', 'CAIXA'].includes(currentUser.role) && (
+                  {['ADMIN', "CAIXA"].includes(currentUser.role) && (
                     <button type="button" className="cf-button cf-btn-3d cf-btn-3d--sky cf-btn-3d--sm flex items-center gap-2 font-bold" onClick={() => navigateCashierPage('deliveries')}>
                       <span className="text-sm">🛵</span>
-                      <span>Entregas</span>
+                      <span> {'deliveries_9f818d'.tr} </span>
                     </button>
                   )}
                 </div>
@@ -1279,19 +1259,19 @@ const { useState, useEffect, useRef, useMemo } = React;
                 {/* Right group: Operator profile & Sair */}
                 <div className="cf-pos-group-right flex items-center gap-3">
                   <div className="hidden md:block text-right">
-                    <strong className="block text-xs font-black text-slate-800 leading-tight">{currentUser.name || 'Operador'}</strong>
+                    <strong className="block text-xs font-black text-slate-800 leading-tight">{currentUser.name || 'team_operator'.tr}</strong>
                     <span className="text-[10px] font-bold text-emerald-700 tracking-wider uppercase">{currentUser.role}</span>
                   </div>
-                  <button type="button" className="cf-danger-button" onClick={async () => { await window.ConfloraSession.apiFetch('/api/auth/logout', { method: 'POST' }); window.location.reload(); }}>Sair</button>
+                  <button type="button" className="cf-danger-button" onClick={async () => { await window.ConfloraSession.apiFetch('/api/auth/logout', { method: 'POST' }); window.location.reload(); }}>{'team_logout'.tr}</button>
                 </div>
               </div>
-              <nav className="cashier-command-nav mx-auto mt-3 mb-4 grid w-full max-w-[1600px] grid-cols-3 sm:grid-cols-6 gap-2.5 border-t border-slate-100 pt-3 lg:mx-0 lg:w-2/3" aria-label="Ações do caixa por atalho">
-                <button type="button" className={`cf-btn-3d cf-btn-3d--sm !rounded-xl !px-3 !py-2.5 text-xs flex items-center justify-center gap-2 ${cart.length > 0 ? 'cf-btn-3d--primary' : 'cf-btn-3d--secondary'}`} disabled={cart.length === 0} onClick={() => setActiveModal('pay')}><kbd className="rounded-lg bg-black/10 px-1.5 py-0.5 font-black text-[11px]">F1</kbd><span>Pagar</span></button>
-                <button type="button" className={shortcutButtonClass} onClick={() => navigateCashierPage('orders')}><kbd className="rounded-lg bg-black/10 px-1.5 py-0.5 font-black text-[11px]">F2</kbd><span>Comandas</span></button>
-                <button type="button" className={shortcutButtonClass} onClick={() => navigateCashierPage('report')}><kbd className="rounded-lg bg-black/10 px-1.5 py-0.5 font-black text-[11px]">F3</kbd><span>Relatório</span></button>
-                <button type="button" className={shortcutButtonClass} onClick={() => setActiveModal('discount')}><kbd className="rounded-lg bg-black/10 px-1.5 py-0.5 font-black text-[11px]">F4</kbd><span>Desconto</span></button>
-                <button type="button" className={shortcutButtonClass} onClick={() => setActiveModal('freight')}><kbd className="rounded-lg bg-black/10 px-1.5 py-0.5 font-black text-[11px]">F8</kbd><span>Entrega</span></button>
-                <button type="button" className={shortcutButtonClass} onClick={() => navigateCashierPage('history')}><kbd className="rounded-lg bg-black/10 px-1.5 py-0.5 font-black text-[11px]">F9</kbd><span>Histórico</span></button>
+              <nav className="cashier-command-nav mx-auto mt-3 mb-4 grid w-full max-w-[1600px] grid-cols-3 sm:grid-cols-6 gap-2.5 border-t border-slate-100 pt-3 lg:mx-0 lg:w-2/3" aria-label={'cashier_actions_by_shortcut'.tr}>
+                <button type="button" className={`cf-btn-3d cf-btn-3d--sm !rounded-xl !px-3 !py-2.5 text-xs flex items-center justify-center gap-2 ${cart.length > 0 ? 'cf-btn-3d--primary' : 'cf-btn-3d--secondary'}`} disabled={cart.length === 0} onClick={() => setActiveModal('pay')}><kbd className="rounded-lg bg-black/10 px-1.5 py-0.5 font-black text-[11px]">F1</kbd><span> {'pay'.tr} </span></button>
+                <button type="button" className={shortcutButtonClass} onClick={() => navigateCashierPage('orders')}><kbd className="rounded-lg bg-black/10 px-1.5 py-0.5 font-black text-[11px]">F2</kbd><span> {'tabs'.tr} </span></button>
+                <button type="button" className={shortcutButtonClass} onClick={() => navigateCashierPage('report')}><kbd className="rounded-lg bg-black/10 px-1.5 py-0.5 font-black text-[11px]">F3</kbd><span>{'report'.tr}</span></button>
+                <button type="button" className={shortcutButtonClass} onClick={() => setActiveModal('discount')}><kbd className="rounded-lg bg-black/10 px-1.5 py-0.5 font-black text-[11px]">F4</kbd><span>{'cart_discount'.tr}</span></button>
+                <button type="button" className={shortcutButtonClass} onClick={() => setActiveModal('freight')}><kbd className="rounded-lg bg-black/10 px-1.5 py-0.5 font-black text-[11px]">F8</kbd><span>{'cart_delivery_option'.tr}</span></button>
+                <button type="button" className={shortcutButtonClass} onClick={() => navigateCashierPage('history')}><kbd className="rounded-lg bg-black/10 px-1.5 py-0.5 font-black text-[11px]">F9</kbd><span>{'history'.tr}</span></button>
               </nav>
 
               {/* Com Flora Category Pills Row */}
@@ -1309,9 +1289,7 @@ const { useState, useEffect, useRef, useMemo } = React;
 
                 {availableSubcategories.length > 0 && (
                   <div data-drag-scroll="true" className="cf-drag-scroll flex min-w-0 w-full items-center gap-1.5 overflow-x-auto py-1 px-1 bg-emerald-50/70 rounded-full border border-emerald-200 no-scrollbar">
-                    <span className="text-[11px] font-black text-emerald-800 uppercase tracking-wide px-2 shrink-0">
-                      🏷️ Sub:
-                    </span>
+                    <span className="text-[11px] font-black text-emerald-800 uppercase tracking-wide px-2 shrink-0"> {'sub'.tr} </span>
                     {availableSubcategories.map(sub => (
                       <render-category-tag key={sub.key} category={sub.name} variant="filter" color-category={sub.parent}
                         selected={String(selectedSubcategories.includes(sub.key))}
@@ -1344,15 +1322,14 @@ const { useState, useEffect, useRef, useMemo } = React;
                           <ChevronDown className="w-4 h-4 text-emerald-700" />
                         </>
                       ) : (
-                        <span>Catálogo de Produtos</span>
+                        <span>{'product_catalog'.tr}</span>
                       )}
                     </h2>
 
                   </div>
 
                   <span className="text-xs text-slate-400 font-medium">
-                    {filteredProducts.length} itens
-                  </span>
+                    {filteredProducts.length} {'mobile_cart_items'.tr} </span>
                 </div>
 
                 {/* Compact 4-to-5-Per-Row Cards Grid on Desktop (1 extra column) */}
@@ -1385,11 +1362,9 @@ const { useState, useEffect, useRef, useMemo } = React;
 
                 <div ref={loadMoreRef} className="min-h-5 pt-2 text-center text-[11px] text-slate-400" aria-live="polite">
                   {filteredProducts.length > visibleCount && (typeof IntersectionObserver === 'undefined'
-                    ? <button className="rounded-xl border bg-white px-4 py-2" onClick={() => setVisibleCount((count) => Math.min(count + 60, filteredProducts.length))}>Carregar mais produtos</button>
-                    : 'Carregando próximos produtos…')}
-                  <p className="text-[11px] text-slate-400 hidden sm:block">
-                    Toque nos cartões para lançar direto no recibo ao lado.
-                  </p>
+                    ? <button className="rounded-xl border bg-white px-4 py-2" onClick={() => setVisibleCount((count) => Math.min(count + 60, filteredProducts.length))}>{'load_more_products'.tr}</button>
+                    : 'loading_next_products'.tr)}
+                  <p className="text-[11px] text-slate-400 hidden sm:block"> {'tap_the_cards_to_add_them_directly_to_the_receipt_on_the_side'.tr} </p>
                 </div>
               </section>
 
@@ -1420,8 +1395,8 @@ const { useState, useEffect, useRef, useMemo } = React;
                 <button
                   type="button"
                   onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-                  aria-label="Voltar ao início da página"
-                  title="Voltar ao início"
+                  aria-label={'back_to_top_of_page'.tr}
+                  title={'back_to_top'.tr}
                   className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-[#0F381E] shadow-lg ring-1 ring-slate-200 transition hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
                 >
                   <IconBase className="h-5 w-5"><path d="m18 15-6-6-6 6"/><path d="M12 9v12"/></IconBase>
@@ -1430,8 +1405,8 @@ const { useState, useEffect, useRef, useMemo } = React;
                   type="button"
                   onClick={() => setActiveModal('pay')}
                   disabled={cart.length === 0}
-                  aria-label="Ir para pagamento"
-                  title="Ir para pagamento"
+                  aria-label={'go_to_payment'.tr}
+                  title={'go_to_payment'.tr}
                   className="flex h-12 w-12 items-center justify-center rounded-full bg-[#109E46] text-white shadow-lg transition hover:bg-[#0d853a] disabled:cursor-not-allowed disabled:bg-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
                 >
                   <CashRegister className="h-5 w-5" />
@@ -1440,8 +1415,8 @@ const { useState, useEffect, useRef, useMemo } = React;
                   <button
                     type="button"
                     onClick={openCustomerModal}
-                    aria-label="Selecionar cliente"
-                    title="Selecionar cliente"
+                    aria-label={'select_customer'.tr}
+                    title={'select_customer'.tr}
                     className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-[#109E46] shadow-lg ring-1 ring-emerald-200 transition hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
                   >
                     <UserPlus className="h-5 w-5" />
@@ -1459,7 +1434,7 @@ const { useState, useEffect, useRef, useMemo } = React;
             <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setActiveModal(null); }}>
               {/* MODAL: IDENTIFICAR / ADICIONAR CLIENTE */}
               {activeModal === 'customer' && (
-                <div role="dialog" aria-modal="true" aria-label="Identificar cliente" className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 max-h-[90vh] flex flex-col">
+                <div role="dialog" aria-modal="true" aria-label={'identify_customer_f311df'.tr} className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 max-h-[90vh] flex flex-col">
                   {/* Modal Header */}
                   <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                     <div className="flex items-center gap-2.5">
@@ -1467,11 +1442,9 @@ const { useState, useEffect, useRef, useMemo } = React;
                         <UserPlus className="w-5 h-5" />
                       </div>
                       <div>
-                        <h3 className="text-base font-extrabold text-slate-900">
-                          Identificar Cliente
-                        </h3>
+                        <h3 className="text-base font-extrabold text-slate-900"> {'identify_customer'.tr} </h3>
                         <p className="text-xs text-slate-500">
-                          {orderType === 'DELIVERY' ? '🛵 Entrega · Informe o endereço' : '🏪 Retirada'}
+                          {orderType === 'DELIVERY' ? 'delivery_enter_address'.tr : 'pickup'.tr}
                         </p>
                       </div>
                     </div>
@@ -1483,7 +1456,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                     </button>
                   </div>
 
-                  {customerError && <div id="customerSaveError" role="alert" tabIndex="-1" className="cf-error-banner"><strong>Não foi possível adicionar o cliente</strong><span>{customerError}</span>{/e-mail|email/i.test(customerError) && <span>Use BUSCAR CLIENTE para selecionar o cadastro existente ou confira o e-mail informado.</span>}</div>}
+                  {customerError && <div id="customerSaveError" role="alert" tabIndex="-1" className="cf-error-banner"><strong>{'could_not_add_customer'.tr}</strong><span>{customerError}</span>{/e-mail|email/i.test(customerError) && <span>{'use_search_customer_to_select_an_existing_record_or_check_the_provided_email'.tr}</span>}</div>}
                   {/* Feedback notification if any */}
                   {customerNotification && (
                     <div className="mt-3 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
@@ -1493,64 +1466,53 @@ const { useState, useEffect, useRef, useMemo } = React;
                   )}
 
                   <div className="flex-1 overflow-y-auto py-3 space-y-3.5 pr-1">
-                    <button type="button" className="cf-button w-full !rounded-xl !py-3" onClick={() => setCustomerSearchOpen(true)}><Search className="w-4 h-4" />BUSCAR CLIENTE</button>
+                    <button type="button" className="cf-button w-full !rounded-xl !py-3" onClick={() => setCustomerSearchOpen(true)}><Search className="w-4 h-4" />{'search_customer'.tr}</button>
 
                     <div className="border-t border-slate-100 pt-3 space-y-3">
-                      <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                        Dados do Cliente / Pedido
-                      </p>
+                      <p className="text-xs font-bold uppercase tracking-wider text-slate-400"> {'customer_order_details'.tr} </p>
 
                       {/* Nome do Cliente */}
                       <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Nome do Cliente <span className="text-rose-500">*</span>
+                        <label className="block text-xs font-bold text-slate-700 mb-1"> {'customer_name'.tr} <span className="text-rose-500">*</span>
                         </label>
                         <input
                           type="text"
-                          id="customer-name" aria-label="Nome do Cliente" value={tempCustomerName}
+                          id="customer-name" aria-label={'customer_name'.tr} value={tempCustomerName}
                           onChange={(e) => setTempCustomerName(e.target.value)}
-                          placeholder="Ex: Maria Santos ou Cliente Balcão"
+                          placeholder={'ex_maria_santos_or_counter_customer'.tr}
                           className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-600 focus:outline-none font-semibold text-slate-800"
                         />
-                        <span className="text-[10px] text-slate-400 mt-0.5 block">
-                          Se for somente o nome, não salva na base (compra rápida).
-                        </span>
+                        <span className="text-[10px] text-slate-400 mt-0.5 block"> {'if_name_only_it_won_t_be_saved_to_the_database_quick_sale'.tr} </span>
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                         {/* Telefone / WhatsApp */}
                         <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1">
-                            Telefone / WhatsApp:
-                          </label>
+                          <label className="block text-xs font-bold text-slate-700 mb-1"> {'phone_whatsapp'.tr} </label>
                           <input
                             type="text"
-                            id="customer-phone" aria-label="Telefone / WhatsApp" value={tempCustomerPhone}
+                            id="customer-phone" aria-label={'phone_whatsapp_5af049'.tr} value={tempCustomerPhone}
                             onChange={(e) => setTempCustomerPhone(e.target.value)}
-                            placeholder="Ex: (11) 98765-4321"
+                            placeholder={'ex_11_98765_4321'.tr}
                             className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-600 focus:outline-none text-slate-800"
                           />
                         </div>
 
                         {/* CPF / CNPJ */}
                         <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1">
-                            CPF / CNPJ (Opcional):
-                          </label>
+                          <label className="block text-xs font-bold text-slate-700 mb-1"> {'cpf_cnpj_optional'.tr} </label>
                           <input
                             type="text"
                             value={tempCustomerCpf}
                             onChange={(e) => setTempCustomerCpf(e.target.value)}
-                            placeholder="Ex: 000.000.000-00"
+                            placeholder={'ex_000_000_000_00'.tr}
                             className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-600 focus:outline-none text-slate-800"
                           />
                         </div>
                       </div>
 
                       <div>
-                        <label htmlFor="customer-email" className="block text-xs font-bold text-slate-700 mb-1">
-                          E-mail da conta do cliente (opcional):
-                        </label>
+                        <label htmlFor="customer-email" className="block text-xs font-bold text-slate-700 mb-1"> {'customer_account_email_optional'.tr} </label>
                         <input
                           type="email"
                           id="customer-email"
@@ -1558,29 +1520,25 @@ const { useState, useEffect, useRef, useMemo } = React;
                           aria-invalid={!!customerError && /e-mail|email/i.test(customerError)}
                           aria-describedby={customerError ? 'customerSaveError' : undefined}
                           onChange={(e) => setTempCustomerEmail(e.target.value)}
-                          placeholder="cliente@email.com"
+                          placeholder={'customer_email'.tr}
                           className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-600 focus:outline-none text-slate-800"
                         />
-                        <span className="mt-0.5 block text-[10px] text-slate-400">
-                          Vincula o cadastro ao login do cliente para consultar saldo e movimentações.
-                        </span>
+                        <span className="mt-0.5 block text-[10px] text-slate-400"> {'links_the_record_to_the_customer_login_to_check_balance_and_transactions'.tr} </span>
                       </div>
 
                       {/* Endereço de Entrega */}
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
-                          <span>Endereço de Entrega:</span>
+                          <span>{'delivery_address'.tr}</span>
                           {orderType === 'DELIVERY' && (
-                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
-                              Necessário para Entrega
-                            </span>
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full"> {'required_for_delivery'.tr} </span>
                           )}
                         </label>
                         <textarea
                           rows="2"
-                          id="customer-address" aria-label="Endereço de entrega" value={tempCustomerAddress}
+                          id="customer-address" aria-label={'delivery_address_befbe3'.tr} value={tempCustomerAddress}
                           onChange={(e) => setTempCustomerAddress(e.target.value)}
-                          placeholder="Rua, Número, Bairro, Cidade, Complemento / Ponto de Referência..."
+                          placeholder={'street_number_neighborhood_city_apartment_landmark'.tr}
                           className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-600 focus:outline-none text-slate-800 resize-none"
                         />
                       </div>
@@ -1600,13 +1558,13 @@ const { useState, useEffect, useRef, useMemo } = React;
                     )}>
                       {!shouldPersistCustomer ? (
                         <div className="flex items-center gap-1.5">
-                          <span className="font-bold">⚡ Compra Rápida:</span>
-                          <span className="text-[10px] text-amber-800">Somente nome preenchido · Não será salvo na base</span>
+                          <span className="font-bold">{'quick_sale'.tr}</span>
+                          <span className="text-[10px] text-amber-800">{'only_name_filled_in_will_not_be_saved_to_the_database'.tr}</span>
                         </div>
                       ) : (
                         <div className="flex items-center gap-1.5">
-                          <span className="font-bold">💾 Cadastro:</span>
-                          <span className="text-[10px] text-emerald-800">Dados informados · Será cadastrado na base para futuras compras</span>
+                          <span className="font-bold"> {'registration'.tr} </span>
+                          <span className="text-[10px] text-emerald-800">{'data_provided_will_be_registered_in_the_database_for_future_purchases'.tr}</span>
                         </div>
                       )}
                     </div>
@@ -1621,12 +1579,12 @@ const { useState, useEffect, useRef, useMemo } = React;
                           ? 'cf-btn-3d--primary'
                           : 'cf-btn-3d--secondary opacity-50 cursor-not-allowed'
                       )}
-                      title="Adiciona o cliente ao pedido"
+                      title={'adds_the_customer_to_the_order'.tr}
                     >
                       <UserPlus className="w-4 h-4" />
                       <span>
                         {isSavingCustomer
-                          ? 'Salvando…' : selectedCustomerId ? 'Selecionar cliente' : 'Adicionar cliente'}
+                          ? 'saving'.tr : selectedCustomerId ? 'select_customer'.tr : 'add_customer'.tr}
                       </span>
                     </button>
 
@@ -1635,18 +1593,14 @@ const { useState, useEffect, useRef, useMemo } = React;
                         type="button"
                         onClick={() => setActiveModal(null)}
                         className="hover:text-slate-800 font-medium"
-                      >
-                        Cancelar
-                      </button>
+                      > {'product_entry_cancel'.tr} </button>
                       {orderType !== 'DELIVERY' && tempCustomerName.trim() && (tempCustomerPhone.trim() || tempCustomerAddress.trim()) && (
                         <button
                           type="button"
                           onClick={handleQuickPurchaseCustomer}
                           className="text-amber-700 hover:text-amber-800 font-medium"
-                          title="Usar apenas nesta venda sem salvar no banco"
-                        >
-                          ⚡ Usar somente nesta venda (não salvar)
-                        </button>
+                          title={'use_for_this_sale_only_without_saving_to_database'.tr}
+                        > {'use_for_this_sale_only_do_not_save'.tr} </button>
                       )}
                     </div>
                   </div>
@@ -1659,11 +1613,9 @@ const { useState, useEffect, useRef, useMemo } = React;
                   <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                     <div>
                       <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full">
-                        {currentUser.role === 'VENDEDOR' ? 'Venda • F1' : 'Fechamento de Caixa • F1'}
+                        {currentUser.role === 'VENDEDOR' ? 'sale_f1'.tr : 'cash_register_closure_f1'.tr}
                       </span>
-                      <h3 className="text-xl font-extrabold text-slate-900 mt-1">
-                        Finalizar Pagamento
-                      </h3>
+                      <h3 className="text-xl font-extrabold text-slate-900 mt-1"> {'complete_payment'.tr} </h3>
                     </div>
                     <button
                       onClick={() => setActiveModal(null)}
@@ -1675,25 +1627,24 @@ const { useState, useEffect, useRef, useMemo } = React;
 
                   <div className="my-4 p-4 rounded-2xl bg-[#0F381E] text-white flex items-center justify-between">
                     <div>
-                      <span className="text-xs text-emerald-200 block">Total a receber</span>
+                      <span className="text-xs text-emerald-200 block">{'total_due_2d41e9'.tr}</span>
                       <span className="text-2xl font-black">{formatBRL(finalTotal)}</span>
                     </div>
                     <div className="text-right text-xs text-emerald-100">
-                      <p>{distinctItemsCount} itens ({totalUnitsCount} un.)</p>
-                      <p className="font-bold text-emerald-300">{orderType === 'DELIVERY' ? '🛵 Entrega' : '🏪 Retirada'}</p>
-                      {discountPercent > 0 && <p>Desc: -{discountPercent}%</p>}
-                      {orderType === 'DELIVERY' && <p>Entrega: {formatBRL(freightValue)}</p>}
+                      <p>{distinctItemsCount} {'items'.tr} {totalUnitsCount} {'units_63dfbb'.tr} </p>
+                      <p className="font-bold text-emerald-300">{orderType === 'DELIVERY' ? 'delivery'.tr : 'pickup'.tr}</p>
+                      {discountPercent > 0 && <p> {'disc_b7ddfa'.tr} {discountPercent}%</p>}
+                      {orderType === 'DELIVERY' && <p>{'delivery_cdbdf1'.tr} {formatBRL(freightValue)}</p>}
                     </div>
                   </div>
 
                   {/* Customer display badge in pay modal */}
                   <div className="mb-4 p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
                     <div className="min-w-0 flex-1">
-                      <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                        Cliente • {orderType === 'DELIVERY' ? '🛵 Entrega' : '🏪 Retirada'}
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block"> {'customer_d054e0'.tr} {orderType === 'DELIVERY' ? 'delivery'.tr : 'pickup'.tr}
                       </span>
-                      <span className="font-bold text-slate-800 truncate block">{customerName || 'Cliente Balcão'}</span>
-                      {customerCreditBalance > 0 && <span className="text-[11px] font-semibold text-emerald-700 block">Crédito disponível: {formatBRL(customerCreditBalance)}</span>}
+                      <span className="font-bold text-slate-800 truncate block">{customerName || "Cliente Balcão"}</span>
+                      {customerCreditBalance > 0 && <span className="text-[11px] font-semibold text-emerald-700 block">{'available_credit'.tr} {formatBRL(customerCreditBalance)}</span>}
                       {orderType === 'DELIVERY' && customerAddress && (
                         <span className="text-[11px] text-emerald-700 truncate block">📍 {customerAddress}</span>
                       )}
@@ -1701,17 +1652,13 @@ const { useState, useEffect, useRef, useMemo } = React;
                     <button
                       onClick={() => openCustomerModal()}
                       className="text-xs font-bold text-emerald-700 hover:text-emerald-800 underline px-2 py-1"
-                    >
-                      Alterar
-                    </button>
+                    > {'change'.tr} </button>
                   </div>
 
-                  <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
-                    Forma de Pagamento
-                  </p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2"> {'payment_method'.tr} </p>
                   <div hidden={splitPayment} className={splitPayment ? 'hidden' : 'grid grid-cols-2 gap-2 mb-3 sm:grid-cols-5'}>
                     {[
-                      { id: 'pix', label: window.ConfloraOrderDisplay.payment('PIX'), icon: PixIcon },
+                      { id: 'pix', label: window.ConfloraOrderDisplay.payment("PIX"), icon: PixIcon },
                       { id: 'dinheiro', label: window.ConfloraOrderDisplay.payment('DINHEIRO'), icon: Banknote },
                       { id: 'credito', label: window.ConfloraOrderDisplay.payment('CREDITO'), icon: CreditCard },
                       { id: 'debito', label: window.ConfloraOrderDisplay.payment('DEBITO'), icon: CreditCard },
@@ -1722,10 +1669,12 @@ const { useState, useEffect, useRef, useMemo } = React;
                       return (
                         <button
                           key={method.id}
+                          aria-pressed={active}
+                          data-payment-method={method.id}
                           disabled={method.disabled}
-                          title={method.id === 'credito_cliente' ? `Disponível: ${formatBRL(customerCreditBalance)}. O saldo precisa cobrir a venda completa.` : undefined}
+                          title={method.id === 'credito_cliente' ? `${'available'.tr} ${formatBRL(customerCreditBalance)}. O saldo precisa cobrir a venda completa.` : undefined}
                           onClick={() => setPaymentMethod(method.id)}
-                          className={"p-2 rounded-xl border text-[11px] font-bold flex flex-col items-center gap-1 transition disabled:cursor-not-allowed disabled:opacity-45 " + (active
+                          className={(method.id === 'pix' ? 'cf-pix-payment ' : '') + "p-2 rounded-xl border text-[11px] font-bold flex flex-col items-center gap-1 transition disabled:cursor-not-allowed disabled:opacity-45 " + (active
                             ? 'border-[#109E46] bg-emerald-50 text-[#0F381E] ring-2 ring-emerald-500/20'
                             : 'border-slate-200 text-slate-600 hover:bg-slate-50')}
                         >
@@ -1739,9 +1688,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                   {/* Vendedor e Caixa Responsáveis */}
                   <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs">
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase">
-                        Venda feita por (Vendedor):
-                      </label>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase"> {'sold_by_salesperson'.tr} </label>
                       <input
                         type="text"
                         value={currentUser.name?.trim() || currentUser.email || 'Colaborador'}
@@ -1751,24 +1698,23 @@ const { useState, useEffect, useRef, useMemo } = React;
                     </div>
                   </div>
 
-                  <label className="my-3 flex items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={deferToCashier} onChange={(event) => setDeferToCashier(event.target.checked)} />Somente criar comanda e encaminhar ao caixa (inclusive Pix)</label>
-                  <label className="my-3 flex items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={splitPayment} onChange={(event) => setSplitPayment(event.target.checked)} />Usar mais de uma forma de pagamento</label>
+                  <label className="my-3 flex items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={deferToCashier} onChange={(event) => setDeferToCashier(event.target.checked)} />{'only_create_order_and_send_to_cashier_including_pix'.tr}</label>
+                  <label className="my-3 flex items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={splitPayment} onChange={(event) => setSplitPayment(event.target.checked)} />{'use_more_than_one_payment_method'.tr}</label>
                   {splitPayment && <PdvComponents.PaymentPartsEditor parts={paymentParts} onChange={setPaymentParts} total={finalTotal} customerId={customerId} />}
                   {paymentMethod === 'fiado' && (
                     <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-medium mb-3">
-                      ⚠️ <strong>Venda Fiada:</strong> O valor de {formatBRL(finalTotal)} será registrado no saldo devedor de <strong>{customerName}</strong>.
+                      ⚠️ <strong>{'store_credit_tab'.tr}</strong> {'the_amount_of'.tr} {formatBRL(finalTotal)} {'will_be_recorded_in_the_debt_balance_of'.tr} <strong>{customerName}</strong>.
                     </div>
                   )}
 
                   {paymentMethod === 'credito_cliente' && (
-                    <div className="p-2.5 rounded-xl bg-sky-50 border border-sky-200 text-sky-900 text-xs font-medium mb-3">
-                      O caixa usará <strong>{formatBRL(finalTotal)}</strong> do crédito disponível de <strong>{formatBRL(customerCreditBalance)}</strong>. O saldo precisa cobrir toda a venda.
+                    <div className="p-2.5 rounded-xl bg-sky-50 border border-sky-200 text-sky-900 text-xs font-medium mb-3"> {'the_cashier_will_use'.tr} <strong>{formatBRL(finalTotal)}</strong> {'of_the_available_credit_from'.tr} <strong>{formatBRL(customerCreditBalance)}</strong>. O saldo precisa cobrir toda a venda.
                     </div>
                   )}
 
                   {paymentMethod === 'pix' && !splitPayment && !deferToCashier && (
                     <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-medium mb-3">
-                      {window.CONFLORA_PIX_MODE === 'MANUAL' ? <>Pix manual: copie a chave após registrar o pedido. O caixa confere o recebimento e o comprovante antes de confirmar a venda.</> : <>💠 <strong>Pix Sicredi:</strong> QR Code e chave Pix Copia e Cola com o valor fixo travado de <strong>{formatBRL(finalTotal)}</strong>. Pedido baixado automaticamente quando pago!</>}
+                      {window.CONFLORA_PIX_MODE === 'MANUAL' ? <>{'manual_pix_copy_the_key_after_registering_the_order_the_cashier_checks_the_receipt_an'.tr}</> : <>💠 <strong> {'sicredi_pix'.tr} </strong> {'qr_code_and_pix_copy_and_paste_with_a_fixed_locked_amount_of'.tr} <strong>{formatBRL(finalTotal)}</strong>. Pedido baixado automaticamente quando pago!</>}
                     </div>
                   )}
 
@@ -1777,17 +1723,13 @@ const { useState, useEffect, useRef, useMemo } = React;
                       <div className="flex items-center justify-between pb-1 border-b border-slate-200/80">
                         <strong className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
                           <span>🧮</span>
-                          <span>Calculadora de Troco</span>
+                          <span>{'change_calculator'.tr}</span>
                         </strong>
-                        <span className="text-[10px] font-bold text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-full">
-                          Visual & Informativa
-                        </span>
+                        <span className="text-[10px] font-bold text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-full"> {'visual_informative'.tr} </span>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                         <div>
-                          <label className="block text-[11px] font-extrabold text-slate-700 uppercase mb-1">
-                            1. RECEBI:
-                          </label>
+                          <label className="block text-[11px] font-extrabold text-slate-700 uppercase mb-1"> {'label_1_received'.tr} </label>
                           <div className="relative">
                             <span className="absolute left-2.5 top-1.5 text-xs font-bold text-slate-400">R$</span>
                             <input
@@ -1797,39 +1739,35 @@ const { useState, useEffect, useRef, useMemo } = React;
                               value={cashReceived}
                               onChange={(e) => setCashReceived(e.target.value)}
                               className="w-full pl-8 pr-2 py-1.5 text-sm font-black text-slate-900 border-2 border-emerald-300 rounded-xl bg-white focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-400/30"
-                              aria-label="Valor recebido em dinheiro físico"
+                              aria-label={'amount_received_in_physical_cash'.tr}
                             />
                           </div>
-                          <span className="text-[10px] text-slate-500 font-medium mt-0.5 block">Valor entregue</span>
+                          <span className="text-[10px] text-slate-500 font-medium mt-0.5 block"> {'amount_handed_over'.tr} </span>
                         </div>
                         <div>
-                          <label className="block text-[11px] font-extrabold text-slate-700 uppercase mb-1">
-                            2. VALOR DA VENDA:
-                          </label>
+                          <label className="block text-[11px] font-extrabold text-slate-700 uppercase mb-1"> {'message_2_sale_amount'.tr} </label>
                           <input
                             type="text"
                             readOnly
                             tabIndex={-1}
                             value={formatBRL(finalTotal)}
                             className="w-full px-2.5 py-1.5 text-sm font-black text-emerald-950 border border-slate-200 rounded-xl bg-slate-100 cursor-default select-none"
-                            aria-label="Valor da venda"
+                            aria-label={'sale_amount'.tr}
                           />
-                          <span className="text-[10px] text-slate-500 font-medium mt-0.5 block">Total a pagar</span>
+                          <span className="text-[10px] text-slate-500 font-medium mt-0.5 block">{'total_due'.tr}</span>
                         </div>
                         <div>
-                          <label className="block text-[11px] font-extrabold text-slate-700 uppercase mb-1">
-                            3. TROCO:
-                          </label>
+                          <label className="block text-[11px] font-extrabold text-slate-700 uppercase mb-1"> {'label_3_change'.tr} </label>
                           <input
                             type="text"
                             readOnly
                             tabIndex={-1}
                             value={formatBRL(changeAmount)}
                             className={`w-full px-2.5 py-1.5 text-sm font-black border rounded-xl cursor-default select-none ${changeAmount > 0 ? "border-emerald-500 bg-emerald-100 text-emerald-950" : "border-slate-200 bg-slate-100 text-slate-600"}`}
-                            aria-label="Troco calculado"
+                            aria-label={'calculated_change'.tr}
                           />
                           <span className="text-[10px] text-slate-500 font-medium mt-0.5 block">
-                            {changeAmount > 0 ? "Devolver ao cliente" : "Sem troco"}
+                            {changeAmount > 0 ? 'change_to_customer'.tr : 'no_change'.tr}
                           </span>
                         </div>
                       </div>
@@ -1840,16 +1778,15 @@ const { useState, useEffect, useRef, useMemo } = React;
                     <button
                       onClick={() => { setActiveModal(null); setCashReceived(""); }}
                       className="w-1/3 py-3 rounded-xl border border-slate-200 font-bold text-xs text-slate-600 hover:bg-slate-50"
-                    >
-                      Voltar
-                    </button>
+                    > {'back_59dc92'.tr} </button>
                     <button
                       disabled={isSubmittingSale || (splitPayment && (paymentParts.some((part) => Number(part.amount) <= 0) || paymentParts.reduce((sum, part) => sum + Math.round(Number(part.amount) * 100), 0) !== Math.round(finalTotal * 100))) || (!splitPayment && !deferToCashier && paymentMethod === 'credito_cliente' && customerCreditBalance < finalTotal)}
                       onClick={handleCompleteSale}
-                      className={primaryActionButtonClass + ' w-2/3 px-4 py-3 text-sm active:scale-98'}
+                      className={primaryActionButtonClass + ' w-2/3 px-4 py-3 text-sm active:scale-98' + (paymentMethod === 'pix' && !splitPayment && !deferToCashier ? ' cf-pix-payment cf-pix-checkout' : '')}
+                      data-pix-selected={paymentMethod === 'pix' && !splitPayment && !deferToCashier}
                     >
                       <Check className="w-4 h-4" />
-                      <span>{isSubmittingSale ? 'Processando...' : deferToCashier ? 'Enviar comanda ao caixa' : splitPayment ? 'Confirmar pagamentos' : currentUser.role === 'VENDEDOR' && paymentMethod !== 'pix' ? 'Enviar comanda ao caixa' : paymentMethod === 'pix' ? (window.CONFLORA_PIX_MODE === 'MANUAL' ? 'Registrar Pix pendente' : 'Gerar Pix Sicredi') : paymentMethod === 'fiado' && currentUser.role !== 'ADMIN' ? 'Solicitar aprovação do fiado' : paymentMethod === 'credito_cliente' ? 'Usar saldo do cliente' : customerId ? 'Finalizar venda' : customerName && customerName !== 'Cliente Balcão' ? 'Adicionar cliente e finalizar venda' : 'Finalizar venda'}</span>
+                      <span>{isSubmittingSale ? 'processing'.tr : deferToCashier ? 'send_order_to_cash_register'.tr : splitPayment ? 'confirm_payments'.tr : currentUser.role === 'VENDEDOR' && paymentMethod !== 'pix' ? 'send_order_to_cash_register'.tr : paymentMethod === 'pix' ? (window.CONFLORA_PIX_MODE === 'MANUAL' ? 'register_pending_pix'.tr : 'generate_sicredi_pix'.tr) : paymentMethod === 'fiado' && currentUser.role !== 'ADMIN' ? 'request_store_credit_approval'.tr : paymentMethod === 'credito_cliente' ? 'use_customer_balance'.tr : customerId ? 'finalize_sale'.tr : customerName && customerName !== 'Cliente Balcão' ? 'add_customer_and_finalize_sale'.tr : 'finalize_sale'.tr}</span>
                     </button>
                   </div>
                 </div>
@@ -1859,9 +1796,7 @@ const { useState, useEffect, useRef, useMemo } = React;
               {activeModal === 'discount' && (
                 <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-xl">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-extrabold text-slate-900">
-                      Aplicar Desconto (F4)
-                    </h3>
+                    <h3 className="text-lg font-extrabold text-slate-900"> {'apply_discount_f4'.tr} </h3>
                     <button
                       onClick={() => setActiveModal(null)}
                       className="p-1.5 text-slate-400 hover:text-slate-600 rounded-full"
@@ -1883,9 +1818,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                     ))}
                   </div>
 
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">
-                    Ou digite a porcentagem (%):
-                  </label>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1"> {'or_enter_the_percentage'.tr} </label>
                   <input
                     type="number"
                     min="0"
@@ -1900,9 +1833,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                   <button
                     onClick={() => setActiveModal(null)}
                     className={primaryActionButtonClass + ' w-full px-4 py-3 text-sm'}
-                  >
-                    Confirmar Desconto
-                  </button>
+                  > {'confirm_discount'.tr} </button>
                 </div>
               )}
 
@@ -1910,9 +1841,7 @@ const { useState, useEffect, useRef, useMemo } = React;
               {activeModal === 'freight' && (
                 <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-xl">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-extrabold text-slate-900">
-                      Taxa de entrega (F8)
-                    </h3>
+                    <h3 className="text-lg font-extrabold text-slate-900"> {'delivery_fee_f8'.tr} </h3>
                     <button
                       onClick={() => setActiveModal(null)}
                       className="p-1.5 text-slate-400 hover:text-slate-600 rounded-full"
@@ -1929,14 +1858,12 @@ const { useState, useEffect, useRef, useMemo } = React;
                         onClick={() => setFreightValue(val)}
                         className={"cf-btn-3d cf-btn-3d--sm " + (Number(freightValue) === val ? 'cf-btn-3d--primary' : 'cf-btn-3d--secondary')}
                       >
-                        {val === 0 ? 'Sem taxa' : ('R$ ' + val)}
+                        {val === 0 ? 'no_fee'.tr : ('R$ ' + val)}
                       </button>
                     ))}
                   </div>
 
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">
-                    Valor personalizado (R$):
-                  </label>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1"> {'custom_amount_r'.tr} </label>
                   <input
                     type="number"
                     min="0"
@@ -1949,9 +1876,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                   <button
                     onClick={() => setActiveModal(null)}
                     className={primaryActionButtonClass + ' w-full px-4 py-3 text-sm'}
-                  >
-                    Salvar entrega
-                  </button>
+                  > {'save_delivery'.tr} </button>
                 </div>
               )}
 

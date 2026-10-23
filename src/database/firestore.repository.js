@@ -83,10 +83,13 @@ class FirestoreRepository {
     isInMemory = false,
     productImageStorage = productImageStorageService,
   } = {}) {
+    if (isInMemory && process.env.NODE_ENV !== 'test') {
+      throw new Error('Armazenamento em memória permitido somente nos testes isolados.');
+    }
     this.firestore = firestoreInstance;
     this.productImageStorage = productImageStorage;
     this.isInMemory =
-      isInMemory || process.env.NODE_ENV === 'test';
+      isInMemory || (process.env.NODE_ENV === 'test' && !firestoreInstance);
 
     this.inMemoryMessages = new Set();
     this.inMemorySessions = new Map();
@@ -101,40 +104,6 @@ class FirestoreRepository {
     this.inMemoryNotifications = [];
     this.inMemoryStorefrontEvents = [];
     this._firestoreClientDisabled = false;
-
-    const defaultUsers = [
-      {
-        id: 'usr-edmar',
-        name: 'Edmar Júnio (Izibola)',
-        email: 'edmarjuniob@gmail.com',
-        role: 'ADMIN',
-        pin: '1234',
-        active: true,
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: 'usr-caixa1',
-        name: 'Atendente do Caixa',
-        email: 'caixa1@conflora.com.br',
-        role: 'CAIXA',
-        pin: '0000',
-        active: true,
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: 'usr-entregador1',
-        name: 'Entregador Conflora',
-        email: 'entregador1@conflora.com.br',
-        role: 'ENTREGADOR',
-        pin: '2222',
-        active: true,
-        createdAt: new Date().toISOString(),
-      },
-    ];
-
-    for (const u of this.isInMemory ? defaultUsers : []) {
-      this.inMemoryUsers.set(u.id, u);
-    }
 
     if (
       !this.firestore &&
@@ -164,187 +133,46 @@ class FirestoreRepository {
             `Firestore conectado ao projeto: ${targetProjectId}`
           );
         } catch (err) {
-          Logger.warn(
-            'Firestore initialization failed; running with in-memory store',
-            { error: err.message }
-          );
+        if (this.firestore || !this.isInMemory) throw err;
+          throw new Error('Não foi possível iniciar a conexão com o Firestore.', { cause: err });
         }
       }
     }
+    if (!this.firestore && !this.isInMemory) {
+      throw Object.assign(new Error('Firestore obrigatório para executar o aplicativo.'), { status: 503 });
+    }
   }
 
-  // --- Funções REST do Firebase (Leitura confiável mesmo sem ADC IAM) ---
-
-  decodeFirestoreValue(val) {
-    if (!val || typeof val !== 'object') {
-      return val;
+  requireTestStorage() {
+    if (process.env.NODE_ENV !== 'test' || !this.isInMemory || this.firestore) {
+      throw Object.assign(new Error('Firestore indisponível. Operação não confirmada.'), { status: 503 });
     }
-    if ('stringValue' in val) {
-      return val.stringValue;
-    }
-    if ('integerValue' in val) {
-      return parseInt(val.integerValue, 10);
-    }
-    if ('doubleValue' in val) {
-      return parseFloat(val.doubleValue);
-    }
-    if ('booleanValue' in val) {
-      return val.booleanValue;
-    }
-    if ('timestampValue' in val) {
-      return val.timestampValue;
-    }
-    if ('nullValue' in val) {
-      return null;
-    }
-    if ('mapValue' in val) {
-      const res = {};
-      const fields = val.mapValue.fields || {};
-      for (const [k, v] of Object.entries(fields)) {
-        res[k] = this.decodeFirestoreValue(v);
-      }
-      return res;
-    }
-    if ('arrayValue' in val) {
-      const values = val.arrayValue.values || [];
-      return values.map((v) => this.decodeFirestoreValue(v));
-    }
-    return val;
   }
 
-  decodeFirestoreDoc(doc) {
-    if (!doc) {
-      return null;
-    }
-    const id = doc.name ? doc.name.split('/').pop() : undefined;
-    const result = { id };
-    if (doc.fields) {
-      for (const [k, v] of Object.entries(doc.fields)) {
-        result[k] = this.decodeFirestoreValue(v);
-      }
-    }
-    if (!result.id && id) {
-      result.id = id;
-    }
-    return result;
-  }
+  // --- Products and inventory ---
 
-  async fetchAllProductsViaRest() {
-    const apiKey = config.firebase?.apiKey;
-    const projectId =
-      config.firebase?.projectId ||
-      config.gcp?.projectId ||
-      'confloraai';
-
-    if (!apiKey) {
-      return [];
-    }
-
-    const products = [];
-    let pageToken = '';
-    do {
-      const pageParam = pageToken
-        ? `&pageToken=${encodeURIComponent(pageToken)}`
-        : '';
-      const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/products?pageSize=300${pageParam}&key=${apiKey}`;
-      const res = await fetch(url);
-      if (!res.ok) {
-        throw new Error(`Firestore REST HTTP ${res.status}: ${res.statusText}`);
-      }
-      const data = await res.json();
-      if (Array.isArray(data.documents)) {
-        for (const doc of data.documents) {
-          const decoded = this.decodeFirestoreDoc(doc);
-          if (decoded && decoded.id) {
-            products.push(decoded);
-          }
-        }
-      }
-      pageToken = data.nextPageToken || '';
-    } while (pageToken);
-
-    return products;
-  }
-
-  async fetchDocViaRest(collection, docId) {
-    const apiKey = config.firebase?.apiKey;
-    const projectId =
-      config.firebase?.projectId ||
-      config.gcp?.projectId ||
-      'confloraai';
-
-    if (!apiKey || !docId) {
-      return null;
-    }
-    const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${collection}/${encodeURIComponent(docId)}?key=${apiKey}`;
-    const res = await fetch(url);
-    if (!res.ok) {
-      return null;
-    }
-    const data = await res.json();
-    return this.decodeFirestoreDoc(data);
-  }
-
-  async fetchCollectionViaRest(collection) {
-    const apiKey = config.firebase?.apiKey;
-    const projectId =
-      config.firebase?.projectId ||
-      config.gcp?.projectId ||
-      'confloraai';
-
-    if (!apiKey) {
-      return [];
-    }
-    const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${collection}?pageSize=300&key=${apiKey}`;
-    const res = await fetch(url);
-    if (!res.ok) {
-      return [];
-    }
-    const data = await res.json();
-    if (Array.isArray(data.documents)) {
-      return data.documents
-        .map((d) => this.decodeFirestoreDoc(d))
-        .filter(Boolean);
-    }
-    return [];
-  }
-
-  // --- Produtos, Estoque e integração WhatsApp ---
 
   async getAllProducts() {
-    if (this.isInMemory || this._firestoreClientDisabled) {return Array.from(this.inMemoryProducts.values());}
-    if (!this.firestore) {throw new Error('Firestore indisponível.');}
-    try {
+    if (this.firestore) {
       const snapshot = await this.firestore.collection('products').get();
-      return snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }));
-    } catch (err) {
-      if (err && (err.code === 7 || (err.message && (err.message.includes('PERMISSION_DENIED') || err.message.includes('insufficient permissions'))))) {
-        this._firestoreClientDisabled = true;
-        Logger.info('Firestore sem permissão de leitura; nenhum catálogo simulado será exibido.');
-        return Array.from(this.inMemoryProducts.values());
-      }
-      throw err;
+      return snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
     }
+    this.requireTestStorage();
+    return [...this.inMemoryProducts.values()];
   }
+
 
   async getProductById(productId) {
-    if (!productId) {return null;}
+    if (!productId) return null;
     const id = String(productId).trim();
-    if (this.isInMemory || this._firestoreClientDisabled) {return this.inMemoryProducts.get(id) || null;}
-    if (!this.firestore) {throw new Error('Firestore indisponível.');}
-    try {
-      const snapshot = await this.firestore.collection('products').doc(id).get();
-      return snapshot.exists ? { ...snapshot.data(), id: snapshot.id } : null;
-    } catch (err) {
-      if (err && (err.code === 7 || (err.message && (err.message.includes('PERMISSION_DENIED') || err.message.includes('insufficient permissions'))))) {
-        this._firestoreClientDisabled = true;
-        return this.inMemoryProducts.get(id) || null;
-      }
-      throw err;
+    if (this.firestore) {
+      const document = await this.firestore.collection('products').doc(id).get();
+      return document.exists ? { ...document.data(), id: document.id } : null;
     }
+    this.requireTestStorage();
+    return this.inMemoryProducts.get(id) || null;
   }
 
-  // Checkout loads only requested products, never a cached or complete catalog.
   async getProductsByIds(productIds) {
     const ids = [...new Set(productIds.map(id => String(id).trim()))];
     if (!ids.length) return [];
@@ -373,7 +201,7 @@ class FirestoreRepository {
       metadata.storageLocation = 'firebase-storage';
     }
 
-    if (this.isInMemory) {
+    if (this.isInMemory && !this.firestore) {
       this.inMemoryProductImages.set(photoDoc.id, photoDoc);
       if (photoDoc.productId) {
         this.inMemoryProductImages.set(String(photoDoc.productId), photoDoc);
@@ -388,11 +216,12 @@ class FirestoreRepository {
           .doc(photoDoc.id)
           .set(metadata);
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         if (
           err.code === 7 ||
           err.message?.includes('PERMISSION_DENIED')
         ) {
-          this._firestoreClientDisabled = true;
+          // A failed request must be retried against Firestore.
         } else {
           Logger.warn('Erro ao salvar foto no Firestore', {
             error: err.message,
@@ -410,7 +239,7 @@ class FirestoreRepository {
     }
     const cleanId = String(idOrProductId).trim();
 
-    if (this.isInMemory) {
+    if (this.isInMemory && !this.firestore) {
       return this.inMemoryProductImages.get(cleanId) || null;
     }
 
@@ -433,22 +262,14 @@ class FirestoreRepository {
           return querySnap.docs[0].data();
         }
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         if (
           err.code === 7 ||
           err.message?.includes('PERMISSION_DENIED')
         ) {
-          this._firestoreClientDisabled = true;
+          // A failed request must be retried against Firestore.
         }
       }
-    }
-
-    if (config.firebase?.apiKey) {
-      try {
-        const photo = await this.fetchDocViaRest('product_images', cleanId);
-        if (photo) {
-          return photo;
-        }
-      } catch {}
     }
 
     return null;
@@ -459,7 +280,7 @@ class FirestoreRepository {
       return [];
     }
     const cleanId = String(idOrProductId).trim();
-    if (this.isInMemory) {
+    if (this.isInMemory && !this.firestore) {
       return Array.from(new Set(this.inMemoryProductImages.values()))
         .filter((photo) => String(photo.productId) === cleanId || photo.id === cleanId || photo.id?.startsWith(`img_${cleanId}`))
         .sort((a, b) => (a.index || 0) - (b.index || 0));
@@ -475,8 +296,9 @@ class FirestoreRepository {
           .map((doc) => ({ ...doc.data(), id: doc.id }))
           .sort((a, b) => (a.index || 0) - (b.index || 0));
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         if (err.code === 7 || err.message?.includes('PERMISSION_DENIED')) {
-          this._firestoreClientDisabled = true;
+          // A failed request must be retried against Firestore.
         } else {
           Logger.warn('Erro ao consultar fotos do produto no Firestore', { error: err.message, productId: cleanId });
         }
@@ -686,11 +508,12 @@ class FirestoreRepository {
           .doc(String(product.id))
           .set(dataWithTs, { merge: true });
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         if (
           err.code === 7 ||
           err.message?.includes('PERMISSION_DENIED')
         ) {
-          this._firestoreClientDisabled = true;
+          // A failed request must be retried against Firestore.
         } else {
           Logger.warn('Erro ao salvar produto no Firestore', {
             error: err.message,
@@ -699,7 +522,7 @@ class FirestoreRepository {
       }
     }
 
-    this.inMemoryProducts.set(String(product.id), { ...this.inMemoryProducts.get(String(product.id)), ...dataWithTs });
+    if (!this.firestore) this.inMemoryProducts.set(String(product.id), { ...this.inMemoryProducts.get(String(product.id)), ...dataWithTs });
     const nextImagePathSet = new Set(nextImagePaths);
     for (const imagePath of new Set(previousImagePaths)) {
       if (!nextImagePathSet.has(imagePath)) {
@@ -733,11 +556,12 @@ class FirestoreRepository {
           .delete()
           .catch(() => {});
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         if (
           err.code === 7 ||
           err.message?.includes('PERMISSION_DENIED')
         ) {
-          this._firestoreClientDisabled = true;
+          // A failed request must be retried against Firestore.
         } else {
           Logger.warn('Erro ao excluir produto no Firestore', {
             error: err.message,
@@ -816,57 +640,26 @@ class FirestoreRepository {
     return shouldConfirm ? this.confirmOrderPayment(order.id) : order;
   }
 
+
   async getOrderById(orderId) {
-    const idStr = String(orderId);
-    if (this.firestore && !this._firestoreClientDisabled) {
-      try {
-        const snap = await this.firestore.collection('orders').doc(idStr).get();
-        if (snap.exists) {
-          const docData = { id: snap.id, ...snap.data() };
-          this.inMemoryOrders.set(idStr, docData);
-          return docData;
-        }
-      } catch (err) {
-        if (
-          err.code === 7 ||
-          err.code === 'permission-denied' ||
-          err.message?.includes('PERMISSION_DENIED') ||
-          err.message?.includes('Missing or insufficient')
-        ) {
-          this._firestoreClientDisabled = true;
-        } else {
-          Logger.warn('Erro ao buscar pedido por ID no Firestore', { error: err.message });
-        }
-      }
+    const id = String(orderId);
+    if (this.firestore) {
+      const document = await this.firestore.collection('orders').doc(id).get();
+      return document.exists ? { ...document.data(), id: document.id } : null;
     }
-    if (config.firebase?.apiKey) {
-      try {
-        const restDoc = await this.fetchDocViaRest('orders', idStr);
-        if (restDoc) {
-          this.inMemoryOrders.set(idStr, restDoc);
-          return restDoc;
-        }
-      } catch {}
-    }
-    return this.inMemoryOrders.get(idStr) || null;
+    this.requireTestStorage();
+    return this.inMemoryOrders.get(id) || null;
   }
+
 
   async saveOrderReceipt(orderId, receiptText) {
     const id = String(orderId || '').trim();
-    const receipt = String(receiptText || '');
-    if (!id || !receipt.trim()) throw new Error('Pedido e conteúdo do recibo são obrigatórios.');
+    if (!id || !String(receiptText || '').trim()) throw new Error('Pedido e recibo são obrigatórios.');
     const order = await this.getOrderById(id);
-    if (!order) throw new Error('Pedido não encontrado para salvar o recibo.');
-    const updatedOrder = { ...order, receiptText: receipt };
-    this.inMemoryOrders.set(id, updatedOrder);
-    if (this.firestore && !this._firestoreClientDisabled) {
-      try {
-        await this.firestore.collection('orders').doc(id).update({ receiptText: receipt });
-      } catch (error) {
-        Logger.warn('Não foi possível persistir a cópia do recibo no pedido.', { orderId: id, error: error.message });
-      }
-    }
-    return updatedOrder;
+    if (!order) throw new Error('Pedido não encontrado.');
+    if (this.firestore) await this.firestore.collection('orders').doc(id).update({ receiptText });
+    else { this.requireTestStorage(); this.inMemoryOrders.set(id, { ...order, receiptText }); }
+    return { ...order, receiptText };
   }
 
   async findPendingPixOrderByPhone(phone) {
@@ -1135,9 +928,10 @@ class FirestoreRepository {
           .get();
         return snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
       } catch (error) {
+        if (this.firestore || !this.isInMemory) throw error;
         const errorText = String(error?.message || error?.details || error || '');
         if (error?.code === 7 || error?.code === '7' || error?.code === 'permission-denied' || errorText.includes('PERMISSION_DENIED')) {
-          this._firestoreClientDisabled = true;
+          // A failed request must be retried against Firestore.
           FirestoreRepository._globalClientDisabled = true;
         } else {
           Logger.warn('Falha ao consultar vendas do fechamento por data', { error: errorText });
@@ -1159,9 +953,10 @@ class FirestoreRepository {
           .get();
         return snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
       } catch (error) {
+        if (this.firestore || !this.isInMemory) throw error;
         const errorText = String(error?.message || error?.details || error || '');
         if (error?.code === 7 || error?.code === '7' || error?.code === 'permission-denied' || errorText.includes('PERMISSION_DENIED')) {
-          this._firestoreClientDisabled = true;
+          // A failed request must be retried against Firestore.
           FirestoreRepository._globalClientDisabled = true;
         } else {
           Logger.warn('Falha ao consultar recebimentos de dívidas do fechamento', { error: errorText });
@@ -1209,6 +1004,7 @@ class FirestoreRepository {
         }
         return records;
       } catch (error) {
+        if (this.firestore || !this.isInMemory) throw error;
         Logger.warn('Falha ao consultar o painel de vendas por período', { collectionName, error: error.message });
         throw new Error('Não foi possível consultar todos os registros deste período.');
       }
@@ -1367,6 +1163,7 @@ class FirestoreRepository {
         const snap = await this.firestore.collection('store_settings').doc('inventory').get();
         stored = snap.data();
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         if (/PERMISSION_DENIED/i.test(err.message) || err.code === 7) {
           Logger.warn('Permissão negada para store_settings; operação de estoque interrompida.');
         } else {
@@ -1591,6 +1388,7 @@ class FirestoreRepository {
         );
         return result;
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         if (id) {
           throw new Error('Não foi possível persistir a baixa de estoque do pedido.', {
             cause: err,
@@ -1727,13 +1525,14 @@ class FirestoreRepository {
           ...doc.data(),
         }));
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         if (
           err.code === 7 ||
           err.code === 'permission-denied' ||
           err.message?.includes('PERMISSION_DENIED') ||
           err.message?.includes('Missing or insufficient')
         ) {
-          this._firestoreClientDisabled = true;
+          // A failed request must be retried against Firestore.
         } else {
           Logger.warn(
             'Erro ao buscar stock_movements no Firestore',
@@ -1878,13 +1677,14 @@ class FirestoreRepository {
         this.inMemoryOrders.set(ref.id, saved);
         return saved;
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         if (
           err.code === 7 ||
           err.code === 'permission-denied' ||
           err.message?.includes('PERMISSION_DENIED') ||
           err.message?.includes('Missing or insufficient')
         ) {
-          this._firestoreClientDisabled = true;
+          // A failed request must be retried against Firestore.
         } else {
           Logger.warn(
             'Erro ao salvar pedido direto no Firestore',
@@ -1915,106 +1715,38 @@ class FirestoreRepository {
     return orderObj;
   }
 
+
   async getSalesOrders() {
-    if (!this.firestore || this._firestoreClientDisabled) {
-      return Array.from(this.inMemoryOrders.values());
-    }
-    if (this.salesOrdersCache && Date.now() < this.salesOrdersCache.expiresAt) {
-      return this.salesOrdersCache.orders;
-    }
-    try {
-      if (!this.salesOrdersPending) {
-        this.salesOrdersPending = (async () => {
-          const orders = [];
-          let cursor;
-          do {
-            let query = this.firestore.collection('orders').select('status', 'items').orderBy('__name__').limit(500);
-            if (cursor) query = query.startAfter(cursor);
-            const page = await query.get();
-            orders.push(...page.docs.map(doc => doc.data()));
-            if (page.size < 500) break;
-            cursor = page.docs[page.docs.length - 1];
-          } while (cursor);
-          this.salesOrdersCache = { orders, expiresAt: Date.now() + 60000 };
-          return orders;
-        })().finally(() => { this.salesOrdersPending = null; });
-      }
-      const orders = await this.salesOrdersPending;
-      return orders;
-    } catch (err) {
-      if (
-        err.code === 7 ||
-        err.code === 'permission-denied' ||
-        err.message?.includes('PERMISSION_DENIED') ||
-        err.message?.includes('Missing or insufficient')
-      ) {
-        this._firestoreClientDisabled = true;
-      } else {
-        Logger.warn('Erro ao buscar pedidos para ranking no Firestore', {
-          error: err.message,
-        });
-      }
-      return Array.from(this.inMemoryOrders.values());
-    }
+    if (this.pendingSalesRead) return this.pendingSalesRead;
+    this.pendingSalesRead = this.readSalesOrders();
+    try { return await this.pendingSalesRead; }
+    finally { this.pendingSalesRead = null; }
   }
 
+  async readSalesOrders() {
+    if (!this.firestore) { this.requireTestStorage(); return [...this.inMemoryOrders.values()]; }
+    const orders = [];
+    let cursor;
+    do {
+      let query = this.firestore.collection('orders').select('status', 'items').orderBy('__name__').limit(500);
+      if (cursor) query = query.startAfter(cursor);
+      const page = await query.get();
+      orders.push(...page.docs.map(doc => doc.data()));
+      if (page.size < 500) break;
+      cursor = page.docs[page.docs.length - 1];
+    } while (cursor);
+    return orders;
+  }
+
+
   async getAllOrders(limit = 50) {
-    if (this.firestore && !this._firestoreClientDisabled && !FirestoreRepository._globalClientDisabled) {
-      try {
-        const snap = await this.firestore
-          .collection('orders')
-          .orderBy('createdAt', 'desc')
-          .limit(limit)
-          .get();
-
-        if (!snap.empty) {
-          const orders = snap.docs.map((d) => ({
-            id: d.id,
-            ...d.data(),
-          }));
-          for (const order of orders) {
-            this.inMemoryOrders.set(order.id, order);
-          }
-          return orders;
-        }
-      } catch (err) {
-        const errText = String(err?.message || err?.details || err || '');
-        if (
-          err?.code === 7 ||
-          err?.code === '7' ||
-          err?.code === 'permission-denied' ||
-          errText.includes('PERMISSION_DENIED') ||
-          errText.includes('Missing or insufficient') ||
-          errText.includes('7 PERMISSION_DENIED')
-        ) {
-          this._firestoreClientDisabled = true;
-          FirestoreRepository._globalClientDisabled = true;
-        } else {
-          Logger.warn(
-            'Erro ao buscar pedidos no Firestore',
-            { error: err?.message || errText }
-          );
-        }
-      }
+    const size = Math.min(10000, Math.max(1, Math.floor(Number(limit) || 50)));
+    if (this.firestore) {
+      const snapshot = await this.firestore.collection('orders').orderBy('createdAt', 'desc').limit(size).get();
+      return snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
     }
-
-    if (!this.isInMemory && config.firebase?.apiKey) {
-      try {
-        const restOrders = await this.fetchCollectionViaRest('orders');
-        if (restOrders && restOrders.length > 0) {
-          for (const o of restOrders) {
-            this.inMemoryOrders.set(o.id, o);
-          }
-          return restOrders.slice(0, limit);
-        }
-      } catch {}
-    }
-
-    return Array.from(
-      this.inMemoryOrders.values()
-    ).sort((a, b) =>
-      (b.createdAt || '').localeCompare(a.createdAt || '')
-    );
+    this.requireTestStorage();
+    return [...this.inMemoryOrders.values()].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).slice(0, size);
   }
 
   async updateOrderStatus(orderId, status) {
@@ -2041,6 +1773,7 @@ class FirestoreRepository {
 
         return doc.exists;
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         Logger.warn(
           'Erro ao verificar mensagem no Firestore; usando fallback',
           { error: err.message }
@@ -2067,6 +1800,7 @@ class FirestoreRepository {
 
         return;
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         Logger.warn(
           'Erro ao registrar mensagem no Firestore; usando fallback',
           { error: err.message }
@@ -2094,6 +1828,7 @@ class FirestoreRepository {
 
         return snapshot.docs.map((doc) => doc.data());
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         Logger.warn(
           'Erro ao buscar histórico no Firestore; usando fallback',
           { error: err.message }
@@ -2131,6 +1866,7 @@ class FirestoreRepository {
 
         return;
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         if (requirePersistence) throw err;
           Logger.warn(
             'Erro ao salvar mensagem no Firestore; usando fallback',
@@ -2179,6 +1915,7 @@ class FirestoreRepository {
 
         return doc.exists ? doc.data() : null;
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         Logger.warn(
           'Erro ao buscar perfil do cliente no Firestore; usando fallback',
           { error: err.message }
@@ -2236,6 +1973,7 @@ class FirestoreRepository {
           .get();
         snapshot.docs.forEach((doc) => addCustomer(doc.data(), doc.id));
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         Logger.warn('Erro ao buscar clientes por nome', { error: err.message });
       }
     }
@@ -2268,6 +2006,7 @@ class FirestoreRepository {
           .get();
         return snapshot.docs.map((document) => ({ ...document.data(), id: document.id }));
       } catch (error) {
+        if (this.firestore || !this.isInMemory) throw error;
         Logger.warn('Falha ao localizar cadastro financeiro do cliente', { error: error.message });
         throw new Error('Não foi possível validar o vínculo da conta do cliente.');
       }
@@ -2303,6 +2042,7 @@ class FirestoreRepository {
 
         return;
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         Logger.warn(
           'Erro ao salvar perfil do cliente no Firestore; usando fallback',
           { error: err.message }
@@ -2347,6 +2087,7 @@ class FirestoreRepository {
         const currentBalance = custSnap.exists ? Number(custSnap.data().debtBalance || 0) : 0;
         await custRef.set({ debtBalance: currentBalance + val, updatedAt: now }, { merge: true });
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         Logger.warn('Erro ao salvar lançamento de dívida no Firestore', { error: err.message });
       }
     }
@@ -2390,6 +2131,7 @@ class FirestoreRepository {
         newBalance = Math.max(0, currentBalance - val);
         await custRef.set({ debtBalance: newBalance, updatedAt: now }, { merge: true });
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         Logger.warn('Erro ao salvar quitação de dívida no Firestore', { error: err.message });
       }
     }
@@ -2434,6 +2176,7 @@ class FirestoreRepository {
         transactions = [...debts, ...settles].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
         return { customerKey: key, balance, transactions };
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         Logger.warn('Erro ao buscar dívidas do cliente no Firestore', { error: err.message });
         throw new Error('Não foi possível carregar o extrato financeiro deste cliente.');
       }
@@ -2458,6 +2201,7 @@ class FirestoreRepository {
         const docs = snap.docs.map(d => ({ ...d.data(), id: d.id }));
         return docs;
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         if (err && (err.code === 7 || err.code === 'permission-denied' || String(err.message || '').includes('PERMISSION_DENIED'))) {
           throw Object.assign(new Error('Cadastro de usuários indisponível.'), { status: 503 });
         }
@@ -2510,6 +2254,7 @@ class FirestoreRepository {
           if (old?.data()?.userId === String(id)) tx.delete(oldIdentity);
         });
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         Logger.warn(
           'Erro ao salvar usuário no Firestore',
           { error: err.message }
@@ -2520,10 +2265,7 @@ class FirestoreRepository {
 
     if (!this.firestore && !this.isInMemory) throw new Error('Cadastro indisponível.');
     if (!this.firestore && email && [...this.inMemoryUsers.values()].some(user => user.email === email && user.id !== String(id))) throw Object.assign(new Error('Este e-mail já possui cadastro.'), { status: 409 });
-    this.inMemoryUsers.set(
-      String(id),
-      dataWithTs
-    );
+    if (!this.firestore) this.inMemoryUsers.set(String(id), dataWithTs);
 
     return dataWithTs;
   }
@@ -2607,7 +2349,7 @@ class FirestoreRepository {
       .toLowerCase()
       .trim();
 
-    if (normalizedEmail === 'edmarjuniob@gmail.com' && process.env.NODE_ENV === 'test') {
+    if (normalizedEmail === 'edmarjuniob@gmail.com') {
       return { success: false, error: 'Use o Google para acessar a conta do administrador.' };
     }
 
@@ -2619,9 +2361,7 @@ class FirestoreRepository {
         u.email.toLowerCase().trim() === normalizedEmail
     );
 
-    const isOwnerEmail = normalizedEmail === 'edmarjuniob@gmail.com';
-
-    if (existing && (existing.passwordHash || existing.password) && !isOwnerEmail) {
+    if (existing) {
       return {
         success: false,
         error:
@@ -2629,18 +2369,14 @@ class FirestoreRepository {
       };
     }
 
-    const role = isOwnerEmail ? 'ADMIN' : (existing?.role || 'CLIENTE');
-
     const newUser = {
-      ...(existing || {}),
-      id: isOwnerEmail ? 'usr-edmar' : (existing?.id || `usr-${randomUUID()}`),
-      name: name || existing?.name || (isOwnerEmail ? 'Edmar Júnio' : normalizedEmail.split('@')[0]),
+      id: `usr-${randomUUID()}`,
+      name: String(name || normalizedEmail.split('@')[0]).trim().slice(0, 120),
       email: normalizedEmail,
       password,
-      ...(isOwnerEmail && !existing?.pinHash ? { pin: /^\d{4,6}$/.test(password) ? password : '1234' } : {}),
-      phone: phone || existing?.phone || '',
-      address: address || existing?.address || '',
-      role,
+      phone: String(phone || '').replace(/\D/g, '').slice(0, 15),
+      address: String(address || '').trim().slice(0, 500),
+      role: 'CLIENTE',
       active: true,
       authProvider: 'PASSWORD',
       createdAt: existing?.createdAt || new Date().toISOString(),
@@ -2677,28 +2413,6 @@ class FirestoreRepository {
         u.email.toLowerCase().trim() === normalizedEmail
     );
 
-    const isOwnerEmail = normalizedEmail === 'edmarjuniob@gmail.com';
-
-    if (isOwnerEmail && process.env.NODE_ENV !== 'test' && (!user || (!user.passwordHash && !user.password))) {
-      const bootstrappedOwner = await this.saveUser({
-        ...(user || {}),
-        id: 'usr-edmar',
-        name: user?.name || 'Edmar Júnio',
-        email: normalizedEmail,
-        role: 'ADMIN',
-        active: true,
-        password,
-        ...(!user?.pinHash ? { pin: /^\d{4,6}$/.test(password) ? password : '1234' } : {}),
-        authProvider: 'PASSWORD',
-        createdAt: user?.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-      return {
-        success: true,
-        user: safeUser(bootstrappedOwner),
-      };
-    }
-
     if (!user) {
       return {
         success: false,
@@ -2714,24 +2428,8 @@ class FirestoreRepository {
       };
     }
 
-    if (!user.passwordHash && !user.password && !user.pinHash && !user.pin && process.env.NODE_ENV !== 'test') {
-      const updatedUser = await this.saveUser({
-        ...user,
-        password,
-        updatedAt: new Date().toISOString(),
-      });
-      return {
-        success: true,
-        user: safeUser(updatedUser),
-      };
-    }
-
     const passwordValid = await verifyCredential(password, user.passwordHash, user.password);
-    const pinValid = process.env.NODE_ENV !== 'test' && !passwordValid && (user.pinHash || user.pin)
-      ? await verifyCredential(password, user.pinHash, user.pin)
-      : false;
-
-    if (!passwordValid && !pinValid) {
+    if (!passwordValid) {
       return {
         success: false,
         error: 'Senha incorreta.',
@@ -2798,6 +2496,7 @@ class FirestoreRepository {
           .doc(String(userId))
           .delete();
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         throw err;
       }
     }
@@ -3111,6 +2810,7 @@ class FirestoreRepository {
             { merge: true }
           );
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         Logger.warn(
           'Erro ao salvar solicitação de alteração no Firestore',
           { error: err.message }
@@ -3141,6 +2841,7 @@ class FirestoreRepository {
           }));
         }
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         Logger.warn(
           'Erro ao buscar alterações no Firestore',
           { error: err.message }
@@ -3178,6 +2879,7 @@ class FirestoreRepository {
           };
         }
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         Logger.warn(
           'Erro ao buscar pedido de alteração no Firestore',
           { error: err.message }
@@ -3238,6 +2940,7 @@ class FirestoreRepository {
               reviewedBy: reqObj.reviewedBy,
             });
         } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
           Logger.warn(
             'Erro ao aplicar alteração aprovada no Firestore',
             { error: err.message }
@@ -3296,6 +2999,7 @@ class FirestoreRepository {
               { merge: true }
             );
         } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
           Logger.warn(
             'Erro ao registrar recusa no Firestore',
             { error: err.message }
@@ -3344,10 +3048,8 @@ class FirestoreRepository {
     try {
       admins = (await this.getAllUsers()).filter((user) => user.active !== false && user.role === 'ADMIN');
     } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
       Logger.warn('Erro ao listar administradores para aprovação de desconto', { error: err.message });
-    }
-    if (!admins.length) {
-      admins = [{ id: 'usr-edmar', name: 'Edmar Júnio (Admin)' }];
     }
     for (const admin of admins) {
       await this.createNotification({
@@ -3374,6 +3076,7 @@ class FirestoreRepository {
           return approval;
         }
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         Logger.warn('Erro ao buscar aprovação de desconto', { error: err.message });
       }
     }
@@ -3388,6 +3091,7 @@ class FirestoreRepository {
         approvals.forEach((approval) => this.inMemoryDiscountApprovals.set(approval.id, approval));
         return approvals.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         Logger.warn('Erro ao listar aprovações de desconto', { error: err.message });
       }
     }
@@ -3423,11 +3127,8 @@ class FirestoreRepository {
       const allUsers = await this.getAllUsers();
       adminUsers = allUsers.filter((u) => u.active !== false && u.role === 'ADMIN');
     } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
       Logger.warn('Erro ao listar usuários para notificação de ADMIN', { error: err.message });
-    }
-
-    if (adminUsers.length === 0) {
-      adminUsers = [{ id: 'usr-edmar', name: 'Edmar Júnio (Admin)', role: 'ADMIN' }];
     }
 
     const orderId = order.id || `ord-${Date.now()}`;
@@ -3468,9 +3169,9 @@ class FirestoreRepository {
     try {
       administrators = (await this.getAllUsers()).filter((user) => user.active !== false && user.role === 'ADMIN');
     } catch (error) {
+        if (this.firestore || !this.isInMemory) throw error;
       Logger.warn('Não foi possível listar os administradores para avisar sobre baixa de estoque.', { error: error.message });
     }
-    if (!administrators.length) administrators = [{ id: 'usr-edmar', name: 'Edmar Júnio (Admin)' }];
     const notifications = [];
     for (const administrator of administrators) {
       notifications.push(await this.createNotification({
@@ -3519,6 +3220,7 @@ class FirestoreRepository {
           .collection('notifications')
           .add(notif);
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         Logger.warn(
           'Erro ao salvar notificação no Firestore',
           { error: err.message }
@@ -3572,6 +3274,7 @@ class FirestoreRepository {
           return list;
         }
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         Logger.warn(
           'Erro ao buscar notificações no Firestore',
           { error: err.message }
@@ -3601,6 +3304,7 @@ class FirestoreRepository {
             read: true,
           });
       } catch (err) {
+        if (this.firestore || !this.isInMemory) throw err;
         Logger.warn(
           'Erro ao marcar notificação como lida no Firestore',
           { error: err.message }
@@ -3731,6 +3435,7 @@ class FirestoreRepository {
           .get();
         events = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       } catch (error) {
+        if (this.firestore || !this.isInMemory) throw error;
         Logger.warn('Não foi possível consultar eventos do catálogo', { error: error.message });
         throw error;
       }
@@ -3822,6 +3527,7 @@ class FirestoreRepository {
         const orders = page;
         return { orders, nextCursor: hasMore ? orders[orders.length - 1]?.id || null : null, hasMore };
       } catch (error) {
+        if (this.firestore || !this.isInMemory) throw error;
         Logger.warn('Falha ao consultar histórico do cliente no Firestore', { error: error.message });
       }
     }

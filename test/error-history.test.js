@@ -7,7 +7,7 @@ const path = require('node:path');
 const { ErrorHistoryService } = require('../src/services/error-history.service');
 const Logger = require('../src/shared/logger');
 const { createApp } = require('../src/http/app');
-const { FirestoreRepository } = require('../src/database/firestore.repository');
+const { FirestoreRepository } = require('./helpers/repository-fixture');
 
 test('histórico não guarda segredos, deduplica falhas repetidas e pagina sem perder registros do mesmo instante', async () => {
   const history = new ErrorHistoryService({ inMemory: true });

@@ -895,5 +895,92 @@ tbody tr:hover {
 .table-scroll .action-btn { min-height:34px; padding:7px 11px !important; }
 @media(max-width:700px) { .admin-section-heading .stock-toolbar-actions { width:100%; } #tab-cashier > div:first-child > div:last-child { width:100%; } #tab-cashier > div:first-child .action-btn { flex:1 1 140px; } .action-btn { min-height:44px; } }
 
-body .action-btn, body .header-btn, body .btn-action, body .nav-btn { border-radius:999px !important; }
-body :is(.action-btn,.header-btn,.btn-action):hover:not(:disabled) { transform:translateY(-2px); box-shadow:0 7px 16px rgb(20 44 28 / 18%); }
+body .action-btn, body .header-btn, body .btn-action, body .nav-btn { border-radius:12px !important; }
+body :is(.action-btn,.header-btn,.btn-action):hover:not(:disabled) { transform:translateY(-1px); box-shadow:0 4px 12px rgb(20 44 28 / 14%); }
+
+/* Product spreadsheet import modal */
+.product-editor-dialog.product-import-dialog {
+  width: min(760px, calc(100vw - 32px));
+  max-width: none;
+  max-height: min(90dvh, 860px);
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  color: #173322;
+  background: #fff;
+  border: 1px solid #d9e7dd;
+  border-radius: 18px;
+  box-shadow: 0 24px 80px rgb(16 42 26 / 25%);
+}
+.product-editor-dialog.product-import-dialog::backdrop {
+  background: rgb(17 31 22 / 48%);
+  backdrop-filter: blur(3px);
+}
+.product-import-dialog__surface { display:flex; flex-direction:column; max-height:inherit; min-height:0; }
+.product-import-dialog__header {
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:20px;
+  padding:22px 24px 18px;
+  background:linear-gradient(135deg,#f4faf5,#fff 74%);
+  border-bottom:1px solid #e5eee7;
+}
+.product-import-dialog__heading { min-width:0; }
+.product-import-dialog__title { margin:0; color:#173322; font-size:21px; font-weight:800; line-height:1.25; }
+.product-import-dialog__description { margin:7px 0 0; color:#607267; font-size:13px; line-height:1.55; }
+.product-import-dialog__close {
+  display:inline-flex;
+  flex:0 0 40px;
+  align-items:center;
+  justify-content:center;
+  width:40px;
+  height:40px;
+  padding:0;
+  color:#40594a;
+  background:#fff;
+  border:1px solid #dce8df;
+  border-radius:12px;
+  font-size:22px;
+  line-height:1;
+  cursor:pointer;
+}
+.product-import-dialog__close:hover { color:#146c3b; background:#f2faf4; border-color:#9ccca9; }
+.product-import-dialog__content { display:grid; gap:16px; min-height:0; padding:20px 24px 22px; overflow:auto; }
+.product-import-dialog__template { justify-self:start; }
+.product-import-dialog__file-card { display:grid; gap:8px; padding:16px; background:#f7fbf8; border:1px dashed #a9cbb2; border-radius:14px; transition:border-color .15s ease,background .15s ease; }
+.product-import-dialog__file-card:focus-within,.product-import-dialog__file-card.has-file { background:#f0f8f2; border-color:#25934d; }
+.product-import-dialog__file-label { color:#183b27; font-size:14px; font-weight:750; }
+.product-import-dialog__file-help { color:#65766b; font-size:12px; line-height:1.5; }
+.product-import-dialog__file-input { display:block; width:100%; min-width:0; color:#33483a; font:inherit; font-size:13px; }
+.product-import-dialog__file-input::file-selector-button { min-height:38px; margin-right:10px; padding:8px 13px; color:#176d3a; background:#fff; border:1px solid #9fc9aa; border-radius:10px; font:inherit; font-weight:700; cursor:pointer; }
+.product-import-dialog__file-input::file-selector-button:hover { background:#edf8f0; }
+.product-import-dialog__file-name { min-height:18px; color:#627468; font-size:12px; overflow-wrap:anywhere; }
+.product-import-dialog__file-actions { display:flex; justify-content:flex-end; }
+.product-import-dialog__status { margin:0; padding:0; color:#52685a; font-size:13px; line-height:1.5; }
+.product-import-dialog__status:empty { display:none; }
+.product-import-dialog__status[data-state="error"] { padding:11px 13px; color:#8a2824; background:#fff4f2; border:1px solid #f2c9c5; border-radius:11px; }
+.product-import-dialog__status[data-state="success"] { padding:11px 13px; color:#17653a; background:#eff9f1; border:1px solid #b9dfc1; border-radius:11px; }
+.product-import-dialog__preview { justify-self:end; }
+.product-import-dialog__preview-panel { display:grid; gap:12px; padding-top:16px; border-top:1px solid #e4ece6; }
+.product-import-dialog__preview-panel[hidden] { display:none; }
+.product-import-dialog__preview-title { margin:0; color:#173322; font-size:15px; font-weight:800; }
+.product-import-dialog__errors { margin:0; padding:12px 14px 12px 32px; color:#842d28; background:#fff5f3; border:1px solid #f0d0cc; border-radius:12px; font-size:13px; line-height:1.55; }
+.product-import-dialog__table-wrap { max-height:320px; overflow:auto; border:1px solid #e0e9e2; border-radius:12px; }
+.product-import-dialog__table { width:100%; min-width:600px; border-collapse:separate; border-spacing:0; font-size:13px; }
+.product-import-dialog__table th,.product-import-dialog__table td { padding:11px 12px; text-align:left; vertical-align:top; border-bottom:1px solid #edf1ee; }
+.product-import-dialog__table th { position:sticky; top:0; z-index:1; color:#365343; background:#f3f8f4; font-size:12px; font-weight:800; }
+.product-import-dialog__table tbody tr:last-child td { border-bottom:0; }
+.product-import-dialog__table tbody tr:nth-child(even) { background:#fafcfa; }
+.product-import-dialog__actions { display:flex; justify-content:flex-end; gap:10px; padding:16px 24px; background:#fbfdfb; border-top:1px solid #e5eee7; }
+.product-import-dialog__actions button:disabled,.product-import-dialog__file-actions button:disabled { opacity:.55; cursor:not-allowed; transform:none; }
+@media(max-width:600px) {
+  .product-editor-dialog.product-import-dialog { width:calc(100vw - 20px); max-height:calc(100dvh - 20px); border-radius:15px; }
+  .product-import-dialog__header { gap:12px; padding:18px 17px 15px; }
+  .product-import-dialog__title { font-size:19px; }
+  .product-import-dialog__content { gap:14px; padding:16px 17px 18px; }
+  .product-import-dialog__file-card { padding:13px; }
+  .product-import-dialog__actions { padding:13px 17px; }
+  .product-import-dialog__actions > * { flex:1; }
+  .product-import-dialog__file-actions > * { width:100%; }
+}

@@ -19,10 +19,10 @@ export function buildSearchSuggestions(products, query, categories = [], synonym
     const aliases = [...(product.searchAliases || []), ...(product.tags || [])];
     const identity = normalize([product.name, ...aliases].join(' '));
     const related = synonyms.filter(group => Array.isArray(group) && group.some(alias => identity.includes(normalize(alias)))).flat();
-    add(product.name, 'Produto', [...aliases, ...related]);
-    add(product.categoryName || product.category, 'Categoria');
+    add(product.name, 'product'.tr, [...aliases, ...related]);
+    add(product.categoryName || product.category, 'product_entry_category'.tr);
     add(product.subcategoryName || product.subcategory, 'Subcategoria');
-    for (const id of product.categories || []) add(categories.find(category => category.id === id && category.isActive !== false)?.name, 'Categoria');
+    for (const id of product.categories || []) add(categories.find(category => category.id === id && category.isActive !== false)?.name, 'product_entry_category'.tr);
   }
   return [...entries.values()].sort((a, b) => a.score - b.score || (a.kind === 'Produto' ? 0 : 1) - (b.kind === 'Produto' ? 0 : 1) || a.label.localeCompare(b.label, 'pt-BR')).slice(0, 8);
 }

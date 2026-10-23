@@ -1,7 +1,7 @@
 process.env.NODE_ENV = 'test';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { FirestoreRepository } = require('../src/database/firestore.repository');
+const { FirestoreRepository } = require('./helpers/repository-fixture');
 
 // Double transacional: publica escritas só no commit e proíbe leitura após escrita.
 // Não substitui a homologação com o emulador/Firestore real.

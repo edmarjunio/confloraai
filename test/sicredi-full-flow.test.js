@@ -5,15 +5,18 @@ process.env.OWNER_WHATSAPP_NUMBER = '5564999994321';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
-const { FirestoreRepository } = require('../src/database/firestore.repository');
+const { FirestoreRepository } = require('./helpers/repository-fixture');
 const { SicrediPixClient } = require('../src/integrations/sicredi-pix.client');
 const { createApp } = require('../src/http/app');
 
 function createTestEnvironment() {
-  const firestoreRepo = new FirestoreRepository({ isInMemory: true });
+  const db = require('./helpers/metered-firestore').meteredFirestore();
+  const firestoreRepo = new FirestoreRepository({ firestoreInstance: db });
+  db.data.set('store_settings/storefront', firestoreRepo.storefrontSettings);
+  for (const user of [{id:'usr-edmar',role:'ADMIN',pin:'1234'}, {id:'usr-caixa1',role:'CAIXA',pin:'0000'}]) db.data.set('users/' + user.id, {...user,active:true});
 
   // Cadastra produto real no banco (Firestore em memória) com preço R$ 45,00 e estoque 10
-  firestoreRepo.inMemoryProducts.set('muda-ipe', {
+  db.data.set('products/muda-ipe', {
     id: 'muda-ipe',
     name: 'Muda de Ipê Amarelo',
     price: 45.0,
@@ -170,7 +173,7 @@ test('Fluxo Completo PIX Sicredi: 1) QR Code com valor travado no backend -> 2) 
   assert.equal(cobCall.body.valor.modalidadeAlteracao, 0, 'modalidadeAlteracao deve ser 0 (impede o pagador de alterar o valor)');
 
   // Verifica estado no Firebase (Firestore) antes do Webhook: estoque reservado, não baixado em definitivo
-  const productBeforeWebhook = firestoreRepo.inMemoryProducts.get('muda-ipe');
+  const productBeforeWebhook = await firestoreRepo.getProductById('muda-ipe');
   assert.equal(productBeforeWebhook.stockQuantity, 10, 'Estoque físico permanece 10 enquanto aguarda pagamento');
   assert.equal(productBeforeWebhook.reservedQuantity, 2, '2 unidades devem estar reservadas no Firestore');
 
@@ -229,7 +232,7 @@ test('Fluxo Completo PIX Sicredi: 1) QR Code com valor travado no backend -> 2) 
   assert.equal(eventDoc?.status, 'DONE', 'Evento do Webhook deve ser marcado como DONE na coleção pdv_pix_events');
 
   // Verifica baixa definitiva do estoque e liberação da reserva no Firestore
-  const productAfterWebhook = firestoreRepo.inMemoryProducts.get('muda-ipe');
+  const productAfterWebhook = await firestoreRepo.getProductById('muda-ipe');
   assert.equal(productAfterWebhook.stockQuantity, 8, 'Estoque físico deve cair de 10 para 8 após confirmação do PIX');
   assert.equal(productAfterWebhook.reservedQuantity, 0, 'Reserva de estoque deve ser zerada após baixa definitiva');
 
@@ -240,7 +243,7 @@ test('Fluxo Completo PIX Sicredi: 1) QR Code com valor travado no backend -> 2) 
     body: JSON.stringify({ pix: [{ endToEndId, txid, valor: '90.00' }] }),
   });
   assert.equal(duplicateWebhook.status, 200);
-  assert.equal(firestoreRepo.inMemoryProducts.get('muda-ipe').stockQuantity, 8, 'Reenvio de webhook não pode baixar estoque duas vezes');
+  assert.equal((await firestoreRepo.getProductById('muda-ipe')).stockQuantity, 8, 'Reenvio de webhook não pode baixar estoque duas vezes');
 
   // Verifica envio de notificações WhatsApp (QR Code na criação + Comprovante de PIX aprovado após Webhook)
   assert.ok(whatsappMessages.some((m) => m.type === 'image' && m.caption.includes(createdOrder.pixData.pixCopiaECola)), 'Deve ter enviado a imagem do QR Code PIX');
@@ -249,7 +252,7 @@ test('Fluxo Completo PIX Sicredi: 1) QR Code com valor travado no backend -> 2) 
 
 test('Endpoint de Simulação Admin (POST /api/admin/sicredi-pix/simulate) valida as 3 etapas em sandbox isolado', async (t) => {
   const { firestoreRepo, app } = createTestEnvironment();
-  firestoreRepo.inMemoryUsers.set('admin-sim', {
+  await firestoreRepo.saveUser({
     id: 'admin-sim',
     name: 'Admin Conflora',
     email: 'admin@conflora.test',
@@ -302,157 +305,24 @@ test('Endpoint de Simulação Admin (POST /api/admin/sicredi-pix/simulate) valid
   assert.equal(report.steps.step3_firebaseUpdate.stockAfterWebhook.stockQuantity, 8);
 });
 
-test('Painel /admin Monitor PIX Sicredi: lista pedidos pendente/confirmado/expirado e permite simular Webhook sem tokens', async (t) => {
+test('Sicredi simulator requires administrator and never writes business data', async t => {
   const { firestoreRepo, app } = createTestEnvironment();
-  firestoreRepo.inMemoryUsers.set('admin-mon', {
-    id: 'admin-mon',
-    name: 'Admin Monitor',
-    email: 'admin-mon@conflora.test',
-    role: 'ADMIN',
-    pin: '1234',
-    active: true,
-  });
-
-  const server = app.listen(0);
+  const server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
   t.after(() => server.close());
-  const baseUrl = `http://127.0.0.1:${server.address().port}`;
-
-  // Verifica que o HTML do /admin inclui a seção do Monitor PIX, contador visual, filtro de data e botões de exportação
-  const adminHtmlRes = await fetch(`${baseUrl}/admin`);
-  assert.equal(adminHtmlRes.status, 200);
-  const adminHtml = await adminHtmlRes.text();
-  assert.ok(adminHtml.includes('sicrediPixMonitorSection'), 'HTML do /admin deve conter o painel sicrediPixMonitorSection');
-  assert.ok(adminHtml.includes('Monitor de Pagamentos PIX (Sicredi)'), 'HTML do /admin deve exibir o título do Monitor PIX Sicredi');
-  assert.ok(adminHtml.includes('pixPendingVsConfirmedWidget'), 'HTML do /admin deve conter o contador visual de pendentes vs confirmados');
-  assert.ok(adminHtml.includes('btnExportPixCsv'), 'HTML do /admin deve conter o botão de exportação CSV');
-  assert.ok(adminHtml.includes('btnExportPixPdf'), 'HTML do /admin deve conter o botão de exportação PDF');
-  assert.ok(adminHtml.includes('pixMonitorDateFrom'), 'HTML do /admin deve conter o filtro de data inicial');
-
-  // Autentica como ADMIN
-  const loginRes = await fetch(`${baseUrl}/api/admin/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userId: 'admin-mon', pin: '1234' }),
-  });
-  assert.equal(loginRes.status, 200);
-  const cookie = loginRes.headers.get('set-cookie').split(';')[0];
-
-  // 1. Cria 2 pedidos PIX de teste pelo simulador do painel /admin (sem precisar de tokens reais)
-  const order1Res = await fetch(`${baseUrl}/api/admin/sicredi-pix/simulate-order`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', cookie },
-    body: JSON.stringify({ customerName: 'Cliente PIX 1', unitPrice: 75, quantity: 2 }),
-  });
-  assert.equal(order1Res.status, 201);
-  const order1Data = await order1Res.json();
-  assert.equal(order1Data.order.pixStatus, 'pendente');
-  assert.equal(order1Data.order.pixAmount, 150);
-  assert.equal(order1Data.cobRequest.payload.valor.modalidadeAlteracao, 0);
-
-  const order2Res = await fetch(`${baseUrl}/api/admin/sicredi-pix/simulate-order`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', cookie },
-    body: JSON.stringify({ customerName: 'Cliente PIX 2', unitPrice: 50, quantity: 1 }),
-  });
-  assert.equal(order2Res.status, 201);
-  const order2Data = await order2Res.json();
-  assert.equal(order2Data.order.pixStatus, 'pendente');
-
-  // 2. Consulta o monitor PIX: deve exibir 2 pedidos com status 'pendente'
-  const listBeforeRes = await fetch(`${baseUrl}/api/admin/sicredi-pix/orders`, {
-    headers: { cookie },
-  });
-  assert.equal(listBeforeRes.status, 200);
-  const listBefore = await listBeforeRes.json();
-  assert.equal(listBefore.summary.pendente, 2);
-  assert.equal(listBefore.summary.confirmado, 0);
-  assert.equal(listBefore.summary.expirado, 0);
-  assert.equal(listBefore.summary.pendentesVsConfirmados.pendente, 2);
-  assert.equal(listBefore.summary.pendentesVsConfirmados.confirmado, 0);
-  assert.equal(listBefore.summary.pendentesVsConfirmados.pendentePercent, 100);
-
-  // 3. Simula a chegada do Webhook de pagamento aprovado para o Pedido 1
-  const whConfirmRes = await fetch(`${baseUrl}/api/admin/sicredi-pix/simulate-webhook`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', cookie },
-    body: JSON.stringify({ orderId: order1Data.order.id, action: 'confirm' }),
-  });
-  assert.equal(whConfirmRes.status, 200);
-  const whConfirm = await whConfirmRes.json();
-  assert.equal(whConfirm.before.pixStatus, 'pendente');
-  assert.equal(whConfirm.after.pixStatus, 'confirmado');
-  assert.equal(whConfirm.after.verifiedVia, 'SICREDI_PIX_WEBHOOK');
-  assert.ok(Array.isArray(whConfirm.webhookPayload.pix));
-
-  // 4. Simula a expiração de prazo (TTL) para o Pedido 2
-  const whExpireRes = await fetch(`${baseUrl}/api/admin/sicredi-pix/simulate-webhook`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', cookie },
-    body: JSON.stringify({ orderId: order2Data.order.id, action: 'expire' }),
-  });
-  assert.equal(whExpireRes.status, 200);
-  const whExpire = await whExpireRes.json();
-  assert.equal(whExpire.before.pixStatus, 'pendente');
-  assert.equal(whExpire.after.pixStatus, 'expirado');
-
-  // 5. Cria um 3º pedido para termos 1 pendente, 1 confirmado e 1 expirado no painel /admin
-  await fetch(`${baseUrl}/api/admin/sicredi-pix/simulate-order`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', cookie },
-    body: JSON.stringify({ customerName: 'Cliente PIX 3', unitPrice: 40, quantity: 1 }),
-  });
-
-  const listAfterRes = await fetch(`${baseUrl}/api/admin/sicredi-pix/orders`, {
-    headers: { cookie },
-  });
-  const listAfter = await listAfterRes.json();
-  assert.equal(listAfter.summary.total, 3);
-  assert.equal(listAfter.summary.pendente, 1);
-  assert.equal(listAfter.summary.confirmado, 1);
-  assert.equal(listAfter.summary.expirado, 1);
-
-  // Verifica o contador visual Pendentes vs Confirmados via Firestore
-  assert.equal(listAfter.summary.pendentesVsConfirmados.pendente, 1);
-  assert.equal(listAfter.summary.pendentesVsConfirmados.confirmado, 1);
-  assert.equal(listAfter.summary.pendentesVsConfirmados.activeTotal, 2);
-  assert.equal(listAfter.summary.pendentesVsConfirmados.pendentePercent, 50);
-  assert.equal(listAfter.summary.pendentesVsConfirmados.confirmadoPercent, 50);
-  assert.equal(listAfter.summary.pendentesVsConfirmados.pendenteValor, 40);
-  assert.equal(listAfter.summary.pendentesVsConfirmados.confirmadoValor, 150);
-
-  // 6. Testa o filtro por data (?date=YYYY-MM-DD)
-  const todayIso = listAfter.orders[0].businessDate;
-  const filteredTodayRes = await fetch(`${baseUrl}/api/admin/sicredi-pix/orders?date=${todayIso}`, {
-    headers: { cookie },
-  });
-  const filteredToday = await filteredTodayRes.json();
-  assert.equal(filteredToday.summary.total, 3, 'Filtro da data de hoje deve retornar os 3 pedidos');
-
-  const filteredOtherDateRes = await fetch(`${baseUrl}/api/admin/sicredi-pix/orders?date=2099-12-31`, {
-    headers: { cookie },
-  });
-  const filteredOtherDate = await filteredOtherDateRes.json();
-  assert.equal(filteredOtherDate.summary.total, 0, 'Filtro de data futura sem pedidos deve retornar 0');
-
-  // 7. Testa a exportação de Conciliação Bancária em CSV e PDF
-  const csvRes = await fetch(`${baseUrl}/api/admin/sicredi-pix/export.csv?date=${todayIso}`, {
-    headers: { cookie },
-  });
-  assert.equal(csvRes.status, 200);
-  assert.match(csvRes.headers.get('content-type') || '', /text\/csv/i);
-  const csvText = await csvRes.text();
-  assert.ok(csvText.includes('Status_PIX;Status_Sistema;Modo_PIX;Valor_PIX_BRL;Modalidade_Alteracao;TXID_Sicredi;EndToEndId_Bacen'), 'CSV deve conter cabeçalho de conciliação bancária');
-  assert.ok(csvText.includes('Cliente PIX 1'), 'CSV deve listar o Cliente PIX 1');
-  assert.ok(csvText.includes('CONFIRMADO'), 'CSV deve incluir status CONFIRMADO');
-
-  const pdfRes = await fetch(`${baseUrl}/api/admin/sicredi-pix/export.pdf?date=${todayIso}`, {
-    headers: { cookie },
-  });
-  assert.equal(pdfRes.status, 200);
-  assert.match(pdfRes.headers.get('content-type') || '', /application\/pdf/i);
-  const pdfBuffer = Buffer.from(await pdfRes.arrayBuffer());
-  assert.equal(pdfBuffer.subarray(0, 4).toString('ascii'), '%PDF', 'Arquivo exportado deve ser um PDF válido');
+  const base = 'http://127.0.0.1:' + server.address().port;
+  const post = (path, data, cookie) => fetch(base + path, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(cookie ? { cookie } : {}) }, body: JSON.stringify(data) });
+  assert.equal((await post('/api/admin/sicredi-pix/simulate', {})).status, 401);
+  const cashier = await post('/api/admin/auth/login', { userId: 'usr-caixa1', pin: '0000' });
+  assert.equal((await post('/api/admin/sicredi-pix/simulate', {}, cashier.headers.get('set-cookie').split(';')[0])).status, 403);
+  const admin = await post('/api/admin/auth/login', { userId: 'usr-edmar', pin: '1234' });
+  const cookie = admin.headers.get('set-cookie').split(';')[0];
+  const before = JSON.stringify(await firestoreRepo.getAllProducts());
+  const result = await post('/api/admin/sicredi-pix/simulate', { unitPrice: 19.99, quantity: 3 }, cookie);
+  assert.equal(result.status, 200);
+  const report = await result.json();
+  assert.equal(report.isolatedSandbox, true);
+  assert.equal(report.steps.step3_firebaseUpdate.duplicateIsIdempotent, true);
+  assert.equal((await firestoreRepo.getAllOrders()).length, 0);
+  assert.equal(JSON.stringify(await firestoreRepo.getAllProducts()), before);
+  assert.equal((await post('/api/admin/sicredi-pix/simulate', { unitPrice: -1 }, cookie)).status, 400);
 });
-
-
-

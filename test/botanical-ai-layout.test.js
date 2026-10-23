@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { BotanicalConsultantService } = require('../src/ai/botanical-consultant');
 const { createApp } = require('../src/http/app');
-const { FirestoreRepository } = require('../src/database/firestore.repository');
+const { FirestoreRepository } = require('./helpers/repository-fixture');
 
 
 

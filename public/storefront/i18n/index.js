@@ -2,6 +2,7 @@ import { pt } from './pt.js';
 import { en } from './en.js';
 import { es } from './es.js';
 import { fr } from './fr.js';
+import { aliases } from './aliases.js';
 
 export const TRANSLATIONS = {
   pt,
@@ -17,19 +18,14 @@ export const SUPPORTED_LANGUAGES = [
   { code: 'fr', label: 'Français', flag: '🇫🇷' },
 ];
 
-let activeLanguage = 'pt';
-const listeners = new Set();
+const shared = globalThis.ConfloraLanguageState ||= { language: 'pt', listeners: new Set() };
+const listeners = shared.listeners;
 
 // Load stored language preference or browser preference
 try {
   const saved = localStorage.getItem('conflora_lang');
   if (saved && ['pt', 'en', 'es', 'fr'].includes(saved)) {
-    activeLanguage = saved;
-  } else if (typeof navigator !== 'undefined' && navigator.language) {
-    const lang = navigator.language.slice(0, 2).toLowerCase();
-    if (['pt', 'en', 'es', 'fr'].includes(lang)) {
-      activeLanguage = lang;
-    }
+    shared.language = saved;
   }
 } catch {
   // Ignore storage errors
@@ -391,7 +387,7 @@ function translateDynamicTerm(rawText, lang) {
  * Get current active language code ('pt' | 'en' | 'es' | 'fr')
  */
 export function getLanguage() {
-  return activeLanguage;
+  return shared.language;
 }
 
 /**
@@ -399,7 +395,7 @@ export function getLanguage() {
  */
 export function setLanguage(lang) {
   if (['pt', 'en', 'es', 'fr'].includes(lang)) {
-    activeLanguage = lang;
+    shared.language = lang;
     try {
       localStorage.setItem('conflora_lang', lang);
       document.documentElement.lang = lang === 'pt' ? 'pt-BR' : lang;
@@ -437,16 +433,17 @@ export function onLanguageChange(fn) {
  */
 export function tr(key, params = {}) {
   if (key === undefined || key === null) return '';
-  const strKey = String(key);
-  const lang = activeLanguage;
+  const original = String(key);
+  const strKey = aliases[original] || original;
+  const lang = shared.language;
   const dict = TRANSLATIONS[lang] || TRANSLATIONS.pt;
 
   let text = dict ? dict[strKey] : undefined;
 
   // Se não encontrou no dicionário direto e não é português, tenta termo botânico / categoria / emoji
   if (text === undefined && lang !== 'pt') {
-    const dynamic = translateDynamicTerm(strKey, lang);
-    if (dynamic !== strKey) {
+    const dynamic = translateDynamicTerm(original, lang);
+    if (dynamic !== original) {
       text = dynamic;
     }
   }
@@ -458,7 +455,7 @@ export function tr(key, params = {}) {
 
   // If still missing, return the key itself
   if (text === undefined) {
-    text = strKey;
+    text = original;
   }
 
   // Interpolate parameters {param}
@@ -517,7 +514,8 @@ export function applyHtmlTranslations(root = document) {
   root.querySelectorAll('[data-i18n]').forEach((el) => {
     const key = el.getAttribute('data-i18n');
     if (key) {
-      el.textContent = tr(key);
+      const translated = tr(key);
+      if (el.textContent !== translated) el.textContent = translated;
     }
   });
 
@@ -525,7 +523,8 @@ export function applyHtmlTranslations(root = document) {
   root.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
     const key = el.getAttribute('data-i18n-placeholder');
     if (key) {
-      el.placeholder = tr(key);
+      const translated = tr(key);
+      if (el.placeholder !== translated) el.placeholder = translated;
     }
   });
 
@@ -533,7 +532,8 @@ export function applyHtmlTranslations(root = document) {
   root.querySelectorAll('[data-i18n-title]').forEach((el) => {
     const key = el.getAttribute('data-i18n-title');
     if (key) {
-      el.title = tr(key);
+      const translated = tr(key);
+      if (el.title !== translated) el.title = translated;
     }
   });
 
@@ -541,7 +541,8 @@ export function applyHtmlTranslations(root = document) {
   root.querySelectorAll('[data-i18n-aria]').forEach((el) => {
     const key = el.getAttribute('data-i18n-aria');
     if (key) {
-      el.setAttribute('aria-label', tr(key));
+      const translated = tr(key);
+      if (el.getAttribute('aria-label') !== translated) el.setAttribute('aria-label', translated);
     }
   });
 }

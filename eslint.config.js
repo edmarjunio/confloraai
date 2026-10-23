@@ -1,5 +1,5 @@
 module.exports = [
-  { ignores: ["public/pdv/vendor/**", "public/pdv/dist/**", "public/storefront/dist/**", "public/storefront/sw-built.js", "src/dataconnect-admin-generated/**", "functions/lib/**", "test-results/**", "playwright-report/**"] },
+  { ignores: ["public/pdv/vendor/**", "public/pdv/dist/**", "public/storefront/dist/**", "public/storefront/sw-built.js", "public/storefront/i18n-runtime.js", "src/dataconnect-admin-generated/**", "functions/lib/**", "test-results/**", "playwright-report/**"] },
   {
     files: ["**/*.js"],
     ignores: ["node_modules/**"],

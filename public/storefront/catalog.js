@@ -59,7 +59,7 @@ export function createCatalog(state, add, navigate) {
     const initialTarget = nextValidWeight(minimum, increment);
     const initialQuantity = initialTarget <= maxStock ? initialTarget : highestValidWeight(maxStock, minimum, increment);
     const dialog = element("dialog", { class: "product-weight-dialog" });
-    const title = element("h2", { text: `Quantos quilos de ${product.name}?` });
+    const title = element("h2", { text: `${'how_many_kilos_of'.tr} ${product.name}?` });
     const price = element("p", { class: "product-weight-price", text: `${money(product.price.amountMinor)} / kg` });
     const input = element("input", {
       type: "text",
@@ -68,21 +68,21 @@ export function createCatalog(state, add, navigate) {
       min: String(minimum),
       step: String(increment),
       value: String(Number(initialQuantity.toFixed(3))),
-      "aria-label": `Quantidade em quilos de ${product.name}`,
+      "aria-label": `${'quantity_in_kilos_of'.tr} ${product.name}`,
       required: "",
     });
     input.addEventListener("input", () => { input.value = input.value.replace(/[^\d.,]/g, "").replace(/(.*[.,].*)[.,]/g, "$1"); });
     if (Number.isFinite(maxStock)) input.max = String(maxStock);
-    const total = element("strong", { class: "product-weight-total" });
-    const cancel = element("button", { type: "button", class: "quiet", text: "Cancelar".tr, onclick: () => dialog.close() });
-    const confirm = element("button", { type: "button", class: "cf-button", text: "Adicionar ao carrinho".tr });
+    const total = element("strong", { class: 'product_weight_total'.tr });
+    const cancel = element("button", { type: "button", class: "quiet", text: 'product_entry_cancel'.tr, onclick: () => dialog.close() });
+    const confirm = element("button", { type: "button", class: "cf-button", text: 'add_to_cart'.tr });
     const updateTotal = () => {
       const quantity = Number(String(input.value).replace(",", "."));
       const valid = Number.isFinite(quantity)
         && quantity >= minimum
         && quantity <= maxStock
         && Math.abs(quantity / increment - Math.round(quantity / increment)) < 0.00001;
-      total.textContent = `Total: ${money(Math.round(product.price.amountMinor * (Number.isFinite(quantity) ? quantity : 0)))}`;
+      total.textContent = `${'total_18e872'.tr} ${money(Math.round(product.price.amountMinor * (Number.isFinite(quantity) ? quantity : 0)))}`;
       confirm.disabled = !valid;
     };
     input.addEventListener("input", updateTotal);
@@ -97,9 +97,9 @@ export function createCatalog(state, add, navigate) {
     });
     dialog.append(
       element("div", { class: "product-weight-content" }, [
-        element("header", { class: "product-weight-header" }, [title, element("button", { type: "button", class: "product-info-close", "aria-label": "Fechar".tr, text: "×", onclick: () => dialog.close() })]),
+        element("header", { class: "product-weight-header" }, [title, element("button", { type: "button", class: "product-info-close", "aria-label": 'common_close'.tr, text: "×", onclick: () => dialog.close() })]),
         price,
-        element("label", { class: "product-weight-label", text: "Peso para adicionar".tr }, [input, element("span", { text: "kg" })]),
+        element("label", { class: "product-weight-label", text: 'weight_to_add'.tr }, [input, element("span", { text: 'kg'.tr })]),
         total,
         element("div", { class: "product-weight-actions" }, [cancel, confirm]),
       ]),
@@ -157,7 +157,7 @@ export function createCatalog(state, add, navigate) {
   async function openProductInformation(product) {
     let buildProductInfoContent;
     try { ({ buildProductInfoContent } = await prepareProductInfo()); }
-    catch { notify('Não foi possível carregar os detalhes. Reabra a loja para atualizar a versão.'); return; }
+    catch { notify('could_not_load_details_reopen_the_store_to_update_the_version'.tr); return; }
     state.trackEvent?.("view_item", {
       productId: product.id,
       productName: product.name,
@@ -181,8 +181,8 @@ export function createCatalog(state, add, navigate) {
     const closeButton = element("button", {
       type: "button",
       class: "product-info-close",
-      "aria-label": "Fechar".tr,
-      title: "Fechar",
+      "aria-label": 'common_close'.tr,
+      title: 'common_close'.tr,
       onclick: () => dialog.close(),
     }, [icon("x")]);
     const title = element("h2", { text: product.name, title: product.name });
@@ -193,18 +193,18 @@ export function createCatalog(state, add, navigate) {
     const content = [
       element("header", { class: "product-info-header" }, [
         element("div", { class: "product-info-heading" }, [
-          categoryTag(categoryLabel(product) || "Produto", "product-info-category"),
+          categoryTag(categoryLabel(product) || 'product'.tr, "product-info-category"),
           title,
           element("div", { class: "product-info-price-row" }, [
             element("strong", { class: "product-info-price", text: money(product.price.amountMinor) }),
-            element("span", { class: "product-info-unit", text: product.saleUnit?.label ? `${"por".tr} ${product.saleUnit.label.tr}` : "preço atual".tr }),
+            element("span", { class: "product-info-unit", text: product.saleUnit?.label ? `${'per'.tr} ${product.saleUnit.label.tr}` : 'current_price'.tr }),
           ]),
         ]),
         closeButton,
       ]),
       element("div", { class: "product-info-body" }, [
         element("section", { class: "product-info-intro" }, [
-          element("span", { class: "product-info-eyebrow", text: "ESCOLHA COM CONFIANÇA".tr }),
+          element("span", { class: "product-info-eyebrow", text: 'choose_with_confidence_34fcb05659'.tr }),
           element("p", { text: info.summary }),
         ]),
         element("div", { class: "product-info-facts" }, info.facts.map(({ label, value, icon: iconName, tone }) => element("section", { class: `product-info-fact ${tone}` }, [
@@ -232,14 +232,14 @@ export function createCatalog(state, add, navigate) {
           element("ul", {}, info.tips.map((tip) => element("li", { text: tip }))),
         ]),
         ...(contentSections.length ? [element("details", { class: "product-info-extra-details" }, [
-          element("summary", { text: "Mais detalhes do produto" }),
+          element("summary", { text: 'more_product_details'.tr }),
           ...contentSections.map((section) => element("section", { class: "product-info-extra" }, [
             element("h3", { text: section.title }),
             element("p", { text: section.body }),
           ])),
         ])] : []),
         ...(specificationEntries.length ? [element("details", { class: "product-info-specifications" }, [
-          element("summary", { text: "Ver especificações" }),
+          element("summary", { text: 'view_specifications'.tr }),
           element("dl", {}, specificationEntries.flatMap(([label, value]) => [
             element("dt", { text: value.label || label }),
             element("dd", { text: `${value.value || value}${value.unit ? ` ${value.unit}` : ""}` }),
@@ -247,9 +247,19 @@ export function createCatalog(state, add, navigate) {
         ])] : []),
       ]),
     ];
+    const informationBody = content[1];
+    if (!info.summary && !info.facts.length && !info.likes && !info.avoid && !info.tips.length && !contentSections.length && !specificationEntries.length) {
+      informationBody.append(element('p', { text: 'product_no_additional_information'.tr }));
+    }
+    if (!info.summary) informationBody.querySelector('.product-info-intro')?.remove();
+    if (!info.facts.length) informationBody.querySelector('.product-info-facts')?.remove();
+    if (!info.likes) informationBody.querySelector('.product-info-preference.positive')?.remove();
+    if (!info.avoid) informationBody.querySelector('.product-info-preference.caution')?.remove();
+    if (!info.likes && !info.avoid) informationBody.querySelector('.product-info-preferences')?.remove();
+    if (!info.tips.length) informationBody.querySelector('.product-info-tips')?.remove();
     if (relatedProducts.length > 1) {
       content[1].prepend(element("section", { class: "product-info-variants" }, [
-        element("h3", { text: "Outras opções disponíveis" }),
+        element("h3", { text: 'other_options_available'.tr }),
         ...relatedProducts.filter((variant) => variant.id !== product.id).map((variant) => element("div", { class: "product-info-variant" }, [
           element("span", { text: [variant.name, variant.variation].filter(Boolean).join(" · ") }),
           element("strong", { text: money(variant.price.amountMinor) }),
@@ -259,7 +269,7 @@ export function createCatalog(state, add, navigate) {
     const minimumQuantity = product.saleUnit?.minimum || 1;
     const unavailable = product.status === "INATIVO" || product.isAvailable === false
       || (product.stock?.tracked && product.stock.quantity < minimumQuantity);
-    const addButton = element("button", { type: "button", class: "cf-button product-info-add", text: unavailable ? "Indisponível".tr : isSoldByKg(product) ? "Escolher peso".tr : "Adicionar".tr, disabled: unavailable, onclick: () => {
+    const addButton = element("button", { type: "button", class: "cf-button product-info-add", text: unavailable ? 'catalog_unavailable'.tr : isSoldByKg(product) ? 'select_weight'.tr : 'catalog_add_to_cart'.tr, disabled: unavailable, onclick: () => {
       triggerButtonKick(addButton);
       dialog.close();
       addFromCard(product, minimumQuantity);
@@ -267,14 +277,14 @@ export function createCatalog(state, add, navigate) {
     const footerActions = [addButton];
     const contactPhone = String(state.config?.checkout?.contactPhone || "").replace(/\D/g, "");
     if (contactPhone.length >= 10 && contactPhone.length <= 15) {
-      const message = encodeURIComponent(`Olá! Gostaria de saber mais sobre ${product.name}.`);
+      const message = encodeURIComponent(`${'hello_i_would_like_to_know_more_about'.tr} ${product.name}.`);
       footerActions.push(element("a", {
         class: "cf-button product-info-whatsapp",
         href: `https://wa.me/${contactPhone}?text=${message}`,
         target: "_blank",
         rel: "noopener noreferrer",
         "aria-label": `Perguntar pelo WhatsApp sobre ${product.name}`,
-      }, [icon("send"), element("span", { text: "Tirar dúvida no WhatsApp" })]));
+      }, [icon("send"), element("span", { text: 'ask_a_question_on_whatsapp'.tr })]));
     }
     content.push(element("footer", { class: "product-info-footer" }, [
       element("div", { class: "product-info-footer-actions" }, footerActions),
@@ -297,7 +307,7 @@ export function createCatalog(state, add, navigate) {
     const names = (Array.isArray(product.categories) ? product.categories : [])
       .map((id) => state.config?.categories?.find((c) => c.id === id)?.name)
       .filter(Boolean);
-    const canonicalNames = ["Frutífera", "Horta", "Hortifrutti", "Outros", "Pets", "Plantas / Mudas"];
+    const canonicalNames = ['highlight_fruit'.tr, "Horta", "Hortifrutti", "Outros", "Pets", "Plantas / Mudas"];
     const isCanonical = (value) => canonicalNames.find(
       (item) => normalizeProductText(item) === normalizeProductText(value),
     );
@@ -474,12 +484,12 @@ export function createCatalog(state, add, navigate) {
       render();
     };
     $("#categoryFilterControl").replaceChildren(
-      categoryFilter("Mais comprados".tr, showingFavorites, () => {
+      categoryFilter('most_purchased'.tr, showingFavorites, () => {
         showingFavorites = !showingFavorites;
         updateFilters();
         refreshPurchases();
       }, "purchases"),
-      categoryFilter("Todas as categorias".tr, !showingFavorites && selectedCategories.length === 0, () => {
+      categoryFilter('all_categories'.tr, !showingFavorites && selectedCategories.length === 0, () => {
         showingFavorites = false;
         selectedCategories = [];
         updateFilters(true);
@@ -508,8 +518,8 @@ export function createCatalog(state, add, navigate) {
     if (subcatContainer) {
       subcatContainer.hidden = options.size === 0;
       subcatContainer.replaceChildren(...(options.size ? [
-        element("span", { class: "subcategory-header-badge", text: "Subcategorias:".tr }),
-        categoryFilter("Todas as subcategorias".tr, selectedSubcategories.length === 0, () => {
+        element("span", { class: "subcategory-header-badge", text: 'subcategories'.tr }),
+        categoryFilter('all_subcategories'.tr, selectedSubcategories.length === 0, () => {
           selectedSubcategories = [];
           pageSize = 24;
           render();
@@ -595,7 +605,7 @@ export function createCatalog(state, add, navigate) {
       }, [
         element("p", {
           class: "empty catalog-empty-text",
-          text: showingFavorites ? (purchaseLoading ? "Carregando suas compras..." : purchaseError || (state.user ? "Seus produtos comprados aparecerão aqui, dos mais comprados para os menos comprados." : "Entre na sua conta para ver os produtos que você mais compra.")).tr : "Nenhum produto encontrado. Tente outra busca.".tr,
+          text: showingFavorites ? (purchaseLoading ? 'loading_your_purchases_088d4c'.tr : purchaseError || (state.user ? 'your_purchased_products_will_appear_here_ordered_by_quantity_purchased'.tr : 'sign_in_to_see_the_products_you_buy_most'.tr)).tr : 'no_products_found_try_another_search'.tr,
         }),
         ...(showingFavorites && purchaseError ? [
           element('button', { type: 'button', class: 'quiet catalog-empty-action', text: 'Tentar novamente'.tr, onclick: refreshPurchases })
@@ -605,7 +615,7 @@ export function createCatalog(state, add, navigate) {
             type: "button",
             class: "quiet catalog-empty-action",
             style: "margin: 0.75rem auto 0; display: block; text-decoration: underline; cursor: pointer;",
-            text: "Limpar busca e ver produtos".tr,
+            text: 'catalog_clear_filters'.tr,
             onclick: () => {
               if ($("#search")) $("#search").value = "";
               render();
@@ -615,9 +625,9 @@ export function createCatalog(state, add, navigate) {
       ]);
       $("#products").replaceChildren(emptyContainer);
     }
-    $("#resultCount").textContent = list.length === 1 ? `1 ${"produto".tr}` : `${list.length} ${"produtos".tr}`;
-    $("#catalogTitle").textContent = showingFavorites ? "Produtos que mais comprei".tr : "Explore o catálogo".tr;
-    loadMoreButton.textContent = "catalog.load_more".tr;
+    $("#resultCount").textContent = list.length === 1 ? `1 ${'catalog_product_singular'.tr}` : `${list.length} ${'catalog_products'.tr}`;
+    $("#catalogTitle").textContent = showingFavorites ? 'products_i_buy_most'.tr : 'catalog_title'.tr;
+    loadMoreButton.textContent = 'catalog_load_more'.tr;
     loadMoreButton.hidden = list.length <= pageSize;
     if (pageObserver && !loadMoreButton.hidden) {
       pageObserver.observe(loadMoreButton);
@@ -641,13 +651,13 @@ export function createCatalog(state, add, navigate) {
     view.replaceChildren(
       element("button", {
         class: "quiet",
-        text: "← Voltar ao catálogo".tr,
+        text: 'product_back_to_catalog'.tr,
         onclick: () => navigate(state.basePath || "/"),
       }),
     );
     if (!product) {
       view.append(
-        element("h1", { text: "Produto não encontrado ou indisponível.".tr }),
+        element("h1", { text: 'product_not_found'.tr }),
       );
       return;
     }
@@ -670,7 +680,7 @@ export function createCatalog(state, add, navigate) {
       view.append(
         element("div", {
           class: "inactive-banner",
-          text: "⚠️ AVISO: Este produto está INATIVO no sistema e não está disponível para compra.".tr,
+          text: 'product_inactive_warning'.tr,
         }),
       );
     }
@@ -691,7 +701,7 @@ export function createCatalog(state, add, navigate) {
       "image-candidates": JSON.stringify(images.slice(1)),
       "fallback-src": "/store-assets/placeholder.svg",
       alt: product.imageIsIllustrative
-        ? `Imagem ilustrativa de ${product.name}`
+        ? `${'illustrative_image_of'.tr} ${product.name}`
         : images[0].alt,
       loading: 'eager',
       fetchpriority: 'high',
@@ -701,7 +711,7 @@ export function createCatalog(state, add, navigate) {
       value: product.saleUnit?.minimum || 1,
       min: product.saleUnit?.minimum || 1,
       step: product.saleUnit?.increment || 1,
-      "aria-label": "Quantidade".tr,
+      "aria-label": 'product_quantity'.tr,
     });
     if (product.stock?.tracked) {
       quantity.max = product.stock.quantity;
@@ -718,7 +728,7 @@ export function createCatalog(state, add, navigate) {
       "button",
       {
         class: "primary",
-        text: isInactive ? "Item Inativo".tr : unavailable ? "Indisponível".tr : "Adicionar".tr,
+        text: isInactive ? 'catalog_item_inactive'.tr : unavailable ? 'catalog_unavailable'.tr : 'catalog_add_to_cart'.tr,
         onclick: () => {
           triggerButtonKick(buyButton);
           addFromCard(product, Number(quantity.value));
@@ -731,7 +741,7 @@ export function createCatalog(state, add, navigate) {
     const editDetailBtn = element("button", {
       type: "button",
       class: "quiet",
-      text: "catalog.edit_product".tr,
+      text: 'catalog_edit_product'.tr,
       onclick: () => {
         if (state.productEntry) {state.productEntry.open(product);}
       },
@@ -811,13 +821,13 @@ export function createCatalog(state, add, navigate) {
     const panels = [
       {
         id: "about",
-        label: "Sobre o produto",
+        label: 'about_the_product'.tr,
         nodes: [
           element("h2", { text: product.name, title: product.name }),
           element("p", {
             text:
               product.description ||
-              "Consulte nossa equipe para saber mais sobre este produto.",
+              'consult_our_team_to_learn_more_about_this_product'.tr,
           }),
         ],
       },
@@ -831,12 +841,12 @@ export function createCatalog(state, add, navigate) {
       })),
       {
         id: "specifications",
-        label: "Especificações",
+        label: 'product_specifications'.tr,
         nodes: Object.keys(product.specifications || {}).length
           ? [specs]
           : [
               element("p", {
-                text: "Consulte nossa equipe para confirmar os detalhes deste produto.",
+                text: 'consult_our_team_to_confirm_the_details_of_this_product'.tr,
               }),
             ],
       },
@@ -844,7 +854,7 @@ export function createCatalog(state, add, navigate) {
     const tabs = element("div", {
       class: "detail-tabs",
       role: "tablist",
-      "aria-label": "Informações do produto",
+      "aria-label": 'product_information'.tr,
     });
     const content = element("section", {
       class: "detail-information",
@@ -930,7 +940,7 @@ export function createCatalog(state, add, navigate) {
       element("button", {
         type: "button",
         class: `filter-choice-btn is-special${selectedCategories.length === 0 ? " is-active" : ""}`,
-        text: "Todas as categorias",
+        text: 'all_categories'.tr,
         onclick: () => {
           selectedCategories = [];
           selectedSubcategories = [];
@@ -960,7 +970,7 @@ export function createCatalog(state, add, navigate) {
     ];
 
     const catSection = element("section", { class: "filter-group" }, [
-      element("h3", { class: "filter-group-title", text: "Categorias" }),
+      element("h3", { class: "filter-group-title", text: 'mobile_nav_categories'.tr }),
       element("div", { class: "filter-buttons-grid" }, catButtons),
     ]);
 
@@ -998,7 +1008,7 @@ export function createCatalog(state, add, navigate) {
 
         subSections.push(
           element("section", { class: "filter-group" }, [
-            element("h3", { class: "filter-group-title", text: `Subcategorias de ${activeCatObj.name}` }),
+            element("h3", { class: "filter-group-title", text: `${'subcategories_of'.tr} ${activeCatObj.name}` }),
             element("div", { class: "filter-buttons-grid" }, subButtons),
           ]),
         );
@@ -1022,7 +1032,7 @@ export function createCatalog(state, add, navigate) {
           element("button", {
             type: "button",
             class: "mobile-active-pill",
-            title: "Remover filtro de categoria",
+            title: 'remove_category_filter'.tr,
             onclick: () => {
               selectedCategories = [];
               selectedSubcategories = [];
@@ -1040,7 +1050,7 @@ export function createCatalog(state, add, navigate) {
             element("button", {
               type: "button",
               class: "mobile-active-pill",
-              title: "Remover filtro de subcategoria",
+              title: 'remove_subcategory_filter'.tr,
               onclick: () => {
                 selectedSubcategories = selectedSubcategories.filter((k) => k !== subKey);
                 doUpdateFilters(false);

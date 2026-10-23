@@ -20,13 +20,8 @@ test('cashier product details expose registered care, habitat and feeding notes'
   ]);
 });
 
-test('cashier product details use safe guidance when details are not registered', () => {
+test('cashier product details stay empty when no information was registered', () => {
   const details = getCashierProductDetails({ name: 'Produto sem especificações' });
 
-  assert.deepEqual(details.map(({ label }) => label), [
-    'Descrição',
-    'Cuidados',
-    'Onde deixar / moradia',
-  ]);
-  assert.ok(details.every(({ value }) => value.length > 20));
+  assert.deepEqual(details, []);
 });

@@ -149,7 +149,7 @@ class BotanicalConsultantService {
         formattedPrice: `R$ ${price.toFixed(2).replace('.', ',')}`,
         imageUrl: img,
         unit: p.unit || p.unidade || 'un',
-        stock: p.stockQuantity ?? p.estoque ?? 20,
+        stock: p.stockQuantity ?? p.estoque ?? 0,
       };
     });
 

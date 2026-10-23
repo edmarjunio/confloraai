@@ -1,12 +1,12 @@
 export function customerOrderStatus(order) {
-  if (/CANCEL|REJECT|EXPIRED/.test(String(order.status || '').toUpperCase())) return 'Pedido cancelado';
+  if (/CANCEL|REJECT|EXPIRED/.test(String(order.status || '').toUpperCase())) return 'order_cancelled'.tr;
   const delivery = String(order.deliveryStatus || order.status || '').toUpperCase();
-  if (['DELIVERED', 'ENTREGUE'].includes(delivery)) return 'Pedido entregue';
-  if (delivery === 'OUT_FOR_DELIVERY') return 'Em rota de entrega';
-  if (['PREPARING_DELIVERY', 'PREPARING'].includes(delivery)) return 'Pedido em preparação';
-  if (['READY', 'READY_FOR_PICKUP'].includes(delivery)) return 'Pedido pronto para retirada';
-  if (order.paidAt || ['APPROVED', 'PAID', 'ON_ACCOUNT'].includes(order.paymentStatus)) return 'Pedido confirmado';
-  return 'Pedido recebido';
+  if (['DELIVERED', 'ENTREGUE'].includes(delivery)) return 'order_delivered'.tr;
+  if (delivery === 'OUT_FOR_DELIVERY') return 'out_for_delivery_3af3c5'.tr;
+  if (['PREPARING_DELIVERY', 'PREPARING'].includes(delivery)) return 'order_being_prepared'.tr;
+  if (['READY', 'READY_FOR_PICKUP'].includes(delivery)) return 'order_ready_for_pickup'.tr;
+  if (order.paidAt || ['APPROVED', 'PAID', 'ON_ACCOUNT'].includes(order.paymentStatus)) return 'order_confirmed'.tr;
+  return 'order_received'.tr;
 }
 
 // The first snapshot is a baseline; reconnects and stage changes never replay arrivals.

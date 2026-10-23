@@ -1,4 +1,4 @@
-const profile = require("../../config/stores/conflora.example.json");
+const profile = require("../../config/stores/conflora.json");
 const { rankProductSales } = require("../catalog/product-sales");
 const { productStatus } = require("../catalog/product-status");
 const { resolveHdProductImage } = require("../catalog/image-resolver");
@@ -46,6 +46,9 @@ function toProduct(item, { stockControlEnabled = true } = {}) {
   return {
     id: String(item.id),
     name,
+    nameTranslations: Object.fromEntries(['en', 'es', 'fr'].filter(language =>
+      typeof item.nameTranslations?.[language] === 'string' && item.nameTranslations[language].trim().length <= 180)
+      .map(language => [language, item.nameTranslations[language].trim()])),
     canonicalName: item.canonicalName || item.canonical_name || name,
     productType: item.productType || item.tipoProduto || item.tipo || "",
     variation: item.variation || item.variacao || item.variationLabel || item.apresentacao || "",
@@ -140,8 +143,9 @@ function existingConfig(products, saved, settings = { stockControlEnabled: true 
     result.branding ||= {};
     result.branding.logoUrl ||= profile.branding.logoUrl;
     result.checkout ||= structuredClone(profile.checkout);
+    result.categories ||= [];
     result.checkout.contactPhone ||=
-      process.env.OWNER_WHATSAPP_NUMBER || profile.checkout?.contactPhone || "5564999351616";
+      process.env.OWNER_WHATSAPP_NUMBER || "";
     for (const product of activeProducts) {
       if (
         !result.categories.some(
@@ -156,7 +160,7 @@ function existingConfig(products, saved, settings = { stockControlEnabled: true 
         });
       }
     }
-    result.checkout.enabledPayments = ["PIX", "CASH", "CREDITO", "DEBITO"];
+
     if (result.checkout.delivery) result.checkout.delivery.label = "Entrega";
     if (result.checkout.pickup) result.checkout.pickup.label = "Retirada";
     result.inventory = {
@@ -188,12 +192,13 @@ function existingConfig(products, saved, settings = { stockControlEnabled: true 
     ...require("../orders/pix-mode").manualPixSettings({ required: false }),
   };
   config.checkout.contactPhone =
-    process.env.STORE_NOTIFICATION_PHONE || process.env.OWNER_WHATSAPP_NUMBER || "5564999351616";
-  config.checkout.enabledPayments = ["PIX", "CASH", "CREDITO", "DEBITO"];
+    process.env.STORE_NOTIFICATION_PHONE || process.env.OWNER_WHATSAPP_NUMBER || "";
+  config.checkout.enabledPayments = [];
+  config.checkout.pickup.enabled = false;
   config.checkout.delivery = {
-    enabled: true,
+    enabled: false,
     label: "Entrega",
-    serviceAreas: ["Mineiros - GO"],
+    serviceAreas: [],
     feeMinor: 0,
   };
   config.checkout.pickup.label = "Retirada";
@@ -669,6 +674,7 @@ async function readStoreSettings(repository) {
       throw Object.assign(new Error('Configurações da loja indisponíveis.', { cause: err }), { status: 503 });
     }
   }
+  if (process.env.NODE_ENV !== 'test') throw Object.assign(new Error('Configurações da loja indisponíveis.'), { status: 503 });
   return repository.storefrontSettings;
 }
 module.exports = {

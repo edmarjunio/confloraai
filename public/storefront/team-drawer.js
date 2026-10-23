@@ -37,7 +37,7 @@ export function initTeamDrawer() {
         if (data && data.user) {
           currentOperator = {
             name: data.user.name || 'Colaborador',
-            role: data.user.role || 'CAIXA',
+            role: data.user.role || "CAIXA",
             id: data.user.id || '',
             canSwitchProfiles: Boolean(data.user.canSwitchProfiles),
           };
@@ -73,35 +73,35 @@ export function initTeamDrawer() {
     if (opNameEl) {opNameEl.textContent = currentOperator.name;}
     if (opBadgeEl) {
       opBadgeEl.textContent = isDriver
-        ? 'CARGO: ENTREGADOR'
+        ? 'role_delivery_person'.tr
         : isSeller
-          ? 'CARGO: VENDEDOR'
+          ? 'role_salesperson'.tr
           : isCaixa
-            ? 'CARGO: CAIXA'
+            ? 'team_role_cashier'.tr
             : isAdmin
-              ? 'CARGO: ADMIN'
-              : 'FAÇA LOGIN COM PIN';
-      opBadgeEl.className = 'team-role-badge ' + (isAdmin ? 'admin' : 'caixa');
+              ? 'team_role_admin'.tr
+              : 'log_in_with_pin'.tr;
+      opBadgeEl.className = 'team-role-badge ' + (isAdmin ? 'admin' : 'register_e3d7b7'.tr);
     }
     if (subtitleEl) {
       subtitleEl.textContent = isDriver
-        ? 'Entregas e recebimentos na rota'
+        ? 'deliveries_and_pickups_on_route'.tr
         : isSeller
-          ? 'Vendedor · Comandas e Pix'
+          ? 'salesperson_orders_and_pix'.tr
           : isCaixa
-            ? 'Caixa Liberado · Acesso exclusivo às suas vendas de hoje'
+            ? 'register_open_exclusive_access_to_your_sales_today'.tr
             : isAdmin
-              ? 'Administração Geral Liberada'
-              : 'Identifique seu cargo com PIN';
+              ? 'general_administration_unlocked'.tr
+              : 'identify_your_role_with_pin'.tr;
     }
     if (caixaDescEl) {
       caixaDescEl.textContent = isDriver
-        ? 'Aceitar pedidos, abrir a rota e confirmar entregas'
+        ? 'accept_orders_open_route_and_confirm_deliveries'.tr
         : isSeller
-          ? 'Atendimento, geração de comandas e Pix'
+          ? 'customer_service_order_tickets_and_pix'.tr
           : isCaixa
-            ? 'Acesso estrito às suas vendas e números de hoje'
-            : 'Frente de Caixa Geral e Balcão';
+            ? 'team_cashier_desc'.tr
+            : 'general_cash_register_and_counter'.tr;
     }
 
     if (ownerQuickSwitchBox) {
@@ -137,17 +137,17 @@ export function initTeamDrawer() {
           const data = await res.json();
           if (res.ok && data.success && data.user) {
             currentOperator = {
-              name: data.user.name || 'Edmar Júnio',
+              name: data.user.name || 'administrator'.tr,
               role: data.user.role,
               id: data.user.id,
               canSwitchProfiles: Boolean(data.user.canSwitchProfiles),
             };
             updateDrawerUI();
           } else {
-            window.alert(data.error || 'Não foi possível alternar o perfil.');
+            window.alert(data.error || 'could_not_switch_profile'.tr);
           }
         } catch {
-          window.alert('Erro de conexão ao alternar perfil.');
+          window.alert('connection_error_when_switching_profile'.tr);
         }
       });
     });
@@ -226,7 +226,7 @@ export function initTeamDrawer() {
       const id = selectUser.value;
       const pin = pinInput ? pinInput.value.trim() : '';
       if (!pin) {
-        window.alert('Digite seu PIN de segurança para confirmar o operador.');
+        window.alert('enter_your_security_pin_to_confirm_the_operator'.tr);
         return;
       }
 
@@ -251,7 +251,7 @@ export function initTeamDrawer() {
         updateDrawerUI();
         opSelectorBox.classList.add('hidden');
       } catch {
-        window.alert('Erro ao validar PIN no servidor.');
+        window.alert('error_validating_pin_on_server'.tr);
       }
     });
   }

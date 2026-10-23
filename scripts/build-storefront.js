@@ -53,6 +53,15 @@ function buildStorefront(root = path.resolve(__dirname, '..')) {
     .replace('/* BUILD_MANIFEST */', `self.CONFLORA_BUILD = ${JSON.stringify({ version, core })};`);
   fs.writeFileSync(path.join(assets, 'sw-built.js'), worker);
   fs.writeFileSync(path.join(assets, 'dist/manifest.json'), JSON.stringify({ version, app: appUrl, core, outputs: result.metafile.outputs }, null, 2));
+  const currentFiles = new Set([
+    ...Object.keys(result.metafile.outputs).map(file => path.basename(file)),
+    ...[...shellAssets].map(file => path.basename(file)),
+  ]);
+  for (const file of fs.readdirSync(destination)) {
+    if (/^[\w-]+-(?:[a-f0-9]{16}|[A-Z0-9]{8})\.(?:js|css|webp|png|svg)$/.test(file) && !currentFiles.has(file)) {
+      fs.unlinkSync(path.join(destination, file));
+    }
+  }
   console.log(`Storefront: ${shellAssets.size} recursos essenciais versionados; módulos secundários sob demanda.`);
   return { version, core };
 }
