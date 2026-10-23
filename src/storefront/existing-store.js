@@ -1,5 +1,4 @@
 const profile = require("../../config/stores/conflora.json");
-const { rankProductSales } = require("../catalog/product-sales");
 const { productStatus } = require("../catalog/product-status");
 const { resolveHdProductImage } = require("../catalog/image-resolver");
 const {
@@ -210,11 +209,12 @@ function existingConfig(products, saved, settings = { stockControlEnabled: true 
 function installExistingStore(app, { repository, assistant, catalog, getOrderIntake = () => null }) {
   const { createPublicSnapshot } = require('./public-snapshot');
   const publicSnapshot = createPublicSnapshot(async () => {
-    const [settings, saved] = await Promise.all([
+    const [settings, saved, records] = await Promise.all([
       repository.getInventorySettings ? repository.getInventorySettings() : { stockControlEnabled: true },
       readSettings(),
+      repository.getAllProducts(),
     ]);
-    const items = await products({ settings, saved });
+    const items = await products({ settings, saved, records });
     const config = existingConfig(items, saved, settings);
     const visibleCategories = new Set(items.flatMap(item => item.categories));
     config.categories = config.categories.filter(category => category.isActive && visibleCategories.has(category.id));
@@ -304,16 +304,11 @@ function installExistingStore(app, { repository, assistant, catalog, getOrderInt
       .type("application/javascript")
       .send(script);
   });
-  async function products({ advisory = false, settings, saved } = {}) {
+  async function products({ advisory = false, settings, saved, records } = {}) {
     if (advisory && catalog) await catalog.refreshCatalog();
-    let records = advisory && Array.isArray(catalog?.rawItems) ? catalog.rawItems : await repository.getAllProducts();
-    if (!advisory && repository.getSalesOrders) {
-      try {
-        records = rankProductSales(records, await repository.getSalesOrders());
-      } catch {
-        // preserve unranked records
-      }
-    }
+    records ||= advisory && Array.isArray(catalog?.rawItems) ? catalog.rawItems : await repository.getAllProducts();
+    // Public browsing never depends on the store's complete sales history.
+    // Personal purchase rankings have their own authenticated, on-demand flow.
     if (!settings && repository.getInventorySettings) {
       try {
         settings = await repository.getInventorySettings();

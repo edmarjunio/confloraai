@@ -1,5 +1,9 @@
 # Conflora AI — carregamento inteligente
 
+> Registro histórico de 22/10. Não descreve o estado atual nem comprova a
+> performance das alterações de 23/10. Consulte
+> [a implementação em andamento](IMPLEMENTACAO-2026-10-23.md).
+
 Implementação local revisada em 22/10/2026. Não houve deploy, cobrança, envio real de WhatsApp ou alteração de credenciais.
 
 ## 1. Entrega e escopo

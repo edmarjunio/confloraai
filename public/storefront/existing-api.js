@@ -5,7 +5,7 @@ export function createExistingApi() {
   let catalogPromise;
   async function request(path, options = {}) {
     const isGet = !options.method || options.method === "GET";
-    const maxRetries = isGet ? 3 : 0;
+    const maxRetries = isGet ? 1 : 0;
     let attempt = 0;
     while (true) {
       try {
@@ -28,6 +28,7 @@ export function createExistingApi() {
         }
         return data;
       } catch (err) {
+        if (options.signal?.aborted) throw err;
         attempt++;
         const isTransient =
           err.name === "TypeError" ||
@@ -123,8 +124,13 @@ export function createExistingApi() {
     }
     if (route === "/admin/products" || route === "/admin/products/") {
       catalogPromise ||= request("/api/storefront/catalog");
-      const result = await catalogPromise;
-      return result.products;
+      const pending = catalogPromise;
+      try {
+        const result = await pending;
+        return result.products;
+      } finally {
+        if (catalogPromise === pending) catalogPromise = null;
+      }
     }
     if (route === "/orders" && options.method === "POST") {
       const result = await request("/api/storefront/orders", options);

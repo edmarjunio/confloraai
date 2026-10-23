@@ -1199,12 +1199,19 @@ function renderAdminGerencialHtml() {
     document.addEventListener('DOMContentLoaded', initializeDashboard);
     document.addEventListener('keydown', handleDashboardShortcut);
 
+    let analyticsStarted = false;
+    let dashboardAuthorized = false;
     function switchExecutiveTab(tab) {
       const isClosing = tab === 'closing';
       document.getElementById('viewClosing').style.display = isClosing ? 'block' : 'none';
       document.getElementById('viewAnalytics').style.display = isClosing ? 'none' : 'block';
       document.getElementById('btnTabClosing').classList.toggle('active', isClosing);
       document.getElementById('btnTabAnalytics').classList.toggle('active', !isClosing);
+      if (!isClosing && dashboardAuthorized && !analyticsStarted) {
+        analyticsStarted = true;
+        loadPeriodMetrics();
+        loadSeasonalMetrics();
+      }
     }
 
     async function initializeDashboard() {
@@ -1217,8 +1224,10 @@ function renderAdminGerencialHtml() {
         const response = await window.ConfloraSession.apiFetch('/api/auth/me');
         const data = await response.json();
         if (response.ok && data.user && data.user.role === 'ADMIN') {
+          dashboardAuthorized = true;
+          if (document.getElementById('btnTabAnalytics').classList.contains('active')) switchExecutiveTab('analytics');
           document.getElementById('btnSendReport').hidden = false;
-          await Promise.all([loadPeriodMetrics(), loadSeasonalMetrics(), loadExecutiveMetrics(), checkClosingStatus(getBusinessToday())]);
+          await Promise.all([loadExecutiveMetrics(), checkClosingStatus(getBusinessToday())]);
           return;
         }
         showToast('dashboard_available_for_admin_only'.tr);

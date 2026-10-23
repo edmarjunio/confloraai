@@ -1873,10 +1873,31 @@ function renderAdminHtml(storeConfig) {
       return [];
     }
 
-    // 6. CONSULTA RÁPIDA DE PREÇO
-    async function loadPriceProducts() {
+    // Share only concurrent reads; never persist private inventory in the browser.
+    let inventoryPending = null;
+    let inventoryRevision = 0;
+    window.addEventListener('cf-catalog-invalidated', () => {
+      inventoryRevision++;
+      inventoryPending = null;
+    });
+    async function readAdminInventory() {
+      const revision = inventoryRevision;
+      const identity = currentUser?.id;
+      inventoryPending ||= window.ConfloraSession.apiFetch('/api/inventory');
+      const pending = inventoryPending;
       try {
-        const res = await window.ConfloraSession.apiFetch('/api/inventory');
+        const response = await pending;
+        if (identity !== currentUser?.id) throw new Error('Sessão alterada. Atualize a consulta.');
+        if (revision !== inventoryRevision) return readAdminInventory();
+        return response.clone();
+      } finally {
+        if (inventoryPending === pending) inventoryPending = null;
+      }
+    }
+
+    async function loadInventoryProducts(warning) {
+      try {
+        const res = await readAdminInventory();
         if (res.ok) {
           const data = await res.json();
           const list = safeExtractProductsAdmin(data);
@@ -1885,10 +1906,15 @@ function renderAdminHtml(storeConfig) {
           allProducts = [];
         }
       } catch (e) {
-        console.warn('price_lookup_failed'.tr, e);
+        console.warn(warning, e);
         allProducts = [];
       }
       if (!Array.isArray(allProducts)) allProducts = [];
+    }
+
+    // 6. CONSULTA RÁPIDA DE PREÇO
+    async function loadPriceProducts() {
+      await loadInventoryProducts('price_lookup_failed'.tr);
       filterPriceTable();
     }
 
@@ -2183,22 +2209,10 @@ function renderAdminHtml(storeConfig) {
       finally { renderStockControl(); }
     }
     async function loadStockProducts() {
-      await loadStockControl();
-      try {
-        const res = await window.ConfloraSession.apiFetch('/api/inventory');
-        if (res.ok) {
-          const data = await res.json();
-          const list = safeExtractProductsAdmin(data);
-          allProducts = Array.isArray(list) ? list : [];
-        } else {
-          allProducts = [];
-        }
-      } catch (e) {
-        console.warn('failed_to_load_inventory'.tr, e);
-        allProducts = [];
-      }
-      if (!Array.isArray(allProducts)) allProducts = [];
+      const controls = loadStockControl();
+      await loadInventoryProducts('failed_to_load_inventory'.tr);
       filterStockCards();
+      await controls;
       await loadStockMovements();
     }
 
@@ -2506,20 +2520,7 @@ function renderAdminHtml(storeConfig) {
     }
 
     async function loadAdminProducts() {
-      try {
-        const res = await window.ConfloraSession.apiFetch('/api/inventory');
-        if (res.ok) {
-          const data = await res.json();
-          const list = safeExtractProductsAdmin(data);
-          allProducts = Array.isArray(list) ? list : [];
-        } else {
-          allProducts = [];
-        }
-      } catch (e) {
-        console.warn('failed_to_load_products'.tr, e);
-        allProducts = [];
-      }
-      if (!Array.isArray(allProducts)) allProducts = [];
+      await loadInventoryProducts('failed_to_load_products'.tr);
       renderAdminCategoryChips();
       renderAdminProducts();
     }
@@ -2978,18 +2979,20 @@ function renderAdminHtml(storeConfig) {
             ...pendingPhotosList.filter(photo => photo.isExisting && photo.url).map(photo => photo.url),
             ...externalImgs,
           ])];
-          const finalResponse = await window.ConfloraSession.apiFetch('/api/admin/products', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              ...payload,
-              images: finalImages,
-              imageUrl: finalImages[0] || '',
-            }),
-          });
-          const finalResult = await finalResponse.json();
-          if (!finalResponse.ok || !finalResult.success) {
-            throw new Error(finalResult.error || 'could_not_complete_photo_replacement'.tr);
+          if (newUploads.length) {
+            const finalResponse = await window.ConfloraSession.apiFetch('/api/admin/products', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ...payload,
+                images: finalImages,
+                imageUrl: finalImages[0] || '',
+              }),
+            });
+            const finalResult = await finalResponse.json();
+            if (!finalResponse.ok || !finalResult.success) {
+              throw new Error(finalResult.error || 'could_not_complete_photo_replacement'.tr);
+            }
           }
         } catch (error) {
           renderPendingPhotosGrid();

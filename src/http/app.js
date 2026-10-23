@@ -1,7 +1,6 @@
 require('../i18n/default');
 const { createHash, randomUUID } = require('node:crypto');
 const { createWebSessions, safeUser } = require('../security/web-session');
-const { rankProductSales } = require('../catalog/product-sales');
 const { StorefrontAnalyticsService, campaignLabel } = require('../services/storefront-analytics.service');
 const { resolveHdProductImage } = require('../catalog/image-resolver');
 const { getCashierProductDetails } = require('../catalog/cashier-product-details');
@@ -693,14 +692,7 @@ function createApp({
     res.setHeader('Expires', '0');
     try {
       let products = await messageService.firestoreRepo.getAllProducts();
-      if (typeof messageService.firestoreRepo.getSalesOrders === 'function') {
-        try {
-          const orders = await messageService.firestoreRepo.getSalesOrders();
-          products = rankProductSales(products, orders);
-        } catch (error) {
-          Logger.warn('sales_ranking_temporarily_unavailable'.tr, { error: error.message });
-        }
-      }
+      // Inventory is independent of historical sales; reports own that workload.
       products = products.map((product) => {
         const imageCandidates = getProductImageCandidates(product);
         return {

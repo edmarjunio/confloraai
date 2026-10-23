@@ -17,3 +17,9 @@ export async function clearLegacyBusinessCaches(storage = globalThis.caches) {
     await Promise.all(names.filter(name => name.startsWith('conflora')).map(name => storage.delete(name)));
   } catch { /* Disabled cache storage cannot prevent current backend reads. */ }
 }
+
+export async function resetBusinessCaches() {
+  clearLegacyBusinessStorage();
+  const { purgeRetiredPublicDatabases } = await import('./cache-generation.mjs');
+  return Promise.all([clearLegacyBusinessCaches(), purgeRetiredPublicDatabases()]);
+}

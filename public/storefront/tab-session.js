@@ -29,6 +29,10 @@
     });
   }
   if (window.ConfloraSession) return;
+  // Shared by catalogue, PDV and administration; no credentials or live sale drafts are cleared.
+  if (typeof document !== 'undefined') {
+    void import('/store-assets/storage-cleanup.js').then(module => module.resetBusinessCaches()).catch(() => {});
+  }
   const nativeFetch = window.fetch.bind(window);
   const tenant = /^\/shop\/([^/]+)/.exec(location.pathname)?.[1];
   const read = (key) => { try { return window.sessionStorage.getItem(key); } catch { return null; } };
@@ -40,6 +44,13 @@
   let token = read(tokenKey) || '';
   let initialized = !storageAvailable || read(initializedKey) === '1';
   let generation = 0;
+  const sharedStreams = new Map();
+  const closeStreams = () => {
+    for (const entry of sharedStreams.values()) {
+      for (const consumer of [...entry.consumers]) consumer.close();
+    }
+    sharedStreams.clear();
+  };
   const tabId = read('conflora_tab_id_v1') || crypto.randomUUID();
   write('conflora_tab_id_v1', tabId);
   // Tenant authentication retains its separate, scoped contract.
@@ -53,21 +64,28 @@
     if (token) headers.set('Authorization', 'Bearer ' + token);
     const version = generation;
     const response = await nativeFetch(input, { ...options, headers });
+    const method = String(options.method || (input instanceof window.Request ? input.method : 'GET')).toUpperCase();
+    if (response.ok && !['GET', 'HEAD', 'OPTIONS'].includes(method) &&
+        /\/(?:products|stock|orders|config|inventory-settings)(?:\/|$)/.test(url.pathname)) {
+      // Only an invalidation timestamp crosses tabs, never private response data.
+      try { window.localStorage.setItem('cf-public-invalidated', String(Date.now())); } catch { /* TTL remains the fallback. */ }
+      window.dispatchEvent(new window.Event('cf-catalog-invalidated'));
+    }
     const isLogin = /\/auth\/(?:login|register|google)$/.test(url.pathname);
-    if (isLogin && response.ok) generation += 1;
+    if (isLogin && response.ok) { generation += 1; closeStreams(); }
     if (response.headers.has('X-Conflora-Session') && (isLogin || version === generation)) {
       token = response.headers.get('X-Conflora-Session') || '';
       write(tokenKey, token);
     }
     if (url.pathname === '/api/auth/me' || (isLogin && response.ok) || url.pathname === '/api/auth/logout') {
       initialized = true; write(initializedKey, '1');
-      if (url.pathname === '/api/auth/logout' && response.ok) { generation += 1; token = ''; write(tokenKey, ''); }
+      if (url.pathname === '/api/auth/logout' && response.ok) { generation += 1; closeStreams(); token = ''; write(tokenKey, ''); }
     }
     return response;
   };
 
   // Native EventSource cannot attach the tab credential; use a fetch stream.
-  function openEventStream(url) {
+  function createEventStream(url) {
     const events = new window.EventTarget();
     let controller; let timer; let closed = false;
     const connect = async () => {
@@ -96,6 +114,47 @@
     };
     events.close = () => { closed = true; clearTimeout(timer); controller?.abort(); };
     connect(); return events;
+  }
+  function openEventStream(url) {
+    const key = generation + ':' + new URL(url, location.href).href;
+    let entry = sharedStreams.get(key);
+    if (!entry) {
+      entry = { stream: createEventStream(url), consumers: new Set() };
+      sharedStreams.set(key, entry);
+    }
+    const listeners = [];
+    let closed = false;
+    const consumer = {
+      addEventListener(type, listener, options) {
+        if (closed) return;
+        // Each subscription owns its wrapper, even if callers reuse a callback.
+        const wrapped = event => typeof listener === 'function' ? listener.call(consumer, event) : listener?.handleEvent(event);
+        listeners.push({ type, listener, wrapped, options });
+        entry.stream.addEventListener(type, wrapped, options);
+      },
+      removeEventListener(type, listener) {
+        for (let index = listeners.length - 1; index >= 0; index--) {
+          const item = listeners[index];
+          if (item.type === type && item.listener === listener) {
+            entry.stream.removeEventListener(type, item.wrapped, item.options);
+            listeners.splice(index, 1);
+          }
+        }
+      },
+      close() {
+        if (closed) return;
+        closed = true;
+        for (const item of listeners) entry.stream.removeEventListener(item.type, item.wrapped, item.options);
+        listeners.length = 0;
+        entry.consumers.delete(consumer);
+        if (!entry.consumers.size) {
+          entry.stream.close();
+          if (sharedStreams.get(key) === entry) sharedStreams.delete(key);
+        }
+      },
+    };
+    entry.consumers.add(consumer);
+    return consumer;
   }
   function watchOrderUpdates(onChange) {
     const stream = openEventStream('/api/caixa/orders/stream');

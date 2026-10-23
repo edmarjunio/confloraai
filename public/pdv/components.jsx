@@ -214,8 +214,8 @@ window.PdvComponents = (() => {
   function Loading() {
     return <main className="min-h-screen bg-[#F4F6F5] font-sans text-slate-800"><Topbar /><button type="button" className="cf-back-button m-4" onClick={() => window.ConfloraNavigation.back()}>{'back_59dc92'.tr}</button><p className="p-8 text-center text-sm text-slate-500">{'loading_session'.tr}</p></main>;
   }
-  async function api(path, body) {
-    const response = await window.ConfloraSession.apiFetch(path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
+  async function api(path, body, options = {}) {
+    const response = await window.ConfloraSession.apiFetch(path, { ...options, ...(body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}) });
     const data = await response.json();
     if (!response.ok) { throw new Error(data.error || 'could_not_complete_the_operation'.tr); }
     return data;
@@ -2126,6 +2126,7 @@ window.PdvComponents = (() => {
     const [quickProductNotice, setQuickProductNotice] = useState('');
     const [closingNotice, setClosingNotice] = useState('');
     const dataRef = useRef(null);
+    const refreshRequestRef = useRef(null);
     const soundSettingsRef = useRef(soundSettings);
     soundSettingsRef.current = soundSettings;
     const lastBatchTimestampRef = useRef(0);
@@ -2281,54 +2282,82 @@ window.PdvComponents = (() => {
       });
     };
 
-    const refresh = async (silent = false) => {
-      if (!silent) setRefreshing(true);
-      setError('');
-      try {
-        const query = new URLSearchParams({ from: dateFrom, to: dateTo });
-        const nextData = await api('/api/caixa/orders?' + query.toString());
-        const previous = dataRef.current;
-        if (silent && previous) {
-          const previousActiveIds = new Set([...(previous.pendingConfirmation || []), ...(previous.pendingPayment || []), ...(previous.awaitingDriver || []), ...(previous.outForDelivery || [])].map((order) => order.id));
-          const previousPaymentIds = new Set((previous.pendingPayment || []).map((order) => order.id));
-          const previousPaidIds = new Set((previous.paid || []).map((order) => order.id));
+    const refresh = (silent = false) => {
+      const active = refreshRequestRef.current;
+      if (active) {
+        // An event or confirmed mutation during a read requires one trailing read.
+        active.again = true;
+        return active.promise;
+      }
+      const request = { controller: new AbortController(), again: false, promise: null };
+      refreshRequestRef.current = request;
+      request.promise = (async () => {
+        do {
+          request.again = false;
+          if (!silent) setRefreshing(true);
+          setError('');
+          try {
+            const query = new URLSearchParams({ from: dateFrom, to: dateTo });
+            const nextData = await api('/api/caixa/orders?' + query.toString(), undefined, { signal: request.controller.signal });
+            if (refreshRequestRef.current !== request || request.controller.signal.aborted) return;
+            const previous = dataRef.current;
+            if (silent && previous) {
+              const previousActiveIds = new Set([...(previous.pendingConfirmation || []), ...(previous.pendingPayment || []), ...(previous.awaitingDriver || []), ...(previous.outForDelivery || [])].map((order) => order.id));
+              const previousPaymentIds = new Set((previous.pendingPayment || []).map((order) => order.id));
+              const previousPaidIds = new Set((previous.paid || []).map((order) => order.id));
 
-          const incoming = [...(nextData.pendingConfirmation || []), ...(nextData.pendingPayment || []), ...(nextData.awaitingDriver || []), ...(nextData.outForDelivery || [])].filter((order) => !previousActiveIds.has(order.id));
-          const movedToPayment = (nextData.pendingPayment || []).filter((order) => !previousPaymentIds.has(order.id) && previousActiveIds.has(order.id));
-          const movedToPaid = (nextData.paid || []).filter((order) => !previousPaidIds.has(order.id));
+              const incoming = [...(nextData.pendingConfirmation || []), ...(nextData.pendingPayment || []), ...(nextData.awaitingDriver || []), ...(nextData.outForDelivery || [])].filter((order) => !previousActiveIds.has(order.id));
+              const movedToPayment = (nextData.pendingPayment || []).filter((order) => !previousPaymentIds.has(order.id) && previousActiveIds.has(order.id));
+              const movedToPaid = (nextData.paid || []).filter((order) => !previousPaidIds.has(order.id));
 
-          if (incoming.length) {
-            const ids = new Set(incoming.map((order) => order.id));
-            setPulsedOrderIds((current) => new Set([...current, ...ids]));
-            const firstIncoming = incoming[0];
-            const target = resolveOrderTargetColumn(firstIncoming);
-            setNewOrderNotice(incoming.length === 1 ? `Nova comanda #${firstIncoming.ticketNumber} → ${target.title}` : `${incoming.length} ${'new_orders_grouped_in_summary'.tr}`);
-            enqueueOrderNotifications(incoming, { targetStage: target.stage, playSound: true });
-            setTimeout(() => setPulsedOrderIds((current) => new Set([...current].filter((id) => !ids.has(id)))), 9000);
-            setTimeout(() => setNewOrderNotice(''), 9000);
-          } else if (movedToPaid.length) {
-            triggerFly(movedToPaid, { targetStage: 'paid', delayMs: floatingOrder && movedToPaid.some((o) => o.id === floatingOrder.id) ? 0 : 220 });
-          } else if (movedToPayment.length) {
-            triggerFly(movedToPayment, { targetStage: 'payment', delayMs: floatingOrder && movedToPayment.some((o) => o.id === floatingOrder.id) ? 0 : 220 });
+              if (incoming.length) {
+                const ids = new Set(incoming.map((order) => order.id));
+                setPulsedOrderIds((current) => new Set([...current, ...ids]));
+                const firstIncoming = incoming[0];
+                const target = resolveOrderTargetColumn(firstIncoming);
+                setNewOrderNotice(incoming.length === 1 ? `Nova comanda #${firstIncoming.ticketNumber} → ${target.title}` : `${incoming.length} ${'new_orders_grouped_in_summary'.tr}`);
+                enqueueOrderNotifications(incoming, { targetStage: target.stage, playSound: true });
+                setTimeout(() => setPulsedOrderIds((current) => new Set([...current].filter((id) => !ids.has(id)))), 9000);
+                setTimeout(() => setNewOrderNotice(''), 9000);
+              } else if (movedToPaid.length) {
+                triggerFly(movedToPaid, { targetStage: 'paid', delayMs: floatingOrder && movedToPaid.some((o) => o.id === floatingOrder.id) ? 0 : 220 });
+              } else if (movedToPayment.length) {
+                triggerFly(movedToPayment, { targetStage: 'payment', delayMs: floatingOrder && movedToPayment.some((o) => o.id === floatingOrder.id) ? 0 : 220 });
+              }
+            }
+            dataRef.current = nextData;
+            setData(nextData);
+            setSelectedOrder((current) => {
+              if (!current) return current;
+              const available = [nextData.procurementOrders || [], nextData.pendingConfirmation, nextData.pendingPayment, nextData.confirmed, nextData.paid, nextData.awaitingDriver || [], nextData.outForDelivery || [], nextData.history].flat();
+              return available.find((order) => order.id === current.id) || current;
+            });
+          } catch (err) {
+            if (refreshRequestRef.current === request && !request.controller.signal.aborted) setError(err.message);
           }
+        } while (request.again && refreshRequestRef.current === request && !request.controller.signal.aborted);
+      })().finally(() => {
+        if (refreshRequestRef.current === request) {
+          refreshRequestRef.current = null;
+          setRefreshing(false);
         }
-        dataRef.current = nextData;
-        setData(nextData);
-        setSelectedOrder((current) => {
-          if (!current) return current;
-          const available = [nextData.procurementOrders || [], nextData.pendingConfirmation, nextData.pendingPayment, nextData.confirmed, nextData.paid, nextData.awaitingDriver || [], nextData.outForDelivery || [], nextData.history].flat();
-          return available.find((order) => order.id === current.id) || current;
-        });
-      } catch (err) { setError(err.message); }
-      finally { if (!silent) setRefreshing(false); }
+      });
+      return request.promise;
     };
     useEffect(() => {
+      dataRef.current = null;
+      setData(null);
       refresh();
-      return window.ConfloraSession.watchOrderUpdates(() => {
+      const stop = window.ConfloraSession.watchOrderUpdates(() => {
         refresh(true);
         loadClosingStatus();
       });
-    }, [dateFrom, dateTo]);
+      return () => {
+        stop();
+        refreshRequestRef.current?.controller.abort();
+        refreshRequestRef.current = null;
+      };
+    }, [dateFrom, dateTo, user.id, user.role]);
 
     const setPeriod = (days) => {
       setDateTo(today);

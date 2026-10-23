@@ -9,7 +9,6 @@ import {
 } from "./ui.js";
 import { icon } from "./icons.js";
 import { onLanguageChange } from "./i18n/index.js";
-import { storeQueries } from "./query/tanstackQuery.js";
 import { renderOrderReceipt } from "./receipt.js";
 import { translateProductName } from './i18n/products.js';
 
@@ -530,8 +529,10 @@ export function createCart(state) {
     $("#checkoutError").textContent = "";
 
     try {
-      // Execute order via TanStack Query mutation
-      const order = await storeQueries.submitOrder(payload, state.api, pending.key);
+      // Keep the same operation identity on an uncertain network outcome.
+      const result = await state.api('/orders', { method: 'POST', body: payload,
+        headers: { 'Idempotency-Key': pending.key } });
+      const order = result?.order || result;
       if (owner !== submittingOwner) return;
       state.purchaseInsights?.invalidate();
       state.orderNotifications?.received(order);

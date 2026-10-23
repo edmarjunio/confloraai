@@ -212,7 +212,7 @@ class PdvRepository {
     if (database && !this.repository._firestoreClientDisabled) {
       const collection = database.collection('orders');
       const open = collection.where('deliveryStatus', 'in', ['PENDING_DISPATCH', 'PENDING_DELIVERY', 'PREPARING_DELIVERY', 'OUT_FOR_DELIVERY']);
-      const completed = collection.where('deliveryStatus', '==', 'DELIVERED').limit(200);
+      const completed = collection.where('deliveryStatus', '==', 'DELIVERED').orderBy('deliveredAt', 'desc').limit(100);
       const [openSnap, completedSnap] = await Promise.all([open.get(), completed.get()]);
       const openDocs = openSnap.docs.map((document) => ({ ...document.data(), id: document.id }));
       const completedDocs = completedSnap.docs

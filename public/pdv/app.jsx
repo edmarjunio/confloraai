@@ -150,15 +150,6 @@ const { useState, useEffect, useRef, useMemo } = React;
     const primaryActionButtonClass = 'cf-btn-3d cf-btn-3d--primary';
     const shortcutButtonClass = 'cf-btn-3d cf-btn-3d--secondary cf-btn-3d--sm !rounded-xl !px-3 !py-2.5 text-xs flex items-center justify-center gap-2';
 
-    function readStorefrontProductImages() {
-      try {
-        localStorage.removeItem('conflora:public-catalog:v1:main:conflora');
-        localStorage.removeItem('conflora_catalog_cache');
-        localStorage.removeItem('conflora_catalog_cache_v2');
-      } catch (_) {}
-      return new Map();
-    }
-
     function App() {
       // Device Simulator: 'responsive' | 'mobile-preview'
       const deviceView = 'responsive';
@@ -277,9 +268,18 @@ const { useState, useEffect, useRef, useMemo } = React;
           else if (page === 'report') url.searchParams.set('view', 'report');
           else if (page === 'history') url.searchParams.set('view', 'history');
           else url.searchParams.delete('view');
-          window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+          if (url.href !== window.location.href) window.history.pushState({ confloraNavigation: true }, '', url.pathname + url.search + url.hash);
         } catch (_) {}
       };
+
+      useEffect(() => {
+        const navigate = event => {
+          const view = event.detail?.view;
+          navigateCashierPage(view === 'commands' ? 'orders' : ['orders', 'report', 'history', 'deliveries'].includes(view) ? view : null);
+        };
+        window.addEventListener('cf-pdv-navigate', navigate);
+        return () => window.removeEventListener('cf-pdv-navigate', navigate);
+      }, []);
 
       const handleQuickProductCreated = (item, add = false) => {
         const productId = String(item.id ?? item.productId ?? item.sku ?? '').trim();
@@ -405,17 +405,15 @@ const { useState, useEffect, useRef, useMemo } = React;
       useEffect(() => {
         if (!currentUser || currentUser.role === 'ENTREGADOR') return;
         window.ConfloraSession.apiFetch('/api/caixa/products').then((res) => { if (!res.ok) throw new Error('could_not_load_products'.tr); return res.json(); }).then((rows) => {
-          const storefrontImagesById = readStorefrontProductImages();
           setProducts(rows.map((item) => {
             const productId = String(item.id ?? item.productId ?? item.sku ?? '').trim();
             const images = (Array.isArray(item.images) ? item.images : [])
               .map((entry) => (typeof entry === 'string' ? entry : entry?.url || entry?.imageUrl || entry?.src || entry?.downloadURL || ''))
               .filter(Boolean);
-            const cachedImages = storefrontImagesById.get(productId) || [];
             const imageCandidates = window.ConfloraProductCard?.getImageCandidates({
               ...item,
-              images: [...images, ...cachedImages],
-            }) || [...new Set([...images, item.imageUrl, item.imagePathCache, ...cachedImages]
+              images,
+            }) || [...new Set([...images, item.imageUrl, item.imagePathCache]
               .map((image) => String(image || '').trim())
               .filter((image) => /^https:\/\/(?:firebasestorage|storage)\.googleapis\.com\//i.test(image)
                 || /^\/api\/images\//i.test(image)
@@ -640,7 +638,12 @@ const { useState, useEffect, useRef, useMemo } = React;
 
       useEffect(() => {
         const scheduler = imagePreloadRef.current;
-        const upcomingImages = new Set(filteredProducts.slice(visibleCount, visibleCount + 60).map((product) => product.image).filter(Boolean));
+        const connection = navigator.connection;
+        if (connection?.saveData || /^(slow-)?2g$|^3g$/.test(connection?.effectiveType || '') || document.visibilityState !== 'visible') {
+          scheduler.queue = [];
+          return;
+        }
+        const upcomingImages = new Set(filteredProducts.slice(visibleCount, visibleCount + 6).map((product) => product.image).filter(Boolean));
         scheduler.queue = scheduler.queue.filter((imageUrl) => upcomingImages.has(imageUrl));
         for (const imageUrl of upcomingImages) {
           if (imageUrl && !scheduler.started.has(imageUrl)) {
@@ -649,7 +652,7 @@ const { useState, useEffect, useRef, useMemo } = React;
           }
         }
         const startNext = () => {
-          if (scheduler.active >= 5 || !scheduler.queue.length) return;
+          if (scheduler.active >= 2 || !scheduler.queue.length) return;
           const imageUrl = scheduler.queue.shift();
           scheduler.active += 1;
           const image = new Image();
@@ -663,7 +666,8 @@ const { useState, useEffect, useRef, useMemo } = React;
           image.src = imageUrl;
           startNext();
         };
-        while (scheduler.active < 5 && scheduler.queue.length) startNext();
+        while (scheduler.active < 2 && scheduler.queue.length) startNext();
+        return () => { scheduler.queue = []; };
       }, [filteredProducts, visibleCount]);
 
       const isSoldByKg = (product) => String(product?.saleUnit?.code || product?.unit || product?.unidade || '').trim().toUpperCase() === 'KG';

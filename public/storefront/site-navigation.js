@@ -322,7 +322,13 @@
 
         // Navegação de abas internas no /admin sem reload
         link.onclick = (event) => {
-          if (location.pathname === '/admin' && item.href.startsWith('/admin?tab=')) {
+          if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
+          if (['/caixa', '/pdv'].includes(location.pathname) && item.href.startsWith('/caixa')) {
+            event.preventDefault();
+            dialog.close();
+            const view = new URL(item.href, location.origin).searchParams.get('view');
+            window.dispatchEvent(new CustomEvent('cf-pdv-navigate', { detail: { view } }));
+          } else if (location.pathname === '/admin' && item.href.startsWith('/admin?tab=')) {
             event.preventDefault();
             dialog.close();
             const tab = new URL(item.href, location.origin).searchParams.get('tab');

@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createPublicSnapshot } = require('../src/storefront/public-snapshot');
 
-test('public reads share only concurrent requests and never return a retained snapshot', async () => {
+test('public reads share concurrent requests and expire the public projection', async () => {
   let reads = 0, now = 1, fail = false;
   const snapshot = createPublicSnapshot(async () => {
     reads++;
@@ -12,11 +12,11 @@ test('public reads share only concurrent requests and never return a retained sn
   const values = await Promise.all(Array.from({ length: 100 }, () => snapshot.read()));
   assert.equal(reads, 1);
   assert.ok(values.every(value => value === values[0]));
-  await snapshot.read(); assert.equal(reads, 2);
-  now += 15000; await snapshot.read(); assert.equal(reads, 3);
+  await snapshot.read(); assert.equal(reads, 1);
+  now += 15000; await snapshot.read(); assert.equal(reads, 2);
   snapshot.invalidate(); fail = true;
   await assert.rejects(snapshot.read(), /unavailable/);
-  fail = false; await snapshot.read(); assert.equal(reads, 5);
+  fail = false; await snapshot.read(); assert.equal(reads, 4);
   assert.equal(snapshot.metrics.shared, 99);
 });
 
@@ -33,5 +33,5 @@ test('an edit during a pending read cannot republish an obsolete price', async (
   release({ price: 10 });
   assert.deepEqual(await pending, { price: 20 });
   assert.deepEqual(await snapshot.read(), { price: 20 });
-  assert.equal(reads, 3);
+  assert.equal(reads, 2);
 });

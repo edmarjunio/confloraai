@@ -20,9 +20,8 @@ import {
   onLanguageChange,
 } from "./i18n/index.js";
 import { appStore } from "./store/index.js";
-import { queryClient } from "./query/tanstackQuery.js";
+import { createPublicCatalog, PUBLIC_FRESH_TIME } from './public-catalog.mjs';
 import { renderOrderReceipt } from "./receipt.js";
-import { clearLegacyBusinessStorage, clearLegacyBusinessCaches } from "./storage-cleanup.js";
 import { startPerformanceMonitor } from "./performance.mjs";
 import { createPurchaseInsights } from "./purchase-insights.mjs";
 import { createOrderFeedback } from "./order-feedback.js";
@@ -34,9 +33,18 @@ const slug = existingStore
   ? "conflora"
   : decodeURIComponent(location.pathname.split("/")[2]);
 const basePath = existingStore ? "" : `/shop/${slug}`;
-clearLegacyBusinessStorage();
-void clearLegacyBusinessCaches();
-const PUBLIC_FRESH_TIME = 15000;
+// Persist only the audited main store's public projection, never tenant/private APIs.
+const publicCatalog = existingStore ? createPublicCatalog('main:conflora') : null;
+let catalogSource = 'network';
+function catalogStatus(message) {
+  let status = document.getElementById('catalogSyncStatus');
+  if (!status) {
+    status = element('p', { id: 'catalogSyncStatus', role: 'status', class: 'muted' });
+    document.getElementById('products').before(status);
+  }
+  status.textContent = message;
+  status.hidden = !message;
+}
 
 const state = {
   existingStore,
@@ -48,12 +56,30 @@ const state = {
   user: null,
 };
 let catalogRevision = 0;
+function invalidateVisibleCatalog() {
+  catalogRevision++;
+  publicCatalog?.invalidate();
+  lastCatalogRefresh = 0;
+  nextCatalogRetry = 0;
+  catalogSource = 'cache';
+  // Wait for any older request to finish before starting the authoritative read.
+  if (catalog) {
+    setTimeout(async () => {
+      await catalogRefresh?.catch(() => {});
+      if (document.visibilityState === 'visible') refreshPublicCatalog().catch(() => {});
+    }, 0);
+  }
+}
+window.addEventListener('cf-catalog-invalidated', invalidateVisibleCatalog);
+window.addEventListener('storage', event => {
+  if (event.key === 'cf-public-invalidated') invalidateVisibleCatalog();
+});
 const transport = state.api;
 state.api = async (path, options = {}) => {
   const result = await transport(path, options);
-  if (options.method && !['GET', 'HEAD'].includes(options.method) && /(?:products|stock|orders|config|inventory)/.test(path)) {
+  if (!existingStore && options.method && !['GET', 'HEAD'].includes(options.method) && /(?:products|stock|orders|config|inventory)/.test(path)) {
     catalogRevision++;
-    queryClient.invalidateQueries({ queryKey: ['catalog', slug] });
+    publicCatalog?.invalidate();
     // Keep the receipt/checkout in place; refresh the public display in the background.
     lastCatalogRefresh = 0;
     setTimeout(async () => {
@@ -369,7 +395,11 @@ state.applyConfig = applyConfig;
 
 state.refreshCatalog = () => catalog?.render();
 state.reloadProducts = async () => {
-  queryClient.invalidateQueries({ queryKey: ["catalog"] });
+  catalogRevision++;
+  publicCatalog?.invalidate();
+  lastCatalogRefresh = 0;
+  nextCatalogRetry = 0;
+  await catalogRefresh?.catch(() => {});
   return refreshPublicCatalog();
 };
 
@@ -1090,21 +1120,27 @@ window.addEventListener("popstate", async (event) => {
 // Application bootstrap
 let catalogRefresh;
 let lastCatalogRefresh = 0;
+let nextCatalogRetry = 0;
 async function refreshPublicCatalog() {
   if (catalogRefresh) return catalogRefresh;
+  if (navigator.onLine === false || Date.now() < nextCatalogRetry) return;
   const revision = catalogRevision;
   catalogRefresh = (async () => {
+    if (catalogSource === 'cache') catalogStatus('Exibindo dados salvos. Atualizando…');
     const [config, products] = await Promise.all([
       state.api("/config"), state.api("/products"),
     ]);
     if (revision !== catalogRevision) return;
+    publicCatalog?.write({ config, products });
+    catalogSource = 'network';
+    catalogStatus('');
     lastCatalogRefresh = Date.now();
+    nextCatalogRetry = 0;
     const configChanged = JSON.stringify(state.config) !== JSON.stringify(config);
     const productsChanged = JSON.stringify(state.products) !== JSON.stringify(products);
     if (!configChanged && !productsChanged) return;
     state.config = config;
     state.products = products;
-    queryClient.setQueryData(["catalog", slug], products);
     if (configChanged) applyConfig();
     if (configChanged || productsChanged) catalog.render();
     if (productsChanged) cart.render();
@@ -1113,6 +1149,10 @@ async function refreshPublicCatalog() {
   })();
   try {
     await catalogRefresh;
+  } catch (error) {
+    nextCatalogRetry = Date.now() + PUBLIC_FRESH_TIME;
+    catalogStatus('Não foi possível atualizar. Os dados exibidos podem estar desatualizados.');
+    throw error;
   } finally {
     catalogRefresh = null;
   }
@@ -1123,11 +1163,26 @@ try {
   applyHtmlTranslations();
 
   const session = state.api("/me").catch(() => ({ user: null }));
-  [state.config, state.products] = await Promise.all([
-    state.api("/config"), state.api("/products"),
-  ]);
-  queryClient.setQueryData(["catalog", slug], state.products);
-  lastCatalogRefresh = Date.now();
+  const bootRevision = catalogRevision;
+  const saved = await publicCatalog?.read();
+  if (saved) {
+    state.config = saved.config;
+    state.products = saved.products;
+    catalogSource = 'cache';
+    lastCatalogRefresh = bootRevision === catalogRevision ? saved.savedAt : 0;
+    catalogStatus('Dados salvos no dispositivo. Preços e estoque são conferidos ao enviar o pedido.');
+    performanceMonitor.count('publicCacheHit');
+  } else {
+    [state.config, state.products] = await Promise.all([state.api('/config'), state.api('/products')]);
+    if (bootRevision === catalogRevision) {
+      publicCatalog?.write(state);
+      lastCatalogRefresh = Date.now();
+    } else {
+      catalogSource = 'cache';
+      catalogStatus('Atualizando dados após uma alteração…');
+    }
+    performanceMonitor.count('publicCacheMiss');
+  }
 
   catalog = createCatalog(
     state,
@@ -1166,6 +1221,7 @@ try {
   }
 
   performanceMonitor.markCatalogReady();
+  if ((saved && !saved.fresh) || bootRevision !== catalogRevision) refreshPublicCatalog().catch(() => {});
   // Login resolution does not block the public catalogue or its first render.
   session.then(async ({ user }) => {
     state.user = user || null;
@@ -1189,7 +1245,8 @@ try {
     }
   };
   document.addEventListener("visibilitychange", refreshOnReturn);
-  window.addEventListener("online", () => { lastCatalogRefresh = 0; refreshOnReturn(); });
+  window.addEventListener("online", () => { lastCatalogRefresh = 0; nextCatalogRetry = 0; refreshOnReturn(); });
+  window.addEventListener('offline', () => catalogStatus('Sem conexão. Consulta disponível; operações precisam de confirmação do servidor.'));
   const catalogInteraction = () => {
     lastCatalogInteraction = Date.now();
     if (Date.now() - lastCatalogRefresh >= PUBLIC_FRESH_TIME) refreshPublicCatalog().catch(() => {});
@@ -1202,10 +1259,10 @@ try {
     clearTimeout(catalogTimer);
     catalogTimer = setTimeout(async () => {
       if (document.visibilityState === 'visible' && Date.now() - lastCatalogInteraction < 120000) {
-        try { await refreshPublicCatalog(); } catch { lastCatalogRefresh = Date.now(); }
+        try { await refreshPublicCatalog(); } catch { /* Failure must not advance freshness. */ }
       }
       scheduleCatalogRefresh();
-    }, document.visibilityState === 'visible' && Date.now() - lastCatalogInteraction < 120000 ? Math.max(1000, PUBLIC_FRESH_TIME - (Date.now() - lastCatalogRefresh)) : PUBLIC_FRESH_TIME);
+    }, document.visibilityState === 'visible' && navigator.onLine !== false && Date.now() - lastCatalogInteraction < 120000 ? Math.max(1000, nextCatalogRetry - Date.now(), PUBLIC_FRESH_TIME - (Date.now() - lastCatalogRefresh)) : PUBLIC_FRESH_TIME);
   };
   scheduleCatalogRefresh();
   window.addEventListener('pagehide', () => clearTimeout(catalogTimer));
@@ -1234,8 +1291,5 @@ try {
       onclick: () => location.reload(),
     }),
   );
-  if (isNetwork) {
-    setTimeout(() => location.reload(), 3500);
-    window.addEventListener("online", () => location.reload(), { once: true });
-  }
+  // Do not loop full-page reloads on a slow link; keep the explicit retry action.
 }
