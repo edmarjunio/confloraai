@@ -71,6 +71,10 @@ class MessageService {
     messageId = '',
     verifyOnly = false,
   }) {
+    const { evaluateDailyReset } = require('./conversation-automation');
+    await evaluateDailyReset(this.firestoreRepo, phone).catch(err => {
+      Logger.warn('Erro ao avaliar reset diário', { error: err.message, phone });
+    });
     const startTime = performance.now();
     const whatsapp = require('./durable-conversation-transport').durableConversationTransport(this.firestoreRepo, this.whatsappClient, { phone, messageId });
     // 1. Marcar como lida e salvar mensagem

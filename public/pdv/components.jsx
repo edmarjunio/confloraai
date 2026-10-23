@@ -1481,6 +1481,225 @@ window.PdvComponents = (() => {
       </button>
     </OrderCardSurface>;
   }
+  function WhatsappCompactCard({ conversation, selected, onClick }) {
+    const rawPhone = String(conversation.phone || conversation.customerPhone || '').replace(/\D/g, '');
+    const formattedPhone = rawPhone.length === 11
+      ? `(${rawPhone.slice(0, 2)}) ${rawPhone.slice(2, 7)}-${rawPhone.slice(7)}`
+      : rawPhone.length === 13 && rawPhone.startsWith('55')
+      ? `+55 (${rawPhone.slice(2, 4)}) ${rawPhone.slice(4, 9)}-${rawPhone.slice(9)}`
+      : conversation.phone || conversation.customerPhone || 'Não informado';
+
+    const unreadCount = Number(conversation.unreadCount || conversation.unread || 0);
+    const lastMsgTime = conversation.updatedAt
+      ? new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }).format(new Date(conversation.updatedAt))
+      : '';
+
+    const isHuman = conversation.automation === 'paused';
+    const isNeedsVendor = isHuman && conversation.reason === 'needs_vendor';
+    const isAwaitingPix = conversation.paymentStatus === 'AWAITING_PIX';
+    const isPaid = conversation.paymentStatus === 'PAID' || conversation.status === 'COMPLETED';
+
+    return (
+      <button
+        type="button"
+        onClick={() => onClick(conversation)}
+        className={`w-full text-left rounded-2xl border p-3.5 transition shadow-2xs relative cursor-pointer ${
+          selected
+            ? 'border-emerald-600 bg-emerald-50/90 ring-2 ring-emerald-500/20'
+            : 'border-slate-200 bg-white hover:border-emerald-300 hover:bg-slate-50/80'
+        }`}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <strong className="block truncate text-sm font-black text-slate-900">
+              {conversation.customerName || conversation.name || 'Cliente WhatsApp'}
+            </strong>
+            <span className="block truncate text-xs font-semibold text-slate-500">
+              📱 {formattedPhone}
+            </span>
+          </div>
+          {lastMsgTime && (
+            <span className="shrink-0 text-[10px] font-bold text-slate-400">
+              {lastMsgTime}
+            </span>
+          )}
+        </div>
+
+        {conversation.lastMessage && (
+          <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-slate-600">
+            "{conversation.lastMessage}"
+          </p>
+        )}
+
+        <div className="mt-3 flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100">
+          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
+            isNeedsVendor
+              ? 'bg-amber-100 text-amber-900 border border-amber-300'
+              : isHuman
+              ? 'bg-purple-100 text-purple-900 border border-purple-300'
+              : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+          }`}>
+            {isNeedsVendor ? '⚠️ Precisa de vendedor' : isHuman ? '👤 Vendedor' : '🤖 Agente Conflora'}
+          </span>
+
+          {isAwaitingPix && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 border border-sky-300 px-2 py-0.5 text-[10px] font-extrabold text-sky-900">
+              ⏳ Aguardando Pix
+            </span>
+          )}
+
+          {isPaid && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-300 px-2 py-0.5 text-[10px] font-extrabold text-emerald-900">
+              ✅ Pago
+            </span>
+          )}
+
+          {unreadCount > 0 && (
+            <span className="ml-auto shrink-0 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-emerald-600 text-white text-[11px] font-black shadow-xs">
+              {unreadCount}
+            </span>
+          )}
+        </div>
+      </button>
+    );
+  }
+
+  function WhatsappChatDrawer({ conversation, onClose, onTakeover, onRelease, onCloseConversation, onOpenOrder }) {
+    const [messages, setMessages] = useState([]);
+    const [text, setText] = useState('');
+    const [sending, setSending] = useState(false);
+    const [error, setError] = useState('');
+    const rawPhone = String(conversation?.phone || conversation?.customerPhone || '').replace(/\D/g, '');
+
+    useEffect(() => {
+      if (!rawPhone) return;
+      let active = true;
+      api(`/api/admin/whatsapp/conversations/${rawPhone}/messages`)
+        .then(res => { if (active && res.messages) setMessages(res.messages); })
+        .catch(err => { if (active) setError(err.message); });
+
+      const handleKey = (event) => {
+        if (event.key === 'Escape') onClose();
+      };
+      window.addEventListener('keydown', handleKey);
+      return () => { active = false; window.removeEventListener('keydown', handleKey); };
+    }, [rawPhone]);
+
+    const handleSend = async () => {
+      if (!text.trim() || sending) return;
+      setSending(true);
+      setError('');
+      try {
+        await api(`/api/admin/whatsapp/conversations/${rawPhone}/send`, { text: text.trim() });
+        setText('');
+        const res = await api(`/api/admin/whatsapp/conversations/${rawPhone}/messages`);
+        if (res.messages) setMessages(res.messages);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setSending(false);
+      }
+    };
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSend();
+      }
+    };
+
+    const openWaMe = async () => {
+      try {
+        await onTakeover(conversation);
+        window.open(`https://wa.me/${rawPhone}`, '_blank');
+      } catch (err) {
+        setError('Não foi possível pausar o agente antes de abrir no WhatsApp.');
+      }
+    };
+
+    if (!conversation) return null;
+
+    return (
+      <div className="fixed inset-0 z-[90] flex justify-end bg-black/40 backdrop-blur-xs" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+        <aside className="w-full max-w-lg h-full bg-white flex flex-col shadow-2xl overflow-hidden border-l border-slate-200">
+          <header className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between shrink-0">
+            <div>
+              <h2 className="text-base font-black text-slate-900">{conversation.customerName || conversation.name || 'Cliente WhatsApp'}</h2>
+              <p className="text-xs text-slate-500 font-semibold">📱 {rawPhone}</p>
+            </div>
+            <button type="button" onClick={onClose} aria-label="Fechar painel" className="w-8 h-8 rounded-full border border-slate-200 text-slate-500 hover:bg-slate-100 flex items-center justify-center font-bold">✕</button>
+          </header>
+
+          {/* Bar de Ações do Operador */}
+          <div className="p-3 bg-emerald-50/60 border-b border-emerald-100 flex flex-wrap gap-2 shrink-0">
+            {conversation.automation === 'paused' ? (
+              <button type="button" onClick={() => onRelease(conversation)} className="cf-btn-3d cf-btn-3d--secondary cf-btn-3d--sm">
+                🤖 Devolver ao Agente
+              </button>
+            ) : (
+              <button type="button" onClick={() => onTakeover(conversation)} className="cf-btn-3d cf-btn-3d--primary cf-btn-3d--sm">
+                👤 Assumir Atendimento
+              </button>
+            )}
+
+            {conversation.orderId && (
+              <button type="button" onClick={() => onOpenOrder(conversation.orderId)} className="cf-btn-3d cf-btn-3d--secondary cf-btn-3d--sm">
+                📋 Abrir Comanda
+              </button>
+            )}
+
+            <button type="button" onClick={openWaMe} className="cf-btn-3d cf-btn-3d--secondary cf-btn-3d--sm">
+              💬 Abrir no WhatsApp
+            </button>
+
+            <button type="button" onClick={() => onCloseConversation(conversation)} className="cf-btn-3d cf-btn-3d--secondary cf-btn-3d--sm ml-auto text-red-700">
+              ✖ Encerrar
+            </button>
+          </div>
+
+          {/* Histórico Cronológico */}
+          <div className="flex-1 p-4 overflow-y-auto space-y-3 min-h-0 bg-[#F4F6F5]">
+            {error && <p role="alert" className="p-3 rounded-xl bg-red-50 text-xs font-bold text-red-800 border border-red-200">{error}</p>}
+            {messages.map((msg) => {
+              const isUser = msg.payload?.from || msg.sentBy;
+              const msgTime = msg.createdAt ? new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }).format(new Date(msg.createdAt)) : '';
+              return (
+                <div key={msg.id} className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
+                  <div className={`max-w-[85%] p-3 rounded-2xl text-xs font-medium ${isUser ? 'bg-emerald-700 text-white rounded-br-none' : 'bg-white border border-slate-200 text-slate-800 rounded-bl-none shadow-2xs'}`}>
+                    <p className="whitespace-pre-wrap">{msg.payload?.message || msg.text || '[Sem texto]'}</p>
+                    {msgTime && <span className={`block text-[9px] mt-1 text-right font-bold ${isUser ? 'text-emerald-200' : 'text-slate-400'}`}>{msgTime}</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Input e Envio de Mensagem */}
+          <footer className="p-3 border-t border-slate-200 bg-white shrink-0">
+            <div className="flex items-center gap-2">
+              <textarea
+                rows={1}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Digite sua mensagem… (Enter envia, Shift+Enter quebra linha)"
+                className="flex-1 p-2.5 border border-slate-300 rounded-xl text-xs focus:border-emerald-600 focus:outline-none resize-none"
+              />
+              <button
+                type="button"
+                disabled={sending || !text.trim()}
+                onClick={handleSend}
+                className="cf-btn-3d cf-btn-3d--primary cf-btn-3d--md"
+              >
+                {sending ? '...' : 'Enviar'}
+              </button>
+            </div>
+          </footer>
+        </aside>
+      </div>
+    );
+  }
+
   function MetricCard({ label, value, description, tone = 'default' }) {
     return <cf-card padding="sm" class="cf-metric-card" tone={tone === 'debt' ? 'warning' : undefined}>
       <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</p>
@@ -2396,6 +2615,43 @@ window.PdvComponents = (() => {
       finally { setBusy(false); setDragFrom(null); }
     };
 
+    const [whatsappConversations, setWhatsappConversations] = useState([]);
+    const [whatsappFilter, setWhatsappFilter] = useState('all_open');
+    const [selectedConversation, setSelectedConversation] = useState(null);
+    const [mobileTab, setMobileTab] = useState('orders'); // 'orders' | 'whatsapp'
+
+    const fetchWhatsappConversations = async () => {
+      try {
+        const res = await api(`/api/admin/whatsapp/conversations?filter=${whatsappFilter}`);
+        if (res.conversations) setWhatsappConversations(res.conversations);
+      } catch {
+        // Silencioso se indisponível
+      }
+    };
+
+    useEffect(() => {
+      if (view === 'orders') fetchWhatsappConversations();
+    }, [view, whatsappFilter]);
+
+    const handleTakeover = async (conv) => {
+      const rawPhone = String(conv.phone || conv.customerPhone || '').replace(/\D/g, '');
+      await api(`/api/admin/whatsapp/conversations/${rawPhone}/takeover`, { expectedVersion: conv.version });
+      await fetchWhatsappConversations();
+    };
+
+    const handleRelease = async (conv) => {
+      const rawPhone = String(conv.phone || conv.customerPhone || '').replace(/\D/g, '');
+      await api(`/api/admin/whatsapp/conversations/${rawPhone}/release`);
+      await fetchWhatsappConversations();
+    };
+
+    const handleCloseConv = async (conv) => {
+      const rawPhone = String(conv.phone || conv.customerPhone || '').replace(/\D/g, '');
+      await api(`/api/admin/whatsapp/conversations/${rawPhone}/close`, { status: 'CLOSED_NO_SALE' });
+      setSelectedConversation(null);
+      await fetchWhatsappConversations();
+    };
+
     const deliveryOrderIds = new Set([...(data?.awaitingDriver || []), ...(data?.outForDelivery || [])].map(order => order.id));
     const columns = data ? [
       { title: 'ENCOMENDAS', hint: 'quote_deposit_and_arrival_at_store_administration'.tr, orders: data.procurementOrders || [], tone: 'amber', stage: 'procurement' },
@@ -2482,9 +2738,74 @@ window.PdvComponents = (() => {
           {!data && !error && <p className="rounded-xl bg-white p-6 text-center text-sm text-slate-500">{'loading_tickets'.tr}</p>}
           {data && <>
             {view === 'orders' && <>
+              {/* Seletor de Aba Dedicada no Mobile */}
+              <div className="flex md:hidden gap-2 mb-3">
+                <button
+                  type="button"
+                  onClick={() => setMobileTab('orders')}
+                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition ${
+                    mobileTab === 'orders' ? 'bg-emerald-800 text-white shadow-xs' : 'bg-white text-slate-700 border border-slate-200'
+                  }`}
+                >
+                  Comandas ({columns.reduce((sum, col) => sum + col.orders.length, 0)})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMobileTab('whatsapp')}
+                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 ${
+                    mobileTab === 'whatsapp' ? 'bg-emerald-800 text-white shadow-xs' : 'bg-white text-slate-700 border border-slate-200'
+                  }`}
+                >
+                  <span>WhatsApp ({whatsappConversations.length})</span>
+                  {whatsappConversations.some(c => c.unreadCount > 0) && (
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  )}
+                </button>
+              </div>
+
               {newOrderNotice && <div role="status" className="mb-3 rounded-xl border border-amber-300 bg-amber-100 px-4 py-3 text-sm font-extrabold text-amber-950 shadow-sm" aria-live="polite">🔔 {newOrderNotice}</div>}
+
               <div className="cf-cashier-board cf-orders-board flex w-full gap-4 overflow-x-auto pb-4 pt-1 snap-x select-none">
-                {columns.map((column) => <CashierColumn key={column.title} {...column} isTargetGlow={flyingToStage === column.stage} canMove={['ADMIN', "CAIXA"].includes(user.role) && !busy} dragFrom={dragFrom} onMove={moveOrder} onDragStart={setDragFrom} onDragEnd={() => setDragFrom(null)} pulsedOrderIds={pulsedOrderIds} selectedOrderId={selectedOrder?.id} onDetails={setSelectedOrder} />)}
+                {/* Coluna Desktop de WhatsApp */}
+                <section className={`w-[340px] min-w-[340px] shrink-0 snap-start flex flex-col rounded-2xl border border-slate-200 bg-slate-100 p-3 ${mobileTab === 'whatsapp' ? 'block md:block' : 'hidden md:block'}`}>
+                  <header className="mb-3 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-950 px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="text-xs font-black tracking-wide">WHATSAPP</h3>
+                      <span className="rounded-full bg-white/80 px-2 py-0.5 text-xs font-extrabold">{whatsappConversations.length}</span>
+                    </div>
+                    <select
+                      value={whatsappFilter}
+                      onChange={(e) => setWhatsappFilter(e.target.value)}
+                      className="mt-2 w-full text-xs font-bold p-1.5 border border-emerald-200 rounded-lg bg-white text-slate-800"
+                    >
+                      <option value="all_open">Todos abertos</option>
+                      <option value="needs_vendor">Precisa de vendedor</option>
+                      <option value="awaiting_pix">Aguardando Pix</option>
+                      <option value="completed">Concluídos</option>
+                      <option value="closed_no_sale">Encerrados sem venda</option>
+                    </select>
+                  </header>
+                  <div className="space-y-2 overflow-y-auto max-h-[70vh]">
+                    {whatsappConversations.map((conv) => (
+                      <WhatsappCompactCard
+                        key={conv.id || conv.phone}
+                        conversation={conv}
+                        selected={selectedConversation?.id === conv.id}
+                        onClick={setSelectedConversation}
+                      />
+                    ))}
+                    {!whatsappConversations.length && (
+                      <p className="p-4 text-center text-xs text-slate-500 rounded-xl border border-dashed border-slate-300 bg-white/70">
+                        Nenhum atendimento nesta categoria.
+                      </p>
+                    )}
+                  </div>
+                </section>
+
+                {/* Colunas de Comandas */}
+                <div className={`flex gap-4 ${mobileTab === 'orders' ? 'block md:flex' : 'hidden md:flex'}`}>
+                  {columns.map((column) => <CashierColumn key={column.title} {...column} isTargetGlow={flyingToStage === column.stage} canMove={['ADMIN', "CAIXA"].includes(user.role) && !busy} dragFrom={dragFrom} onMove={moveOrder} onDragStart={setDragFrom} onDragEnd={() => setDragFrom(null)} pulsedOrderIds={pulsedOrderIds} selectedOrderId={selectedOrder?.id} onDetails={setSelectedOrder} />)}
+                </div>
               </div>
             </>}
 
@@ -2669,6 +2990,22 @@ window.PdvComponents = (() => {
           <MetricCard label={'store_credits_settled_by_me'.tr} value={money(data.metrics.debtReceipts)} description="Recebimentos no período" />
         </div>
       </section>}
+      {selectedConversation && (
+        <WhatsappChatDrawer
+          conversation={selectedConversation}
+          onClose={() => setSelectedConversation(null)}
+          onTakeover={handleTakeover}
+          onRelease={handleRelease}
+          onCloseConversation={handleCloseConv}
+          onOpenOrder={(orderId) => {
+            setSelectedConversation(null);
+            api('/api/caixa/orders/' + encodeURIComponent(orderId))
+              .then(setSelectedOrder)
+              .catch(() => {});
+          }}
+        />
+      )}
+
       {selectedOrder && <OrderDetails extraContent={selectedOrder.procurement ? <a className={button} href="/configuracoes"> {'manage_order'.tr} </a> : null} key={`${selectedOrder.id}:${selectedOrder.status}:${selectedOrder.paymentMethod}`} order={selectedOrder} canApproveCredit={user.role === 'ADMIN' && selectedOrder.creditApprovalStatus === 'PENDING'} canAdvance={user.role !== 'VENDEDOR' && selectedOrder.status === 'AWAITING_CONFIRMATION' && selectedOrder.creditApprovalStatus !== 'PENDING'} onAdvance={(order) => moveOrder(order.id, 'confirmation', 'payment')} canReceive={(user.role === 'ADMIN' && selectedOrder.creditApprovalStatus === 'PENDING' && selectedOrder.paymentParts?.length > 1 || user.role !== 'VENDEDOR' && ['AWAITING_CASHIER', 'AWAITING_PAYMENT', 'PENDING'].includes(selectedOrder.status)) && !selectedOrder.pixData?.txid} canConfirmManualPix={selectedOrder.pixMode !== 'MANUAL' && (user.role !== 'VENDEDOR' || selectedOrder.createdBy?.id === user.id && (!selectedOrder.pixData?.txid || (selectedOrder.paymentParts || [{ method: selectedOrder.paymentMethod }]).every(part => part.method === 'PIX'))) && (selectedOrder.paymentMethod === 'PIX' && ['CREATING_PIX', 'AWAITING_PIX', ...(selectedOrder.procurement ? ['AWAITING_RECONCILIATION'] : [])].includes(selectedOrder.status) || user.role === 'VENDEDOR' && ['AWAITING_CASHIER', 'AWAITING_PAYMENT', 'PENDING'].includes(selectedOrder.status))} busy={busy} error={error} onReceive={receive} onManualPix={async (order, note, proofId) => {
         setBusy(true); setError('');
         try {

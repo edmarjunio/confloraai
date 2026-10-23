@@ -75,4 +75,36 @@ async function setConversationChannel(repo, phone, channel) {
   });
 }
 
-module.exports = { conversationAutomation, resumeAgentRequestedConversation, setConversationChannel };
+/**
+ * Avalia a mudança de data (America/Sao_Paulo) no primeiro atendimento do dia.
+ * Preserva histórico, comandas e Pix pendentes; expira rascunhos sem confirmação.
+ */
+async function evaluateDailyReset(repo, phone, { now = new Date() } = {}) {
+  const tenantId = 'conflora';
+  const customerKey = customerKeyFor(tenantId, phone);
+  const conversationId = scopedId(tenantId, customerKey);
+  const tzDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(now);
+
+  return runTransaction(repo, async tx => {
+    const current = await tx.get('agent_conversations', conversationId) || {
+      tenantId,
+      customerKey,
+      automation: 'active',
+    };
+    const lastDate = current.lastSessionDate || '';
+    if (lastDate === tzDateStr) return { isNewDay: false, current };
+
+    const updated = {
+      ...current,
+      lastSessionDate: tzDateStr,
+      sessionStartedAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      ...(current.automation === 'active' ? { channel: 'menu' } : {}),
+    };
+
+    tx.set('agent_conversations', conversationId, updated);
+    return { isNewDay: true, current: updated };
+  });
+}
+
+module.exports = { conversationAutomation, resumeAgentRequestedConversation, setConversationChannel, evaluateDailyReset };

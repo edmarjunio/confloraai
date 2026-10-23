@@ -19,6 +19,42 @@ class IncomingMessageService {
       if (current?.status === 'NEEDS_RECONCILIATION') throw Object.assign(new Error('Mensagem exige conferência operacional.'), { status: 409 });
       if (current?.nextAttemptAt > this.now()) throw Object.assign(new Error('Mensagem em backoff.'), { status: 503 });
       if (current?.leaseUntil > this.now()) throw Object.assign(new Error('Mensagem em processamento. Tente novamente.'), { status: 503 });
+
+      // Agregação e concatenação durável de mensagens do mesmo remetente na janela curta de 3.5s
+      const phone = current?.payload?.phone;
+      if (phone) {
+        const senderKey = this.id(`aggregation_${phone}`);
+        const aggState = await tx.get('incoming_aggregations', senderKey);
+        const windowMs = Number(process.env.MESSAGE_AGGREGATION_WINDOW_MS) || 3500;
+        const now = this.now();
+
+        let aggregatedMessage = current?.payload?.message || '';
+        let messageIds = [messageId];
+
+        if (aggState && aggState.lastMessageAt && (now - aggState.lastMessageAt) < windowMs) {
+          if (aggState.aggregatedMessage) {
+            aggregatedMessage = `${aggState.aggregatedMessage}\n${aggregatedMessage}`;
+          }
+          if (Array.isArray(aggState.messageIds)) {
+            messageIds = [...new Set([...aggState.messageIds, messageId])];
+          }
+        }
+
+        tx.set('incoming_aggregations', senderKey, {
+          id: senderKey,
+          phone,
+          lastMessageAt: now,
+          processingMessageId: messageId,
+          aggregatedMessage,
+          messageIds,
+          updatedAt: new Date(now).toISOString(),
+        });
+
+        if (current?.payload) {
+          current.payload.message = aggregatedMessage;
+        }
+      }
+
       tx.set('incoming_messages', id, { ...current, id, status: 'PROCESSING', owner, attempts: Number(current?.attempts || 0) + 1, leaseUntil: this.now() + 120000, expiresAt: null });
       return { id, owner };
     });
