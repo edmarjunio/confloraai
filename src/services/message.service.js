@@ -3,6 +3,27 @@ const Logger = require('../shared/logger');
 const { formatCurrency } = require('../shared/string.util');
 const { recognizeGreeting } = require('../shared/greeting');
 
+function isAmbiguousMessage(text) {
+  const norm = String(text || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  if (!norm || norm.length < 3) return false;
+
+  const patterns = [
+    /\bpensando em comprar\b/,
+    /\bnao sei ainda\b/,
+    /\bnao sei o que\b/,
+    /\bnao sei direito\b/,
+    /\bqueria ver um negocio\b/,
+    /\bver um negocio\b/,
+    /\bver umas coisas\b/,
+    /\bso olhadinha\b/,
+    /\bso olhando\b/,
+    /\bso dando uma olhada\b/,
+    /\bduvida sobre o que\b/,
+    /\bindecis[oa]\b/,
+  ];
+  return patterns.some(pattern => pattern.test(norm));
+}
+
 class MessageService {
   /**
    * @param {Object} dependencies
@@ -100,6 +121,12 @@ class MessageService {
 
     if (/^(?:menu|quero ver as op[cç][oõ]es)[!,.?\s]*$/i.test(String(message || '').trim())) return this.sendMainMenu(phone, whatsapp, startTime);
 
+    if (!interactiveId && isAmbiguousMessage(message)) {
+      await conversationAutomation(this.firestoreRepo, phone, { pauseReason: 'ambiguous_customer_needs_human', messageId });
+      Logger.info(`Indecisive/ambiguous message from ${phone}. Pausing automation for human team. [NEEDS_HUMAN_ATTENTION]`);
+      return { reply: '', intent: 'AMBIGUOUS_NEEDS_HUMAN', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
+    }
+
     const initialChoice = ['catalogo_virtual', 'montar_sacola', 'btn_sacola', 'btn_atendente'].includes(interactiveId);
     if (!conversation.channel || (conversation.channel === 'menu' && !initialChoice)) {
       return this.sendMainMenu(phone, whatsapp, startTime);
@@ -111,10 +138,10 @@ class MessageService {
     if (isAgentSelection) conversation = await setConversationChannel(this.firestoreRepo, phone, 'agent');
     if (isCartSelection) conversation = await setConversationChannel(this.firestoreRepo, phone, 'cart');
 
-    if (interactiveId === 'catalogo_virtual') {
+    if (interactiveId === 'catalogo_virtual' || /^(1|cat[aá]logo|cat[aá]logo virtual)$/i.test(trimmed)) {
       await setConversationChannel(this.firestoreRepo, phone, 'menu');
-      const catalogUrl = whatsappConfig.catalogUrl;
-      const reply = `Acesse o Catálogo Virtual da Conflora: ${catalogUrl}`;
+      const catalogUrl = process.env.WHATSAPP_CATALOG_URL || whatsappConfig.catalogUrl || 'https://conflora.com.br';
+      const reply = `🌿 *Catálogo Virtual Conflora*\n\nAcesse nosso site para visualizar todos os nossos produtos:\n${catalogUrl}`;
       if (whatsapp) await whatsapp.sendTextMessage(phone, reply);
       await this.firestoreRepo.appendMessage(phone, 'assistant', reply);
       return { reply, intent: 'VIRTUAL_CATALOG_LINK', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
@@ -139,20 +166,7 @@ class MessageService {
     }
     const wantsMenu = greeting || /^(?:menu|quero ver as op[cç][oõ]es)[!,.?\s]*$/i.test(String(message || '').trim());
     if (!interactiveId && !isReceiptPayload && !isActiveAgent && !isActiveCart && wantsMenu) {
-      await setConversationChannel(this.firestoreRepo, phone, 'menu');
-      const reply = `${greeting ? greeting + ' ' : ''}Como prefere continuar?`;
-      if (whatsapp) {
-        await whatsapp.sendInteractiveButtons(phone, {
-          bodyText: reply,
-          buttons: [
-            { id: 'catalogo_virtual', title: 'Catálogo virtual' },
-            { id: 'montar_sacola', title: 'Montar minha sacola' },
-            { id: 'btn_atendente', title: 'Falar com atendente' },
-          ],
-        });
-      }
-      await this.firestoreRepo.appendMessage(phone, 'assistant', reply);
-      return { reply, intent: 'MAIN_MENU_SENT', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
+      return this.sendMainMenu(phone, whatsapp, startTime);
     }
 
     const cartCheckout = isActiveCart && ['order_entrega', 'order_retirada'].includes(interactiveId);
@@ -572,6 +586,13 @@ class MessageService {
       });
     }
 
+    // Revalidar status da conversa antes de enviar resposta para garantir prioridade do atendimento humano
+    const recheckedConv = await conversationAutomation(this.firestoreRepo, phone);
+    if (recheckedConv.automation === 'paused') {
+      Logger.info(`Staff takeover/handoff active for ${phone}. Suppressing automated bot reply.`);
+      return { reply: '', intent: 'HUMAN_HANDOFF_ACTIVE', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
+    }
+
     // 7. Salvar resposta no histórico
     await this.firestoreRepo.appendMessage(phone, 'assistant', reply);
 
@@ -593,12 +614,18 @@ class MessageService {
 
   async sendMainMenu(phone, whatsapp, startTime) {
     await require('./conversation-automation').setConversationChannel(this.firestoreRepo, phone, 'menu');
-    const reply = 'Como posso te ajudar?';
-    if (whatsapp) await whatsapp.sendInteractiveButtons(phone, { bodyText: reply, buttons: [
-      { id: 'catalogo_virtual', title: 'Catálogo virtual' },
-      { id: 'montar_sacola', title: 'Montar minha sacola' },
-      { id: 'btn_atendente', title: 'Falar com atendente' },
-    ] });
+    const reply = '🌿 *Conflora Horta e Viveiro*\n\nOlá! Como podemos ajudar?';
+    if (whatsapp) {
+      await whatsapp.sendInteractiveButtons(phone, {
+        headerText: '🌿 Conflora Horta e Viveiro',
+        bodyText: 'Olá! Como podemos ajudar?',
+        buttons: [
+          { id: 'catalogo_virtual', title: 'Catálogo virtual' },
+          { id: 'montar_sacola', title: 'Comprar agora' },
+          { id: 'btn_atendente', title: 'Falar com atendente' },
+        ],
+      });
+    }
     await this.firestoreRepo.appendMessage(phone, 'assistant', reply, { requirePersistence: true });
     return { reply, intent: 'MAIN_MENU_SENT', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
   }
