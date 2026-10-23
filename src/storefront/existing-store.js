@@ -47,7 +47,7 @@ function toProduct(rawItem, { stockControlEnabled = true } = {}) {
     ...registeredImages,
     storageImageProxy,
   ].filter(Boolean))];
-  return {
+  const res = {
     id: String(item.id),
     name,
     nameTranslations: Object.fromEntries(['en', 'es', 'fr'].filter(language =>
@@ -65,7 +65,6 @@ function toProduct(rawItem, { stockControlEnabled = true } = {}) {
     imageIsIllustrative: !registeredImage,
     imageFallbackUrl: "/store-assets/placeholder.svg",
     images: imageCandidates,
-    imageFileId,
     categories: [digest(category).slice(0, 16)],
     categoryName: category,
     subcategoryName: subcategory,
@@ -82,23 +81,6 @@ function toProduct(rawItem, { stockControlEnabled = true } = {}) {
       (tag) => typeof tag === "string",
     ),
     searchAttributes: { light: item.light || item.iluminacao || item.luminosidade || '', environment: item.environment || item.ambiente_ideal || item.onde_deixar || '' },
-    specifications: Object.fromEntries(
-      Object.entries(item.specifications || {}).filter(
-        ([, value]) =>
-          value &&
-          typeof value.label === "string" &&
-          typeof value.value === "string",
-      ),
-    ),
-    contentSections: (Array.isArray(item.contentSections)
-      ? item.contentSections
-      : []
-    ).filter(
-      (section) =>
-        section &&
-        typeof section.title === "string" &&
-        typeof section.body === "string",
-    ),
     isAvailable: commercial.active,
     status: productStatus(item),
     stock: {
@@ -112,31 +94,65 @@ function toProduct(rawItem, { stockControlEnabled = true } = {}) {
       increment: commercial.saleUnit.increment,
     },
     salesCount: Number(item.salesCount) || 0,
-    descriptionAi: item.descriptionAi || item.descricao_ia || "",
-    careInstructions: item.careInstructions || item.care || item.cuidados_basicos || item.cuidadosBasicos || "",
-    cuidados_basicos: item.cuidados_basicos || item.cuidadosBasicos || "",
-    iluminacao: item.iluminacao || item.iluminação || item.illumination || item.lighting || "",
-    illumination: item.illumination || item.iluminacao || item.iluminação || item.lighting || item.dicas_iluminacao || "",
-    watering: item.watering || item.wateringInstructions || item.rega || item.irrigacao || item.frequencia_rega || "",
-    ambiente_ideal: item.ambiente_ideal || item.ambienteIdeal || "",
-    environment: item.environment || item.ambiente_ideal || item.ambienteIdeal || item.habitat || "",
-    dicas_armazenamento: item.dicas_armazenamento || item.dicasArmazenamento || "",
-    storageTips: item.storageTips || item.storage || item.dicas_armazenamento || item.dicasArmazenamento || "",
-    durabilidade: item.durabilidade || "",
-    durability: item.durability || item.durabilidade || item.validade || "",
-    preferences: item.preferences || item.o_que_gosta || item.oQueGosta || item.gosta_de || "",
-    dislikes: item.dislikes || item.o_que_evitar || item.oQueEvitar || item.nao_gosta || "",
-    usage: item.usage || item.uso || item.modo_de_uso || item.modoDeUso || "",
-    selectionTips: item.selectionTips || item.dica_escolha || item.dicaEscolha || "",
-    suitability: item.suitability || item.indicacao || item.indicação || item.especie_indicada || "",
-    matureSize: item.matureSize || item.porte_adulto || item.porteAdulto || item.tamanho_adulto || item.tamanhoAdulto || "",
-    precautions: item.precautions || item.precaucoes || item.precauções || item.cuidados_de_uso || "",
-    alimentacao: item.alimentacao || item.alimentação || item.feeding || item.dieta || "",
-    feeding: item.feeding || item.alimentacao || item.alimentação || item.dieta || "",
-    housing: item.housing || item.moradia || item.abrigo || item.habitat_ideal || item.habitatIdeal || "",
-    handling: item.handling || item.manejo || item.comportamento || item.dicas_manejo || item.dicasManejo || "",
-    prohibitedFoods: item.prohibitedFoods || item.alimentos_proibidos || item.alimentosProibidos || item.o_que_nao_oferecer || item.oQueNaoOferecer || "",
   };
+
+  if (imageFileId) res.imageFileId = imageFileId;
+
+  const specs = Object.fromEntries(
+    Object.entries(item.specifications || {}).filter(
+      ([, value]) =>
+        value &&
+        typeof value.label === "string" &&
+        typeof value.value === "string",
+    ),
+  );
+  if (Object.keys(specs).length > 0) res.specifications = specs;
+
+  const sections = (Array.isArray(item.contentSections)
+    ? item.contentSections
+    : []
+  ).filter(
+    (section) =>
+      section &&
+      typeof section.title === "string" &&
+      typeof section.body === "string",
+  );
+  if (sections.length > 0) res.contentSections = sections;
+
+  const details = [
+    ['descriptionAi', item.descriptionAi || item.descricao_ia],
+    ['careInstructions', item.careInstructions || item.care || item.cuidados_basicos || item.cuidadosBasicos],
+    ['cuidados_basicos', item.cuidados_basicos || item.cuidadosBasicos],
+    ['iluminacao', item.iluminacao || item.iluminação || item.illumination || item.lighting],
+    ['illumination', item.illumination || item.iluminacao || item.iluminação || item.lighting || item.dicas_iluminacao],
+    ['watering', item.watering || item.wateringInstructions || item.rega || item.irrigacao || item.frequencia_rega],
+    ['ambiente_ideal', item.ambiente_ideal || item.ambienteIdeal],
+    ['environment', item.environment || item.ambiente_ideal || item.ambienteIdeal || item.habitat],
+    ['dicas_armazenamento', item.dicas_armazenamento || item.dicasArmazenamento],
+    ['storageTips', item.storageTips || item.storage || item.dicas_armazenamento || item.dicasArmazenamento],
+    ['durabilidade', item.durabilidade],
+    ['durability', item.durability || item.durabilidade || item.validade],
+    ['preferences', item.preferences || item.o_que_gosta || item.oQueGosta || item.gosta_de],
+    ['dislikes', item.dislikes || item.o_que_evitar || item.oQueEvitar || item.nao_gosta],
+    ['usage', item.usage || item.uso || item.modo_de_uso || item.modoDeUso],
+    ['selectionTips', item.selectionTips || item.dica_escolha || item.dicaEscolha],
+    ['suitability', item.suitability || item.indicacao || item.indicação || item.especie_indicada],
+    ['matureSize', item.matureSize || item.porte_adulto || item.porteAdulto || item.tamanho_adulto || item.tamanhoAdulto],
+    ['precautions', item.precautions || item.precaucoes || item.precauções || item.cuidados_de_uso],
+    ['alimentacao', item.alimentacao || item.alimentação || item.feeding || item.dieta],
+    ['feeding', item.feeding || item.alimentacao || item.alimentação || item.dieta],
+    ['housing', item.housing || item.moradia || item.abrigo || item.habitat_ideal || item.habitatIdeal],
+    ['handling', item.handling || item.manejo || item.comportamento || item.dicas_manejo || item.dicasManejo],
+    ['prohibitedFoods', item.prohibitedFoods || item.alimentos_proibidos || item.alimentosProibidos || item.o_que_nao_oferecer || item.oQueNaoOferecer],
+  ];
+
+  for (const [key, value] of details) {
+    if (typeof value === "string" && value.trim()) {
+      res[key] = value.trim();
+    }
+  }
+
+  return res;
 }
 function existingConfig(products, saved, settings = { stockControlEnabled: true }) {
   const activeProducts = products.filter(
@@ -345,11 +361,57 @@ function installExistingStore(app, { repository, assistant, catalog, getOrderInt
           ),
       );
   }
-  app.get("/api/storefront/catalog", async (_req, res, next) => {
+  app.get("/api/storefront/catalog", async (req, res, next) => {
     try {
-      res
-        .set("Cache-Control", "no-store")
-        .json(await publicSnapshot.read());
+      const full = await publicSnapshot.read();
+      const limit = Number.parseInt(req.query.limit, 10);
+      const page = Number.parseInt(req.query.page, 10) || 1;
+      const category = req.query.category ? String(req.query.category).trim().toLowerCase() : '';
+      const search = req.query.search ? String(req.query.search).trim().toLowerCase() : '';
+
+      if (!limit && !category && !search && !req.query.page) {
+        return res.set("Cache-Control", "no-store").json(full);
+      }
+
+      let filteredProducts = full.products || [];
+      if (category) {
+        filteredProducts = filteredProducts.filter(p =>
+          (p.categoryName && p.categoryName.toLowerCase().includes(category)) ||
+          (Array.isArray(p.categories) && p.categories.some(c => String(c).toLowerCase() === category))
+        );
+      }
+      if (search) {
+        filteredProducts = filteredProducts.filter(p =>
+          (p.name && p.name.toLowerCase().includes(search)) ||
+          (p.canonicalName && p.canonicalName.toLowerCase().includes(search)) ||
+          (Array.isArray(p.searchAliases) && p.searchAliases.some(a => String(a).toLowerCase().includes(search))) ||
+          (Array.isArray(p.tags) && p.tags.some(t => String(t).toLowerCase().includes(search)))
+        );
+      }
+
+      const totalItems = filteredProducts.length;
+      if (limit && limit > 0) {
+        const startIndex = (page - 1) * limit;
+        const endIndex = startIndex + limit;
+        const paginatedProducts = filteredProducts.slice(startIndex, endIndex);
+        return res.set("Cache-Control", "no-store").json({
+          config: full.config,
+          products: paginatedProducts,
+          pagination: {
+            page,
+            limit,
+            totalItems,
+            totalPages: Math.ceil(totalItems / limit),
+            hasMore: endIndex < totalItems,
+          },
+        });
+      }
+
+      return res.set("Cache-Control", "no-store").json({
+        config: full.config,
+        products: filteredProducts,
+        pagination: { totalItems },
+      });
     } catch (error) {
       next(error);
     }

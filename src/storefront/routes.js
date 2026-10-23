@@ -149,13 +149,45 @@ function installStorefront(app, { express, firestore, repository, assistant }) {
   router.get("/config", (req, res) => res.json(req.storeConfig));
   router.get(
     "/products",
-    handle(async (req, res) =>
-      res.json(
-        (await repo.list(req.tenantId, "products")).filter(
-          (p) => p.isAvailable,
-        ),
-      ),
-    ),
+    handle(async (req, res) => {
+      let products = (await repo.list(req.tenantId, "products")).filter(
+        (p) => p.isAvailable,
+      );
+      const limit = Number.parseInt(req.query.limit, 10);
+      const page = Number.parseInt(req.query.page, 10) || 1;
+      const category = req.query.category ? String(req.query.category).trim().toLowerCase() : '';
+      const search = req.query.search ? String(req.query.search).trim().toLowerCase() : '';
+
+      if (category) {
+        products = products.filter(p =>
+          (p.categoryName && p.categoryName.toLowerCase().includes(category)) ||
+          (Array.isArray(p.categories) && p.categories.some(c => String(c).toLowerCase() === category))
+        );
+      }
+      if (search) {
+        products = products.filter(p =>
+          (p.name && p.name.toLowerCase().includes(search)) ||
+          (p.canonicalName && p.canonicalName.toLowerCase().includes(search))
+        );
+      }
+
+      if (limit && limit > 0) {
+        const startIndex = (page - 1) * limit;
+        const paginated = products.slice(startIndex, startIndex + limit);
+        return res.json({
+          products: paginated,
+          pagination: {
+            page,
+            limit,
+            totalItems: products.length,
+            totalPages: Math.ceil(products.length / limit),
+            hasMore: startIndex + limit < products.length,
+          },
+        });
+      }
+
+      return res.json(products);
+    }),
   );
   router.get(
     "/images/:id",
