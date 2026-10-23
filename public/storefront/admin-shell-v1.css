@@ -984,3 +984,5 @@ body :is(.action-btn,.header-btn,.btn-action):hover:not(:disabled) { transform:t
   .product-import-dialog__actions > * { flex:1; }
   .product-import-dialog__file-actions > * { width:100%; }
 }
+
+.admin-product-filters{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.admin-product-filters input{flex:1;min-width:160px}.admin-product-filters select,.admin-product-filters input{min-height:44px;border:1px solid #dce7df;border-radius:10px;padding:8px 12px}.admin-product-row[hidden]{display:none!important}

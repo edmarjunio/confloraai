@@ -2,6 +2,7 @@
 function PdvDelivery({ user, onBack }) {
   const { useState, useEffect, useRef } = React;
   const [data, setData] = useState(null);
+  const [mobileStage, setMobileStage] = useState('available');
   const [pulsedOrderIds, setPulsedOrderIds] = useState(new Set());
   const pulseTimer = useRef(null);
   const [selected, setSelected] = useState(null);
@@ -61,6 +62,9 @@ function PdvDelivery({ user, onBack }) {
       }
       if (['complete', 'receive'].includes(action) && actualDistanceKm !== '') payload.actualDistanceKm = Number(actualDistanceKm);
       const result = await request('/api/caixa/deliveries/' + encodeURIComponent(order.id) + '/' + action, payload);
+      if (result.order?.deliveryStatus === 'PREPARING_DELIVERY') setMobileStage('separating');
+      if (result.order?.deliveryStatus === 'OUT_FOR_DELIVERY') setMobileStage('inRoute');
+      if (result.order?.deliveryStatus === 'DELIVERED') setMobileStage('completed');
       if (['complete', 'receive'].includes(action) && result.order?.deliveryStatus === 'DELIVERED') {
         setNotice('delivery_completed_please_rate_the_service_and_delivery_of_this_order_below'.tr);
         setEditingFeedback(true);
@@ -462,14 +466,15 @@ function PdvDelivery({ user, onBack }) {
     )}
   </div>;
 
-  return <main className="min-h-screen bg-[#F4F6F5] font-sans text-slate-800">
+  return <main className="cf-delivery-page min-h-screen bg-[#F4F6F5] font-sans text-slate-800">
     <PdvComponents.Topbar user={user} onCashier={onBack} /><header className="cf-page-toolbar"><div className="flex w-full flex-wrap items-center justify-between gap-3"><button type="button" className="cf-back-button" onClick={() => user.role === 'ENTREGADOR' ? window.ConfloraNavigation.back() : onBack()}>{'back_59dc92'.tr}</button><h1 className="text-xl font-black text-[#0F381E]"> {'deliveries_506da8'.tr} </h1><div className="flex flex-wrap items-center gap-3"><div className="text-right"><strong className="block text-sm">{user.name}</strong><span className="text-[10px] font-bold text-emerald-700">{user.role}</span></div><button type="button" className="cf-danger-button" onClick={async () => { await window.ConfloraSession.apiFetch('/api/auth/logout', { method: 'POST' }); window.location.reload(); }}>{'team_logout'.tr}</button></div></div></header>
     <div className="cf-work-body w-full max-w-none p-4 sm:p-6">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-slate-600">{'take_the_order_pack_the_products_and_tap_left_the_nursery_everyone_follows_only_the_p'.tr}</p><span role="status" className="rounded-full bg-emerald-100 px-3 py-2 text-xs font-bold text-emerald-800">{'automatic_update'.tr}</span></div>
       {notice && <p role="status" className="cf-order-card--attention mb-4 rounded-xl bg-amber-100 p-3 font-bold">{notice}</p>}
       {error && !selected && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-red-700">{error}</p>}
       {!data && <p>{'loading_deliveries'.tr}</p>}
-      <div className="grid w-full grid-cols-1 gap-4 pb-3 md:grid-cols-2 xl:grid-cols-4" aria-label={'delivery_board'.tr}>
+      <nav className="cf-delivery-stage-tabs" aria-label="Etapas das entregas">{[['available','Disponíveis'],['separating','Separar'],['inRoute','Em rota'],['completed','Concluídas']].map(([key,label]) => <button type="button" key={key} aria-pressed={mobileStage === key} onClick={() => setMobileStage(key)}>{label} <span>{(data?.[key] || []).length}</span></button>)}</nav>
+      <div data-mobile-stage={mobileStage} className="cf-delivery-board grid w-full grid-cols-1 gap-4 pb-3 md:grid-cols-2 xl:grid-cols-4" aria-label={'delivery_board'.tr}>
         <PdvComponents.CashierColumn title={'waiting_for_driver_a1232a'.tr} hint="Pedidos disponíveis para assumir" orders={decorate(data?.available)} tone="amber" selectedOrderId={selected?.id} pulsedOrderIds={pulsedOrderIds} onDetails={order => { setSelected(order); setError(''); }} canMove={false} />
         <PdvComponents.CashierColumn title={'orders_being_packed'.tr} hint="Produtos sendo separados pelo responsável" orders={decorate(data?.separating)} tone="blue" selectedOrderId={selected?.id} pulsedOrderIds={new Set()} onDetails={order => { setSelected(order); setError(''); }} canMove={false} />
         <PdvComponents.CashierColumn title={'on_route'.tr} hint="Saída da horta registrada · tempo atualizado" orders={decorate(data?.inRoute)} tone="blue" selectedOrderId={selected?.id} pulsedOrderIds={new Set()} onDetails={order => { setSelected(order); setError(''); }} canMove={false} />

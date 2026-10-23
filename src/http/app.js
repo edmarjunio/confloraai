@@ -1501,8 +1501,10 @@ function createApp({
     const saleUnit = unit === 'KG'
       ? { code: 'KG', label: 'kg', minimum: 0.1, increment: 0.1 }
       : { code: 'UN', label: 'unidade', minimum: 1, increment: 1 };
+    const requestId = String(body.requestId || randomUUID());
+    if (!/^[a-f0-9-]{36}$/i.test(requestId)) return res.status(400).json({ error: 'Identificador de cadastro inválido.' });
     const product = {
-      id: `prod-${randomUUID().replaceAll('-', '')}`,
+      id: `prod-${requestId.replaceAll('-', '')}`,
       name,
       category: category || 'Geral',
       subcategory: '',
@@ -1516,6 +1518,11 @@ function createApp({
     };
 
     try {
+      const existing = await messageService.firestoreRepo.getProductById(product.id);
+      if (existing) {
+        if (existing.createdBy?.id !== req.user.id || existing.name !== name) return res.status(409).json({ error: 'Este cadastro já foi utilizado. Reabra o formulário.' });
+        return res.status(200).json({ success: true, product: existing });
+      }
       await messageService.firestoreRepo.saveProduct(product);
       messageService.catalogRepo?.invalidateCache?.();
       messageService.metaAgentService?.productIndex?.invalidate?.();

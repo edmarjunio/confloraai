@@ -254,7 +254,10 @@ const { useState, useEffect, useRef, useMemo } = React;
       const [freightValue, setFreightValue] = useState(0);
 
       // Mobile Bottom Sheet mode: 'collapsed' | 'peek' (tempo real) | 'expanded'
-      const [mobileSheetMode, setMobileSheetMode] = useState('peek');
+      const [mobileSheetMode, setMobileSheetMode] = useState('collapsed');
+      const [showQuickProduct, setShowQuickProduct] = useState(false);
+      const [productNotice, setProductNotice] = useState('');
+      const [showMobileOptions, setShowMobileOptions] = useState(false);
       const [activeModal, setActiveModal] = useState(null); // 'pay' | 'discount' | 'freight' | 'receipt' | 'customer' | 'debt_settle'
       const [cashierPage, setCashierPage] = useState(() => {
         const view = new URLSearchParams(window.location.search).get('view');
@@ -276,6 +279,42 @@ const { useState, useEffect, useRef, useMemo } = React;
           else url.searchParams.delete('view');
           window.history.replaceState(null, '', url.pathname + url.search + url.hash);
         } catch (_) {}
+      };
+
+      const handleQuickProductCreated = (item, add = false) => {
+        const productId = String(item.id ?? item.productId ?? item.sku ?? '').trim();
+        const name = String(item.name || '').trim();
+        const category = String(item.category || 'Geral').trim() || 'Geral';
+        const image = item.image || item.imageUrl || item.imageFallbackUrl || '/store-assets/placeholder.svg';
+        const product = {
+          ...item,
+          id: productId,
+          sku: String(item.sku || item.id || ''),
+          name,
+          canonicalName: String(item.canonicalName || name).trim(),
+          variation: item.variation || '',
+          category,
+          categoryName: category,
+          subcategory: '',
+          imageFileId: '',
+          imageFallbackUrl: item.imageFallbackUrl || '',
+          description: '',
+          searchTags: '',
+          stock: item.stock || `${item.stockQuantity ?? 0} ${item.unit || 'UN'}`,
+          isShortcut: false,
+          imageCandidates: item.imageCandidates || [],
+          image,
+        };
+        setProducts((previous) => [product, ...previous.filter((existing) => String(existing.id) !== productId)]
+          .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')));
+        setShowingFavorites(false);
+        setSelectedCategories([]);
+        setSelectedSubcategories([]);
+        setSearchQuery(name);
+        setVisibleCount(60);
+        setShowQuickProduct(false);
+        setProductNotice(add ? 'Produto adicionado à venda!' : 'Produto cadastrado com sucesso!');
+        if (add) addProductToCart(product);
       };
 
       useEffect(() => {
@@ -805,6 +844,7 @@ const { useState, useEffect, useRef, useMemo } = React;
       const renderMobileBottomSheet = () => {
         const isExpanded = mobileSheetMode === 'expanded';
         const isCollapsed = mobileSheetMode === 'collapsed';
+        if (!isExpanded) return <div className="cf-mobile-cart-bar lg:hidden"><div><span>{distinctItemsCount} itens no carrinho</span><strong>{formatBRL(finalTotal)}</strong></div><button type="button" className="cf-btn-3d cf-btn-3d--primary cf-btn-3d--md" onClick={() => setMobileSheetMode('expanded')}>Ver carrinho →</button></div>;
 
         return (
           <>
@@ -1236,7 +1276,7 @@ const { useState, useEffect, useRef, useMemo } = React;
       if (openingRequired) return <PdvComponents.AbrirCaixaModal onOpened={() => setOpeningRequired(false)} />;
       if (openingCheckError) return <div role="alert">{openingCheckError}<button onClick={() => window.location.reload()}>Tentar novamente</button></div>;
       if (currentUser.role === 'ENTREGADOR' || cashierPage === 'deliveries') return <PdvDelivery user={currentUser} onBack={() => navigateCashierPage(null)} />;
-      if (cashierPage) return <PdvComponents.CashierQueue onInitialOrderOpened={() => setNotificationOrderId('')} initialOrderId={notificationOrderId} user={currentUser} view={cashierPage} onBack={() => navigateCashierPage(null)} onDebt={() => { navigateCashierPage(null); setActiveModal('debt_settle'); }} />;
+      if (cashierPage) return <PdvComponents.CashierQueue products={products} hasActiveSale={cart.length > 0} onProductCreated={handleQuickProductCreated} onInitialOrderOpened={() => setNotificationOrderId('')} initialOrderId={notificationOrderId} user={currentUser} view={cashierPage} onBack={() => navigateCashierPage(null)} onDebt={() => { navigateCashierPage(null); setActiveModal('debt_settle'); }} />;
       return (
         <div className="min-h-screen bg-[#F4F6F5] text-slate-800 flex flex-col font-sans select-none">
           {/* Main Responsive Wrapper (Full width or Mobile Frame simulator) */}
@@ -1248,7 +1288,12 @@ const { useState, useEffect, useRef, useMemo } = React;
             {activeModal === 'approval' && <PdvComponents.DiscountApproval approval={discountApproval} onClose={() => setActiveModal(null)} onOrder={(order) => { setCompletedOrder(order); setActiveModal('receipt'); }} />}
             {activeModal === 'debt_settle' && <PdvComponents.DebtSettlement onClose={() => setActiveModal(null)} />}
             {/* Com Flora Standard Website Header adapted for POS */}
-            <div className="sticky top-0 z-20 bg-white">
+            <div className="cf-pos-header sticky top-0 z-20 bg-white">
+              <div className="cf-mobile-sale-header">
+                <div className="cf-mobile-sale-heading"><button aria-label="Voltar" type="button" onClick={() => window.ConfloraNavigation.back()}>‹</button><div><strong>Caixa</strong><small>Nova venda</small></div><button type="button" aria-label="Notificações e comandas" onClick={() => navigateCashierPage('orders')}><IconBase className="h-5 w-5"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></IconBase></button><button type="button" aria-label="Atualizar produtos" onClick={async () => { try { const response = await window.ConfloraSession.apiFetch('/api/caixa/products'); if (!response.ok) throw new Error('Não foi possível atualizar.'); const rows = await response.json(); setProducts(rows.map((item) => ({ ...item, categoryName: item.category || 'Geral', stock: item.stock + ' ' + item.unit, image: item.imageUrl || '/store-assets/placeholder.svg', isShortcut: favoriteProductIdsRef.current.has(String(item.id)) }))); setProductNotice('Catálogo atualizado.'); } catch (error) { setProductNotice(error.message); } }}>↻</button><button type="button" aria-label="Mais opções" aria-expanded={showMobileOptions} onClick={() => setShowMobileOptions(!showMobileOptions)}>☰</button></div>
+                <label className="cf-mobile-search"><span aria-hidden="true">⌕</span><input aria-label="Buscar produto" placeholder="Nome, categoria ou código…" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} /><button type="button" aria-label="Limpar busca" onClick={() => setSearchQuery('')}>×</button><button type="button" aria-label="Filtros" onClick={() => setShowMobileOptions(!showMobileOptions)}>☷</button></label>
+                {showMobileOptions && <nav className="cf-mobile-options"><button onClick={() => navigateCashierPage('orders')}>Comandas</button><button onClick={() => navigateCashierPage('deliveries')}>Entregas</button><button onClick={() => navigateCashierPage('report')}>Relatório</button><button onClick={() => navigateCashierPage('history')}>Histórico</button><button onClick={() => setActiveModal('discount')}>Desconto</button><button onClick={() => setActiveModal('freight')}>Entrega</button><button onClick={openCustomerModal}>Cliente</button></nav>}
+              </div>
               <PdvComponents.Topbar hideCashier user={currentUser} onCashier={() => navigateCashierPage(null)} onSearch={setSearchQuery} searchValue={searchQuery} searchInputRef={searchInputRef} />
               <div className="cf-page-toolbar cf-pos-context">
                 {/* Left group: Navigation & Title badge */}
@@ -1352,6 +1397,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                     ? 'grid-cols-2'
                     : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5')}
                 >
+                  <button type="button" className="cf-btn-3d cf-btn-3d--secondary cf-btn-3d--sm col-span-full justify-self-start" onClick={() => setShowQuickProduct(true)}>+ Novo produto</button>
                   {filteredProducts.length === 0 && <p role="status" className="col-span-full p-4 text-sm text-slate-600">{'catalog_empty_title'.tr}</p>}
                   {filteredProducts.slice(0, visibleCount).map((product) => {
                     const productId = String(product?.id ?? product?.productId ?? product?.sku ?? '').trim();
@@ -1406,7 +1452,7 @@ const { useState, useEffect, useRef, useMemo } = React;
               </div>
             )}
             {deviceView === 'responsive' && (
-              <div className="fixed bottom-56 right-4 z-50 flex flex-col items-end gap-2 lg:hidden">
+              <div className="cf-pos-legacy-floating fixed bottom-56 right-4 z-50 flex flex-col items-end gap-2 lg:hidden">
                 <button
                   type="button"
                   onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
@@ -1441,6 +1487,8 @@ const { useState, useEffect, useRef, useMemo } = React;
             )}
           </div>
 
+          {productNotice && <div role="status" className="cf-product-notice" onClick={() => setProductNotice('')}>{productNotice}</div>}
+          {showQuickProduct && <PdvComponents.QuickProductDialog products={products} initialName={searchQuery} canAdd onClose={() => setShowQuickProduct(false)} onCreated={handleQuickProductCreated} onUseExisting={(product) => { addProductToCart(product); setShowQuickProduct(false); }} />}
           {/* MODALS */}
           {weightProduct && <PdvComponents.WeightPrompt product={weightProduct} onCancel={() => setWeightProduct(null)} onConfirm={confirmWeightAdd} />}
           {customerSearchOpen && <PdvComponents.CustomerSearch onClose={() => setCustomerSearchOpen(false)} onSelect={selectCustomerFromList} />}

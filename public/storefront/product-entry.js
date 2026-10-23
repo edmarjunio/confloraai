@@ -154,6 +154,8 @@ export function createProductEntry(state, onSaved) {
       ]),
     );
 
+    const advanced = element("details", { class: "pe-advanced" }, [element("summary", { text: "Mais opções: status, foto e descrição" })]);
+
     // Status selector
     const statusSelect = element("select", { name: "status" }, [
       element("option", { value: "ATIVO", text: 'active_visible_and_available_for_sale'.tr }),
@@ -162,7 +164,7 @@ export function createProductEntry(state, onSaved) {
     if (editingProduct?.status) {
       statusSelect.value = editingProduct.status;
     }
-    form.append(
+    advanced.append(
       element("label", { class: "pe-label" }, [
         element("span", { text: 'product_status'.tr }),
         statusSelect,
@@ -185,7 +187,7 @@ export function createProductEntry(state, onSaved) {
       previewImg.src = imageInput.value.trim() || "/store-assets/placeholder.svg";
     });
 
-    form.append(
+    advanced.append(
       element("label", { class: "pe-label" }, [
         element("span", { text: 'product_photo_url'.tr }),
         element("div", { class: "pe-img-row" }, [imageInput, previewImg]),
@@ -199,7 +201,7 @@ export function createProductEntry(state, onSaved) {
       placeholder: 'brief_description_or_item_features'.tr,
       value: editingProduct?.description || "",
     });
-    form.append(
+    advanced.append(
       element("label", { class: "pe-label" }, [
         element("span", { text: 'description'.tr }),
         descTextarea,
@@ -216,12 +218,14 @@ export function createProductEntry(state, onSaved) {
       placeholder: 'keywords_separated_by_comma_e_g_premium_sale'.tr,
       value: tagsVal,
     });
-    form.append(
+    advanced.append(
       element("label", { class: "pe-label" }, [
         element("span", { text: 'search_tags'.tr }),
         tagsInput,
       ]),
     );
+
+    form.append(advanced);
 
     // Actions
     const submitBtn = element("button", {

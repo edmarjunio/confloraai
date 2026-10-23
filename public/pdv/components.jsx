@@ -1996,7 +1996,111 @@ window.PdvComponents = (() => {
     return { stage: 'payment', title: 'waiting_for_payment_6fbef3'.tr, tone: 'blue' };
   }
 
-  function CashierQueue({ user, view, onBack, onDebt, initialOrderId, onInitialOrderOpened }) {
+  function QuickProductDialog({ onClose, onCreated, products = [], initialName = '', canAdd = false, onUseExisting }) {
+    const [name, setName] = useState(initialName);
+    const [category, setCategory] = useState('Geral');
+    const [unit, setUnit] = useState('UN');
+    const [price, setPrice] = useState('');
+    const [stockQuantity, setStockQuantity] = useState('0');
+    const savingRef = useRef(false);
+    const requestId = useRef(crypto.randomUUID());
+    const dialogRef = useRef(null);
+    useEffect(() => {
+      const previousFocus = document.activeElement;
+      const oldOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      const handleKey = (event) => {
+        if (event.key === 'Escape' && !savingRef.current) { event.preventDefault(); onClose(); }
+        if (event.key !== 'Tab') return;
+        const elements = [...dialogRef.current.querySelectorAll('button:not(:disabled),input:not(:disabled),summary,select')].filter(node => node.getClientRects().length);
+        const first = elements[0]; const last = elements[elements.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      };
+      document.addEventListener('keydown', handleKey);
+      return () => { document.body.style.overflow = oldOverflow; document.removeEventListener('keydown', handleKey); previousFocus?.focus?.(); };
+    }, []);
+    const normalize = (value) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    const matches = name.trim().length < 2 ? [] : products.filter((product) => normalize(product.name).includes(normalize(name))).slice(0, 3);
+    const categories = [...new Set(products.map((product) => product.category).filter(Boolean))].sort();
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState('');
+    const priceValue = Number(String(price).replace(',', '.'));
+    const stockValue = Number(String(stockQuantity).replace(',', '.'));
+    const valid = name.trim().length >= 2
+      && Number.isFinite(priceValue) && priceValue > 0
+      && String(stockQuantity).trim() !== '' && Number.isFinite(stockValue) && stockValue >= 0
+      && (unit === 'KG' || Number.isInteger(stockValue));
+
+    const submit = async (event) => {
+      event.preventDefault();
+      if (!valid || savingRef.current) return;
+      savingRef.current = true;
+      const addAfterSave = event.nativeEvent.submitter?.value === 'add';
+      setBusy(true);
+      setError('');
+      try {
+        const result = await api('/api/caixa/products', {
+          requestId: requestId.current,
+          name: name.trim(),
+          category: category.trim() || 'Geral',
+          unit,
+          price: priceValue,
+          stockQuantity: stockValue,
+        });
+        if (!result?.product) throw new Error('O produto foi salvo, mas não retornou os dados para exibição.');
+        onCreated(result.product, addAfterSave);
+      } catch (submitError) {
+        setError(submitError.message || 'Não foi possível cadastrar o produto. Tente novamente.');
+      } finally {
+        savingRef.current = false;
+        setBusy(false);
+      }
+    };
+
+    const fieldClass = 'mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100';
+    return <div className="cf-quick-product-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
+      <form ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="cf-quick-product-title" className="cf-quick-product-dialog" onSubmit={submit}>
+        <header className="flex items-start justify-between gap-3">
+          <div><p className="text-[10px] font-extrabold uppercase tracking-[.14em] text-emerald-700">Cadastro rápido</p><h2 id="cf-quick-product-title" className="mt-1 text-xl font-black text-[#0F381E]">Novo produto</h2><p className="mt-1 text-xs text-slate-500">Cadastre o essencial e já continue a venda.</p></div>
+          <button type="button" className="cf-quick-product-close" aria-label="Fechar cadastro" onClick={onClose} disabled={busy}>×</button>
+        </header>
+        <label className="mt-5 block text-xs font-extrabold text-slate-700">Nome do produto <span className="text-red-600">*</span>
+          <input autoFocus required minLength={2} maxLength={180} className={fieldClass} value={name} onChange={(event) => setName(event.target.value)} placeholder="Ex.: Alface crespa" />
+        </label>
+        {matches.length > 0 && <aside className="mt-2 rounded-xl bg-amber-50 p-3 text-xs"><p className="font-bold">Já existe um produto parecido.</p>{matches.map((product) => <div key={product.id} className="mt-2 flex items-center justify-between gap-2"><span>{product.name} · {money(product.price)}</span><button type="button" className="cf-btn-3d cf-btn-3d--secondary cf-btn-3d--sm" onClick={() => onUseExisting?.(product)}>{canAdd ? 'Adicionar à venda' : 'Ver produto'}</button></div>)}</aside>}
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="block text-xs font-extrabold text-slate-700">Categoria
+            <input list="quick-product-categories" maxLength={80} className={fieldClass} value={category} onChange={(event) => setCategory(event.target.value)} placeholder="Geral" />
+            <datalist id="quick-product-categories">{categories.map((value) => <option key={value} value={value} />)}</datalist>
+          </label>
+          <fieldset className="block text-xs font-extrabold text-slate-700"><legend>Vendido por</legend>
+            <div className="mt-1.5 grid grid-cols-2 gap-2" role="group" aria-label="Unidade de venda">
+              {[['UN', 'Unidade'], ['KG', 'Quilo']].map(([value, label]) => <button key={value} type="button" aria-pressed={unit === value} onClick={() => { setUnit(value); if (value === 'KG' && Number.isInteger(Number(stockQuantity))) setStockQuantity(Number(stockQuantity).toFixed(3)); if (value === 'UN' && !Number.isInteger(Number(stockQuantity))) setStockQuantity(''); }} className={`cf-quick-product-unit ${unit === value ? 'is-selected' : ''}`}>{label}</button>)}
+            </div>
+          </fieldset>
+        </div>
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="block text-xs font-extrabold text-slate-700">Preço por {unit === 'KG' ? 'kg' : 'unidade'} <span className="text-red-600">*</span>
+            <span className="mt-1.5 flex items-center rounded-xl border border-slate-200 bg-white focus-within:border-emerald-600 focus-within:ring-2 focus-within:ring-emerald-100"><span className="pl-3 text-sm font-bold text-slate-400">R$</span><input required type="text" inputMode="decimal" className="w-full rounded-xl bg-transparent px-2 py-2.5 text-sm text-slate-800 outline-none" value={price ? Number(price).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''} onChange={(event) => { const digits = event.target.value.replace(/[^0-9]/g, ''); setPrice(digits ? (Number(digits) / 100).toFixed(2) : ''); }} placeholder="0,00" /></span>
+          </label>
+          <details className="text-xs text-slate-600"><summary className="cursor-pointer py-3 font-bold">Mais opções</summary><label className="block text-xs font-extrabold text-slate-700">Estoque inicial ({unit === 'KG' ? 'kg' : 'un.'}) <span className="text-red-600">*</span>
+            <input required min="0" step={unit === 'KG' ? '0.001' : '1'} type="number" inputMode="decimal" className={fieldClass} value={stockQuantity} onChange={(event) => setStockQuantity(event.target.value)} />
+          </label><p className="mt-1">Informe somente a quantidade real disponível. O cadastro não movimenta vendas anteriores.</p></details>
+        </div>
+        <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2.5 text-xs leading-relaxed text-emerald-900">Imagem e outras informações podem ser completadas depois. O produto ficará disponível no catálogo assim que for salvo.</p>
+        {canAdd && stockValue <= 0 && <p className="mt-2 text-xs text-amber-800">Para vender agora, informe o estoque real disponível em Mais opções.</p>}
+        {error && <p role="alert" className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs font-semibold text-red-800">{error}</p>}
+        <footer className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button type="button" className="cf-btn-3d cf-btn-3d--secondary cf-btn-3d--md" onClick={onClose} disabled={busy}>Cancelar</button>
+          <button type="submit" value="save" className={`cf-btn-3d cf-btn-3d--${canAdd ? 'secondary' : 'primary'} cf-btn-3d--md`} disabled={!valid || busy}>{busy ? 'Salvando…' : 'Salvar produto'}</button>
+          {canAdd && <button type="submit" value="add" className="cf-btn-3d cf-btn-3d--primary cf-btn-3d--md" disabled={!valid || busy}>Salvar e adicionar</button>}
+        </footer>
+      </form>
+    </div>;
+  }
+
+  function CashierQueue({ user, view, onBack, onDebt, initialOrderId, onInitialOrderOpened, onProductCreated, products = [], hasActiveSale = false }) {
     const today = dateInSaoPaulo();
     const [dateFrom, setDateFrom] = useState(today);
     const [dateTo, setDateTo] = useState(today);
@@ -2018,6 +2122,8 @@ window.PdvComponents = (() => {
     const [closingStatus, setClosingStatus] = useState(null);
     const [showClosingModal, setShowClosingModal] = useState(false);
     const [showOpeningModal, setShowOpeningModal] = useState(false);
+    const [showQuickProductDialog, setShowQuickProductDialog] = useState(false);
+    const [quickProductNotice, setQuickProductNotice] = useState('');
     const [closingNotice, setClosingNotice] = useState('');
     const dataRef = useRef(null);
     const soundSettingsRef = useRef(soundSettings);
@@ -2309,6 +2415,10 @@ window.PdvComponents = (() => {
           <button type="button" className="cf-btn-3d cf-btn-3d--primary cf-orders-fab" aria-label={title} title={title} onClick={() => document.querySelector('.cf-cashier-board')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
             <svg viewBox="0 0 24 24" aria-hidden="true" className="cf-orders-fab-icon" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4.5h6M9 10h6M9 14h6M9 18h3" /></svg>
             <span className="cf-orders-fab-tooltip">{title}</span>
+          </button>
+          <button type="button" className="cf-btn-3d cf-btn-3d--primary cf-orders-fab" aria-label="Criar produto" title="Criar produto" onClick={() => setShowQuickProductDialog(true)}>
+            <svg viewBox="0 0 24 24" aria-hidden="true" className="cf-orders-fab-icon" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3 20 7.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="m4.4 7.8 7.6 4.4 7.6-4.4M12 12.2V21M12 3v9.2"/><path d="M17.5 4.8v4M15.5 6.8h4"/></svg>
+            <span className="cf-orders-fab-tooltip">+ Novo produto</span>
           </button>
           <OrderDateFilter from={dateFrom} to={dateTo} today={today} onChange={(from, to) => { setDateFrom(from); setDateTo(to); }} />
           <OrderSoundAlert settings={soundSettings} onChange={setSoundSettings} floating />
@@ -2726,6 +2836,8 @@ window.PdvComponents = (() => {
           }}
         />
       )}
+      {quickProductNotice && <p role="status" className="cf-product-notice" onClick={() => setQuickProductNotice('')}>{quickProductNotice}</p>}
+      {showQuickProductDialog && <QuickProductDialog products={products} canAdd={hasActiveSale && !selectedOrder} onUseExisting={(product) => { setShowQuickProductDialog(false); onProductCreated?.(product, hasActiveSale && !selectedOrder); }} onClose={() => setShowQuickProductDialog(false)} onCreated={(product, add) => { setShowQuickProductDialog(false); setQuickProductNotice(add ? 'Produto adicionado à venda!' : 'Produto cadastrado com sucesso!'); onProductCreated?.(product, add); }} />}
     </div>;
   }
   function DebtSettlement({ onClose }) {
@@ -2744,5 +2856,5 @@ window.PdvComponents = (() => {
     const amountInvalid = !Number.isFinite(Number(amount)) || Number(amount) <= 0 || (!isCreditEntry && Number(amount) > balance);
     return <Panel title={'receive_customer_payment'.tr} onClose={onClose}>{error && <p role="alert" className="text-red-700">{error}</p>}{result ? <div><p> {'recorded_payment'.tr} {money(result.amount)}</p><p> {'remaining_balance_9a6698'.tr} {money(result.newBalance)}</p><p>{'available_credit'.tr} {money(result.newCreditBalance)}</p>{result.newBalance > 0 && <button className={button + ' mt-4'} onClick={() => { setBalance(result.newBalance); setCreditBalance(result.newCreditBalance || 0); setAmount(Number(result.newBalance).toFixed(2)); setId(crypto.randomUUID()); setResult(null); setSplitPayment(false); setProofSeen(false); setNote(''); setProofId(''); }}> {'receive_remaining_amount'.tr} </button>}</div> : <><label>{'search_registered_customer'.tr}<input className={field} value={query} onChange={(e) => setQuery(e.target.value)} /></label><div className="max-h-36 overflow-auto">{customers.map((row) => <button className="block w-full border-b p-2 text-left" key={row.id} onClick={() => select(row)}>{row.name} · {row.phone || 'no_phone'.tr}</button>)}</div>{customer && <><p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm font-bold">{customer.name}<span className="mt-1 block text-xs font-medium text-amber-800"> {'remaining_balance_9a6698'.tr} {money(balance)}</span><span className="block text-xs font-medium text-emerald-800">{'available_credit'.tr} {money(creditBalance)}</span></p><label>{'transaction_type'.tr}<select className={field} value={entryType} onChange={(event) => setEntryType(event.target.value)}><option value="QUITACAO_FIADO">{'receive_debt_payment'.tr}</option><option value="CREDITO_CLIENTE">{'add_advance_credit'.tr}</option></select></label><label> {'amount_received'.tr} <input className={field} type="number" min="0.01" max={isCreditEntry ? undefined : balance} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></label><PaymentMethodButtons value={method} onChange={setMethod} labels={{ DINHEIRO: 'cart_cash_option'.tr, DEBITO: 'cart_debit_option'.tr, CREDITO: 'cart_card_option'.tr, PIX: 'pix_already_received'.tr }} /><label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={splitPayment} onChange={(event) => setSplitPayment(event.target.checked)} />{'use_more_than_one_payment_method'.tr}</label>{splitPayment && <PaymentPartsEditor parts={parts} onChange={setParts} total={Number(amount || 0)} allowedMethods={['DINHEIRO', 'DEBITO', 'CREDITO', "PIX"]} />}{hasPix && <div className="my-3 space-y-2"><PixProofUpload key={id} targetType="DEBT" targetId={id} onChange={setProofId} /><label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={proofSeen} onChange={(event) => setProofSeen(event.target.checked)} />{'i_checked_the_pix_received_in_conflora_s_account'.tr}</label><label className="block text-xs">{'receipt_note'.tr}<textarea className={field} value={note} onChange={(event) => setNote(event.target.value)} /></label></div>}{!isCreditEntry && <p className="my-3 text-sm font-bold">{'balance_after_receipt'.tr} {money(Math.max(0, balance - Number(amount || 0)))}</p>}<button className={button} disabled={busy || (hasPix && (!proofId || !proofSeen || note.trim().length < 8)) || amountInvalid || (!isCreditEntry && balance <= 0)} onClick={submit}>{busy ? 'recording'.tr : isCreditEntry ? 'register_received_credit'.tr : 'confirm_receipt'.tr}</button></>}</>}</Panel>;
   }
-  return { AbrirCaixaModal, Topbar, Loading, Login, Receipt, CashierQueue, DebtSettlement, DiscountApproval, ProductInformation, WeightPrompt, handleProductImageError, PaymentPartsEditor, PaymentMethodButtons, CustomerSearch, LocationPicker, OrderDetails, CashierColumn, SeparationModal, Button3D, OrderSoundAlert, playOrderAlertSound };
+  return { QuickProductDialog, AbrirCaixaModal, Topbar, Loading, Login, Receipt, CashierQueue, DebtSettlement, DiscountApproval, ProductInformation, WeightPrompt, handleProductImageError, PaymentPartsEditor, PaymentMethodButtons, CustomerSearch, LocationPicker, OrderDetails, CashierColumn, SeparationModal, Button3D, OrderSoundAlert, playOrderAlertSound };
 })();

@@ -414,6 +414,21 @@ export function createAdmin(state) {
     const list = await state.api("/admin/products");
     const editor = element("section");
     const rows = element("div", { class: "admin-products" });
+    const search = element('input', { type: 'search', placeholder: 'Buscar nome ou código', 'aria-label': 'Buscar produtos cadastrados' });
+    const category = element('select', { 'aria-label': 'Filtrar categoria' }, [element('option', { value: '', text: 'Todas as categorias' }), ...[...new Set(list.map(product => product.categoryName || product.category).filter(Boolean))].sort().map(value => element('option', { value, text: value }))]);
+    const status = element('select', { 'aria-label': 'Filtrar status' }, [element('option', { value: '', text: 'Todos os status' }), element('option', { value: 'active', text: 'Ativos' }), element('option', { value: 'inactive', text: 'Ocultos' })]);
+    const applyFilters = () => {
+      const query = search.value.trim().toLocaleLowerCase('pt-BR');
+      [...rows.children].forEach((row, index) => {
+        const product = list[index];
+        row.hidden = ![product.name, product.sku, product.description].filter(Boolean).join(' ').toLocaleLowerCase('pt-BR').includes(query)
+          || Boolean(category.value && (product.categoryName || product.category) !== category.value)
+          || Boolean(status.value && (product.isAvailable ? 'active' : 'inactive') !== status.value);
+      });
+    };
+    search.addEventListener('input', applyFilters);
+    category.addEventListener('change', applyFilters);
+    status.addEventListener('change', applyFilters);
     panel.replaceChildren(
       element("h2", { text: 'products_595f74'.tr }),
       element("button", {
@@ -423,6 +438,7 @@ export function createAdmin(state) {
       rows,
       editor,
     );
+    rows.before(element('div', { class: 'admin-product-filters' }, [search, category, status]));
     for (const product of list) {
       rows.append(
         element("div", { class: "admin-product-row" }, [
