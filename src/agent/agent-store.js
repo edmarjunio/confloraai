@@ -163,9 +163,48 @@ class HandoffStore {
       tx.update(ref, { status: 'resumed', resumedAt: iso, resumedBy: { id: actor.id, role: actor.role } });
       tx.set(this.conversationRef(tenantId, handoff.customerKey), {
         tenantId, customerKey: handoff.customerKey, automation: 'active', resumedAt: iso,
-        resumedBy: actor.id, handoffId, updatedAt: iso,
+        resumedBy: actor.id, handoffId, updatedAt: iso, version: Number(conversation.data()?.version || 0) + 1,
       });
       return { ok: true, handoff: { ...handoff, status: 'resumed' } };
+    });
+  }
+
+  /**
+   * Assumir atendimento por operador humano com concorrência e versionamento atômicos.
+   * Se outro operador tentar assumir simultaneamente, o backend resolve com conflito 409.
+   */
+  async takeover(tenantId, customerKey, actor, expectedVersion = null) {
+    const conversationRef = this.conversationRef(tenantId, customerKey);
+    return this.db.runTransaction(async tx => {
+      const snap = await tx.get(conversationRef);
+      const current = snap.exists ? snap.data() : { tenantId, customerKey, automation: 'active', version: 0 };
+      if (current.tenantId !== tenantId || current.customerKey !== customerKey) throw new Error('CONVERSATION_ISOLATION');
+
+      const currentVersion = Number(current.version || 0);
+      if (expectedVersion !== null && expectedVersion !== undefined && expectedVersion !== currentVersion) {
+        return { ok: false, code: 'CONCURRENCY_CONFLICT', message: 'Atendimento já alterado por outro operador.', currentOperator: current.assignedTo || null };
+      }
+
+      if (current.automation === 'paused' && current.assignedTo && current.assignedTo.id !== actor.id) {
+        return { ok: false, code: 'ALREADY_ASSIGNED', message: `Atendimento sob responsabilidade de ${current.assignedTo.name || current.assignedTo.id}.`, currentOperator: current.assignedTo };
+      }
+
+      const iso = this.now().toISOString();
+      const newVersion = currentVersion + 1;
+      const updated = {
+        ...current,
+        tenantId,
+        customerKey,
+        automation: 'paused',
+        pausedAt: current.pausedAt || iso,
+        reason: 'human_takeover',
+        assignedTo: { id: actor.id, name: actor.name || actor.id, role: actor.role, assignedAt: iso },
+        version: newVersion,
+        updatedAt: iso,
+      };
+
+      tx.set(conversationRef, updated);
+      return { ok: true, conversation: updated, version: newVersion };
     });
   }
 }
