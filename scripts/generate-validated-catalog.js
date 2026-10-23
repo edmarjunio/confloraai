@@ -130,7 +130,6 @@ function buildBreedOrSpeciesProfile(item, inatCache) {
   const norm = normalizeKey(item.name);
   const category = String(item.category || 'Geral').trim();
   const subcategory = String(item.subcategory || '').trim();
-  const normCat = normalizeKey(`${category} ${subcategory}`);
 
   // 1. Check administrative / service items
   if (norm === 'troco do dia' || norm === 'recebimento' || norm === 'mao de obra' || norm === 'saldo devedor' || norm === 'taxa de entrega') {
