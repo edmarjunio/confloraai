@@ -592,6 +592,9 @@ class PdvService {
         const receiver = order.receivedBy?.name || (order.verifiedVia === 'SICREDI_PIX_WEBHOOK' ? 'Sicredi · confirmação automática' : 'Equipe Conflora');
         text = `CONFLORA — PIX CONFIRMADO\nPedido #${order.ticketNumber}\nCliente: ${order.customerName}\nTotal da venda: ${money(order.total)}\nValor Pix: ${money(partAmount(order, 'PIX'))}\nPedido feito por: ${author}\nRecebido por: ${receiver}\nPedido finalizado. Estoque atualizado.`;
       }
+      if (!this.whatsapp || (typeof this.whatsapp.sendPdvText !== 'function' && typeof this.whatsapp.sendTextMessage !== 'function')) {
+        throw new Error('PROVIDER_NOT_CONFIGURED');
+      }
       const chunks = messageChunks(text, this.whatsapp.sendPdvText ? 900 : 3500);
       for (let index = job.textChunksSent || 0; index < chunks.length; index++) {
         const send = this.whatsapp.sendPdvText || this.whatsapp.sendTextMessage;
@@ -599,12 +602,12 @@ class PdvService {
       }
       if (['receipt', 'pix-charge'].includes(job.kind) && order.pixData && !order.completedAt && !order.paidAt && !job.qrSent) {
       const image = Buffer.from(order.pixData.qrCodeBase64.split(',')[1], 'base64');
-        await sendOnce('qr', () => this.whatsapp.sendImageBuffer(phone, image, `Pix pedido #${order.ticketNumber} - ${money(order.pixData.amount || order.total)}\n\nPIX COPIA E COLA:\n${order.pixData.pixCopiaECola}`), { qrSent: true });
+        await sendOnce('qr', () => this.whatsapp.sendImageBuffer?.(phone, image, `Pix pedido #${order.ticketNumber} - ${money(order.pixData.amount || order.total)}\n\nPIX COPIA E COLA:\n${order.pixData.pixCopiaECola}`), { qrSent: true });
       }
       if (job.reportFileName && !job.documentSent) {
         const storage = new (require('../reports/private-report-storage').PrivateReportStorage)(this.repository.repository);
         const document = await storage.read(job.reportFileName);
-        await sendOnce('document', () => this.whatsapp.sendDocumentBuffer(phone, document, 'fechamento-conflora.pdf', 'Fechamento de caixa Conflora'), { documentSent: true });
+        await sendOnce('document', () => this.whatsapp.sendDocumentBuffer?.(phone, document, 'fechamento-conflora.pdf', 'Fechamento de caixa Conflora'), { documentSent: true });
       }
       await update({ status: 'SENT', leaseUntil: 0, sentAt: new Date().toISOString(), lastError: '' });
     } catch (error) {
