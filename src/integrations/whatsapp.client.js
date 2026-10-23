@@ -135,10 +135,22 @@ class WhatsAppClient {
     const templateName = process.env.WHATSAPP_WELCOME_TEMPLATE || 'boas_vindas_conflora';
     const language = config.whatsapp.templates.language || 'pt_BR';
     const cleanName = customerName?.trim?.() || '';
+    const fs = require('node:fs/promises');
+    const path = require('node:path');
+    const logoPath = path.resolve(__dirname, '../../public/storefront/brands/conflora-logo.png');
+    const logoBuffer = await fs.readFile(logoPath);
+    const form = new FormData();
+    form.set('messaging_product', 'whatsapp');
+    form.set('file', new Blob([logoBuffer], { type: 'image/png' }), 'conflora-logo.png');
+    const headerImage = await this.uploadMedia(form);
     // Se tiver nome: "Olá" + " João, s" + "eja..." -> "Olá João, seja muito bem-vindo..."
     // Se não tiver nome: "Olá" + "! S" + "eja..." -> "Olá! Seja muito bem-vindo..."
     const greetingText = cleanName ? ` ${cleanName}, s` : '! S';
     const components = [
+      {
+        type: 'header',
+        parameters: [{ type: 'image', image: { id: headerImage.id } }],
+      },
       {
         type: 'body',
         parameters: [

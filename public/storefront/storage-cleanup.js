@@ -9,3 +9,11 @@ export function clearLegacyBusinessStorage(storage = globalThis.localStorage) {
     }
   } catch { /* Disabled storage does not prevent a live Firestore request. */ }
 }
+
+export async function clearLegacyBusinessCaches(storage = globalThis.caches) {
+  if (!storage) return;
+  try {
+    const names = await storage.keys();
+    await Promise.all(names.filter(name => name.startsWith('conflora')).map(name => storage.delete(name)));
+  } catch { /* Disabled cache storage cannot prevent current backend reads. */ }
+}

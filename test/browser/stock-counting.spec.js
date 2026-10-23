@@ -1,9 +1,11 @@
+const { ensureCashierSession } = require('./cashier-session');
 const { openAdminSection } = require('./admin-navigation');
 const { test, expect } = require('@playwright/test');
 const { randomUUID } = require('node:crypto');
 
 async function start(page, suffix, unit = 'UN') {
   await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-edmar', pin: '1234' } });
+  await ensureCashierSession(page);
   const id = 'count-' + randomUUID();
   const name = 'Contagem ' + suffix;
   expect((await page.request.post('/api/admin/products', { data: { id, name, price: 10, stockQuantity: 20, unit, status: 'ATIVO' } })).ok()).toBe(true);
@@ -16,7 +18,7 @@ async function start(page, suffix, unit = 'UN') {
   return { id, name, card };
 }
 
-test('rapid physical taps, undo, search and reload preserve the entry before one idempotent save', async ({ page }) => {
+test('rapid taps support undo, reload discards unsaved drafts and retry saves one idempotent movement', async ({ page }) => {
   const { card, name, id } = await start(page, 'toques');
   const action = card.getByRole('button', { name: '＋ Contar 1 unidade', exact: true });
   await card.locator('.product-photo').click();
@@ -36,7 +38,10 @@ test('rapid physical taps, undo, search and reload preserve the entry before one
   await page.reload();
   await openAdminSection(page, 'stock');
   await page.locator('#stockSearchInput').fill(name);
-  await expect(card.locator('input')).toHaveValue('4');
+  await expect(card.locator('input')).toHaveValue('');
+  await page.locator('#stockModeEntry').click();
+  await card.locator('input').fill('4');
+  await card.locator('input').blur();
   let failed = false;
   await page.route('**/api/admin/stock/adjustments', async route => {
     const response = await route.fetch();
@@ -63,7 +68,7 @@ test('physical count starts at zero, supports kg and never overwrites a concurre
   page.on('dialog', dialog => dialog.accept()); await page.reload();
   await openAdminSection(page, 'stock');
   await page.locator('#stockSearchInput').fill('Contagem peso KG');
-  await card.getByRole('button', { name: 'Recomeçar este produto' }).click();
+  await expect(card.locator('input')).toHaveValue('');
   await card.locator('input').fill('2.75'); await card.locator('input').blur();
   await page.locator('#stockSave').click();
   await expect(card.locator('.stock-card-balance strong')).toHaveText('2.75');

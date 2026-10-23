@@ -50,7 +50,7 @@ function productField(state, item, index, required = false) {
 
 function totals(totalMinor, depositMinor, { paid = false, completed = false } = {}) {
   const group = element('dl', { class: 'procurement-totals', 'aria-label': 'order_values'.tr });
-  const values = [['total'.tr, totalMinor], [paid ? 'Sinal recebido' : 'message_50_down_payment'.tr, depositMinor], [completed ? 'Saldo recebido' : 'upon_pickup_delivery'.tr, totalMinor === null ? null : totalMinor - depositMinor]];
+  const values = [["total_112398".tr, totalMinor], [paid ? 'Sinal recebido' : 'message_50_down_payment'.tr, depositMinor], [completed ? 'Saldo recebido' : 'upon_pickup_delivery'.tr, totalMinor === null ? null : totalMinor - depositMinor]];
   for (const [label, value] of values) group.append(element('div', {}, [element('dt', { text: label }), element('dd', { text: value === null ? 'A cotar' : money(value) })]));
   return group;
 }

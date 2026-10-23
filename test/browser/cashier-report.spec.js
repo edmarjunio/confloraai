@@ -1,8 +1,10 @@
+const { ensureCashierSession } = require('./cashier-session');
 const { openAdminSection } = require('./admin-navigation');
 const { test, expect } = require('@playwright/test');
 
 test('admin types 100 over a negative stock and sees a clear inventory state banner', async ({ page }) => {
   await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-edmar', pin: '1234' } });
+  await ensureCashierSession(page);
   const name = 'Estoque legado negativo';
   await page.goto('/admin'); await openAdminSection(page, 'stock');
   await page.locator('#stockSearchInput').fill(name);
@@ -24,6 +26,7 @@ test('admin types 100 over a negative stock and sees a clear inventory state ban
 
 test('cashier exports a private PDF at any time and sends it with one button', async ({ page }) => {
   await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-caixa1', pin: '0000' } });
+  await ensureCashierSession(page);
   await page.goto('/admin');
   const actions = page.locator('#adminCashierReport');
   await expect(actions).toContainText('Somente o seu caixa');
@@ -41,6 +44,7 @@ test('cashier exports a private PDF at any time and sends it with one button', a
 
 test('PDV report also downloads the selected period with cashier-only scope', async ({ page }) => {
   await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-caixa1', pin: '0000' } });
+  await ensureCashierSession(page);
   await page.goto('/pdv');
   await expect(page.getByPlaceholder('Nome, categoria ou descrição (Ex.: plantas de sombra, plantas para jardim, flores, e etc)')).toBeVisible();
   await page.keyboard.press('F3');

@@ -1463,6 +1463,69 @@ function createApp({
   app.use('/guias', express.static(require('node:path').resolve(__dirname, '../../public/guias')));
 
   // --- API DO CAIXA & PDV RÁPIDO (CELULAR & BALCÃO) ---
+  app.post('/api/caixa/products', async (req, res) => {
+    if (!req.user || !['ADMIN', 'CAIXA', 'VENDEDOR'].includes(req.user.role)) {
+      return res.status(req.user ? 403 : 401).json({ error: 'unauthorized_access_for_this_profile'.tr });
+    }
+
+    const body = req.body || {};
+    const name = String(body.name || '').trim().replace(/\s+/g, ' ');
+    const category = String(body.category || 'Geral').trim().replace(/\s+/g, ' ');
+    const unit = String(body.unit || 'UN').trim().toUpperCase();
+    const priceText = String(body.price ?? '').trim().replace(',', '.');
+    const stockText = String(body.stockQuantity ?? '').trim().replace(',', '.');
+    const price = Number(priceText);
+    const stockQuantity = Number(stockText);
+    const stockPrecisionValid = unit === 'KG'
+      ? Math.abs(stockQuantity * 1000 - Math.round(stockQuantity * 1000)) < 0.000001
+      : Number.isInteger(stockQuantity);
+
+    if (name.length < 2 || name.length > 180) {
+      return res.status(400).json({ error: 'Informe um nome de produto entre 2 e 180 caracteres.' });
+    }
+    if (category.length > 80) {
+      return res.status(400).json({ error: 'A categoria deve ter no máximo 80 caracteres.' });
+    }
+    if (!['UN', 'KG'].includes(unit)) {
+      return res.status(400).json({ error: 'Selecione unidade ou quilo como unidade de venda.' });
+    }
+    if (!Number.isFinite(price) || price < 0 || !Number.isSafeInteger(Math.round(price * 100)) || Math.abs(price * 100 - Math.round(price * 100)) > 0.000001) {
+      return res.status(400).json({ error: 'Informe um preço válido com até duas casas decimais.' });
+    }
+    if (!stockText || !Number.isFinite(stockQuantity) || stockQuantity < 0 || !stockPrecisionValid) {
+      return res.status(400).json({ error: unit === 'KG'
+        ? 'Informe um estoque válido, com até três casas decimais.'
+        : 'Informe um estoque inteiro igual ou maior que zero.' });
+    }
+
+    const saleUnit = unit === 'KG'
+      ? { code: 'KG', label: 'kg', minimum: 0.1, increment: 0.1 }
+      : { code: 'UN', label: 'unidade', minimum: 1, increment: 1 };
+    const product = {
+      id: `prod-${randomUUID().replaceAll('-', '')}`,
+      name,
+      category: category || 'Geral',
+      subcategory: '',
+      price,
+      unit,
+      saleUnit,
+      stockQuantity,
+      status: 'ATIVO',
+      createdAt: new Date().toISOString(),
+      createdBy: { id: req.user.id, name: req.user.name || '' },
+    };
+
+    try {
+      await messageService.firestoreRepo.saveProduct(product);
+      messageService.catalogRepo?.invalidateCache?.();
+      messageService.metaAgentService?.productIndex?.invalidate?.();
+      return res.status(201).json({ success: true, product: { ...product, imageUrl: '', images: [], imageFileId: '', descriptionAi: '', tagsAi: '' } });
+    } catch (error) {
+      Logger.error('error_saving_quick_cashier_product'.tr, error);
+      return res.status(error.status || 500).json({ error: error.message || 'unable_to_save_product'.tr });
+    }
+  });
+
   app.get('/api/caixa/products', async (_req, res) => {
     try {
       const products = await messageService.firestoreRepo.getAllProducts();
@@ -1626,7 +1689,7 @@ function createApp({
       res.status(200).json({ success: true, product });
     } catch (err) {
       Logger.error('error_saving_product_in_admin'.tr, err);
-      res.status(500).json({ error: err.message });
+      res.status(err.status || 500).json({ error: err.message });
     }
   });
 

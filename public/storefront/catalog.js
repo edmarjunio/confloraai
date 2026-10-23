@@ -7,6 +7,7 @@ import {
   notify,
 } from "./ui.js";
 import { icon } from "./icons.js";
+import { translateProductName } from './i18n/products.js';
 import { searchProducts, normalize as normalizeProductText } from "./guided-search.mjs";
 let productInfoModule;
 const prepareProductInfo = () => productInfoModule ||= import('./product-info-content.js').catch(error => { productInfoModule = null; throw error; });
@@ -59,7 +60,7 @@ export function createCatalog(state, add, navigate) {
     const initialTarget = nextValidWeight(minimum, increment);
     const initialQuantity = initialTarget <= maxStock ? initialTarget : highestValidWeight(maxStock, minimum, increment);
     const dialog = element("dialog", { class: "product-weight-dialog" });
-    const title = element("h2", { text: `${'how_many_kilos_of'.tr} ${product.name}?` });
+    const title = element("h2", { text: `${'how_many_kilos_of'.tr} ${translateProductName(product)}?` });
     const price = element("p", { class: "product-weight-price", text: `${money(product.price.amountMinor)} / kg` });
     const input = element("input", {
       type: "text",
@@ -185,7 +186,7 @@ export function createCatalog(state, add, navigate) {
       title: 'common_close'.tr,
       onclick: () => dialog.close(),
     }, [icon("x")]);
-    const title = element("h2", { text: product.name, title: product.name });
+    const title = element("h2", { text: translateProductName(product), title: translateProductName(product) });
     const info = buildProductInfoContent(product, categoryLabel(product));
     const specificationEntries = Object.entries(product.specifications || {}).filter(([, value]) => value?.value || typeof value === "string");
     const contentSections = (Array.isArray(product.contentSections) ? product.contentSections : [])
@@ -608,7 +609,7 @@ export function createCatalog(state, add, navigate) {
           text: showingFavorites ? (purchaseLoading ? 'loading_your_purchases_088d4c'.tr : purchaseError || (state.user ? 'your_purchased_products_will_appear_here_ordered_by_quantity_purchased'.tr : 'sign_in_to_see_the_products_you_buy_most'.tr)).tr : 'no_products_found_try_another_search'.tr,
         }),
         ...(showingFavorites && purchaseError ? [
-          element('button', { type: 'button', class: 'quiet catalog-empty-action', text: 'Tentar novamente'.tr, onclick: refreshPurchases })
+          element('button', { type: 'button', class: 'quiet catalog-empty-action', text: "try_again".tr, onclick: refreshPurchases })
         ] : []),
         ...(rawQuery ? [
           element("button", {
@@ -667,7 +668,7 @@ export function createCatalog(state, add, navigate) {
       category: product.categoryName,
       value: Number(product.price?.amountMinor || 0) / 100,
     });
-    document.title = `${product.name} · ${state.config.identity.name}`;
+    document.title = `${translateProductName(product)} · ${state.config.identity.name}`;
 
     const isInactive =
       product.status === "INATIVO" || product.isAvailable === false;
@@ -780,7 +781,7 @@ export function createCatalog(state, add, navigate) {
         ]),
         element("div", { class: "detail-copy" }, [
           categoryTag(categoryLabel(product), "detail-category"),
-          element("h1", { text: product.name, title: product.name }),
+          element("h1", { text: translateProductName(product), title: translateProductName(product) }),
           element("strong", {
             class: "detail-price",
             text: money(product.price.amountMinor),
@@ -823,7 +824,7 @@ export function createCatalog(state, add, navigate) {
         id: "about",
         label: 'about_the_product'.tr,
         nodes: [
-          element("h2", { text: product.name, title: product.name }),
+          element("h2", { text: translateProductName(product), title: translateProductName(product) }),
           element("p", {
             text:
               product.description ||

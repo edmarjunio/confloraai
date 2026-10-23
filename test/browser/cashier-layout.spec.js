@@ -1,8 +1,10 @@
+const { ensureCashierSession } = require('./cashier-session');
 const { openAdminSection } = require('./admin-navigation');
 const { test, expect } = require('@playwright/test');
 
 test('partial payment requires a second method and keeps scrolling within the dialog', async ({ page }) => {
   await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-caixa1', pin: '0000' } });
+  await ensureCashierSession(page);
   const response = await page.request.post('/api/caixa/orders', { data: { requestId: require('node:crypto').randomUUID(), items: [{ productId: 'test-plant', quantity: 1 }], paymentMethod: 'DINHEIRO', deferToCashier: true, customerName: 'Pagamento parcial teste' } });
   expect(response.ok()).toBe(true);
   const { order } = await response.json();
@@ -14,11 +16,12 @@ test('partial payment requires a second method and keeps scrolling within the di
   await page.getByRole('button', { name: 'Abrir recibo e detalhes da comanda ' + order.ticketNumber }).click();
   const dialog = page.getByRole('dialog', { name: 'Comanda #' + order.ticketNumber });
   await dialog.getByLabel('Valor nesta forma de pagamento (R$)').fill('10');
-  await expect(dialog.getByRole('status')).toContainText('15,00');
+  await expect(dialog).toContainText('15,00');
   await expect(dialog.getByRole('button', { name: 'Confirmar pagamento e finalizar' })).toBeDisabled();
   await dialog.getByRole('button', { name: 'Adicionar outra forma de pagamento' }).click();
-  await expect(dialog.getByLabel('Valor da parcela 1')).toHaveValue('10.00');
+  await expect(dialog.getByLabel('Valor da parcela 1')).toHaveValue('10');
   await expect(dialog.getByLabel('Valor da parcela 2')).toHaveValue('15.00');
+  await dialog.getByRole('combobox').selectOption('CREDITO');
   await dialog.getByLabel('Valor da parcela 2').fill('14');
   await expect(dialog.getByRole('button', { name: 'Confirmar pagamento e finalizar' })).toBeDisabled();
   await dialog.getByLabel('Valor da parcela 2').fill('15');
@@ -31,6 +34,7 @@ test('partial payment requires a second method and keeps scrolling within the di
 
 test('product gallery highlights cover, reorders originals and opens full-screen preview', async ({ page }) => {
   await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-edmar', pin: '1234' } });
+  await ensureCashierSession(page);
   await page.goto('/admin');
   await openAdminSection(page, 'products');
   await page.getByRole('button', { name: '＋ ADICIONAR PRODUTO', exact: true }).click();
@@ -61,7 +65,7 @@ test('category buttons have room for their raised hover effect', async ({ page }
   await chip.hover();
   const bounds = await chip.evaluate(button => {
     const item = button.getBoundingClientRect();
-    const parent = button.parentElement.getBoundingClientRect();
+    const parent = button.closest('.catalog-category-filter').getBoundingClientRect();
     return { top: item.top - parent.top, bottom: parent.bottom - item.bottom };
   });
   expect(bounds.top).toBeGreaterThanOrEqual(2);
@@ -70,6 +74,7 @@ test('category buttons have room for their raised hover effect', async ({ page }
 
 test('sales table translates pending status and keeps customer, amount and actions on one line', async ({ page }) => {
   await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-edmar', pin: '1234' } });
+  await ensureCashierSession(page);
   await page.route('**/api/admin/daily-metrics*', route => route.fulfill({ json: { totalRevenue: 25, todayOrders: [{ id: 'display-test', customerName: 'Cliente com nome completo', total: 25, paymentMethod: 'DINHEIRO', status: 'AWAITING_PAYMENT', items: [{ name: 'Produto com descrição longa para ocupar o espaço restante', quantity: 1 }] }] } }));
   await page.goto('/admin');
   const row = page.locator('#todayOrdersBody tr').first();
@@ -80,6 +85,7 @@ test('sales table translates pending status and keeps customer, amount and actio
 
 test('admin product cards edit legacy photos and identify illustrative images without saving them', async ({ page }) => {
   await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-edmar', pin: '1234' } });
+  await ensureCashierSession(page);
   await page.route('**/api/inventory', route => route.fulfill({ json: [
     { id: 'legacy-photo', name: 'Foto antiga', price: 12, category: 'Horta', status: 'ATIVO', fotoUrl: '/store-assets/brands/conflora-logo.png' },
     { id: 'illustrative-photo', name: 'Sem foto própria', price: 10, category: 'Horta', status: 'ATIVO', imageFallbackUrl: '/store-assets/brands/conflora-logo.png' },
@@ -102,16 +108,13 @@ test('admin product cards edit legacy photos and identify illustrative images wi
 
 test('admin uses current product assets despite an older public cache and keeps cards sized on desktop and mobile', async ({ page }) => {
   await page.goto('/');
-  await page.evaluate(() => window.navigator.serviceWorker.ready.then(() => undefined));
-  await expect.poll(() => page.evaluate(() => Boolean(window.navigator.serviceWorker.controller))).toBe(true);
   await page.evaluate(async () => {
-    const name = (await window.caches.keys()).find(key => key.startsWith('conflora-public-shell-'));
-    const cache = await window.caches.open(name);
+    const cache = await window.caches.open('conflora-public-shell-obsolete');
     await cache.put('/store-assets/design-system.css', new window.Response('/* Old release without admin grid */', { headers: { 'Content-Type': 'text/css' } }));
     await cache.put('/store-assets/product-card.js', new window.Response('/* Old release without admin edit variant */', { headers: { 'Content-Type': 'application/javascript' } }));
   });
   await page.evaluate(async () => {
-    const response = await window.fetch('/api/admin/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: 'usr-edmar', pin: '1234' }) });
+    const response = await window.ConfloraSession.apiFetch('/api/admin/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: 'usr-edmar', pin: '1234' }) });
     if (!response.ok) throw new Error('Login do administrador não foi concluído.');
   });
   await page.goto('/admin');

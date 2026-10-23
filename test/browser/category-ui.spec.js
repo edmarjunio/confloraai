@@ -7,18 +7,19 @@ async function openCatalog(page) {
   await page.route('http://categories.test/**', async route => {
     const pathname = new URL(route.request().url()).pathname;
     if (pathname !== '/') {
-      const file = resolve(__dirname, '../../public/storefront', pathname.slice(1));
+      const file = resolve(__dirname, '../../public/storefront', pathname.replace(/^\/(?:store-assets\/)?/, ''));
       return route.fulfill({ body: readFileSync(file), contentType: pathname.endsWith('.css') ? 'text/css' : 'text/javascript' });
     }
     return route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head>
       <meta name="viewport" content="width=device-width, initial-scale=1">
       <link rel="stylesheet" href="/store.css"><link rel="stylesheet" href="/design-system.css">
-      <script>Object.defineProperty(String.prototype, 'tr', {get() {return this.toString();}});</script>
+      <script>${require('../helpers/browser-i18n').script}</script>
       <script src="/category-ui.js"></script><script src="/render-image.js"></script><script src="/product-card.js"></script>
       </head><body><main id="catalogView"><input id="search"><select id="sortOrder"><option value="az">az</option></select>
       <div id="categoryFilterControl"></div><div id="subcategoryFilterControl"></div>
       <h1 id="catalogTitle"></h1><span id="resultCount"></span><div id="products" class="products"></div>
-      <button id="loadMore"></button></main><div id="productView" hidden></div>
+      <button id="loadMore"></button><div class="mobile-filter-bar"><button id="openFilterDialogBtn" aria-label="Abrir filtros de categoria">Filtro</button></div></main><div id="productView" hidden></div>
+      <dialog id="filterDialog"><h2>Filtro de Categorias</h2><div id="filterDialogBody"></div></dialog>
       <script type="module">
         import {createCatalog} from '/catalog.js';
         const names = ['Horta', 'Hortifrutti', 'Pets'];
@@ -53,18 +54,18 @@ test('category filters combine selections, deselect, reset and keep subcategory 
   await expect(page.locator('#subcategoryFilterControl')).toBeHidden();
   await expect(page.locator('#products render-product-card')).toHaveCount(1);
   await expect(page.locator('#products')).toContainText('Pets produto');
-  await filter('Todas').focus();
+  await filter('Todas as categorias').focus();
   await page.keyboard.press('Enter');
   await expect(page.locator('#products render-product-card')).toHaveCount(3);
   expect(errors).toEqual([]);
 });
 
-test('filters and card badges share colors in desktop, mobile and selected states', async ({ page }) => {
+test('visible category tags and card badges share colors and selected states', async ({ page }) => {
   await openCatalog(page);
-  for (const width of [320, 390, 768, 1440]) {
+  for (const width of [1024, 1440]) {
     await page.setViewportSize({width, height: 900});
     const filter = page.locator('#categoryFilterControl').getByRole('button', { name: 'Horta', exact: true });
-    await page.locator('#categoryFilterControl').getByRole('button', { name: 'Todas', exact: true }).click();
+    await page.locator('#categoryFilterControl').getByRole('button', { name: 'Todas as categorias', exact: true }).click();
     const soft = await filter.evaluate(node => ({background: getComputedStyle(node).backgroundColor, border: getComputedStyle(node).borderTopColor}));
     await filter.click();
     const strong = await filter.evaluate(node => getComputedStyle(node).backgroundColor);
@@ -76,3 +77,18 @@ test('filters and card badges share colors in desktop, mobile and selected state
     expect(await filter.evaluate(node => node.getBoundingClientRect().right <= innerWidth)).toBe(true);
   }
 });
+
+for (const width of [320, 390, 768]) {
+  test(`mobile filter drawer selects registered categories at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await openCatalog(page);
+    await page.locator('#openFilterDialogBtn').click();
+    const drawer = page.locator('#filterDialog');
+    await expect(drawer).toBeVisible();
+    await drawer.getByRole('button', { name: 'Pets', exact: true }).click();
+    await expect(drawer).not.toBeVisible();
+    await expect(page.locator('#products render-product-card')).toHaveCount(1);
+    await expect(page.locator('#products')).toContainText('Pets produto');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  });
+}

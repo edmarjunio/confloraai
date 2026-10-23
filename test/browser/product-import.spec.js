@@ -1,6 +1,8 @@
+const { ensureCashierSession } = require('./cashier-session');
 const { test, expect } = require('@playwright/test');
 test('Admin valida preços na prévia e importa CSV; repetição não duplica produtos', async ({ page }) => {
   await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-edmar', pin: '1234' } });
+  await ensureCashierSession(page);
   await page.goto('/admin?tab=products');
   await page.getByRole('button', { name: 'Importar planilha de produtos', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Importar produtos por planilha' });
@@ -12,7 +14,7 @@ test('Admin valida preços na prévia e importa CSV; repetição não duplica pr
   await expect(dialog).toContainText('15,90');
   await dialog.getByRole('button', { name: 'Confirmar importação', exact: true }).click();
   await expect(dialog.getByRole('status')).toContainText('1 produto(s) importados');
-  await dialog.getByRole('button', { name: 'Fechar', exact: true }).click();
+  await dialog.getByRole('contentinfo').getByRole('button', { name: 'Fechar', exact: true }).click();
   await page.reload();
   await expect(page.locator('#adminProductsGrid')).toContainText('Produto migrado');
 });
@@ -20,6 +22,7 @@ test('Admin valida preços na prévia e importa CSV; repetição não duplica pr
 
 test('Admin importa JSON pelo mesmo fluxo seguro com prévia', async ({ page }) => {
   await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-edmar', pin: '1234' } });
+  await ensureCashierSession(page);
   await page.goto('/admin?tab=products');
   await page.getByRole('button', { name: 'Importar planilha de produtos', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Importar produtos por planilha' });

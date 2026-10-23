@@ -1,0 +1,5 @@
+{
+  "score": 5,
+  "summary": "Revisão estática das regras locais firestore.rules: todo acesso direto de clientes é negado, incluindo leitura, criação, atualização e exclusão. O aplicativo usa o backend autenticado e o Admin SDK. Não há autorização baseada em cargo enviado pelo cliente nem possibilidade de alterar documentos diretamente para elevar privilégios. Limites de campos, tipos, propriedade e regras comerciais permanecem responsabilidade do backend, que ignora estas regras por usar o Admin SDK. Esta avaliação não confirma implantação das regras, IAM ou execução no emulador.",
+  "findings": []
+}

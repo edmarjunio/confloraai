@@ -29,3 +29,6 @@ public/storefront/sw-built.js
 public/storefront/i18n-runtime.js
 
 tmp/logo-*
+tmp/
+.aistudio/
+.gmp_cache/

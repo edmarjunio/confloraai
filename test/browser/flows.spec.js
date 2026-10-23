@@ -49,7 +49,7 @@ test('Admin: cabeçalho, ordem das abas e navegação dos sete módulos', async 
   await expect(page.locator('#loggedUserRole')).toHaveText('ADMIN');
   await expect(page.getByRole('link', { name: /^CAIXA$/i })).toBeVisible();
   await expect(page.locator('.nav-tabs')).toHaveCount(0);
-  for (const tab of ['cashier', 'orders', 'stock', 'products', 'team', 'status', 'analytics']) {
+  for (const tab of ['cashier', 'orders', 'stock', 'products', 'team', 'status']) {
     await openAdminSection(page, tab);
     await expect(page.locator('#tab-' + tab)).toHaveClass(/active/);
   }
@@ -119,7 +119,7 @@ test('Cliente: compra, recibo e detalhes do histórico usam o mesmo comprovante'
   await expect(page.locator('#headerAccountName')).toHaveText('Cliente E2E');
   await page.locator('#search').fill('Planta Teste');
   await page.getByRole('button', { name: 'Planta Teste', exact: true }).click();
-  await page.getByRole('button', { name: 'Adicionar à sacola', exact: true }).click();
+  await page.getByRole('button', { name: 'Adicionar', exact: true }).click();
   await page.locator('#cartButton').click();
   await page.locator('#checkoutCustomer input[name=name]').fill('Cliente E2E');
   await page.locator('#checkoutCustomer input[name=phone]').fill('64999999999');
@@ -201,7 +201,7 @@ test('Admin mobile: produto inativo não aparece no catálogo e estoque não cau
   const product = page.locator('#adminProductsGrid render-product-card').filter({ hasText: 'Produto oculto teste' });
   await expect(product).toHaveCount(0);
   await page.getByRole('button', { name: 'INATIVOS', exact: true }).click();
-  await expect(product).toContainText('INATIVO - Indisponível');
+  await expect(product).toContainText(/Inativo - Indisponível/i);
   const catalog = await (await page.request.get('/api/storefront/catalog')).json();
   const inactiveCatalogProduct = catalog.products.find(item => item.id === 'inactive-filter-test');
   expect(inactiveCatalogProduct?.isAvailable).toBe(false);

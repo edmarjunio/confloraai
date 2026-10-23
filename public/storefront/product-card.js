@@ -623,8 +623,8 @@
         <div class="chat-mini-body">
           <span class="chat-mini-name" title="${safeName}" data-action="open">${safeName}</span>
           <span class="chat-mini-price">${vm.formattedPrice}</span>
-          <button type="button" class="chat-mini-add cf-btn-3d cf-btn-3d--sm" data-action="add" ${vm.isUnavailable ? "disabled" : ""} aria-label="Adicionar ${safeName}">
-            <span>+ Adicionar</span>
+          <button type="button" class="chat-mini-add cf-btn-3d cf-btn-3d--sm" data-action="add" ${vm.isUnavailable ? "disabled" : ""} aria-label="${'catalog_add_to_cart'.tr} ${safeName}">
+            <span>+ ${'catalog_add_to_cart'.tr}</span>
           </button>
         </div>
       `;

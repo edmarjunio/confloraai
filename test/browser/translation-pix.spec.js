@@ -1,6 +1,13 @@
 const { test, expect } = require('@playwright/test');
 const messages = require('../../src/i18n/messages.json');
+const { ensureCashierSession } = require('./cashier-session');
 const cashierSearch = Object.values(messages).find(value => value.pt === 'Nome, categoria ou descrição (Ex.: plantas de sombra, plantas para jardim, flores, e etc)');
+
+async function openCashier(page) {
+  await expect.poll(() => page.evaluate(async () => (await window.ConfloraSession.apiFetch('/api/auth/me')).status)).toBe(200);
+  await ensureCashierSession(page);
+  await page.reload();
+}
 
 test('Portuguese is the default and language selection persists across pages without changing account roles', async ({ browser }) => {
   const context = await browser.newContext({ locale: 'en-US' });
@@ -14,6 +21,7 @@ test('Portuguese is the default and language selection persists across pages wit
   await page.getByLabel('Usuário').selectOption('usr-caixa1');
   await page.getByLabel('PIN', { exact: true }).fill('0000');
   await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+  await openCashier(page);
   await expect(page.locator('.cashier-command-nav')).toBeVisible();
   for (const language of ['en', 'es', 'fr', 'pt']) {
     await page.locator('.cf-topbar-language').selectOption(language);
@@ -40,6 +48,7 @@ test('PIX uses the supplied image and pulses only when selected, respecting redu
   await page.getByLabel('Usuário').selectOption('usr-caixa1');
   await page.getByLabel('PIN', { exact: true }).fill('0000');
   await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+  await openCashier(page);
   await page.getByText('Planta Teste', { exact: true }).click();
   await page.getByRole('button', { name: /PAGAR - F1/ }).click();
   const pix = page.locator('[data-payment-method="pix"]');
@@ -59,7 +68,7 @@ test('PIX uses the supplied image and pulses only when selected, respecting redu
   await page.screenshot({ path: 'test-results/pix-checkout-mobile.png' });
 
   await page.goto('/products/test-plant');
-  await page.getByRole('button', { name: 'Adicionar à sacola', exact: true }).click();
+  await page.getByRole('button', { name: messages.catalog_add_to_cart.pt, exact: true }).click();
   await page.locator('#cartButton').click();
   const pixChoice = page.locator('.is-choice-pix');
   await pixChoice.locator('input').check();

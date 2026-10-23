@@ -16,3 +16,9 @@ test('blocked browser storage cannot break startup', async () => {
   assert.doesNotThrow(() => (load()).then(module => module.clearLegacyBusinessStorage(storage)));
   (await load()).clearLegacyBusinessStorage(storage);
 });
+
+test('startup removes old Conflora caches while preserving other applications', async () => {
+  const names = new Set(['conflora-public-shell-old', 'conflora-catalog-old', 'other-application']);
+  await (await load()).clearLegacyBusinessCaches({ keys: async () => [...names], delete: async key => names.delete(key) });
+  assert.deepEqual([...names], ['other-application']);
+});

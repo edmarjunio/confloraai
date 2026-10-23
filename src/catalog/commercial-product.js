@@ -43,4 +43,10 @@ function commercialLine(raw, quantity) {
   return { productId: product.id, name: product.name, price: product.price, quantity: qty, unit: product.unit, subtotalMinor };
 }
 
-module.exports = { commercialProduct, commercialLine };
+function hasValidCommercialPrice(raw) {
+  const { name, price, priceMinor } = commercialProduct(raw);
+  return Boolean(name) && Number.isFinite(price) && Number.isSafeInteger(priceMinor) && priceMinor >= 0 &&
+    Math.abs(price * 100 - priceMinor) < 0.00001;
+}
+
+module.exports = { commercialProduct, commercialLine, hasValidCommercialPrice };

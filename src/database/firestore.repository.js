@@ -320,12 +320,20 @@ class FirestoreRepository {
   }
 
   async saveProduct(product) {
-    if (!product || !product.id) {
-      return;
+    const invalid = message => Object.assign(new Error(message), { status: 400 });
+    if (!product || typeof product.id !== 'string' || !/^[a-zA-Z0-9_-]{1,180}$/.test(product.id)) throw invalid('Identificador do produto inválido.');
+    if (product.name !== undefined && (typeof product.name !== 'string' || product.name.trim().length < 2 || product.name.trim().length > 180)) {
+      throw invalid('Informe um nome de produto entre 2 e 180 caracteres.');
     }
 
     const previousProduct = await this.getProductById(product.id);
     const dataWithTs = { ...product, updatedAt: new Date().toISOString() };
+    if (!previousProduct && !product.name?.trim()) throw invalid('Nome do produto obrigatório.');
+    if (product.name !== undefined) dataWithTs.name = product.name.trim();
+    if (product.price !== undefined && (typeof product.price !== 'number' ||
+        !require('../catalog/commercial-product').hasValidCommercialPrice({ ...previousProduct, ...dataWithTs }))) {
+      throw invalid('Informe um preço válido, com até duas casas decimais.');
+    }
     if (product.unit !== undefined || product.unidade !== undefined || product.saleUnit?.code !== undefined) {
       const unit = String(product.saleUnit?.code || product.unit || product.unidade || 'UN').trim().toUpperCase();
       if (!['UN', 'KG'].includes(unit)) { throw new Error('A unidade de venda deve ser UN ou KG.'); }
@@ -364,7 +372,7 @@ class FirestoreRepository {
       }
       Object.assign(dataWithTs, { status, STATUS: status });
     }
-    if (product.name !== undefined) {Object.assign(dataWithTs, { canonicalName: product.name, descricao: product.name, 'DESCRIÇÃO': product.name });}
+    if (product.name !== undefined) {Object.assign(dataWithTs, { canonicalName: dataWithTs.name, descricao: dataWithTs.name, 'DESCRIÇÃO': dataWithTs.name });}
     if (product.price !== undefined) {Object.assign(dataWithTs, { valor_num: product.price, VALOR: product.price });}
     if (product.category !== undefined) {Object.assign(dataWithTs, { categoria: product.category, CATEGORIA: product.category });}
     if (product.subcategory !== undefined) {Object.assign(dataWithTs, { subcategoria: product.subcategory, SUBCATEGORIA: product.subcategory });}

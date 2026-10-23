@@ -1,6 +1,0 @@
-{
-  "summary": "Plano detalhado de implementação para remoção da faixa de testes, fluxo de recibo WhatsApp, Pix Sicredi com valor travado, confirmação automática via Webhook, modalidades Cartão de Débito/Crédito/Fiado/Quitação de Dívida e duplo vínculo Vendedor vs Caixa.",
-  "updatedAt": "2026-10-15T16:59:19.873823589Z",
-  "requestFeedback": true,
-  "userFacing": true
-}

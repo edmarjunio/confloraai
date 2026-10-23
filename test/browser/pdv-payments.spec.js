@@ -1,11 +1,13 @@
+const { ensureCashierSession } = require('./cashier-session');
 const { test, expect } = require('@playwright/test');
 
 test('conferência manual de pagamento dividido mostra apenas o valor da parcela Pix', async ({ page }) => {
   const login = await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-caixa1', pin: '0000' } });
+  await ensureCashierSession(page);
   expect(login.ok()).toBe(true);
+  const snapshot = await (await page.request.get('/api/caixa/orders')).json();
   await page.route((url) => url.pathname === '/api/caixa/orders', async (route) => {
-    const response = await route.fetch();
-    const board = await response.json();
+    const board = { ...snapshot };
     board.pendingPayment = [{
       id: 'manual-mixed-pix', ticketNumber: 'PIXPARCELA', customerName: 'Cliente Pix dividido',
       source: 'PDV', status: 'AWAITING_PIX', paymentMethod: 'PIX', paymentStatus: 'PENDING',
@@ -14,7 +16,7 @@ test('conferência manual de pagamento dividido mostra apenas o valor da parcela
       paymentParts: [{ method: 'DINHEIRO', amount: 10 }, { method: 'PIX', amount: 15 }],
       items: [{ productId: 'test-plant', name: 'Planta Teste', quantity: 1, price: 25 }],
     }];
-    await route.fulfill({ response, json: board });
+    await route.fulfill({ json: board });
   });
   await page.goto('/pdv');
   await expect(page.getByPlaceholder('Nome, categoria ou descrição (Ex.: plantas de sombra, plantas para jardim, flores, e etc)')).toBeVisible();
@@ -26,6 +28,7 @@ test('conferência manual de pagamento dividido mostra apenas o valor da parcela
 
 test('caixa divide pagamento e pode encaminhar uma comanda Pix sem emitir cobrança', async ({ page }) => {
   const login = await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-caixa1', pin: '0000' } });
+  await ensureCashierSession(page);
   expect(login.ok()).toBe(true);
   await page.goto('/pdv');
   const search = page.getByPlaceholder('Nome, categoria ou descrição (Ex.: plantas de sombra, plantas para jardim, flores, e etc)');
@@ -53,21 +56,30 @@ test('caixa divide pagamento e pode encaminhar uma comanda Pix sem emitir cobran
 });
 
 test('quadro permite apenas avançar etapas e abre recebimento ao arrastar para pagos', async ({ page }) => {
+  const customerName = 'Arrastar Teste ' + require('node:crypto').randomUUID().slice(0, 8);
   await page.setViewportSize({ width: 1600, height: 1000 });
   expect((await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-caixa1', pin: '0000' } })).ok()).toBe(true);
-  const creation = await page.request.post('/api/caixa/orders', { data: { requestId: require('node:crypto').randomUUID(), items: [{ productId: 'test-plant', quantity: 1 }], paymentMethod: 'DINHEIRO', deferToCashier: true, customerName: 'Arrastar Teste' } });
+  await ensureCashierSession(page);
+  const creation = await page.request.post('/api/caixa/orders', { data: { requestId: require('node:crypto').randomUUID(), items: [{ productId: 'test-plant', quantity: 1 }], paymentMethod: 'DINHEIRO', deferToCashier: true, customerName } });
   expect(creation.ok()).toBe(true); const { order } = await creation.json();
   await page.goto('/pdv'); await expect(page.getByPlaceholder('Nome, categoria ou descrição (Ex.: plantas de sombra, plantas para jardim, flores, e etc)')).toBeVisible(); await page.keyboard.press('F2');
   const payment = page.getByRole('region', { name: 'ESPERANDO PAGAMENTO', exact: true });
   const paid = page.getByRole('region', { name: 'PAGOS / FINALIZADOS', exact: true });
-  const card = (region) => region.locator('cf-card').filter({ hasText: 'Arrastar Teste' });
+  const card = (region) => region.locator('cf-card').filter({ hasText: customerName });
   await expect(card(payment)).toHaveAttribute('draggable', 'true');
   const dialog = page.getByRole('dialog', { name: `Comanda #${order.ticketNumber}` });
   await expect(card(payment)).toHaveCSS('background-color', 'rgb(189, 221, 255)');
-  await card(payment).dragTo(paid.locator('header'));
+  await card(payment).scrollIntoViewIfNeeded();
+  const sourceBounds = await card(payment).boundingBox();
+  const targetBounds = await paid.boundingBox();
+  const move = page.waitForResponse(response => response.url().endsWith('/api/caixa/orders/' + order.id + '/move'));
+  await card(payment).dragTo(paid, { targetPosition: { x: targetBounds.width / 2, y: sourceBounds.y - targetBounds.y + sourceBounds.height / 2 } });
+  expect((await (await move).json()).order).toMatchObject({ id: order.id, ticketNumber: order.ticketNumber });
   await expect(dialog.getByRole('heading', { name: 'Receber no caixa' })).toBeVisible();
-  await dialog.getByLabel('Usar mais de uma forma de pagamento').check();
+  await dialog.getByLabel('Valor nesta forma de pagamento (R$)').fill('10');
+  await dialog.getByRole('button', { name: 'Adicionar outra forma de pagamento', exact: true }).click();
   await dialog.getByLabel('Valor da parcela 1').fill('10'); await dialog.getByLabel('Valor da parcela 2').fill('15');
+  await dialog.getByRole('combobox').selectOption('CREDITO');
   await dialog.getByRole('button', { name: 'Confirmar pagamento e finalizar', exact: true }).click();
   await expect(dialog).toContainText('Pago / finalizado');
   await dialog.getByRole('button', { name: 'Fechar', exact: true }).click();
@@ -77,13 +89,16 @@ test('quadro permite apenas avançar etapas e abre recebimento ao arrastar para 
 
 test('caixa recebe dívida parcialmente e quita o restante com Pix conferido', async ({ page }) => {
   expect((await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-caixa1', pin: '0000' } })).ok()).toBe(true);
+  await ensureCashierSession(page);
   const customerResponse = await page.request.post('/api/caixa/customers', { data: { name: 'Cliente Parcelado E2E' } });
   const { customer } = await customerResponse.json();
   const creditResponse = await page.request.post('/api/caixa/orders', { data: { requestId: require('node:crypto').randomUUID(), items: [{ productId: 'test-plant', quantity: 8 }], paymentMethod: 'FIADO', customerId: customer.id } });
   expect(creditResponse.ok()).toBe(true); const creditOrder = (await creditResponse.json()).order;
   await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-edmar', pin: '1234' } });
+  await ensureCashierSession(page);
   expect((await page.request.post(`/api/caixa/orders/${creditOrder.id}/confirm`, { data: { paymentMethod: 'FIADO' } })).ok()).toBe(true);
   await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-caixa1', pin: '0000' } });
+  await ensureCashierSession(page);
   await page.goto('/pdv'); await expect(page.getByPlaceholder('Nome, categoria ou descrição (Ex.: plantas de sombra, plantas para jardim, flores, e etc)')).toBeVisible(); await page.keyboard.press('F3');
   await page.getByRole('button', { name: 'Receber pagamento', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Receber pagamento do cliente', exact: true });
@@ -104,6 +119,7 @@ test('caixa recebe dívida parcialmente e quita o restante com Pix conferido', a
 
 test('entrega abre identificação, busca após quatro letras e preenche o cliente selecionado', async ({ page }) => {
   expect((await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-caixa1', pin: '0000' } })).ok()).toBe(true);
+  await ensureCashierSession(page);
   expect((await page.request.post('/api/caixa/customers', { data: { name: 'Mariana Busca Teste', phone: '64988881234', address: 'Rua das Flores, 10, Centro, Mineiros GO' } })).ok()).toBe(true);
   await page.goto('/pdv');
   await expect(page.getByRole('button', { name: '🛵 Entrega', exact: true })).toBeVisible();
@@ -134,6 +150,7 @@ test('entrega abre identificação, busca após quatro letras e preenche o clien
 
 test('comanda recebe por botões e Pix manual exige arquivo antes de finalizar', async ({ page }) => {
   expect((await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-caixa1', pin: '0000' } })).ok()).toBe(true);
+  await ensureCashierSession(page);
   const response = await page.request.post('/api/caixa/orders', { data: { requestId: require('node:crypto').randomUUID(), items: [{ productId: 'test-plant', quantity: 1 }], paymentMethod: 'DINHEIRO', deferToCashier: true, customerName: 'Comprovante Obrigatório' } });
   expect(response.ok()).toBe(true); const { order } = await response.json();
   await page.goto('/pdv'); await expect(page.getByPlaceholder('Nome, categoria ou descrição (Ex.: plantas de sombra, plantas para jardim, flores, e etc)')).toBeVisible(); await page.keyboard.press('F2');
@@ -142,8 +159,7 @@ test('comanda recebe por botões e Pix manual exige arquivo antes de finalizar',
   await expect(dialog.getByRole('combobox')).toHaveCount(0);
   await page.mouse.click(2, 2); await expect(dialog).toBeHidden(); await open.click();
   await dialog.getByRole('button', { name: 'PIX', exact: true }).click();
-  await dialog.getByRole('checkbox', { name: 'Pix já recebido: confirmar manualmente', exact: true }).check();
-  await dialog.getByRole('checkbox', { name: /Conferi o valor do Pix/ }).check();
+  await dialog.getByRole('checkbox', { name: /Conferi o recebimento do Pix/ }).check();
   await dialog.getByLabel('Observação do comprovante').fill('Comprovante conferido na conta');
   const finish = dialog.getByRole('button', { name: 'Confirmar pagamento e finalizar', exact: true });
   await expect(finish).toBeDisabled();
@@ -158,9 +174,11 @@ test('comanda recebe por botões e Pix manual exige arquivo antes de finalizar',
 
 test('seller completes own direct Pix with mandatory proof and no cash receiving controls', async ({ page }) => {
   expect((await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-edmar', pin: '1234' } })).ok()).toBe(true);
+  await ensureCashierSession(page);
   const userId = 'seller-pix-' + Date.now();
   expect((await page.request.post('/api/admin/users', { data: { id: userId, name: 'Vendedor Pix', role: 'VENDEDOR', pin: '7788', active: true } })).ok()).toBe(true);
   expect((await page.request.post('/api/admin/auth/login', { data: { userId, pin: '7788' } })).ok()).toBe(true);
+  await ensureCashierSession(page);
   const response = await page.request.post('/api/caixa/orders', { data: { requestId: require('node:crypto').randomUUID(), items: [{ productId: 'test-plant', quantity: 1 }], paymentMethod: 'DINHEIRO', deferToCashier: true, customerName: 'Pix do Vendedor' } });
   expect(response.ok()).toBe(true);
   const { order } = await response.json();

@@ -12,8 +12,8 @@ test.beforeEach(async ({ page }) => {
     return route.fulfill({ contentType: file.endsWith('.css') ? 'text/css' : 'application/javascript', body: fs.readFileSync(file) });
   });
   await page.goto('http://conflora.test/');
+  await page.addScriptTag({ content: require('../helpers/browser-i18n').script });
   await page.evaluate(() => {
-    Object.defineProperty(String.prototype, 'tr', { configurable: true, get() { return String(this); } });
     Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true });
     Object.defineProperty(window.navigator, 'serviceWorker', { configurable: true, value: undefined });
     window.notificationCalls = [];

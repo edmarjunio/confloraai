@@ -3,8 +3,6 @@ import {
   element,
   money,
   notify,
-  storageGet,
-  storageSet,
   openDialog,
   unlockBodyScroll,
   quantityControl,
@@ -13,7 +11,7 @@ import { icon } from "./icons.js";
 import { onLanguageChange } from "./i18n/index.js";
 import { storeQueries } from "./query/tanstackQuery.js";
 import { renderOrderReceipt } from "./receipt.js";
-import { normalizeStoredCart } from "./cart-storage.mjs";
+import { translateProductName } from './i18n/products.js';
 
 export function createCart(state) {
   try {
@@ -23,9 +21,7 @@ export function createCart(state) {
   const tabId = window.ConfloraSession?.tabId || crypto.randomUUID();
   const ownerId = (user) => user?.id ? `user:${user.id}` : `guest:${tabId}`;
   let owner = ownerId(state.user);
-  let key = `store:${state.slug}:cart:v2:${owner}`;
-  const stored = storageGet(key, []);
-  let items = normalizeStoredCart(stored);
+  let items = [];
   let previousCount = items.reduce((sum, item) => sum + item.quantity, 0);
   let fabAnimation;
   let deliveryLocation = null;
@@ -33,8 +29,54 @@ export function createCart(state) {
   locationPicker?.addEventListener("locationchange", (event) => { deliveryLocation = event.detail; if (!form.elements.address.value.trim() && deliveryLocation.address) form.elements.address.value = deliveryLocation.address; });
   let sending = false;
   let confirmationAccepted = false;
-  let pending = storageGet(`${key}:pending`, null);
+  let pending = null;
   const form = $("#checkoutForm");
+  const cartDialog = $("#cartDialog");
+  const catalogMain = $("#main");
+  let catalogScrollStyles = null;
+
+  function enableCatalogScroll() {
+    if (!cartDialog || !catalogMain || window.matchMedia("(max-width: 768px)").matches) return;
+    const top = Math.max(0, catalogMain.getBoundingClientRect().top);
+    catalogScrollStyles = {
+      height: catalogMain.style.height,
+      overflowY: catalogMain.style.overflowY,
+      overscrollBehavior: catalogMain.style.overscrollBehavior,
+    };
+    catalogMain.style.height = `${Math.max(0, window.innerHeight - top)}px`;
+    catalogMain.style.overflowY = "auto";
+    catalogMain.style.overscrollBehavior = "contain";
+  }
+
+  function disableCatalogScroll() {
+    if (!catalogScrollStyles || !catalogMain) return;
+    const lockedScrollY = Number(document.body.dataset.scrollLocked);
+    if (document.body.dataset.scrollLocked && catalogMain.scrollTop > 0) {
+      document.body.dataset.scrollLocked = String(lockedScrollY + catalogMain.scrollTop);
+    }
+    catalogMain.scrollTop = 0;
+    catalogMain.style.height = catalogScrollStyles.height;
+    catalogMain.style.overflowY = catalogScrollStyles.overflowY;
+    catalogMain.style.overscrollBehavior = catalogScrollStyles.overscrollBehavior;
+    catalogScrollStyles = null;
+  }
+
+  function scrollCatalogOutsideCart(event) {
+    if (!cartDialog?.open || !catalogScrollStyles || !catalogMain) return;
+    const cartBounds = cartDialog.getBoundingClientRect();
+    if (event.clientX >= cartBounds.left && event.clientX <= cartBounds.right) return;
+    if (catalogMain.scrollHeight <= catalogMain.clientHeight) return;
+    event.preventDefault();
+    const delta = event.deltaMode === window.WheelEvent.DOM_DELTA_LINE
+      ? event.deltaY * 16
+      : event.deltaMode === window.WheelEvent.DOM_DELTA_PAGE
+        ? event.deltaY * catalogMain.clientHeight
+        : event.deltaY;
+    catalogMain.scrollTop += delta;
+  }
+
+  document.addEventListener("wheel", scrollCatalogOutsideCart, { capture: true, passive: false });
+  cartDialog?.addEventListener("close", disableCatalogScroll);
 
   // Subscribe to reactive language changes
   onLanguageChange(() => {
@@ -52,10 +94,6 @@ export function createCart(state) {
         Math.round((productFor(item)?.price.amountMinor || 0) * item.quantity),
       0,
     );
-
-  function persist() {
-    storageSet(key, items);
-  }
 
   function add(product, quantity) {
     const receipt = $("#receipt");
@@ -87,9 +125,8 @@ export function createCart(state) {
     } else {
       items.push({ productId: product.id, quantity });
     }
-    persist();
     render();
-    notify(`${product.name} ${'catalog_added_to_cart'.tr}`);
+    notify(`${translateProductName(product)} ${'catalog_added_to_cart'.tr}`);
     state.trackEvent?.("add_to_cart", {
       productId: product.id,
       productName: product.name,
@@ -162,7 +199,6 @@ export function createCart(state) {
         const imageCandidates = window.ConfloraProductCard?.getImageCandidates(product) || product?.images || [];
         const remove = () => {
           items = items.filter((i) => i !== item);
-          persist();
           render();
 
         };
@@ -188,7 +224,6 @@ export function createCart(state) {
             return;
           }
           item.quantity = value;
-          persist();
           render();
 
         });
@@ -202,8 +237,8 @@ export function createCart(state) {
           }),
           element("div", {}, [
             element("strong", {
-              text: product?.name || 'catalog_unavailable'.tr,
-              title: product?.name || 'catalog_unavailable'.tr,
+              text: translateProductName(product) || 'catalog_unavailable'.tr,
+              title: translateProductName(product) || 'catalog_unavailable'.tr,
             }),
             element("span", {
               text: money((product?.price?.amountMinor || 0) * item.quantity),
@@ -489,7 +524,6 @@ export function createCart(state) {
     if (owner !== submittingOwner) return;
     if (!pending || pending.fingerprint !== fingerprint) {
       pending = { fingerprint, key: crypto.randomUUID() };
-      storageSet(`${key}:pending`, pending);
     }
     sending = true;
     updateCheckout();
@@ -518,9 +552,7 @@ export function createCart(state) {
       });
 
       items = [];
-      persist();
       pending = null;
-      storageSet(`${key}:pending`, null);
 
       render();
       form.hidden = true;
@@ -577,6 +609,7 @@ export function createCart(state) {
     dialog.style.transform = "";
     dialog.style.transition = "";
     openDialog(dialog);
+    enableCatalogScroll();
     dialog.scrollTop = 0;
     if (!state.existingStore) return;
     const customerSessionId = state.user?.id;
@@ -596,14 +629,12 @@ export function createCart(state) {
 
   function close() {
     $("#cartDialog").close();
-    unlockBodyScroll();
   }
 
   function clear() {
     if (items.length === 0 || sending) return;
     items = [];
     confirmationAccepted = false;
-    persist();
     resetCartView();
     render();
   }
@@ -630,11 +661,11 @@ export function createCart(state) {
   function setOwner(user) {
     const nextOwner = ownerId(user);
     if (owner === nextOwner) return;
-    persist(); owner = nextOwner; key = `store:${state.slug}:cart:v2:${owner}`;
-    items = normalizeStoredCart(storageGet(key, []));
+    owner = nextOwner;
+    items = [];
     previousCount = items.reduce((sum, item) => sum + item.quantity, 0);
     fabAnimation?.cancel();
-    pending = storageGet(`${key}:pending`, null);
+    pending = null;
     confirmationAccepted = false; deliveryLocation = null;
     form.reset(); form.hidden = false; $('#checkoutCustomer').hidden = false;
     $('#receipt').replaceChildren(); $('#receipt').hidden = true;
@@ -644,10 +675,5 @@ export function createCart(state) {
     $('#orderConfirmDialog').close();
     render();
   }
-  window.addEventListener('storage', (event) => {
-    if (event.key !== key || sending) return;
-    items = normalizeStoredCart(storageGet(key, [])); confirmationAccepted = false;
-    $('#orderConfirmDialog').close(); render();
-  });
   return { add, render, configure, open, close, setOwner };
 }

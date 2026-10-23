@@ -4945,6 +4945,14 @@ body {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04) !important;
   transition: transform 0.12s ease, box-shadow 0.12s ease !important;
 }
+@media (max-width: 767px) {
+  .guided-results-grid.chat-product-grid { grid-template-columns: 1fr !important; }
+  .chat-mini-card { flex-direction: row !important; align-items: stretch; height: 112px; max-height: 112px; }
+  .chat-mini-card .chat-mini-photo { flex: 0 0 88px; width: 88px !important; height: 98px !important; aspect-ratio: auto !important; }
+  .chat-mini-card .chat-mini-body { padding: 3px 6px 3px 10px !important; text-align: left !important; }
+  .chat-mini-card .chat-mini-name { text-align: left !important; font-size: 12px !important; }
+  .chat-mini-card .chat-mini-add { min-height: 32px !important; }
+}
 .chat-mini-card:active {
   transform: scale(0.97) !important;
 }

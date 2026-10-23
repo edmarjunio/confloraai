@@ -203,7 +203,7 @@
         : `cf-product-category-tag cf-category-tag ${this.getAttribute('class') || ''}`.trim();
       tag.classList.toggle('cf-category-clear', action);
       tag.classList.toggle('cf-category-icon-only', hideLabel && !action);
-      const accessibleLabel = labelText || (kind === 'all' ? 'all_categories'.tr : (action ? 'Limpar filtros'.tr || 'Limpar filtros' : 'Filtro'));
+      const accessibleLabel = labelText || (kind === 'all' ? 'all_categories'.tr : (action ? "clear_filters".tr || 'Limpar filtros' : 'Filtro'));
       tag.setAttribute('aria-label', accessibleLabel);
       tag.dataset.categoryTone = theme.tone;
       tag.style.setProperty('--category-strong', theme.strong);

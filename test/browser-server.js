@@ -1,7 +1,7 @@
 // Ambiente de teste isolado: nunca acessa serviços externos.
 process.env.NODE_ENV = "test";
 process.env.REQUEST_AUTH_LIMIT = '10000';
-process.env.PIX_MODE ||= "SICREDI";
+process.env.PIX_MODE ||= "MANUAL";
 process.env.PIX_KEY ||= "52998224725";
 process.env.PIX_TITULAR ||= "Loja de teste";
 const { createApp } = require("../src/http/app");

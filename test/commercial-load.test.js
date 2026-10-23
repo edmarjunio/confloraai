@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { writeFileSync } = require('node:fs');
+const { writeFileSync, mkdirSync } = require('node:fs');
 const { meteredFirestore } = require('./helpers/metered-firestore');
 const { FirestoreRepository } = require('./helpers/repository-fixture');
 const { PdvRepository } = require('../src/orders/pdv.repository');
@@ -35,5 +35,6 @@ test('shared commercial core: 100/500/1000 sales, 20 concurrent requests, replay
       documentReads: db.metrics.reads, documentWrites: db.metrics.writes, transactions: db.metrics.transactions,
       note: 'Local simulated operations, excludes SDK retries, regional latency, indexes, quotas and provider traffic' });
   }
+  mkdirSync('tmp', { recursive: true });
   writeFileSync('tmp/commercial-load-results.json', JSON.stringify(report, null, 2));
 });

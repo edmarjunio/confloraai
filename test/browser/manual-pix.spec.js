@@ -1,3 +1,4 @@
+const { ensureCashierSession } = require('./cashier-session');
 const { test, expect } = require('@playwright/test');
 const { spawn } = require('node:child_process');
 const { resolve } = require('node:path');
@@ -29,6 +30,7 @@ test('cliente envia comprovante na página do pedido e Admin confere o Pix sem S
   await page.getByLabel('Usuário').selectOption('usr-edmar');
   await page.getByLabel('PIN', { exact: true }).fill('1234');
   await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+  await ensureCashierSession(page);
   expect(await page.evaluate(() => window.CONFLORA_PIX_MODE)).toBe('MANUAL');
   await expect(page.getByRole('button', { name: /F2.*Comandas/ })).toBeVisible();
   await page.getByRole('button', { name: /F2.*Comandas/ }).click();

@@ -140,9 +140,12 @@ function existingConfig(products, saved, settings = { stockControlEnabled: true 
   );
   if (saved?.config) {
     const result = structuredClone(saved.config);
+    result.assistant ||= { enabled: false };
+    result.assistant.mode ||= 'GUIDED';
     result.branding ||= {};
     result.branding.logoUrl ||= profile.branding.logoUrl;
     result.checkout ||= structuredClone(profile.checkout);
+    result.checkout.pix = { ...result.checkout.pix, ...require('../orders/pix-mode').manualPixSettings({ required: false }) };
     result.categories ||= [];
     result.checkout.contactPhone ||=
       process.env.OWNER_WHATSAPP_NUMBER || "";
@@ -321,6 +324,7 @@ function installExistingStore(app, { repository, assistant, catalog, getOrderInt
     settings ||= { stockControlEnabled: true };
     if (saved === undefined) saved = await readSettings();
     return records
+      .filter(require('../catalog/commercial-product').hasValidCommercialPrice)
       .map((item) => {
         const product = toProduct(item, settings);
         const category = saved?.config?.categories?.find(
@@ -433,12 +437,13 @@ function installExistingStore(app, { repository, assistant, catalog, getOrderInt
         typeof data.name === "string" && data.name.trim().length >= 2,
         "Nome do produto é obrigatório.",
       );
+      ensure(typeof data.price === 'number' && require('../catalog/commercial-product').hasValidCommercialPrice(data), 'Informe um preço válido, com até duas casas decimais.');
       const product = {
         id: data.id
           ? String(data.id)
           : `prod_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         name: String(data.name).trim(),
-        price: Number(data.price || 0),
+        price: data.price,
         stockQuantity: Number(data.stockQuantity ?? data.stock ?? 0),
         status:
           String(data.status || "ATIVO").trim().toUpperCase() === "INATIVO"

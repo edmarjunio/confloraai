@@ -126,9 +126,12 @@ export function createChat(state, catalog) {
         { role: "assistant", text: response.message.slice(0, 1000) },
       );
       messages.scrollTop = messages.scrollHeight;
-    } catch (error) {
+    } catch {
       pending.remove();
-      notify(error.message);
+      const publicMessage = 'the_service_is_temporarily_unavailable_please_try_again_shortly'.tr;
+      bubble(publicMessage, 'assistant');
+      if (!$('#chatInput').value) $('#chatInput').value = message;
+      notify(publicMessage);
     } finally {
       busy = false;
       form.querySelector("button").disabled = false;

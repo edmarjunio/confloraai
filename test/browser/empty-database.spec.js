@@ -26,10 +26,20 @@ test('every main screen works with no business records and no cached catalogue',
     await expect.poll(() => page.locator('body').innerText()).not.toBe('');
     await expect(page.locator('body')).not.toContainText('Planta Teste');
   }
+  for (const tab of ['cashier', 'orders', 'stock', 'products', 'team', 'status', 'analytics', 'price', 'notifs']) {
+    await page.goto('/admin?tab=' + tab);
+    await expect(page.locator('#tab-' + tab)).toHaveClass(/active/);
+    await expect(page.locator('body')).not.toContainText('Planta Teste');
+  }
+  await page.goto('/admin?tab=products');
+  await expect(page.locator('#adminProductsGrid render-product-card')).toHaveCount(0);
+  await page.screenshot({ path: 'test-results/empty-admin.png', fullPage: true });
   await page.goto('/pdv');
   await expect(page.locator('.cashier-command-nav')).toBeVisible();
+  await expect(page.locator('render-product-card')).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
   await expect(page.locator('.cashier-command-nav')).toBeVisible();
+  await page.screenshot({ path: 'test-results/empty-cashier-mobile.png' });
   expect(errors).toEqual([]);
 });

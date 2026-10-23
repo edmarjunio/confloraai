@@ -1,7 +1,9 @@
+const { ensureCashierSession } = require('./cashier-session');
 const { test, expect } = require('@playwright/test');
 
 test('admin acompanha falha do navegador como texto; página não fica consultando em segundo plano', async ({ page }) => {
   await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-edmar', pin: '1234' } });
+  await ensureCashierSession(page);
   await page.goto('/admin?tab=status');
   await expect(page.getByRole('heading', { name: 'Histórico de erros', exact: true })).toBeVisible();
   const capture = page.waitForResponse(response => response.url().endsWith('/api/client-errors') && response.status() === 202);

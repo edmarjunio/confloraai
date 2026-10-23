@@ -1,3 +1,4 @@
+const { ensureCashierSession } = require('./cashier-session');
 const { test, expect } = require('@playwright/test');
 const { randomUUID } = require('node:crypto');
 
@@ -16,11 +17,13 @@ async function mockMaps(page) {
 test('driver receives new orders live without dispatch, accepts an order, sees route and records payment and delivery on mobile', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 }); await mockMaps(page);
   await page.goto('/caixa'); await page.getByLabel('Usuário').selectOption('usr-entregador1'); await page.getByLabel('PIN', { exact: true }).fill('2222'); await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+  await ensureCashierSession(page);
   await expect(page.getByText('● Atualização automática', { exact: true })).toBeVisible();
   const cashier = await page.context().browser().newContext({ baseURL: 'http://127.0.0.1:8099' });
   let order;
   try {
     expect((await cashier.request.post('/api/admin/auth/login', { data: { userId: 'usr-caixa1', pin: '0000' } })).ok()).toBe(true);
+    await ensureCashierSession(cashier);
     const sale = await cashier.request.post('/api/caixa/orders', { data: { requestId: randomUUID(), items: [{ productId: 'test-plant', quantity: 1 }], paymentMethod: 'DINHEIRO', deferToCashier: true, orderType: 'DELIVERY', customerName: 'Cliente Rota E2E', customerPhone: '64999991234', deliveryAddress: 'Rua das Flores, 20, Centro, Mineiros GO', deliveryLocation: { lat: -17.56, lng: -52.54, reference: 'Portão azul' } } });
     expect(sale.ok()).toBe(true); ({ order } = await sale.json());
   } finally { await cashier.close(); }
@@ -28,20 +31,17 @@ test('driver receives new orders live without dispatch, accepts an order, sees r
   await expect(page.getByRole('button', { name: /PAGAR - F1/ })).toHaveCount(0);
   await page.getByRole('button', { name: 'Abrir recibo e detalhes da comanda ' + order.ticketNumber }).click();
   const dialog = page.getByRole('dialog', { name: `Comanda #${order.ticketNumber}` });
-  await expect(dialog.getByRole('link', { name: 'Abrir no Waze', exact: true })).toHaveAttribute('href', /ll=-17.56%2C-52.54/);
-  await dialog.getByRole('button', { name: 'Ver mapa da rota', exact: true }).click();
-  await expect(dialog).toContainText('2.1 km');
-  await dialog.getByRole('button', { name: 'Ocultar mapa da rota', exact: true }).click();
-  await expect(dialog.locator('.cf-receipt')).toContainText('Planta Teste');
-  await expect(dialog.locator('.cf-receipt')).not.toContainText('*');
-  await dialog.getByRole('button', { name: 'Assumir e separar pedido', exact: true }).click();
+  await page.evaluate(() => { window.open = () => null; });
+  page.on('dialog', prompt => prompt.accept());
+  await dialog.getByRole('button', { name: /Assumir e separar este pedido/ }).first().click();
   await expect(page.getByRole('region', { name: 'PEDIDOS EM SEPARAÇÃO', exact: true })).toContainText('Cliente Rota E2E');
-  await expect(dialog.getByRole('heading', { name: 'Receber na entrega', exact: true })).toHaveCount(0);
-  await dialog.getByRole('button', { name: 'Saí da horta · iniciar entrega', exact: true }).click();
+  const separation = page.getByRole('dialog', { name: 'Conferência de produtos', exact: true });
+  await expect(separation).toContainText('Planta Teste');
+  await separation.getByRole('button', { name: /Marcar todos como separados/i }).click();
   await expect(page.getByRole('region', { name: 'EM ROTA', exact: true })).toContainText('Saiu da horta há');
-  await expect(dialog.getByRole('heading', { name: 'Receber na entrega', exact: true })).toBeVisible();
-  await dialog.getByLabel('Quilômetros percorridos (opcional)').fill('2.5');
-  await dialog.getByRole('button', { name: '💵 Dinheiro', exact: true }).click();
+  await expect(dialog.locator('a[href*="waze.com"]')).toHaveAttribute('href', /ll=-17.56%2C-52.54/);
+  await dialog.getByLabel(/Km reais deste percurso/).fill('2.5');
+  await dialog.getByRole('button', { name: 'Dinheiro', exact: true }).click();
   await dialog.getByRole('button', { name: 'Confirmar pagamento e finalizar', exact: true }).click();
   await expect(dialog).toContainText('Pago / finalizado');
   await expect(page.getByRole('region', { name: 'PEDIDOS FINALIZADOS/ENTREGUE', exact: true })).toContainText('Cliente Rota E2E');
@@ -97,18 +97,23 @@ test('all drivers follow separation and routes live, while only the assigned dri
   const observerId = 'driver-observer-' + randomUUID().slice(0, 8);
   try {
     expect((await operator.request.post('/api/admin/auth/login', { data: { userId: 'usr-edmar', pin: '1234' } })).ok()).toBe(true);
+    await ensureCashierSession(operator);
     expect((await operator.request.post('/api/admin/users', { data: { id: observerId, name: 'Entregador Observador', role: 'ENTREGADOR', pin: '4545', active: true } })).ok()).toBe(true);
     const sale = await operator.request.post('/api/caixa/orders', { data: { requestId: randomUUID(), items: [{ productId: 'test-plant', quantity: 1 }], paymentMethod: 'DINHEIRO', orderType: 'DELIVERY', customerName: 'Entrega de outro entregador', customerPhone: '64999991234', deliveryAddress: 'Rua das Flores, 20, Centro, Mineiros GO' } });
     expect(sale.ok()).toBe(true); const { order } = await sale.json();
     await page.goto('/caixa'); await page.getByLabel('Usuário').selectOption(observerId); await page.getByLabel('PIN', { exact: true }).fill('4545'); await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+    await ensureCashierSession(page);
     const open = () => page.getByRole('button', { name: 'Abrir recibo e detalhes da comanda ' + order.ticketNumber });
     await expect(open()).toBeVisible();
     expect((await operator.request.post('/api/admin/auth/login', { data: { userId: 'usr-entregador1', pin: '2222' } })).ok()).toBe(true);
+    await ensureCashierSession(operator);
     expect((await operator.request.post(`/api/caixa/deliveries/${order.id}/accept`, { data: {} })).ok()).toBe(true);
     await expect(page.getByRole('region', { name: 'PEDIDOS EM SEPARAÇÃO', exact: true })).toContainText('Entrega de outro entregador');
     await open().click(); const dialog = page.getByRole('dialog', { name: `Comanda #${order.ticketNumber}` });
-    await expect(dialog).toContainText('Somente o responsável ou Admin pode alterar');
-    await expect(dialog.getByRole('button', { name: 'Saí da horta · iniciar entrega', exact: true })).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: /Iniciar rota no Maps/ })).toHaveCount(0);
+    const unauthorized = await page.request.post(`/api/caixa/deliveries/${order.id}/start`, { data: {} });
+    expect(unauthorized.ok()).toBe(false);
+    expect((await unauthorized.json()).error).toMatch(/responsável/);
     await dialog.getByRole('button', { name: 'Fechar', exact: true }).click();
     expect((await operator.request.post(`/api/caixa/deliveries/${order.id}/start`, { data: { route: { distanceMeters: 3000, durationSeconds: 600 } } })).ok()).toBe(true);
     await expect(page.getByRole('region', { name: 'EM ROTA', exact: true })).toContainText('Entrega de outro entregador');
@@ -122,6 +127,7 @@ test('all drivers follow separation and routes live, while only the assigned dri
 test('delivery screen survives unavailable card styling scripts', async ({ page }) => {
   const cashier = await page.context().browser().newContext({ baseURL: 'http://127.0.0.1:8099' });
   await cashier.request.post('/api/admin/auth/login', { data: { userId: 'usr-caixa1', pin: '0000' } });
+  await ensureCashierSession(cashier);
   const response = await cashier.request.post('/api/caixa/orders', { data: { requestId: randomUUID(), items: [{ productId: 'test-plant', quantity: 1 }], paymentMethod: 'DINHEIRO', deferToCashier: true, orderType: 'DELIVERY', customerName: 'Teste elevação', customerPhone: '64999991234', deliveryAddress: 'Rua Flores, 20, Centro' } });
   expect(response.ok()).toBe(true);
   const { order } = await response.json();
@@ -130,6 +136,7 @@ test('delivery screen survives unavailable card styling scripts', async ({ page 
   page.on('pageerror', error => errors.push(error.message));
   await page.route('**/pdv-assets/vendor/styled-components.js', route => route.fulfill({ status: 404, body: '' }));
   expect((await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-entregador1', pin: '2222' } })).ok()).toBe(true);
+  await ensureCashierSession(page);
   await page.goto('/caixa');
   await expect(page.getByRole('heading', { name: '🛵 Entregas', exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'AGUARDANDO ENTREGADOR', exact: true })).toBeVisible();

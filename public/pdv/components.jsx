@@ -1089,7 +1089,7 @@ window.PdvComponents = (() => {
             <p className="text-xs text-slate-500 font-medium">{orderStatusLabel(order)} · {paymentLabel(order.paymentMethod)}</p>
           </div>
           <div className="text-right">
-            <span className="text-[10px] font-bold text-slate-400 block uppercase">{'total'.tr}</span>
+            <span className="text-[10px] font-bold text-slate-400 block uppercase">{"total_112398".tr}</span>
             <span className="text-base font-black text-emerald-800">{money(order.total)}</span>
           </div>
         </div>
@@ -1151,7 +1151,7 @@ window.PdvComponents = (() => {
         {canReceive && <section className="mt-4 rounded-2xl border-2 border-emerald-300 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between border-b border-emerald-100 pb-2 mb-3">
             <div>
-              <h3 className="text-base font-black text-emerald-950 flex items-center gap-1.5">
+              <h3 aria-label={deliveryMode ? 'collect_on_delivery'.tr : 'receive_at_cashier'.tr} className="text-base font-black text-emerald-950 flex items-center gap-1.5">
                 <span>{deliveryMode ? 'collect_on_delivery'.tr : 'order_receipt'.tr}</span>
               </h3>
               <p className="text-xs text-slate-500 font-medium"> {'enter_the_method_and_confirm_the_exact_amount'.tr} </p>
@@ -1199,6 +1199,7 @@ window.PdvComponents = (() => {
                       : 'border border-slate-300 text-emerald-950 focus:border-emerald-500'
                   }`}
                   value={parts[0].amount}
+                  aria-label={parts.length > 1 ? 'installment_amount'.tr + ' 1' : 'payment_amount_for_method'.tr}
                   onChange={(e) => handlePart0Amount(e.target.value)}
                   placeholder="0,00"
                 />
@@ -1215,6 +1216,7 @@ window.PdvComponents = (() => {
                     type="button"
                     className="text-xs font-black text-emerald-800 hover:underline flex items-center gap-1 cursor-pointer"
                     onClick={addPart}
+                    aria-label={'add_payment_method_action'.tr}
                   > {'add_another_method'.tr}{money(remainingCents / 100)})
                   </button>
                 </div>
@@ -1256,6 +1258,7 @@ window.PdvComponents = (() => {
                           min="0.01"
                           step="0.01"
                           value={part.amount}
+                          aria-label={'installment_amount'.tr + ' ' + (partIndex + 1)}
                           onChange={(e) => updatePart(partIndex, { amount: e.target.value })}
                           className={`w-full pl-8 pr-2 py-1.5 text-xs font-bold rounded-lg bg-white ${
                             exceeded ? 'border-2 border-red-500 text-red-950 bg-red-50 ring-2 ring-red-400/30' : 'border border-slate-300 text-emerald-950'
@@ -1388,6 +1391,7 @@ window.PdvComponents = (() => {
               </label>
               <textarea
                 className="w-full p-2 border border-slate-300 rounded-lg text-xs"
+                aria-label={'receipt_note'.tr}
                 rows={2}
                 placeholder={'receipt_note_e_g_receipt_checked_at_the_time'.tr}
                 value={manualPixNote}
@@ -1406,6 +1410,7 @@ window.PdvComponents = (() => {
                   : 'cf-btn-3d--secondary'
               }`}
               onClick={handleConfirmReceive}
+              aria-label={'confirm_payment_and_finish'.tr}
             >
               {busy ? (
                 'processing_aebd32'.tr
@@ -1489,18 +1494,17 @@ window.PdvComponents = (() => {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
-      <form aria-label="Abertura de caixa" className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl" onSubmit={async event => {
+      <form aria-label={'cashier_opening'.tr} className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl" onSubmit={async event => {
         event.preventDefault(); setBusy(true); setError('');
         try { await api('/api/caixa/open-my-cashier', { requestId, openingFloat: Number(openingFloat) }); await onOpened(); }
         catch (err) { setError(err.message); } finally { setBusy(false); }
       }}>
-        <h2 className="text-xl font-black text-emerald-950">Abertura de caixa</h2>
-        <p className="my-3 text-sm text-slate-600">Conte o dinheiro recebido para dar troco. Informe zero se não recebeu troco. Cada nova abertura tem seu próprio valor.</p>
-        <label className="block text-sm font-bold">Troco do dia (R$)
-          <input autoFocus required type="number" min="0" step="0.01" value={openingFloat} onChange={e => setOpeningFloat(e.target.value)} className="my-2 w-full rounded-xl border p-3" />
+        <h2 className="text-xl font-black text-emerald-950"> {'cashier_opening'.tr} </h2>
+        <p className="my-3 text-sm text-slate-600"> {'cashier_opening_instructions'.tr} </p>
+        <label className="block text-sm font-bold"> {'cashier_opening_float'.tr} <input autoFocus required type="number" min="0" step="0.01" value={openingFloat} onChange={e => setOpeningFloat(e.target.value)} className="my-2 w-full rounded-xl border p-3" />
         </label>
         {error && <p role="alert" className="my-2 text-sm text-red-700">{error}</p>}
-        <button disabled={busy} className="cf-btn-3d cf-btn-3d--primary w-full">{busy ? 'Abrindo...' : 'Confirmar troco e abrir caixa'}</button>
+        <button disabled={busy} className="cf-btn-3d cf-btn-3d--primary w-full">{busy ? 'opening_in_progress'.tr : 'confirm_opening_cash'.tr}</button>
         {onClose && <button type="button" onClick={onClose} disabled={busy} className="mt-3 w-full text-sm">Cancelar</button>}
       </form>
     </div>;
@@ -1571,10 +1575,10 @@ window.PdvComponents = (() => {
 
           <div className="mt-4 space-y-3">
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
-              <p>Troco do dia desta abertura: <strong>{money(expected.openingFloat || 0)}</strong></p>
-              <p>Recebimentos em dinheiro: <strong>{money(expected.cashReceipts || 0)}</strong></p>
-              <p>Total em dinheiro (troco + recebimentos): <strong>{money(expected.cash)}</strong></p>
-              <p className="mt-1 text-xs">Conte todo o dinheiro da gaveta, incluindo o troco inicial.</p>
+              <p> {'current_session_float'.tr} <strong>{money(expected.openingFloat || 0)}</strong></p>
+              <p> {'cash_receipts_label'.tr} <strong>{money(expected.cashReceipts || 0)}</strong></p>
+              <p> {'cash_total_with_float'.tr} <strong>{money(expected.cash)}</strong></p>
+              <p className="mt-1 text-xs"> {'count_all_drawer_cash'.tr} </p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5">
               <h4 className="text-xs font-black uppercase text-slate-700">{'enter_the_physically_counted_amounts'.tr}</h4>
@@ -1795,7 +1799,66 @@ window.PdvComponents = (() => {
     }
   }
 
-  function OrderSoundAlert({ settings, onChange }) {
+  function OrderDateFilter({ from, to, today, onChange }) {
+    const dialogRef = useRef(null);
+    const [open, setOpen] = useState(false);
+    const [mode, setMode] = useState('day');
+    const [draftFrom, setDraftFrom] = useState(from);
+    const [draftTo, setDraftTo] = useState(to);
+    const filtered = from !== today || to !== today;
+    const validRange = Boolean(draftFrom && (mode === 'day' || draftTo && draftFrom <= draftTo));
+
+    const openFilter = () => {
+      setDraftFrom(from);
+      setDraftTo(to);
+      setMode(from === to ? 'day' : 'range');
+      dialogRef.current.showModal();
+      setOpen(true);
+    };
+    const apply = (start, end) => {
+      onChange(start, end);
+      dialogRef.current.close();
+    };
+    const closeOnBackdrop = (event) => {
+      if (event.target !== event.currentTarget) return;
+      const bounds = event.currentTarget.getBoundingClientRect();
+      if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) {
+        event.currentTarget.close();
+      }
+    };
+
+    return <>
+      <button type="button" className={`cf-btn-3d ${filtered ? 'cf-btn-3d--active' : 'cf-btn-3d--secondary'} cf-orders-fab`} aria-label={'orders_date_filter'.tr} title={`${'orders_date_filter'.tr}: ${from === to ? from : `${from} / ${to}`}`} aria-haspopup="dialog" aria-expanded={open} aria-controls="orders-date-filter" data-filter-active={filtered} onClick={openFilter}>
+        <svg viewBox="0 0 24 24" aria-hidden="true" className="cf-orders-fab-icon" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 4h18l-7 8v7l-4 2v-9L3 4z" /></svg>
+        <span className="cf-orders-fab-tooltip">{'orders_date_filter'.tr}</span>
+      </button>
+      <dialog ref={dialogRef} id="orders-date-filter" className="cf-orders-date-dialog" aria-labelledby="orders-date-filter-title" onClose={() => setOpen(false)} onClick={closeOnBackdrop}>
+        <header className="cf-orders-date-dialog-header">
+          <h2 id="orders-date-filter-title">{'orders_date_filter_title'.tr}</h2>
+          <button type="button" className="cf-orders-date-close" aria-label={'common_close'.tr} onClick={() => dialogRef.current.close()}>✕</button>
+        </header>
+        <div className="cf-orders-date-presets">
+          {[{ days: 0, label: 'today'.tr }, { days: 7, label: 'label_7_days'.tr }, { days: 30, label: 'label_30_days'.tr }].map(option => {
+            const start = option.days === 0 ? today : dateOffset(today, -(option.days - 1));
+            return <button key={option.days} type="button" className={`cf-btn-3d cf-btn-3d--sm ${from === start && to === today ? 'cf-btn-3d--active' : 'cf-btn-3d--secondary'}`} aria-pressed={from === start && to === today} onClick={() => apply(start, today)}>{option.label}</button>;
+          })}
+        </div>
+        <form onSubmit={event => { event.preventDefault(); if (validRange) apply(draftFrom, mode === 'day' ? draftFrom : draftTo); }}>
+          <div className="cf-orders-date-modes">
+            {[{ value: 'day', label: 'orders_date_single_day'.tr }, { value: 'range', label: 'orders_date_range'.tr }].map(option => <button key={option.value} type="button" aria-pressed={mode === option.value} className={`cf-btn-3d cf-btn-3d--sm ${mode === option.value ? 'cf-btn-3d--active' : 'cf-btn-3d--secondary'}`} onClick={() => setMode(option.value)}>{option.label}</button>)}
+          </div>
+          <div className="cf-orders-date-fields">
+            <label>{mode === 'day' ? 'date'.tr : 'from'.tr}<input required aria-label={mode === 'day' ? 'date'.tr : 'start_date'.tr} className="cf-orders-date-input" type="date" value={draftFrom} onChange={event => setDraftFrom(event.target.value)} /></label>
+            {mode === 'range' && <label>{'to'.tr}<input required aria-label={'end_date'.tr} className="cf-orders-date-input" type="date" value={draftTo} min={draftFrom} onChange={event => setDraftTo(event.target.value)} /></label>}
+          </div>
+          {mode === 'range' && draftFrom && draftTo && draftFrom > draftTo && <p role="alert" className="mt-3 text-xs text-red-700">{'select_a_valid_date_range'.tr}</p>}
+          <button type="submit" disabled={!validRange} className="cf-btn-3d cf-btn-3d--primary cf-btn-3d--sm cf-orders-date-apply">{'orders_date_apply'.tr}</button>
+        </form>
+      </dialog>
+    </>;
+  }
+
+  function OrderSoundAlert({ settings, onChange, floating = false }) {
     const [open, setOpen] = useState(false);
     const containerRef = useRef(null);
 
@@ -1817,21 +1880,19 @@ window.PdvComponents = (() => {
     };
 
     return (
-      <div ref={containerRef} className="relative inline-flex items-center gap-1">
+      <div ref={containerRef} className={floating ? 'cf-orders-alert-control' : 'relative inline-flex items-center gap-1'}>
         <button
           type="button"
           onClick={() => update({ muted: !settings.muted })}
           aria-pressed={!settings.muted}
           aria-label={settings.muted ? 'enable_sound_for_new_orders'.tr : 'mute_sound_for_new_orders'.tr}
           title={settings.muted ? 'notification_sound_muted_click_to_enable'.tr : 'notification_sound_active_click_to_mute'.tr}
-          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-extrabold transition ${
-            settings.muted
-              ? 'border-slate-300 bg-slate-100 text-slate-600 hover:bg-slate-200'
-              : 'border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100'
-          }`}
+          className={floating ? `cf-btn-3d cf-btn-3d--sm cf-orders-fab ${settings.muted ? 'cf-btn-3d--secondary' : 'cf-btn-3d--active'}` : `inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-extrabold transition ${settings.muted ? 'border-slate-300 bg-slate-100 text-slate-600 hover:bg-slate-200' : 'border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100'}`}
         >
-          <span aria-hidden="true">{settings.muted ? '🔇' : '🔊'}</span>
-          <span className="hidden sm:inline">{settings.muted ? 'muted'.tr : 'sound_alert'.tr}</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true" className="cf-orders-fab-icon" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            {settings.muted ? <><path d="M11 5 6 9H3v6h3l5 4z" /><path d="m17 9 5 6m0-6-5 6" /></> : <><path d="M11 5 6 9H3v6h3l5 4z" /><path d="M15.5 8.5a5 5 0 0 1 0 7m3-10a9 9 0 0 1 0 13" /></>}
+          </svg>
+          <span className={floating ? 'cf-orders-fab-tooltip' : 'hidden sm:inline'}>{settings.muted ? 'muted'.tr : 'sound_alert'.tr}</span>
         </button>
         <button
           type="button"
@@ -1839,16 +1900,17 @@ window.PdvComponents = (() => {
           aria-expanded={open}
           aria-label={'notification_sound_settings'.tr}
           title={'configure_order_sound_alert'.tr}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-xs text-slate-600 shadow-2xs transition hover:border-emerald-400 hover:text-emerald-900"
+          className={floating ? 'cf-btn-3d cf-btn-3d--sm cf-btn-3d--secondary cf-orders-fab' : 'inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-xs text-slate-600 shadow-2xs transition hover:border-emerald-400 hover:text-emerald-900'}
         >
-          ⚙️
+          <svg viewBox="0 0 24 24" aria-hidden="true" className="cf-orders-fab-icon" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="m19.4 15 .1.1a1.7 1.7 0 0 1-2.4 2.4l-.1-.1a1.7 1.7 0 0 0-2.9 1.2v.2a1.7 1.7 0 0 1-3.4 0v-.2a1.7 1.7 0 0 0-2.9-1.2l-.1.1a1.7 1.7 0 1 1-2.4-2.4l.1-.1A1.7 1.7 0 0 0 4.2 12H4a1.7 1.7 0 0 1 0-3.4h.2a1.7 1.7 0 0 0 1.2-2.9l-.1-.1a1.7 1.7 0 1 1 2.4-2.4l.1.1a1.7 1.7 0 0 0 2.9-1.2V2a1.7 1.7 0 0 1 3.4 0v.2a1.7 1.7 0 0 0 2.9 1.2l.1-.1a1.7 1.7 0 1 1 2.4 2.4l-.1.1a1.7 1.7 0 0 0 1.2 2.9h.2a1.7 1.7 0 0 1 0 3.4h-.2a1.7 1.7 0 0 0-1.2 2.9z" /></svg>
+          {floating && <span className="cf-orders-fab-tooltip">{'notification_sound_settings'.tr}</span>}
         </button>
 
         {open && (
           <div
             role="dialog"
             aria-label={'notification_sound_settings_be48e7'.tr}
-            className="absolute right-0 top-full z-50 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-xl"
+            className={floating ? 'cf-orders-sound-popover absolute left-full top-0 z-50 ml-3 w-72 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-xl' : 'absolute right-0 top-full z-50 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-xl'}
           >
             <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2">
               <strong className="text-xs font-black uppercase tracking-wide text-[#0F381E]"> {'notification_sound'.tr} </strong>
@@ -2241,20 +2303,31 @@ window.PdvComponents = (() => {
     const mostByQuantity = data ? topProducts(reportOrders, 'quantity') : [];
     const mostByValue = data ? topProducts(reportOrders, 'total_112398'.tr) : [];
 
-    return <div className="min-h-screen w-full bg-[#F4F6F5] font-sans text-slate-800">
+    return <div className={`cf-cashier-queue min-h-screen w-full bg-[#F4F6F5] font-sans text-slate-800 ${view === 'orders' ? 'cf-orders-page' : ''}`}>
       <div className="bg-white"><Topbar user={user} onCashier={onBack} />
-        <div className="cf-page-toolbar">
+        {view === 'orders' ? <aside className="cf-orders-fab-rail" aria-label="Ações das comandas">
+          <button type="button" className="cf-btn-3d cf-btn-3d--primary cf-orders-fab" aria-label={title} title={title} onClick={() => document.querySelector('.cf-cashier-board')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+            <svg viewBox="0 0 24 24" aria-hidden="true" className="cf-orders-fab-icon" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4.5h6M9 10h6M9 14h6M9 18h3" /></svg>
+            <span className="cf-orders-fab-tooltip">{title}</span>
+          </button>
+          <OrderDateFilter from={dateFrom} to={dateTo} today={today} onChange={(from, to) => { setDateFrom(from); setDateTo(to); }} />
+          <OrderSoundAlert settings={soundSettings} onChange={setSoundSettings} floating />
+          <button type="button" className="cf-btn-3d cf-btn-3d--secondary cf-orders-fab" disabled={refreshing} aria-label={refreshing ? 'updating'.tr : 'refresh'.tr} title={refreshing ? 'updating'.tr : 'refresh'.tr} onClick={() => refresh()}>
+            <svg viewBox="0 0 24 24" aria-hidden="true" className={`cf-orders-fab-icon ${refreshing ? 'cf-orders-refreshing' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 7v5h-5M4 17v-5h5" /><path d="M5.6 9a7 7 0 0 1 11.7-2L20 12M4 12l2.7 5a7 7 0 0 0 11.7-2" /></svg>
+            <span className="cf-orders-fab-tooltip">{refreshing ? 'updating'.tr : 'refresh'.tr}</span>
+          </button>
+        </aside> : <div className="cf-page-toolbar">
           <div className="flex flex-col items-start gap-2"><button type="button" onClick={onBack} className="cf-back-button">{'back_59dc92'.tr}</button></div>
           <div className="flex flex-wrap items-center gap-2"><h1 className="mr-2 text-lg font-black text-[#0F381E]">{title}</h1><OrderSoundAlert settings={soundSettings} onChange={setSoundSettings} />{view === 'report' && user.role !== 'VENDEDOR' && <button className={button} onClick={onDebt}>{'receive_payment'.tr}</button>}<button className={button} disabled={refreshing} onClick={() => refresh()} aria-label={'refresh'.tr}>{refreshing ? 'updating'.tr : 'refresh_8557d8'.tr}</button></div>
-        </div>
-        </div>
+        </div>}
+      </div>
 
-      <div className="shrink-0 border-b border-slate-200 bg-white/80 px-4 py-3 sm:px-6">
+      {view !== 'orders' && <div className="shrink-0 border-b border-slate-200 bg-white/80 px-4 py-3 sm:px-6">
           <div className="flex w-full max-w-none flex-wrap items-end gap-2">
             <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
               {[{ days: 0, label: 'today'.tr }, { days: 7, label: 'label_7_days'.tr }, { days: 30, label: 'label_30_days'.tr }].map((option) => {
                 const isActive = dateTo === today && dateFrom === (option.days === 0 ? today : dateOffset(today, -(option.days - 1)));
-                return <button key={option.days} aria-pressed={isActive} className={`rounded-full border px-4 py-2 text-xs font-extrabold transition ${isActive ? 'border-emerald-700 bg-emerald-700 text-white shadow-md' : 'border-slate-200 bg-white text-slate-700 hover:-translate-y-0.5 hover:border-emerald-400 hover:bg-emerald-50 hover:shadow-sm'}`} onClick={() => setPeriod(option.days)}>{option.label}</button>;
+                return <button key={option.days} aria-pressed={isActive} className={`cf-btn-3d cf-btn-3d--sm ${isActive ? 'cf-btn-3d--active' : 'cf-btn-3d--secondary'}`} onClick={() => setPeriod(option.days)}>{option.label}</button>;
               })}
             </div>
             <div className="flex items-end gap-2">
@@ -2263,20 +2336,15 @@ window.PdvComponents = (() => {
             </div>
             <span className="ml-auto text-xs text-slate-500">{dateFrom === dateTo ? dateFrom : `${dateFrom} a ${dateTo}`}</span>
           </div>
-        </div>
+        </div>}
 
-      <main className="min-h-[calc(100vh-130px)] w-full max-w-none p-3 sm:p-5">
+      <main className={`min-h-[calc(100vh-130px)] w-full max-w-none p-3 sm:p-5 ${view === 'orders' ? 'cf-orders-main' : ''}`}>
           {error && <p role="alert" className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
           {!data && !error && <p className="rounded-xl bg-white p-6 text-center text-sm text-slate-500">{'loading_tickets'.tr}</p>}
           {data && <>
             {view === 'orders' && <>
-              <div className="mb-3 grid grid-cols-1 gap-2 sm:mb-4 sm:grid-cols-3">
-                <MetricCard label={'sales_assigned_to_me'.tr} value={money(data.metrics.sales)} description={`${data.metrics.orderCount} comanda(s)`} />
-                <MetricCard label={'received_by_me'.tr} value={money(data.metrics.receipts)} description="Vendas pagas no período" />
-                <MetricCard label={'store_credits_settled_by_me'.tr} value={money(data.metrics.debtReceipts)} description="Recebimentos no período" />
-              </div>
               {newOrderNotice && <div role="status" className="mb-3 rounded-xl border border-amber-300 bg-amber-100 px-4 py-3 text-sm font-extrabold text-amber-950 shadow-sm" aria-live="polite">🔔 {newOrderNotice}</div>}
-              <div className="cf-cashier-board flex w-full gap-4 overflow-x-auto pb-4 pt-1 snap-x select-none">
+              <div className="cf-cashier-board cf-orders-board flex w-full gap-4 overflow-x-auto pb-4 pt-1 snap-x select-none">
                 {columns.map((column) => <CashierColumn key={column.title} {...column} isTargetGlow={flyingToStage === column.stage} canMove={['ADMIN', "CAIXA"].includes(user.role) && !busy} dragFrom={dragFrom} onMove={moveOrder} onDragStart={setDragFrom} onDragEnd={() => setDragFrom(null)} pulsedOrderIds={pulsedOrderIds} selectedOrderId={selectedOrder?.id} onDetails={setSelectedOrder} />)}
               </div>
             </>}
@@ -2287,7 +2355,7 @@ window.PdvComponents = (() => {
                 {data.history.map((order) => <button key={order.id} onClick={() => setSelectedOrder(order)} className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-sm"><span className="flex justify-between gap-2"><strong>#{order.ticketNumber} · {order.customerName || "Cliente Balcão"}</strong><strong>{money(order.total)}</strong></span><span className="mt-1 block text-xs text-slate-500">{orderStatusLabel(order)} · {paymentLabel(order.paymentMethod)}</span><span className="mt-1 block text-[11px] text-slate-500">{dateTime(order.paidAt || order.completedAt || order.createdAt)} {'order_34ea85'.tr} {staffLabel(order.createdBy)}</span></button>)}
               </div>
               <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white md:block">
-                <table className="w-full min-w-[760px] text-left text-sm"><thead className="bg-slate-100 text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="p-3"> {'date_cec3a9'.tr} </th><th className="p-3">{'ticket_customer'.tr}</th><th className="p-3"> {'status'.tr} </th><th className="p-3">{'payment'.tr}</th><th className="p-3">{'order_by'.tr}</th><th className="p-3 text-right">{'total'.tr}</th></tr></thead><tbody className="divide-y divide-slate-100">{data.history.map((order) => <tr key={order.id} className="hover:bg-emerald-50/50"><td className="p-3 text-xs text-slate-500">{dateTime(order.paidAt || order.completedAt || order.createdAt)}</td><td className="p-3"><button className="font-bold text-[#0F381E] hover:underline" onClick={() => setSelectedOrder(order)}>#{order.ticketNumber} · {order.customerName || "Cliente Balcão"}</button></td><td className="p-3">{orderStatusLabel(order)}</td><td className="p-3">{paymentLabel(order.paymentMethod)}</td><td className="p-3">{staffLabel(order.createdBy)}</td><td className="p-3 text-right font-bold">{money(order.total)}</td></tr>)}</tbody></table>
+                <table className="w-full min-w-[760px] text-left text-sm"><thead className="bg-slate-100 text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="p-3"> {'date_cec3a9'.tr} </th><th className="p-3">{'ticket_customer'.tr}</th><th className="p-3"> {'status'.tr} </th><th className="p-3">{'payment'.tr}</th><th className="p-3">{'order_by'.tr}</th><th className="p-3 text-right">{"total_112398".tr}</th></tr></thead><tbody className="divide-y divide-slate-100">{data.history.map((order) => <tr key={order.id} className="hover:bg-emerald-50/50"><td className="p-3 text-xs text-slate-500">{dateTime(order.paidAt || order.completedAt || order.createdAt)}</td><td className="p-3"><button className="font-bold text-[#0F381E] hover:underline" onClick={() => setSelectedOrder(order)}>#{order.ticketNumber} · {order.customerName || "Cliente Balcão"}</button></td><td className="p-3">{orderStatusLabel(order)}</td><td className="p-3">{paymentLabel(order.paymentMethod)}</td><td className="p-3">{staffLabel(order.createdBy)}</td><td className="p-3 text-right font-bold">{money(order.total)}</td></tr>)}</tbody></table>
               </div>
               {!data.history.length && <p className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">{'no_sales_found_in_this_period'.tr}</p>}
             </>}
@@ -2326,12 +2394,12 @@ window.PdvComponents = (() => {
 
                     <div className="shrink-0">
                       {!closingStatus.mySession ? (
-                        <button type="button" onClick={() => setShowOpeningModal(true)} className="cf-btn-3d cf-btn-3d--primary px-6 py-3">Abrir novo caixa</button>
+                        <button type="button" onClick={() => setShowOpeningModal(true)} className="cf-btn-3d cf-btn-3d--primary px-6 py-3"> {'open_new_cashier_session'.tr} </button>
                       ) : (
                         <div>
-                          <p className="mb-2 text-xs">Troco do dia: {money(closingStatus.mySession.openingFloat)}</p>
-                          <p className="mb-2 text-xs">Total em dinheiro: {money(closingStatus.myExpected.cash)}</p>
-                          <button type="button" onClick={async () => { await loadClosingStatus(); setShowClosingModal(true); }} className="cf-btn-3d cf-btn-3d--primary px-6 py-3">Fechar meu caixa</button>
+                          <p className="mb-2 text-xs"> {'daily_opening_cash_label'.tr} {money(closingStatus.mySession.openingFloat)}</p>
+                          <p className="mb-2 text-xs"> {'total_cash_label'.tr} {money(closingStatus.myExpected.cash)}</p>
+                          <button type="button" onClick={async () => { await loadClosingStatus(); setShowClosingModal(true); }} className="cf-btn-3d cf-btn-3d--primary px-6 py-3"> {'close_own_cashier_session'.tr} </button>
                         </div>
                       )}
                     </div>
@@ -2390,7 +2458,7 @@ window.PdvComponents = (() => {
                 </div>
                 <div className="divide-y divide-slate-100">
                   {[
-                    { key: 'DINHEIRO', label: 'Recebimentos em dinheiro no período', hint: 'Sem o troco inicial; confira o total da gaveta no fechamento do turno' },
+                    { key: 'DINHEIRO', label: 'period_cash_receipts'.tr, hint: 'receipts_exclude_float'.tr },
                     { key: 'PIX', label: 'pix_received'.tr, hint: 'sicredi_statement_confirmations'.tr },
                     { key: 'CREDITO', label: 'credit_card_e617a2'.tr, hint: 'printed_card_machine_report'.tr },
                     { key: 'DEBITO', label: 'debit_card_9c7168'.tr, hint: 'printed_card_machine_report'.tr },
@@ -2454,6 +2522,14 @@ window.PdvComponents = (() => {
             </>}
           </>}
       </main>
+      {view === 'orders' && data && <section className="cf-orders-metrics-sheet" aria-label="Resumo de valores das comandas">
+        <div className="cf-orders-sheet-handle" aria-hidden="true"><span /></div>
+        <div className="cf-orders-metrics-grid">
+          <MetricCard label={'sales_assigned_to_me'.tr} value={money(data.metrics.sales)} description={`${data.metrics.orderCount} comanda(s)`} />
+          <MetricCard label={'received_by_me'.tr} value={money(data.metrics.receipts)} description="Vendas pagas no período" />
+          <MetricCard label={'store_credits_settled_by_me'.tr} value={money(data.metrics.debtReceipts)} description="Recebimentos no período" />
+        </div>
+      </section>}
       {selectedOrder && <OrderDetails extraContent={selectedOrder.procurement ? <a className={button} href="/configuracoes"> {'manage_order'.tr} </a> : null} key={`${selectedOrder.id}:${selectedOrder.status}:${selectedOrder.paymentMethod}`} order={selectedOrder} canApproveCredit={user.role === 'ADMIN' && selectedOrder.creditApprovalStatus === 'PENDING'} canAdvance={user.role !== 'VENDEDOR' && selectedOrder.status === 'AWAITING_CONFIRMATION' && selectedOrder.creditApprovalStatus !== 'PENDING'} onAdvance={(order) => moveOrder(order.id, 'confirmation', 'payment')} canReceive={(user.role === 'ADMIN' && selectedOrder.creditApprovalStatus === 'PENDING' && selectedOrder.paymentParts?.length > 1 || user.role !== 'VENDEDOR' && ['AWAITING_CASHIER', 'AWAITING_PAYMENT', 'PENDING'].includes(selectedOrder.status)) && !selectedOrder.pixData?.txid} canConfirmManualPix={selectedOrder.pixMode !== 'MANUAL' && (user.role !== 'VENDEDOR' || selectedOrder.createdBy?.id === user.id && (!selectedOrder.pixData?.txid || (selectedOrder.paymentParts || [{ method: selectedOrder.paymentMethod }]).every(part => part.method === 'PIX'))) && (selectedOrder.paymentMethod === 'PIX' && ['CREATING_PIX', 'AWAITING_PIX', ...(selectedOrder.procurement ? ['AWAITING_RECONCILIATION'] : [])].includes(selectedOrder.status) || user.role === 'VENDEDOR' && ['AWAITING_CASHIER', 'AWAITING_PAYMENT', 'PENDING'].includes(selectedOrder.status))} busy={busy} error={error} onReceive={receive} onManualPix={async (order, note, proofId) => {
         setBusy(true); setError('');
         try {

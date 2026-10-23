@@ -1,0 +1,22 @@
+{
+  "date": "2026-10-23",
+  "environment": "local_isolated_tests",
+  "build": "passed",
+  "lint": "passed",
+  "syntax": "passed",
+  "runtime_assets": "passed",
+  "backend": { "total": 435, "passed": 434, "failed": 0, "skipped": 1, "skipReason": "FIRESTORE_EMULATOR_HOST is not configured" },
+  "browser": { "total": 91, "passed": 91, "failed": 0 },
+  "emptyDatabaseBrowser": { "total": 1, "passed": 1, "failed": 0 },
+  "productionDatabase": {
+    "operation": "read_only_aggregate_counts",
+    "checkedAt": "2026-10-23T14:54:35Z",
+    "counts": { "products": 759, "orders": 1, "customers": 0, "users": 2, "store_settings": 1 }
+  },
+  "externalValidation": {
+    "realGoogleAccountChooser": "not_exercised_with_a_real_account",
+    "liveMetaDelivery": "not_sent_by_this_test_run",
+    "sicrediSettlement": "isolated_simulation_only_bank_release_pending",
+    "deployment": "not_performed"
+  }
+}

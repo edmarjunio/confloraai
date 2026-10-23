@@ -1,3 +1,4 @@
+const { ensureCashierSession } = require('./cashier-session');
 const { test, expect } = require('@playwright/test');
 
 test('PDV opens without test banner, uses real login and sends an empty cart until selected', async ({ page }) => {
@@ -28,6 +29,7 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
   await page.getByLabel('Usuário').selectOption('usr-caixa1');
   await page.getByLabel('PIN', { exact: true }).fill('0000');
   await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+  await ensureCashierSession(page);
   await expect(page.getByRole('link', { name: 'Conflora - página inicial' }).first()).toHaveAttribute('href', '/');
   await expect(page.locator('.cf-topbar-identity').getByText('Atendente do Caixa', { exact: true })).toBeVisible();
   await expect(page.locator('.cf-topbar-identity small')).toHaveText('CAIXA');
@@ -80,7 +82,7 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.getByRole('link', { name: 'Caixa', exact: true }).click();
   await page.keyboard.press('F9');
-  await expect(page.getByRole('heading', { name: 'Histórico de vendas' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Histórico de vendas', level: 1 })).toBeVisible();
   await page.getByRole('link', { name: 'Caixa', exact: true }).click();
   await page.keyboard.press('F3');
   await expect(page.getByRole('heading', { name: 'Relatório', exact: true })).toBeVisible();

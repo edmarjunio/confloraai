@@ -1,3 +1,4 @@
+const { ensureCashierSession } = require('./cashier-session');
 const { test, expect } = require('@playwright/test');
 
 for (const operator of [
@@ -13,6 +14,7 @@ for (const operator of [
       await page.getByLabel('Usuário').selectOption(operator.id);
       await page.getByLabel('PIN', { exact: true }).fill(operator.pin);
       await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+      await ensureCashierSession(page);
       await expect(page.locator('.cashier-command-nav')).toBeVisible();
       await expect(page.getByRole('button', { name: 'Informações de Planta Teste' })).toBeVisible();
 

@@ -13750,5 +13750,149 @@
     "en": "No additional information registered.",
     "es": "No hay información adicional registrada.",
     "fr": "Aucune information supplémentaire enregistrée."
+  },
+  "cashier_opening": {
+    "pt": "Abertura de caixa",
+    "en": "Open cashier session",
+    "es": "Apertura de caja",
+    "fr": "Ouverture de caisse"
+  },
+  "cashier_opening_instructions": {
+    "pt": "Conte o dinheiro recebido para dar troco. Informe zero se não recebeu troco. Cada nova abertura tem seu próprio valor.",
+    "en": "Count the cash received for change. Enter zero if none was received. Each new session has its own opening amount.",
+    "es": "Cuente el efectivo recibido para dar cambio. Ingrese cero si no recibió cambio. Cada apertura tiene su propio importe.",
+    "fr": "Comptez les espèces reçues pour rendre la monnaie. Saisissez zéro si vous n’en avez pas reçu. Chaque session a son propre montant initial."
+  },
+  "cashier_opening_float": {
+    "pt": "Troco do dia (R$)",
+    "en": "Opening cash (R$)",
+    "es": "Efectivo inicial (R$)",
+    "fr": "Fond de caisse (R$)"
+  },
+  "opening_in_progress": {
+    "pt": "Abrindo...",
+    "en": "Opening...",
+    "es": "Abriendo...",
+    "fr": "Ouverture..."
+  },
+  "confirm_opening_cash": {
+    "pt": "Confirmar troco e abrir caixa",
+    "en": "Confirm opening cash and open session",
+    "es": "Confirmar efectivo y abrir caja",
+    "fr": "Confirmer le fond et ouvrir la caisse"
+  },
+  "current_session_float": {
+    "pt": "Troco do dia desta abertura:",
+    "en": "Opening cash for this session:",
+    "es": "Efectivo inicial de esta apertura:",
+    "fr": "Fond initial de cette session :"
+  },
+  "cash_receipts_label": {
+    "pt": "Recebimentos em dinheiro:",
+    "en": "Cash receipts:",
+    "es": "Cobros en efectivo:",
+    "fr": "Encaissements en espèces :"
+  },
+  "cash_total_with_float": {
+    "pt": "Total em dinheiro (troco + recebimentos):",
+    "en": "Cash total (opening cash + receipts):",
+    "es": "Total en efectivo (inicial + cobros):",
+    "fr": "Total en espèces (fond + encaissements) :"
+  },
+  "count_all_drawer_cash": {
+    "pt": "Conte todo o dinheiro da gaveta, incluindo o troco inicial.",
+    "en": "Count all cash in the drawer, including the opening cash.",
+    "es": "Cuente todo el efectivo de la caja, incluido el importe inicial.",
+    "fr": "Comptez toutes les espèces du tiroir, y compris le fond initial."
+  },
+  "open_new_cashier_session": {
+    "pt": "Abrir novo caixa",
+    "en": "Open new cashier session",
+    "es": "Abrir nueva caja",
+    "fr": "Ouvrir une nouvelle caisse"
+  },
+  "daily_opening_cash_label": {
+    "pt": "Troco do dia:",
+    "en": "Opening cash:",
+    "es": "Efectivo inicial:",
+    "fr": "Fond initial :"
+  },
+  "total_cash_label": {
+    "pt": "Total em dinheiro:",
+    "en": "Cash total:",
+    "es": "Total en efectivo:",
+    "fr": "Total en espèces :"
+  },
+  "close_own_cashier_session": {
+    "pt": "Fechar meu caixa",
+    "en": "Close my cashier session",
+    "es": "Cerrar mi caja",
+    "fr": "Fermer ma caisse"
+  },
+  "period_cash_receipts": {
+    "pt": "Recebimentos em dinheiro no período",
+    "en": "Cash receipts for the period",
+    "es": "Cobros en efectivo del período",
+    "fr": "Encaissements en espèces sur la période"
+  },
+  "receipts_exclude_float": {
+    "pt": "Sem o troco inicial; confira o total da gaveta no fechamento do turno",
+    "en": "Excludes opening cash; check the drawer total when closing the shift",
+    "es": "No incluye el efectivo inicial; revise el total de la caja al cerrar el turno",
+    "fr": "Hors fond initial ; vérifiez le total du tiroir à la clôture"
+  },
+  "product_photo_not_registered": {
+    "pt": "Foto não cadastrada",
+    "en": "No photo registered",
+    "es": "Foto no registrada",
+    "fr": "Aucune photo enregistrée"
+  },
+  "invalid_product_identifier": {
+    "pt": "Identificador do produto inválido.",
+    "en": "Invalid product identifier.",
+    "es": "Identificador de producto no válido.",
+    "fr": "Identifiant du produit invalide."
+  },
+  "product_name_length": {
+    "pt": "Informe um nome de produto entre 2 e 180 caracteres.",
+    "en": "Enter a product name between 2 and 180 characters.",
+    "es": "Ingrese un nombre de producto de entre 2 y 180 caracteres.",
+    "fr": "Saisissez un nom de produit de 2 à 180 caractères."
+  },
+  "product_name_required": {
+    "pt": "Nome do produto obrigatório.",
+    "en": "Product name is required.",
+    "es": "El nombre del producto es obligatorio.",
+    "fr": "Le nom du produit est obligatoire."
+  },
+  "valid_product_price_required": {
+    "pt": "Informe um preço válido, com até duas casas decimais.",
+    "en": "Enter a valid price with up to two decimal places.",
+    "es": "Ingrese un precio válido con hasta dos decimales.",
+    "fr": "Saisissez un prix valide avec au plus deux décimales."
+  },
+  "payment_amount_for_method": {
+    "pt": "Valor nesta forma de pagamento (R$)",
+    "en": "Amount for this payment method (R$)",
+    "es": "Importe en esta forma de pago (R$)",
+    "fr": "Montant pour ce moyen de paiement (R$)"
+  },
+  "confirm_payment_and_finish": {
+    "pt": "Confirmar pagamento e finalizar",
+    "en": "Confirm payment and finish",
+    "es": "Confirmar pago y finalizar",
+    "fr": "Confirmer le paiement et terminer"
+  },
+  "add_payment_method_action": {
+    "pt": "Adicionar outra forma de pagamento",
+    "en": "Add another payment method",
+    "es": "Añadir otra forma de pago",
+    "fr": "Ajouter un autre moyen de paiement"
+  },
+  "receive_at_cashier": {
+    "pt": "Receber no caixa",
+    "en": "Collect at cashier",
+    "es": "Cobrar en caja",
+    "fr": "Encaisser en caisse"
   }
 }

@@ -221,7 +221,7 @@
       ADMIN: 'Dono / Administrador'.tr,
       CAIXA: 'cashier_operator'.tr,
       VENDEDOR: 'counter_salesperson'.tr,
-      ENTREGADOR: 'Entregador'.tr,
+      ENTREGADOR: "courier".tr,
       CLIENTE: 'friendly_customer'.tr
     };
     badge.textContent = roleLabels[user?.role] || 'friendly_customer'.tr;

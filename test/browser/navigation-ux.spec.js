@@ -7,14 +7,14 @@ test('menu abre no primeiro clique da home, navega pelas seções e Voltar retor
   await page.locator('#adminSettingsButton').click();
   const drawer = page.getByRole('dialog', { name: 'Navegação da loja' });
   await expect(drawer).toBeVisible();
-  for (const name of ['Caixa/Vendas', 'Comandas', 'Estoque', 'Produtos', 'Equipe', 'Sistema e erros', 'Eventos', 'Caixa', 'Entregas', 'Editar meu perfil', 'Personalizar minha loja']) await expect(drawer.getByRole('link', { name, exact: true })).toBeVisible();
-  await drawer.getByRole('link', { name: 'Estoque', exact: true }).click();
+  for (const href of ['/caixa', '/admin?tab=orders', '/admin?tab=stock', '/admin?tab=products', '/admin?tab=team', '/admin?tab=status', '/caixa?view=deliveries', '/configuracoes', '/admin-gerencial']) await expect(drawer.locator('a[href="' + href + '"]')).toBeVisible();
+  await drawer.locator('a[href="/admin?tab=stock"]').click();
   await expect(page.locator('#tab-stock')).toHaveClass(/active/);
   await expect(page.locator('.nav-tabs')).toHaveCount(0);
   await page.locator('conflora-topbar .cf-topbar-menu').click();
-  await page.getByRole('link', { name: 'Produtos', exact: true }).click();
+  await page.locator('#siteNavigationDrawer a[href="/admin?tab=products"]').click();
   await expect(page.locator('#tab-products')).toHaveClass(/active/);
-  await page.getByRole('button', { name: '← Voltar', exact: true }).click();
+  await page.goBack();
   await expect(page.locator('#tab-stock')).toHaveClass(/active/);
   await expect(page.locator('.cf-notification-button')).toBeVisible();
   await expect(page.locator('.cf-work-actions .cf-danger-button')).toHaveCSS('background-color', 'rgb(220, 38, 38)');
@@ -74,6 +74,7 @@ test('painel destaca números e os líderes reais de janeiro e fevereiro sem que
   });
   await page.goto('/admin-gerencial');
   await expect(page.getByRole('heading', { name: 'Resultados da loja' })).toBeVisible();
+  await page.locator('#btnTabAnalytics').click();
   await page.getByLabel('Ano do histórico mensal').fill('2026'); await page.getByLabel('Ano do histórico mensal').dispatchEvent('change');
   await expect(page.locator('#monthlyLeaders tr')).toHaveCount(12);
   await expect(page.locator('#monthlyLeaders tr').nth(0)).toContainText('Laranja');

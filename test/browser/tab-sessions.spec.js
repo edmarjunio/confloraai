@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 
-test('two tabs keep different logins, carts and customer fields after refresh and logout', async ({ context }) => {
+test('two tabs keep separate logins and discard unsaved carts across refresh and logout', async ({ context }) => {
   await context.route(/https:\/\/.*/, route => route.abort());
   await context.addInitScript(() => { window.originalFetch = window.fetch; });
   const first = await context.newPage(); const second = await context.newPage();
@@ -34,7 +34,7 @@ test('two tabs keep different logins, carts and customer fields after refresh an
   await first.reload();
   await expect(first.locator('#headerAccountRole')).toHaveText('ADMIN');
   await first.locator('#cartButton').click();
-  await expect(first.locator('#cartItems')).toContainText('Begônia');
+  await expect(first.locator('#cartCount')).toHaveText('0');
   await expect(first.locator('#cartItems')).not.toContainText('Zamioculca');
   await second.evaluate(() => window.ConfloraSession.apiFetch('/api/auth/logout', { method: 'POST' }));
   await first.reload();
@@ -45,7 +45,7 @@ test('two tabs keep different logins, carts and customer fields after refresh an
   await login(second, 'usr-caixa1', '0000');
   await expect(second.locator('#headerAccountRole')).toHaveText('CAIXA');
   await second.locator('#cartButton').click();
-  await expect(second.locator('#cartItems')).toContainText('Zamioculca');
+  await expect(second.locator('#cartCount')).toHaveText('0');
   await expect(second.locator('#cartItems')).not.toContainText('Begônia');
   await expect(first.locator('#headerAccountRole')).toHaveText('ADMIN');
 });

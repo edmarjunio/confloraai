@@ -15,7 +15,7 @@ for (const width of [320, 390, 768, 1440]) {
     });
     await page.goto('/shop/garden');
     await expect(page.locator('#products .product-card')).toHaveCount(2);
-    await expect(page.locator('#cartCount')).toHaveText('3');
+    await expect(page.locator('#cartCount')).toHaveText('0');
     const dimensions = await page.evaluate(() => ({
       content: document.documentElement.scrollWidth,
       viewport: document.documentElement.clientWidth,

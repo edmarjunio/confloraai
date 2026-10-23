@@ -55,7 +55,7 @@
     addTotal('Subtotal', order.total === null ? null : subtotal);
     if (Number(order.discountAmount || order.discount)) addTotal('cart_discount'.tr, -Number(order.discountAmount || order.discount));
     if (Number(order.freightValue)) addTotal('cart_delivery_option'.tr, order.freightValue);
-    addTotal('total'.tr, order.total === null ? null : total, 'cf_receipt_grand_total'.tr); section.append(totals);
+    addTotal("total_112398".tr, order.total === null ? null : total, 'cf_receipt_grand_total'.tr); section.append(totals);
     if (order.procurement) {
       addTotal('Sinal recebido', (order.procurement.deposit?.amountMinor || 0) / 100);
       addTotal(order.completedAt ? 'balance_received_upon_completion'.tr : 'Saldo a pagar', (Math.round(total * 100) - (order.procurement.deposit?.amountMinor || 0)) / 100);

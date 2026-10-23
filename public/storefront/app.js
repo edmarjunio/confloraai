@@ -22,7 +22,7 @@ import {
 import { appStore } from "./store/index.js";
 import { queryClient } from "./query/tanstackQuery.js";
 import { renderOrderReceipt } from "./receipt.js";
-import { clearLegacyBusinessStorage } from "./storage-cleanup.js";
+import { clearLegacyBusinessStorage, clearLegacyBusinessCaches } from "./storage-cleanup.js";
 import { startPerformanceMonitor } from "./performance.mjs";
 import { createPurchaseInsights } from "./purchase-insights.mjs";
 import { createOrderFeedback } from "./order-feedback.js";
@@ -35,6 +35,7 @@ const slug = existingStore
   : decodeURIComponent(location.pathname.split("/")[2]);
 const basePath = existingStore ? "" : `/shop/${slug}`;
 clearLegacyBusinessStorage();
+void clearLegacyBusinessCaches();
 const PUBLIC_FRESH_TIME = 15000;
 
 const state = {
@@ -374,6 +375,7 @@ state.reloadProducts = async () => {
 
 function editOwnProfile() {
   if (!state.user || !existingStore) return;
+  $('#accountTitle').removeAttribute('data-i18n');
   $('#accountTitle').textContent = 'edit_my_profile'.tr;
   $('#accountSubtitle').textContent = 'update_your_personal_details_your_email_remains_linked_to_your_login'.tr;
   const form = element('form', { class: 'account-profile-form' });
@@ -401,6 +403,7 @@ async function account() {
   content.replaceChildren();
   $("#googleAccount").hidden = !existingStore || !!state.user;
   if (state.user) {
+    $("#accountTitle").removeAttribute('data-i18n');
     $("#accountTitle").textContent = 'your_account'.tr;
     $("#accountSubtitle").textContent = 'choose_what_you_need_to_do_now'.tr;
     content.className = "account-content account-signed-in";
@@ -452,6 +455,7 @@ async function account() {
       }),
     ]));
   } else {
+    $("#accountTitle").removeAttribute('data-i18n');
     $("#accountTitle").textContent = 'sign_in_to_your_account'.tr;
     $("#accountSubtitle").textContent = 'access_your_orders_and_enjoy_a_more_practical_shopping_experience'.tr;
     content.className = "account-content account-signed-out";
@@ -591,7 +595,7 @@ async function renderSpendingTrends() {
     disposeSpendingChart = chart.mountSpendingChart(host, insights.months);
   } catch (error) {
     if (revision !== spendingRevision || owner !== state.user?.id) return;
-    spendingSection.replaceChildren(element('h3', { text: 'spending_trends'.tr }), element('p', { role: 'status', text: error.message }), element('button', { type: 'button', class: 'quiet', text: 'Tentar novamente'.tr, onclick: renderSpendingTrends }));
+    spendingSection.replaceChildren(element('h3', { text: 'spending_trends'.tr }), element('p', { role: 'status', text: error.message }), element('button', { type: 'button', class: 'quiet', text: "try_again".tr, onclick: renderSpendingTrends }));
   }
 }
 historyDialog.addEventListener('close', () => { spendingRevision++; disposeSpendingChart?.(); disposeSpendingChart = undefined; });
@@ -1007,17 +1011,70 @@ historyDialog.addEventListener("click", (event) => { if (event.target === histor
 
 // Language Selector listener
 const langSelect = $("#languageSelect");
+const languageButton = $("#languageButton");
+const languageMenu = $("#languageMenu");
+const currentLanguageFlag = $("#currentLanguageFlag");
+const currentLanguageCode = $("#currentLanguageCode");
+const languageOptions = languageMenu
+  ? [...languageMenu.querySelectorAll("[data-language]")]
+  : [];
+
+const renderLanguageSwitcher = () => {
+  const language = getLanguage();
+  if (langSelect) langSelect.value = language;
+  if (currentLanguageCode) currentLanguageCode.textContent = language.toUpperCase();
+  if (currentLanguageFlag) {
+    currentLanguageFlag.src = `/store-assets/flags/${language}.svg`;
+  }
+  languageOptions.forEach((option) => {
+    const selected = option.dataset.language === language;
+    option.setAttribute("aria-checked", String(selected));
+    option.classList.toggle("is-selected", selected);
+  });
+};
+
+const closeLanguageMenu = () => {
+  if (!languageMenu || !languageButton) return;
+  languageMenu.hidden = true;
+  languageButton.setAttribute("aria-expanded", "false");
+};
+
 if (langSelect) {
-  langSelect.value = getLanguage();
+  renderLanguageSwitcher();
   langSelect.addEventListener("change", (e) => {
     setLanguage(e.target.value);
+    renderLanguageSwitcher();
+    closeLanguageMenu();
   });
 }
+languageButton?.addEventListener("click", () => {
+  const isOpening = languageMenu?.hidden;
+  if (!languageMenu) return;
+  languageMenu.hidden = !isOpening;
+  languageButton.setAttribute("aria-expanded", String(isOpening));
+  if (isOpening) {
+    languageMenu.querySelector('[aria-checked="true"]')?.focus();
+  }
+});
+languageMenu?.addEventListener("click", (event) => {
+  const option = event.target.closest("[data-language]");
+  if (!option || !langSelect) return;
+  langSelect.value = option.dataset.language;
+  langSelect.dispatchEvent(new window.Event("change", { bubbles: true }));
+  languageButton?.focus();
+});
+document.addEventListener("click", (event) => {
+  if (!event.target.closest(".language-switcher")) closeLanguageMenu();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && languageMenu && !languageMenu.hidden) {
+    closeLanguageMenu();
+    languageButton?.focus();
+  }
+});
 
 onLanguageChange(() => {
-  if (langSelect) {
-    langSelect.value = getLanguage();
-  }
+  renderLanguageSwitcher();
   applyHtmlTranslations();
   if (state.config) {
     applyConfig();

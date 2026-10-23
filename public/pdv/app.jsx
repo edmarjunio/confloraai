@@ -989,7 +989,7 @@ const { useState, useEffect, useRef, useMemo } = React;
               {/* Bottom Sticky Pay Bar */}
               <div className="px-4 py-2.5 bg-white border-t border-slate-100 flex items-center justify-between gap-3">
                 <div>
-                  <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400"> {'total'.tr} {orderType === 'DELIVERY' ? 'w_delivery'.tr : 'due'.tr}
+                  <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400"> {"total_112398".tr} {orderType === 'DELIVERY' ? 'w_delivery'.tr : 'due'.tr}
                   </span>
                   <span className="text-xl font-black text-slate-900 leading-none">
                     {formatBRL(finalTotal)}
@@ -1352,6 +1352,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                     ? 'grid-cols-2'
                     : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5')}
                 >
+                  {filteredProducts.length === 0 && <p role="status" className="col-span-full p-4 text-sm text-slate-600">{'catalog_empty_title'.tr}</p>}
                   {filteredProducts.slice(0, visibleCount).map((product) => {
                     const productId = String(product?.id ?? product?.productId ?? product?.sku ?? '').trim();
                     const inCart = cart.find((item) => String(item?.id ?? item?.productId ?? item?.sku ?? '').trim() === productId);
@@ -1685,6 +1686,7 @@ const { useState, useEffect, useRef, useMemo } = React;
                           key={method.id}
                           aria-pressed={active}
                           data-payment-method={method.id}
+                          aria-label={method.id === 'pix' ? 'PIX' : method.label}
                           disabled={method.disabled}
                           title={method.id === 'credito_cliente' ? `${'available'.tr} ${formatBRL(customerCreditBalance)}. O saldo precisa cobrir a venda completa.` : undefined}
                           onClick={() => setPaymentMethod(method.id)}

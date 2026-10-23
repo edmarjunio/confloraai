@@ -7,6 +7,7 @@ try {
     if (!/^[a-f0-9]{16}\.(js|css)$/.test(name) || !fs.statSync(path.join(directory, name)).isFile()) throw new Error('BUILD_MISSING');
   }
   const storefront = path.resolve(__dirname, '../public/storefront');
+  if (!fs.statSync(path.join(storefront, 'i18n-runtime.js')).isFile()) throw new Error('BUILD_MISSING');
   const publicManifest = JSON.parse(fs.readFileSync(path.join(storefront, 'dist/manifest.json'), 'utf8'));
   if (!publicManifest.core.includes(publicManifest.app) || !fs.existsSync(path.join(storefront, 'sw-built.js'))) throw new Error('BUILD_MISSING');
   for (const file of publicManifest.core) {

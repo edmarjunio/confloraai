@@ -1143,22 +1143,56 @@ button:not(.cart-fab):not(.ai-fab) {
   }
 }
 
-/* Keep the search submit button joined to the header input. */
+/* Keep the header search field and action aligned as separate controls. */
 body .cf-topbar-layout .cf-topbar-search {
-  gap: 0 !important;
-  padding-right: 0 !important;
-  overflow: hidden;
+  gap: 4px !important;
+  padding: 0 !important;
+  overflow: visible;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+body .cf-topbar-layout .cf-topbar-search:focus-within {
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+body .cf-topbar-layout .cf-topbar-search > input {
+  min-height: 42px;
+  margin-inline: 6px;
+  padding: 8px 12px !important;
+  border: 2px solid #dfe5e9 !important;
+  border-radius: 0 !important;
+  background: #fff !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+body .cf-topbar-layout .cf-topbar-search > input:focus {
+  border-color: var(--cf-button-primary) !important;
+  outline: 3px solid var(--cf-button-focus);
+  outline-offset: 2px;
+  box-shadow: var(--cf-button-shadow-hover);
 }
 body .cf-topbar-layout .cf-topbar-search > button[type="submit"] {
-  min-height: 34px !important;
-  height: 34px !important;
-  margin-left: 8px;
+  flex: none;
+  min-height: 42px !important;
+  height: 42px !important;
+  margin: 0;
   padding-inline: 16px !important;
-  border: 0 !important;
-  border-radius: 0 999px 999px 0 !important;
-  box-shadow: none !important;
+  border: 2px solid #0f381e !important;
+  border-radius: 10px !important;
+  background: #15803d !important;
+  color: #fff !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  box-shadow: 0 3px 0 #0f381e, 0 3px 6px rgb(15 56 30 / 18%) !important;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background-color 0.15s ease !important;
 }
 body .cf-topbar-layout .cf-topbar-search > button[type="submit"]:hover:not(:disabled) {
-  transform: none !important;
-  box-shadow: none !important;
+  transform: translateY(-1px) !important;
+  background: #166534 !important;
+  box-shadow: 0 4px 0 #0f381e, 0 5px 10px rgb(15 56 30 / 22%) !important;
+}
+body .cf-topbar-layout .cf-topbar-search > button[type="submit"]:active {
+  transform: translateY(2px) !important;
+  box-shadow: 0 1px 0 #0f381e !important;
 }

@@ -42,6 +42,12 @@ test('Minha conta não aparece para visitante; equipe mantém o atalho do caixa'
 
 test('cliente vê dívida no cabeçalho e paga Pix sem contato com o caixa', async ({ page }) => {
   let paid = false;
+  await page.route('**/api/storefront/catalog', async route => {
+    const response = await route.fetch();
+    const data = await response.json();
+    data.config.checkout.pix.mode = 'SICREDI';
+    await route.fulfill({ response, json: data });
+  });
   await page.route('**/api/auth/me', (route) => route.fulfill({ json: { user: { id: 'debt-client', name: 'Cliente', email: 'client@test.com', role: 'CLIENTE' } } }));
   await page.route('**/api/customer/ledger', (route) => route.fulfill({ json: { success: true, balance: paid ? 0 : 20, creditBalance: 0, customerName: 'Cliente', supportPhone: '5564999994321', transactions: [] } }));
   await page.route('**/api/customer/orders**', (route) => route.fulfill({ json: { success: true, orders: [], hasMore: false } }));

@@ -77,13 +77,32 @@
 
       <div class="header-actions cf-topbar-actions">
         <!-- SELETOR DE IDIOMAS (PT, EN, ES, FR) -->
-        <div class="lang-selector-wrapper">
-          <select id="languageSelect" class="lang-select" aria-label="Idioma / Language">
-            <option value="pt">PT 🇧🇷</option>
-            <option value="en">EN 🇺🇸</option>
-            <option value="es">ES 🇪🇸</option>
-            <option value="fr">FR 🇫🇷</option>
+        <div class="lang-selector-wrapper language-switcher">
+          <select id="languageSelect" hidden aria-hidden="true" tabindex="-1" aria-label="Idioma / Language">
+            <option value="pt">Português</option>
+            <option value="en">English</option>
+            <option value="es">Español</option>
+            <option value="fr">Français</option>
           </select>
+          <button id="languageButton" class="lang-select" type="button" aria-label="Idioma / Language" aria-haspopup="menu" aria-expanded="false" aria-controls="languageMenu">
+            <img id="currentLanguageFlag" class="language-flag" src="/store-assets/flags/pt.svg" alt="" aria-hidden="true" />
+            <span id="currentLanguageCode">PT</span>
+            <svg class="language-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m2 4 4 4 4-4" /></svg>
+          </button>
+          <div id="languageMenu" class="language-menu" role="menu" aria-label="Idioma / Language" hidden>
+            <button type="button" class="language-option" role="menuitemradio" aria-checked="false" data-language="pt">
+              <img class="language-flag" src="/store-assets/flags/pt.svg" alt="" aria-hidden="true" /><span class="language-code">PT</span><span>Português</span>
+            </button>
+            <button type="button" class="language-option" role="menuitemradio" aria-checked="false" data-language="en">
+              <img class="language-flag" src="/store-assets/flags/en.svg" alt="" aria-hidden="true" /><span class="language-code">EN</span><span>English</span>
+            </button>
+            <button type="button" class="language-option" role="menuitemradio" aria-checked="false" data-language="es">
+              <img class="language-flag" src="/store-assets/flags/es.svg" alt="" aria-hidden="true" /><span class="language-code">ES</span><span>Español</span>
+            </button>
+            <button type="button" class="language-option" role="menuitemradio" aria-checked="false" data-language="fr">
+              <img class="language-flag" src="/store-assets/flags/fr.svg" alt="" aria-hidden="true" /><span class="language-code">FR</span><span>Français</span>
+            </button>
+          </div>
         </div>
 
         <span id="region"></span>

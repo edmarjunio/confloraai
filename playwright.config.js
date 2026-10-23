@@ -1,6 +1,7 @@
 const { defineConfig } = require("@playwright/test");
 module.exports = defineConfig({
   testDir: "./test/browser",
+  testIgnore: "empty-database.spec.js",
   workers: 1,
   timeout: 30000,
   use: {

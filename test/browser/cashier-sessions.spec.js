@@ -2,7 +2,10 @@ const { test, expect } = require('@playwright/test');
 const { randomUUID } = require('node:crypto');
 
 test('caixa exige troco na entrada e confere separadamente troco, recebimentos e total', async ({ page }) => {
-  await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-caixa1', pin: '0000' } });
+  await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-edmar', pin: '1234' } });
+  const userId = 'session-' + randomUUID();
+  expect((await page.request.post('/api/admin/users', { data: { id: userId, name: 'Operador de conferência', role: 'CAIXA', pin: '3311', active: true } })).ok()).toBe(true);
+  await page.request.post('/api/admin/auth/login', { data: { userId, pin: '3311' } });
   await page.goto('/pdv');
   const opening = page.getByRole('form', { name: 'Abertura de caixa' });
   await expect(opening).toBeVisible();

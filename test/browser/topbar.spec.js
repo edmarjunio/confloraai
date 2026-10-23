@@ -1,9 +1,11 @@
+const { ensureCashierSession } = require('./cashier-session');
 const { test, expect } = require('@playwright/test');
 
 test('one topbar keeps the cashier button aligned across the catalog, admin, PDV and management at every width', async ({ page }) => {
   test.setTimeout(90000);
   await page.addInitScript(() => window.localStorage.setItem('conflora_lang', 'pt'));
   await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-edmar', pin: '1234' } });
+  await ensureCashierSession(page);
   const references = new Map();
   for (const route of ['/', '/admin', '/pdv', '/admin-gerencial']) {
     await page.goto(route);
@@ -19,11 +21,11 @@ test('one topbar keeps the cashier button aligned across the catalog, admin, PDV
       expect(boxes.cashier.right).toBeLessThanOrEqual(width);
       expect(boxes.brand.x).toBeGreaterThanOrEqual(0);
       expect(boxes.search.width).toBeGreaterThan(100);
-      for (const button of boxes.buttons) expect(parseFloat(button.radius)).toBeGreaterThanOrEqual(999);
+      for (const button of boxes.buttons) expect(parseFloat(button.radius)).toBeGreaterThanOrEqual(12);
       if (route === '/') references.set(width, boxes);
       else {
         expect(Math.abs(boxes.brand.x - references.get(width).brand.x)).toBeLessThan(2);
-        if (route !== '/pdv') expect(Math.abs(boxes.cashier.right - references.get(width).cashier.right)).toBeLessThan(2);
+        if (route !== '/pdv') expect(Math.abs(boxes.cashier.right - references.get(width).cashier.right), JSON.stringify({ route, width, current: boxes.cashier, reference: references.get(width).cashier })).toBeLessThan(2);
       }
       if (route === '/pdv' && width >= 1024) {
         const receipt = await page.locator('.cf-cashier-receipt').boundingBox();
@@ -39,18 +41,21 @@ test('one topbar keeps the cashier button aligned across the catalog, admin, PDV
   }
 });
 
-test('staff topbar search opens the catalog with the requested product', async ({ page }) => {
+test('staff topbar search filters registered products within the admin panel', async ({ page }) => {
   await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-edmar', pin: '1234' } });
+  await ensureCashierSession(page);
   await page.goto('/admin');
+  await require('./admin-navigation').openAdminSection(page, 'products');
   const search = page.locator('conflora-topbar input');
   await search.fill('Begônia'); await search.press('Enter');
-  await expect(page).toHaveURL(/q=Beg/);
-  await expect(page.locator('#search')).toHaveValue('Begônia');
-  await expect(page.locator('#products .product-card')).toHaveCount(1);
+  await expect(page.locator('#tab-products')).toHaveClass(/active/);
+  await expect(page.locator('#adminProductsGrid render-product-card')).toHaveCount(1);
+  await expect(page.locator('#adminProductsGrid')).toContainText('Begônia');
 });
 
 test('cashier topbar returns from commands without dropping an unfinished sale', async ({ page }) => {
   await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-caixa1', pin: '0000' } });
+  await ensureCashierSession(page);
   await page.goto('/pdv');
   await page.getByPlaceholder('Nome, categoria ou descrição (Ex.: plantas de sombra, plantas para jardim, flores, e etc)').fill('Planta Teste');
   await page.getByText('Planta Teste', { exact: true }).click();

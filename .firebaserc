@@ -1,4 +1,9 @@
 {
-  "projects": { "default": "confloraai", "production": "confloraai", "dev": "confloraai-dev" }
+  "projects": {
+    "default": "confloraai",
+    "production": "confloraai",
+    "dev": "confloraai-dev"
+  },
+  "targets": {},
+  "etags": {}
 }
-

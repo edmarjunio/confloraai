@@ -446,9 +446,7 @@ class MessageService {
 
     // 3. Garantir catálogo atualizado em memória
     if (!verifyOnly) {
-      await this.catalogRepo.refreshCatalog().catch((err) => {
-        Logger.warn('Aviso: usando cache existente do catálogo', { error: err.message });
-      });
+      await this.catalogRepo.refreshCatalog();
     }
 
 

@@ -36,7 +36,7 @@ test("desktop catalogue, product page, cart sidebar and checkout use one cart", 
   await expect(page).toHaveURL(/products\/product-1/);
   await expect(page.locator("#productView")).toContainText("Sol direto");
   await page
-    .getByRole("button", { name: "Adicionar à sacola", exact: true })
+    .getByRole("button", { name: "Adicionar", exact: true })
     .click();
   await page.getByRole("button", { name: "← Voltar ao catálogo" }).click();
   await page.locator("#cartButton").click();
@@ -46,12 +46,14 @@ test("desktop catalogue, product page, cart sidebar and checkout use one cart", 
     await page
       .locator("#cartDialog")
       .evaluate((dialog) => dialog.matches(":modal")),
-  ).toBe(false);
+  ).toBe(true);
+  await page.getByRole('button', { name: 'Fechar sacola' }).click();
   await page
     .locator("#products .product-card")
     .filter({ hasText: "Substrato" })
     .getByRole("button", { name: "Adicionar", exact: true })
     .click();
+  await page.locator('#cartButton').click();
   await expect(page.locator("#cartItems")).toContainText("Substrato");
   if (await page.locator("#coachSkip").isVisible()) {
     await page.locator("#coachSkip").click();
@@ -87,7 +89,7 @@ test("mobile bottom sheet, assistant recommendations and tenant-local storage", 
   await page
     .locator("#chatMessages render-product-card")
     .filter({ hasText: "Ração para gatos" })
-    .getByRole("button", { name: "Adicionar Ração para gatos ao carrinho", exact: true })
+    .locator('[data-action="add"]')
     .click();
   await expect(page.locator("#cartButton")).toContainText("1");
   await page.screenshot({
@@ -101,7 +103,7 @@ test("mobile bottom sheet, assistant recommendations and tenant-local storage", 
     await page
       .locator("#cartDialog")
       .evaluate((dialog) => dialog.matches(":modal")),
-  ).toBe(false);
+  ).toBe(true);
   await expect(page.locator("#cartItems")).toContainText("Ração para gatos");
   const width = await page
     .locator("html")

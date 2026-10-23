@@ -84,6 +84,7 @@ class CatalogRepository {
     this.expiresAt = 0;
     this.items = rawItems
       .filter((item) => (item.status || 'ATIVO').toUpperCase() === 'ATIVO')
+      .filter(require('./commercial-product').hasValidCommercialPrice)
       .map((item) => normalizeCatalogItem(item));
 
     this.productByNameMap.clear();

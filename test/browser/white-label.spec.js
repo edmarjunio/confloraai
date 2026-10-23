@@ -35,7 +35,7 @@ test("Conflora settings keep the official logo, save colors and support guided p
   await page.reload();
   await expect(page.locator("#logo")).toHaveAttribute(
     "src",
-    /conflora-logo\.png$/,
+    /conflora-logo(?:-[a-f0-9]{16})?\.(?:png|webp)$/,
   );
   expect(
     await page
@@ -65,20 +65,12 @@ test("Conflora settings keep the official logo, save colors and support guided p
   await page.locator("#chatInput").fill("cola multiuzo 2m");
   await page.locator("#chatForm").evaluate((chatForm) => chatForm.requestSubmit());
   await expect(page.locator("#chatMessages")).toContainText("nomes parecidos");
-  await page
-    .getByRole("button", { name: "Informações de Cola Multiuso 2m" })
-    .click();
-  await expect(page.locator("#productInfoDialog")).toContainText(
+  const productCard = page.locator('#chatMessages render-product-card').filter({ hasText: 'Cola Multiuso 2m' });
+  await productCard.locator('.chat-mini-photo').click();
+  await expect(page.locator("#productView")).toContainText(
     "Resistente à água conforme rótulo.",
   );
-  await page.locator("#productInfoDialog").getByRole("button", { name: "Fechar informações" }).click();
-  await expect(
-    page.locator("#chatMessages .guided-results-grid render-product-card"),
-  ).toContainText("Cola Multiuso 2m");
-  await page
-    .locator("#chatMessages .guided-results-grid render-product-card")
-    .getByRole("button", { name: "Adicionar Cola Multiuso 2m ao carrinho", exact: true })
-    .click();
+  await page.getByRole('button', { name: 'Adicionar', exact: true }).click();
   await expect(page.locator("#cartButton")).toContainText("1");
   expect(aiRequests).toBe(0);
   expect(

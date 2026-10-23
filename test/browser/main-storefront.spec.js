@@ -13,7 +13,7 @@ test("chat presents a friendly error when an upstream proxy returns HTML", async
     data.config.assistant.mode = "AI";
     await route.fulfill({ json: data });
   });
-  await page.route("**/api/storefront/assistant", (route) =>
+  await page.route("**/api/chat", (route) =>
     route.fulfill({
       status: 502,
       contentType: "text/html",
@@ -116,7 +116,7 @@ test("main URL shows the new layout and uses existing customer accounts, catalog
   await page.reload();
   await expect(page.locator("#productView h1")).toHaveText("Planta Teste");
   await page
-    .getByRole("button", { name: "Adicionar à sacola", exact: true })
+    .getByRole("button", { name: "Adicionar", exact: true })
     .click();
   await page.locator("#cartButton").click();
   await expect(page.locator("#cartDialog")).toBeVisible();
@@ -124,7 +124,7 @@ test("main URL shows the new layout and uses existing customer accounts, catalog
     await page
       .locator("#cartDialog")
       .evaluate((node) => node.matches(":modal")),
-  ).toBe(false);
+  ).toBe(true);
   await page.locator("#checkoutCustomer input[name=name]").fill("Cliente Nova Vitrine");
   await page.locator("#checkoutCustomer input[name=phone]").fill("64999999999");
   await page.locator("input[name=fulfillment][value=pickup]").check();
@@ -189,7 +189,7 @@ test("main mobile product, bottom sheet and conversational cards follow the appr
   await expect(page.locator(".search")).toBeVisible();
   await page.getByRole("tab", { name: "Especificações" }).click();
   await page
-    .getByRole("button", { name: "Adicionar à sacola", exact: true })
+    .getByRole("button", { name: "Adicionar", exact: true })
     .click();
   await page.screenshot({
     path: "test-results/new-main-mobile-product.png",
@@ -205,7 +205,7 @@ test("main mobile product, bottom sheet and conversational cards follow the appr
   await page.locator("#chatForm").evaluate((form) => form.requestSubmit());
   await expect(page.locator("#chatMessages .guided-results-grid render-product-card").first()).toBeVisible();
   const compactCard = page.locator('#chatMessages .guided-results-grid render-product-card').first();
-  await expect(compactCard).toHaveAttribute('variant', 'cashier');
+  await expect(compactCard).toHaveAttribute('variant', 'chat-mini');
   expect((await compactCard.boundingBox()).height).toBeLessThan(130);
   await compactCard.locator('[data-action="add"]').click();
   await expect(page.getByRole('button', { name: 'Manter filtro atual', exact: true })).toBeVisible();
@@ -277,8 +277,8 @@ test("catalog header exposes login, account role and admin settings according to
   await expect(page.locator("#adminSettingsButton")).toBeVisible();
   await page.locator("#adminSettingsButton").click();
   await expect(page.locator('#siteNavigationDrawer')).toBeVisible();
-  await page.getByRole('link', { name: 'Caixa/Vendas', exact: true }).click();
-  await expect(page).toHaveURL(/\/admin\?tab=cashier$/);
+  await page.locator('#siteNavigationDrawer a[href="/caixa"]').click();
+  await expect(page).toHaveURL(/\/caixa$/);
 
   await page.goto("/");
   await expect(page.locator("#cashierShortcut")).toBeVisible();
@@ -317,7 +317,7 @@ test('mobile chat searches the full catalog after selecting a category and keeps
   const card = page.locator('#chatMessages .guided-results-grid render-product-card').filter({ hasText: 'Abacate KG' }).first();
   await expect(card).toBeVisible();
   expect(await card.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
-  await expect(card.locator('.cf-shared-unit')).toHaveCSS('white-space', 'nowrap');
+  await expect(card.locator('.chat-mini-price')).toContainText('8,99');
   await card.locator('[data-action="add"]').click();
   const weight = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'Quantos quilos de Abacate KG?' }) });
   await expect(weight).toBeVisible();
