@@ -2,9 +2,11 @@
 
 ## Resultado e bloqueadores
 
-Implementação local em `main`, base `429a1d4`, com alterações não commitadas preservadas. Não houve deploy, merge ou alteração do ambiente hospedado. Revisão local identificável: `local-429a1d4-products-20261024`. A sessão de testes foi iniciada explicitamente pelo usuário; a data não foi usada como autorização.
+Implementação local em `main`, iniciada sobre `429a1d4`. Durante a sessão, operações externas avançaram a branch pelos commits `a81764d` e `fbb7ad4`; esses commits foram preservados e não foram executados por este atendimento. Não executei deploy ou merge. A revisão do processo local final é identificada por `local-products-20261024-integrity-final`; isso é um identificador de processo, não uma alegação de equivalência com um commit publicado. A sessão de testes foi iniciada explicitamente pelo usuário; a data não foi usada como autorização.
 
 O Firestore continua sendo a fonte oficial. Os bytes das fotografias ficam no Firebase Storage; Firestore guarda URLs, caminhos e procedência. Loja principal, busca, detalhes, administração, inventário, PDV e publicação Meta usam o mesmo contrato de fotos reais. Isso não significa que toda a operação já tenha fotos ou esteja homologada em produção.
+
+Arquivos e hashes do conjunto compartilhado: [PRODUCT_CHANGESET-2026-10-24.json](PRODUCT_CHANGESET-2026-10-24.json). Inclui mudanças anteriores preservadas e commits externos; não atribui todas as alterações a este atendimento. Principais consumidores ajustados: `src/http/app.js`, `src/http/views-admin.js`, `src/storefront/existing-store.js`, `src/catalog/normalize-catalog-item.js`, `src/catalog/actual-product-photo.js`, `src/catalog/registered-product-content.js`, `src/catalog/commercial-product.js`, `src/agent/product-contract.js`, `src/agent/product-image.js`, `src/agent/agent-service.js`, `src/services/meta-catalog-sync.service.js`, `src/services/meta-catalog-watch.js`, `functions/src/index.ts`, `public/storefront/product-entry.js`, `public/storefront/cache-generation.mjs` e `public/pdv/app.jsx`. Os serviços comerciais e repositórios oficiais continuam sendo os consumidores de gravação.
 
 Auditoria real, somente leitura:
 
@@ -26,6 +28,9 @@ Listas completas: [auditoria JSON](PRODUCT_INTEGRITY-2026-10-24.json), [fotos re
 5. **Comércio:** preço zero editável não perde prioridade para um alias antigo no PDV. A disponibilidade e validação comercial continuam no servidor. `TROCO DO DIA` e `RECEBIMENTO` deixam de ser produtos vendáveis; funções financeiras, abertura de caixa e históricos permanecem.
 6. **Cache:** mutação confirmada invalida a projeção do processo e sinaliza abas por timestamp, sem compartilhar dados privados. A geração pública `cf-public-20261023-real-products1` começa vazia e elimina somente as duas gerações públicas antigas. Nenhuma autenticação, venda ou operação pendente é apagada.
 7. **Sincronização:** alteração de produto → observador local explicitamente habilitado ou trigger hospedado preparado → mesma `pdv_outbox`, estado `CATALOG_PENDING` → worker oficial → leitura atual do backend → validação de elegibilidade → API Meta. Fingerprint, geração e lease evitam recriação por eventos repetidos e preservam reconciliação. Não se sincroniza tudo a cada mensagem. O trigger hospedado não foi publicado.
+8. **Caixa móvel:** o menu “Mais opções” oferece acesso à loja e saída da conta pelo serviço oficial de sessão. Os testes verificam logout real no backend isolado. Nenhuma regra de recebimento ou abertura de caixa foi removida.
+
+O redirecionamento estável `/api/images/:id` usa `no-store`: seu destino pode mudar ou perder aprovação. Apenas o objeto versionado do Storage usa cache imutável. Isso evita preservar um redirecionamento antigo para uma referência retirada; caches previamente aceitos por clientes externos ainda podem levar tempo para expirar.
 
 ## Estado dos canais
 
@@ -68,7 +73,9 @@ Dados de medição: [PRODUCT_HTTP_MEASUREMENTS-2026-10-24.json](performance/PROD
 - Suíte Node isolada: 482 testes, 481 aprovados, 0 falhas, 1 teste dependente de emulador não executado.
 - Carregamento em navegador: 30 aprovados, incluindo upload pelo formulário, revalidação lenta/falha, separação de usuários, checkout e encomendas/Pix manual.
 - Banco vazio: 1 teste aprovado, sem injetar dados iniciais no runtime.
-- Suíte ampliada de navegador: resultado final e eventuais ressalvas serão registrados após a última execução; as primeiras execuções identificaram expectativas antigas de controles móveis e seletores, corrigidas nos testes.
+- Após a última correção do cache de redirecionamentos, 21 testes focados de imagens/upload/integridade passaram novamente. A suíte de pagamentos teve 7 aprovações após isolar a comanda de teste dos registros de outros cenários.
+- Suíte ampliada de navegador: **95 aprovados, 0 falhas, em 2,2 minutos** na execução final. As primeiras execuções identificaram expectativas antigas de controles móveis/seletores e interferência entre registros dos cenários; os testes foram corrigidos, mantendo pagamento/movimentação nos serviços do backend isolado. O gesto nativo de arrastar foi verificado com origem e destino visíveis; não certifica arraste com autoscroll em um quadro extenso no aparelho da loja.
+- `check:whatsapp`: arquivo `.env` local carregado e contrato local do template estruturalmente válido; catálogo nativo ainda pendente. Esse comando não certifica entrega, token ou caminho externo.
 - Auditoria real de produtos/Meta/Storage foi somente leitura nesta retomada. As disponibilidades Meta foram retiradas na etapa anterior em atendimento à exigência de fotos reais. Testes de venda e pagamento desta retomada ficaram isolados, sem mensagens ou cobranças reais.
 
 ## Limpeza e preservações
@@ -87,5 +94,9 @@ Documentos e referências históricas do Firestore não foram apagados. Objetos 
 6. Rollback de código: preservar o diff atual, selecionar revisão revisada e reconstruir assets antes de publicar sob autorização. Não executar reset global, não restaurar imagens não confirmadas nem reabrir produtos Meta indiscriminadamente. Trabalhos pendentes precisam de conciliação da geração vigente.
 
 Para reiniciar localmente: identificar o PID que escuta 8080, confirmar que é este `src/server.js`, encerrar somente esse processo e executar `npm start` no repositório. `EADDRINUSE` significa servidor já escutando, não necessidade de iniciar outro. `npm start` não atualiza o Hosting/Cloud Run. `/health` mostra `revision`; inbox registra `receivedByRevision` e `processedByRevision`, permitindo distinguir entrada e processamento do webhook. O túnel HTTPS precisa estar ativo e corresponder à URL cadastrada na Meta.
+
+O servidor local usa o projeto real `confloraai`, apesar de `NODE_ENV=development`; não é emulador. A checagem do túnel `shiny-crews-matter.loca.lt/health` retornou HTTP 408 nesta retomada. Logo, o caminho externo até o webhook não está certificado. A disponibilidade do processo local não comprova recebimento externo nem resposta no WhatsApp.
+
+A consulta ao site hospedado retornou revisão `confloraai-00186-6jt`, diferente do identificador local, mantendo Pix `MANUAL`. Evidência datada: [HOSTED_REVISION-2026-10-24.json](performance/HOSTED_REVISION-2026-10-24.json). Essa consulta não atualiza o ambiente.
 
 Sugestões prioritárias: fotografar primeiro os produtos mais vendidos, revisar conteúdo e elegibilidade por grupo, homologar um carrinho completo com a equipe, migrar a carga inicial para paginação real com índices/cursores e medir p75 em rede/dispositivo representativos após publicação autorizada. Nenhuma medição desta entrega permite declarar produção validada ou ausência de risco.

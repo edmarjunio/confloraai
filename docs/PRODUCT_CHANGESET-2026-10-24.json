@@ -1,22 +1,532 @@
 {
-  "at": "2026-10-24T11:03:44.369Z",
-  "baseCommit": "a81764d7bf5d9dbe458f40a015bc6678aa7513f9",
-  "scope": "Shared working tree snapshot, including earlier preserved changes; not a commit or deployment",
+  "at": "2026-10-24T11:10:37.605Z",
+  "initialBaseCommit": "429a1d4",
+  "observedHead": "fbb7ad445dfd30c8fa14b75614b0e365286d0f63",
+  "scope": "Shared changes since initial base, including preserved external commits. Hashes describe current files, excluding this self-referential manifest, not attribution or deployment.",
   "files": [
     {
-      "status": " M",
+      "file": ".gcloudignore",
+      "sha256": "cbb1cd948eddb976b848c616d763892e15d095897e96330b8648fdccc173dd1b"
+    },
+    {
+      "file": "artifacts/ux/ux-sale-desktop.png",
+      "sha256": "1393b261f06268d4174d5dac66a2453ebb68b31c542779a286e4b80151ed6267"
+    },
+    {
+      "file": "artifacts/ux/ux-sale-mobile.png",
+      "sha256": "9dce56cce9a328fb3795a82a05f1d7283719624fa6ddba8c54d8aa9963017e8a"
+    },
+    {
+      "file": "docs/PRODUCT_INTEGRITY-2026-10-24.json",
+      "sha256": "f202c2e5749b8a5568fe6085476cf0812a9bcc12628b61ae66d1bdfae2fcee46"
+    },
+    {
+      "file": "docs/PRODUCT_INTEGRITY_REPORT-2026-10-24.md",
+      "sha256": "b80fab4c22d58a78f74ab43e0e45ca1e36a8cf4e3efb36aebb161ae07cade82c"
+    },
+    {
+      "file": "docs/PRODUCT_PHOTOS_PENDING-2026-10-24.csv",
+      "sha256": "c9046c6f06fdc17ecfa793588579e4c0fe8c4868deb5c304ce7bd448e0b765c9"
+    },
+    {
+      "file": "docs/WHATSAPP_ARCHITECTURE.md",
+      "sha256": "ea58bf87bb07198dab46b89f2e35143d232fb63ac827fb3971974ccf0610ac1b"
+    },
+    {
+      "file": "docs/WHATSAPP_CATALOG_OPERATION-2026-10-23.md",
+      "sha256": "6a035e543b33da68ecb4eff88ec64eb284beb690058593971249c593c11b1787"
+    },
+    {
+      "file": "docs/WHATSAPP_CATALOG_RESULT-2026-10-23-AGUARDANDO-META.csv",
+      "sha256": "fbe6531e24d58eb69d923d7815fa1c63857abe086931dddfcf2106ee5ba3671a"
+    },
+    {
+      "file": "docs/WHATSAPP_CATALOG_RESULT-2026-10-23-INDISPONIVEIS.csv",
+      "sha256": "60235fec966a30387464bfba63434ab97ce54fc1cd2f31d84534c534d03557a3"
+    },
+    {
+      "file": "docs/WHATSAPP_CATALOG_RESULT-2026-10-23-NAO-VINCULADOS.csv",
+      "sha256": "8d22877e043256ff2fbb3eca6c0cb8fd8cc28e56ba2f35553e56b29530570eeb"
+    },
+    {
+      "file": "docs/WHATSAPP_CATALOG_RESULT-2026-10-23-REJEITADOS.csv",
+      "sha256": "75412b28455db1de378c169972f34404dd5ad2140adde5f0d581af62bba50575"
+    },
+    {
+      "file": "docs/WHATSAPP_CATALOG_RESULT-2026-10-23.json",
+      "sha256": "de6d7fef31cb393435f0e96c41fb8e0a9466aa9128df81d54d7f7efdccf5be68"
+    },
+    {
+      "file": "docs/performance/CONTRATO.md",
+      "sha256": "5ae47adb64fdaf4f8aa19a6856cba2904c1f921879368eedff4c64fd18ff472b"
+    },
+    {
+      "file": "docs/performance/HOSTED_REVISION-2026-10-24.json",
+      "sha256": "483c9f67802729ef3f5952cead02faf61277db287e5a9f674d7da69abd493fcf"
+    },
+    {
+      "file": "docs/performance/PRODUCT_HTTP_MEASUREMENTS-2026-10-24.json",
+      "sha256": "8d7ca6cbc9da37b83368e509923a944c086be30cf9262da8c1cc7ad62b73ad3b"
+    },
+    {
+      "file": "firebase.json",
+      "sha256": "5ff9bd3b2d38dc1b1c53c986c705c7fea33144bb0a65f7c0fede5be517f55efe"
+    },
+    {
+      "file": "functions/src/index.ts",
+      "sha256": "6c843fea7761f858045a384c5a3ef396ca333613c6931cfe9b58fd1e35da8d81"
+    },
+    {
       "file": "public/pdv/app.jsx",
       "sha256": "892aa37e6d72133c2bb4d93dcf775fee4f8a571909881b35df077fd1ac155d71"
     },
     {
-      "status": " M",
+      "file": "public/store-assets/products/agaporne-verde.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/bourke-rosa.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/calopsita-amarela.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/calopsita-cinza.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/campines.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/canario-belga.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/coelho-comum.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/coelho-mini.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/delimitador-grama-ilustrativo-v1.png",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/filhote-salsicha.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/galinha-balao-femea.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/galinha-balao-macho.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/galinha-balao-pintinho.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/galinha-brahma-femea.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/galinha-brahma-filhote.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/galinha-brahma-frangote.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/galinha-brahma-macho.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/galinha-sedosa-branca-femea.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/galinha-sedosa-branca-macho.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/galinha-sedosa-creme.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/galinha-sedosa-filhote.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/galinha-sedosa-preta.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/galize-mini-cochim-casal.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/galize-mini-cochim-femea.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/galize-mini-cochim-macho.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/galize-nagazaki-femea.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/galize-nagazaki-macho.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/galize-sebright.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/gerbil.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/hamster-russo.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/hamster-sirio.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/indio-gigante.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/jabuti.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/mandarim.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/manon.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/marreco-pompom.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/mini-cabra.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/ourico.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/pato-chocolate.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/pato-comum.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/periquito-australiano.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/polonesa-branca.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/polonesa-filhote.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/pomba-burguesa.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/pombo-leque.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/porquinho-abissinio-femea.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/porquinho-abissinio-macho.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/porquinho-comum-femea.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/porquinho-comum-macho.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/porquinho-ingles-femea.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/porquinho-ingles-macho.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/porquinho-peruano-femea.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/porquinho-peruano-macho.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/red-rumped.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/store-assets/products/rosela.jpg",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "public/storefront/cache-generation.mjs",
+      "sha256": "4bb35e5d4f4bd3bcebee393aef2fb7068944a2d27b3bc42c046daa899d9d7d52"
+    },
+    {
+      "file": "public/storefront/product-entry.js",
+      "sha256": "a6b02538bfbddc9fd18fc684a5e36b9ab482306b82ae50bbef1e6a97a990821f"
+    },
+    {
+      "file": "scripts/audit-product-integrity.js",
+      "sha256": "f88456e2b893aea8c453d07e635a7e3eee08aa442e5ac0fbf4f02b67c2ca1b82"
+    },
+    {
+      "file": "scripts/migrate-product-photos.js",
+      "sha256": "f9bbf5241131a196d194af1c6695ae4d28b5121eee7cdd4263c377dbd0d72b46"
+    },
+    {
+      "file": "scripts/report-meta-catalog.js",
+      "sha256": "de6dffcd3e79a7803aef26ce7cb139c5830cfaeb1113193c1e0450769c24c51f"
+    },
+    {
+      "file": "src/agent/agent-service.js",
+      "sha256": "eceac139765600a3f57b151a073fb8f837bdb69589c684490074ad5c44c11057"
+    },
+    {
+      "file": "src/agent/product-contract.js",
+      "sha256": "27e0cc3a5478a7a157c5ca17b305f60d39df7fde05d0af663a3432b60f1c44fc"
+    },
+    {
+      "file": "src/agent/product-image.js",
+      "sha256": "69a22d364ed539a126ccf7a36230b9db6a98e3a7b24c81b19451dfb60c44cfb8"
+    },
+    {
+      "file": "src/catalog/actual-product-photo.js",
+      "sha256": "7acebda367f10ebc218337cb50e68023502e308bf242dd4f781327f407ee5946"
+    },
+    {
+      "file": "src/catalog/cashier-product-details.js",
+      "sha256": "c133f207a1811caa5e61e83c99ba6820b4650873d3880d303bf07314650f31b7"
+    },
+    {
+      "file": "src/catalog/catalog.repository.js",
+      "sha256": "d7671660243735861285178401ca0c8b2d54d1adcb38275794ac1bc6b01c4bd4"
+    },
+    {
+      "file": "src/catalog/commercial-product.js",
+      "sha256": "1dd9c235de27f06245a7cf2edd8996089bfab7f7ff2c5e858580977218ae6d30"
+    },
+    {
+      "file": "src/catalog/image-migration.service.js",
+      "sha256": "dabb500455957537c711a237ca7d68d939311a846d1effdb37ff651af3996d0b"
+    },
+    {
+      "file": "src/catalog/normalize-catalog-item.js",
+      "sha256": "cd238f870cf6b1d5f42a746e62f382fa7556d14ea3be79484b072f05a0bbcaa2"
+    },
+    {
+      "file": "src/catalog/product-photo.service.js",
+      "sha256": "44acf82b34c93332b81f7364ffa7ba76bec9ec9cc70c6fd994d6b3b6fa17a95a"
+    },
+    {
+      "file": "src/catalog/registered-product-content.js",
+      "sha256": "9e37b5694a87efa410922ae77d5009472ed00bb7534d8ab2c5a1d8587155f012"
+    },
+    {
+      "file": "src/catalog/validated-catalog-profiles.js",
+      "absentFromRuntime": true
+    },
+    {
+      "file": "src/database/firestore.repository.js",
+      "sha256": "99cb9b64752690d60bdf1a0b95432f9f681906f5ce3b953c75323d169f33d1f8"
+    },
+    {
       "file": "src/http/app.js",
       "sha256": "dba19b510e373865178a0e96111c5764b547b1bd8cccbbf183a097f03ba9f467"
     },
     {
-      "status": " M",
+      "file": "src/http/views-admin.js",
+      "sha256": "15803b89f1689cf1bf2b6b1ca76df830ea054a80f3b6f30d03066792d137ff5b"
+    },
+    {
+      "file": "src/http/whatsapp-admin.routes.js",
+      "sha256": "9e4f9ea02978bb051e97f52321c94185ac813a4e3354a33de4e5d5830530e250"
+    },
+    {
+      "file": "src/orders/pdv.repository.js",
+      "sha256": "5e62ff7ce38fed5a957d360e3668483e0d1b96a717b660672fa29847fdca3df8"
+    },
+    {
+      "file": "src/orders/pdv.service.js",
+      "sha256": "895f4744c0693f9f087fca19beb1b7dd8a05304710f469853d54efca2cc471f6"
+    },
+    {
+      "file": "src/server.js",
+      "sha256": "3d8b076e38cdf0279d19188f25f66b8d680cba65faf4fa9886839c9f39ad1560"
+    },
+    {
+      "file": "src/services/meta-catalog-sync.service.js",
+      "sha256": "73c55cc25b35a623ac739413afdce46e7ee2ff2ca0cf4e9053250eff8c9ce2ea"
+    },
+    {
+      "file": "src/services/meta-catalog-watch.js",
+      "sha256": "317b07560dcc9e2cab2d14cd9c3c1c026b4d5d5f06f17939e4b700be1861ebca"
+    },
+    {
+      "file": "src/storefront/existing-store.js",
+      "sha256": "0b22c377e1b3427eabbd3cf2a7909372e81145d3dd1fc67ccf240020116e0a1f"
+    },
+    {
+      "file": "test/browser/empty-database.spec.js",
+      "sha256": "428474d80f05fed6909bd176875eca4ac683f85c9e6b87072b94276be50cd9e5"
+    },
+    {
+      "file": "test/browser/flows.spec.js",
+      "sha256": "c8e7b602d448c4774d17b92ae84766024796d2c6f11dedc4da177d9206c22000"
+    },
+    {
+      "file": "test/browser/main-storefront.spec.js",
+      "sha256": "1ce1741ff19122d9c44a94fce1b1a3f38fd3817b0b25ce40d2b5049fc0473d31"
+    },
+    {
+      "file": "test/browser/pdv-payments.spec.js",
+      "sha256": "312b98657ccc71481b05117325a45559de701faa241a9b5f36a9746444b23e81"
+    },
+    {
       "file": "test/browser/pdv.spec.js",
       "sha256": "565b6bafd3d28f3969b3b62e811d56464dd84c3edce869f6b347914ea4b0c048"
+    },
+    {
+      "file": "test/browser/public-cache.spec.js",
+      "sha256": "fa0db6d7c14cab360bebca57ec6904ee26b9a78776a8552136cbd1e8161095e1"
+    },
+    {
+      "file": "test/browser/tab-sessions.spec.js",
+      "sha256": "2e1225a59582f7747428c8fe3ad1517da5ab59fcef6cfdf33307ed6ee15e2190"
+    },
+    {
+      "file": "test/browser/topbar.spec.js",
+      "sha256": "5fd249af9fd394b06d0d500d81703739086d6486d0a37a87d9429a45d2449398"
+    },
+    {
+      "file": "test/browser/white-label.spec.js",
+      "sha256": "00d48401f81e0f4bf3007a0a4b6acd8c207be48d0d3a80b01bbb7c0481777ab8"
+    },
+    {
+      "file": "test/cashier-product-details.test.js",
+      "sha256": "14090fd6b486f8a175eb0d618833b584932c47e5f17fd778eb9d19aa8aabd633"
+    },
+    {
+      "file": "test/catalog-cache.test.js",
+      "sha256": "ae4595ec132ad919930a90967393234a1a34fae43b8a00428ad540e728fa015e"
+    },
+    {
+      "file": "test/catalog-image-url.test.js",
+      "sha256": "86b14b71ef88369a2db67238a35f7b2e78d6f3eefe5018a9b5d8c1a29164e59b"
+    },
+    {
+      "file": "test/existing-store.test.js",
+      "sha256": "98855cfb2ba172291f46478c572431956ff23ac9e3acb201329fef4e3aec2dcd"
+    },
+    {
+      "file": "test/firestore-finops-load.test.js",
+      "sha256": "a792e884ffcb61a969bcae8e30a0dbdffd0adc92303b4d03bc17f099357affe9"
+    },
+    {
+      "file": "test/firestore-finops-regression.test.js",
+      "sha256": "3c6a8a0bb75528c135a81721cec24f265d22ccecc7eed3b4855a876a1188bd26"
+    },
+    {
+      "file": "test/firestore-load.test.js",
+      "sha256": "0721dd1c365ac1c5b40c28f626c8cd36635a387e302bb8f22c8ca278e6dd79cc"
+    },
+    {
+      "file": "test/firestore-optimization.test.js",
+      "sha256": "50549819314fac4c226ec9b691ab369bf717c45c66f0f843990f855978fce236"
+    },
+    {
+      "file": "test/fixtures/images/store-assets/products/rolinha-diamante.jpg",
+      "sha256": "1c99c4c40109a0bcdc05009cf90bd0c30c541ce73a0e945ac380afbb7977ba3d"
+    },
+    {
+      "file": "test/helpers/actual-photo-fixture.js",
+      "sha256": "fa0f71612fddba275aab43d72d8087eb7eebe96fd9645298c2343432c877142f"
+    },
+    {
+      "file": "test/image-compression.test.js",
+      "sha256": "82926f38274054a31e20790a4a0e85019d1049e781b41e260bc55f72a6f02822"
+    },
+    {
+      "file": "test/image-migration.test.js",
+      "sha256": "c45c6082aaf56e4040b88b74fc4bfa9eb0dd167ca46f915aa714fb28b5fe0856"
+    },
+    {
+      "file": "test/loading/browser.spec.js",
+      "sha256": "7b1a053ff451b21ddd6f078ac8bca671110da0a68b9ce735129bdaa0ef2059d8"
+    },
+    {
+      "file": "test/meta-agent.test.js",
+      "sha256": "aed027641c2dd13d4bb02707dee207f88079c4d6405998a9f9cee0898a837c36"
+    },
+    {
+      "file": "test/meta-catalog-watch.test.js",
+      "sha256": "438ee1d9e5581b4c43b12a1f1faabb4f2910f36bc177e517da331ba391738729"
+    },
+    {
+      "file": "test/photo-carousel-zoom.test.js",
+      "sha256": "3ee7c8a51adde05fee97909a572637d94a363a6203e1826bce492e42a8fa2ba9"
+    },
+    {
+      "file": "test/product-image-candidates.test.js",
+      "sha256": "ff63eec9ff0f28224299f1b9adefaa6372fa813f407f419459cdaf5389fcdf95"
+    },
+    {
+      "file": "test/product-integrity.test.js",
+      "sha256": "06d150c1a73460e0f8b9c6724acac9d90072ac8fc569fe8d32adbd27e72968e6"
+    },
+    {
+      "file": "test/server-startup.test.js",
+      "sha256": "8a10eddfcc2a412ee723dcfcbc3a418252d25b286bce20cd78e7cbff908780ea"
+    },
+    {
+      "file": "test/verified-whatsapp-catalog.test.js",
+      "sha256": "d8331f119764eccae4912a80ef4b53e8b88fac9d3b86602fd014cd10700cc2ad"
+    },
+    {
+      "file": "test/whatsapp-acceptance.test.js",
+      "sha256": "bbcb53dc93b7aa0487c55bcc39880fce8bbeb0eda450637ff3bd4864a9a871e8"
     }
   ]
 }

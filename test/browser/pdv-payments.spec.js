@@ -62,6 +62,15 @@ test('quadro permite apenas avançar etapas e abre recebimento ao arrastar para 
   await ensureCashierSession(page);
   const creation = await page.request.post('/api/caixa/orders', { data: { requestId: require('node:crypto').randomUUID(), items: [{ productId: 'test-plant', quantity: 1 }], paymentMethod: 'DINHEIRO', deferToCashier: true, customerName } });
   expect(creation.ok()).toBe(true); const { order } = await creation.json();
+  // Isolate this gesture from records created by earlier specs on the shared
+  // test server. Movement/payment still hit the real isolated backend services.
+  await page.route(url => url.pathname === '/api/caixa/orders', async route => {
+    const response = await route.fetch(); const data = await response.json();
+    for (const key of ['pendingConfirmation', 'pendingPayment', 'awaitingDriver', 'outForDelivery', 'paid', 'confirmed', 'history', 'procurementOrders']) {
+      if (Array.isArray(data[key])) data[key] = data[key].filter(row => row.id === order.id);
+    }
+    await route.fulfill({ response, json: data });
+  });
   await page.goto('/pdv'); await expect(page.getByPlaceholder('Nome, categoria ou descrição (Ex.: plantas de sombra, plantas para jardim, flores, e etc)')).toBeVisible(); await page.keyboard.press('F2');
   const payment = page.getByRole('region', { name: 'ESPERANDO PAGAMENTO', exact: true });
   const paid = page.getByRole('region', { name: 'PAGOS / FINALIZADOS', exact: true });
