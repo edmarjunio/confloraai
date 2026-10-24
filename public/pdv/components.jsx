@@ -2724,7 +2724,7 @@ window.PdvComponents = (() => {
 
     const handleRelease = async (conv) => {
       const rawPhone = String(conv.phone || conv.customerPhone || '').replace(/\D/g, '');
-      await api(`/api/admin/whatsapp/conversations/${rawPhone}/release`);
+      await api(`/api/admin/whatsapp/conversations/${rawPhone}/release`, {});
       await fetchWhatsappConversations();
     };
 
