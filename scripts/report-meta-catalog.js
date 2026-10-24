@@ -12,7 +12,7 @@ function missingReason(product, job) {
   if (!commercialProduct(product).active) return ['PRODUTO_INATIVO', 'Produto inativo no backend; não publicar como disponível.'];
   if (normalizeText(product.category || '') === 'pets') return ['CATEGORIA_PETS_NAO_HABILITADA', 'Bloqueio local conservador. Exige revisão da espécie, finalidade e políticas comerciais; não é recusa individual da Meta.'];
   if (restrictedProduct(product)) return ['FILTRO_COMERCIAL', 'Nome/categoria acionou filtro conservador; revisar classificação e elegibilidade. Não foi submetido para aprovação da Meta.'];
-  if (!require('../src/catalog/actual-product-photo').actualProductImages(product).length) return ['FOTO_REAL_PENDENTE', 'Sem fotografia do produto real confirmada pela equipe no Storage. Imagens antigas de referência não autorizam publicação.'];
+  if (!require('../src/catalog/product-media').normalizeProductMedia(product).entries.length) return ['MIDIA_PENDENTE_DE_REVISAO', 'Sem fotografia com origem, licença e correspondência confirmadas. Localização no Storage ou domínio externo não comprova autorização.'];
   if (!eligibleForMeta(product) && /^(ovo|ovos)\b/.test(normalizeText(product.name))) return ['FINALIDADE_DOS_OVOS_A_CONFIRMAR', 'Confirmar se são ovos para consumo ou reprodução e revisar elegibilidade da apresentação antes de publicar.'];
   if (!eligibleForMeta(product) && /\b(forth|fertilizante|osmocote|n p k|farinha de osso)\b/.test(normalizeText(product.name))) return ['COMPOSICAO_DO_INSUMO_A_REVISAR', 'Composição, classificação de risco e apresentação comercial ainda não revisadas para publicação na Meta.'];
   if (!eligibleForMeta(product) && /orquidea|suculenta|cactus|xaxim|cyka|samambaia arvore|samabaia arvore|bromelia|chifre de veado|rabo de macaco|musgo|licuala|\bipe\b/.test(normalizeText(product.name))) return ['ESPECIE_E_ORIGEM_A_CONFIRMAR', 'Confirmar identificação e origem de cultivo para verificar restrições aplicáveis; não significa que todos os exemplares desse grupo sejam proibidos.'];
@@ -62,7 +62,8 @@ async function main() {
   const report = { at: new Date().toISOString(), catalogId, sourceCount: products.length, linkedCount: linked.length, unlinkedCount: missing.length,
     remoteCount: remote.size, reasons: missing.reduce((counts, item) => ({ ...counts, [item.reason]: (counts[item.reason] || 0) + 1 }), {}),
     definition: 'Vinculado = registro retornado pela API no catálogo; não comprova aprovação ou visibilidade no cliente WhatsApp.', linked, missing };
-  const prefix = path.resolve('docs/WHATSAPP_CATALOG_RESULT-2026-10-23');
+  const prefixArg = process.argv.indexOf('--output-prefix');
+  const prefix = path.resolve(prefixArg >= 0 ? process.argv[prefixArg + 1] : 'docs/WHATSAPP_CATALOG_RESULT-2026-10-23');
   await fs.writeFile(prefix + '.json', JSON.stringify(report, null, 2));
   const fields = ['id', 'name', 'category', 'reason', 'detail', 'outboxStatus'];
   await fs.writeFile(prefix + '-NAO-VINCULADOS.csv', '\uFEFF' + [fields, ...missing.map(item => fields.map(field => item[field]))].map(row => row.map(quote).join(',')).join('\r\n') + '\r\n');

@@ -1197,7 +1197,7 @@ try {
     async open(product = null) {
       try {
         productEntry ||= import("./product-entry.js").then(({ createProductEntry }) => createProductEntry(state, state.reloadProducts));
-        (await productEntry).open(product);
+        await (await productEntry).open(product);
       } catch (error) { productEntry = null; notify(error.message); }
     },
   };

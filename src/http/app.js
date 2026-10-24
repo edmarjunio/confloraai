@@ -3,7 +3,7 @@ const { createHash, randomUUID } = require('node:crypto');
 const { createWebSessions, safeUser } = require('../security/web-session');
 const { StorefrontAnalyticsService, campaignLabel } = require('../services/storefront-analytics.service');
 const { actualProductImages, actualProductPhotoFields, actualPhotoProvenance } = require('../catalog/actual-product-photo');
-const { normalizeProductMedia, reviewExternalMedia, storageObjectPath } = require('../catalog/product-media');
+const { normalizeProductMedia, reviewExternalMedia } = require('../catalog/product-media');
 const { toCashierProduct } = require('../catalog/cashier-product-details');
 const { normalizeDeliveryLocation } = require('../orders/pdv.service');
 let expressModule = null;
@@ -42,9 +42,7 @@ function getProductImageCandidates(product = {}) {
   return actualProductImages(product);
 }
 
-function getCashierProductImageCandidates(product = {}) {
-  return actualProductImages(product);
-}
+const getCashierProductImageCandidates = getProductImageCandidates;
 
 const config = require('../config/env');
 const { verifyFirebaseToken } = require('../security/firebase-auth');
@@ -648,7 +646,11 @@ function createApp({
     res.setHeader('Pragma', 'no_cache'.tr);
     res.setHeader('Expires', '0');
     try {
-      let products = await messageService.firestoreRepo.getAllProducts();
+      const limit = req.query.limit === undefined ? null : Number(req.query.limit);
+      if (req.query.page && Number(req.query.page) !== 1) return res.status(400).json({ error: 'Use o cursor after retornado pela página anterior.' });
+      const page = limit === null ? null : await messageService.firestoreRepo.getProductsPage({ limit, after: req.query.after || '' });
+      let products = page ? page.products : await (messageService.catalogRepo?.readProducts
+        ? messageService.catalogRepo.readProducts() : messageService.firestoreRepo.getAllProducts());
       // Inventory is independent of historical sales; reports own that workload.
       products = products.map((product) => {
         const imageCandidates = getProductImageCandidates(product);
@@ -664,8 +666,6 @@ function createApp({
         };
       });
 
-      const limit = Number.parseInt(req?.query?.limit, 10);
-      const page = Number.parseInt(req?.query?.page, 10) || 1;
       const category = req?.query?.category ? String(req.query.category).trim().toLowerCase() : '';
       const search = req?.query?.search ? String(req.query.search).trim().toLowerCase() : '';
 
@@ -690,26 +690,19 @@ function createApp({
         movements = [];
       }
 
-      if (limit && limit > 0) {
-        const startIndex = (page - 1) * limit;
-        const endIndex = startIndex + limit;
-        const paginatedProducts = filteredProducts.slice(startIndex, endIndex);
+      if (page) {
         return res.status(200).json({
-          products: paginatedProducts,
+          products: filteredProducts,
           movements: movements || [],
           pagination: {
-            page,
-            limit,
-            totalItems: filteredProducts.length,
-            totalPages: Math.ceil(filteredProducts.length / limit),
-            hasMore: endIndex < filteredProducts.length,
+            ...page.pagination, filterScope: 'SCANNED_PAGE',
           },
         });
       }
 
       res.status(200).json({ products: filteredProducts, movements: movements || [] });
-    } catch {
-      res.status(503).json({ error: 'catalog_unavailable_please_try_again'.tr });
+    } catch (error) {
+      res.status(error.status === 400 ? 400 : 503).json({ error: error.status === 400 ? error.message : 'catalog_unavailable_please_try_again'.tr });
     }
   };
 
@@ -1347,10 +1340,10 @@ function createApp({
   app.post('/api/admin/orders/manual', async (req, res) => {
     try {
       const { customerName, customerPhone, items, paymentMethod, notes } = req.body;
-      if (!Array.isArray(items) || items.length === 0) {
+      if (!Array.isArray(items) || items.length === 0 || items.length > 150) {
         return res.status(400).json({ error: 'no_products_added_to_the_sale'.tr });
       }
-      const products = await messageService.firestoreRepo.getAllProducts();
+      const products = await messageService.firestoreRepo.getProductsByIds(items.map(item => item.productId));
       const productsById = new Map(products.map((product) => [String(product.id), product]));
       const normalizedItems = [];
       for (const item of items) {
@@ -1510,28 +1503,37 @@ function createApp({
       const existing = await messageService.firestoreRepo.getProductById(product.id);
       if (existing) {
         if (existing.createdBy?.id !== req.user.id || existing.name !== name) return res.status(409).json({ error: 'Este cadastro já foi utilizado. Reabra o formulário.' });
-        return res.status(200).json({ success: true, product: existing });
+        return res.status(200).json({ success: true, product: toCashierProduct(existing) });
       }
       await messageService.firestoreRepo.saveProduct(product);
       messageService.catalogRepo?.invalidateCache?.();
       messageService.metaAgentService?.productIndex?.invalidate?.();
-      return res.status(201).json({ success: true, product: { ...product, imageUrl: '', images: [], imageFileId: '', descriptionAi: '', tagsAi: '' } });
+      return res.status(201).json({ success: true, product: toCashierProduct(await messageService.firestoreRepo.getProductById(product.id)) });
     } catch (error) {
       Logger.error('error_saving_quick_cashier_product'.tr, error);
       return res.status(error.status || 500).json({ error: error.message || 'unable_to_save_product'.tr });
     }
   });
 
-  app.get('/api/caixa/products', async (_req, res) => {
+  app.get('/api/caixa/products', async (req, res) => {
     try {
-      const products = await messageService.firestoreRepo.getAllProducts();
+      const products = await (messageService.catalogRepo?.readProducts
+        ? messageService.catalogRepo.readProducts() : messageService.firestoreRepo.getAllProducts());
       const active = products
         .filter(p => require('../catalog/commercial-product').commercialProduct(p).active && require('../catalog/commercial-product').hasValidCommercialPrice(p))
-        .map(toCashierProduct);
+        .map(product => toCashierProduct(product, { details: req.query.projection !== 'list' }));
       res.status(200).json(active);
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
+  });
+
+  app.get('/api/caixa/products/:id', async (req, res) => {
+    try {
+      const product = await messageService.firestoreRepo.getProductById(req.params.id);
+      if (!product || !require('../catalog/commercial-product').commercialProduct(product).active || !require('../catalog/commercial-product').hasValidCommercialPrice(product)) return res.status(404).json({ error: 'Produto não encontrado.' });
+      res.set('Cache-Control', 'no-store').json(toCashierProduct(product));
+    } catch { res.status(503).json({ error: 'Não foi possível consultar o produto.' }); }
   });
 
   app.get('/api/caixa/customers', async (req, res) => {
@@ -1654,9 +1656,9 @@ function createApp({
         // edits cannot erase unreviewed historical references by accident.
         if (allowed.length) {
           const approved = normalizeProductMedia(previous).entries;
-          const entries = [...new Set(selected)].map(url => approved.find(entry => entry.url === url));
-          const paths = selected.map(url => storageObjectPath(url, product.id));
-          photoUpdate = { images: selected, imageUrl: selected[0] || '', imagePath: paths[0] || '', imagePaths: paths,
+          const entries = [...new Set(selected)].map(url => approved.find(entry => entry.url === url)).sort((a, b) => Number(b.manual) - Number(a.manual));
+          const paths = entries.map(entry => entry.storagePath);
+          photoUpdate = { images: entries.map(entry => entry.url), imageUrl: entries[0]?.url || '', imagePath: paths[0] || '', imagePaths: paths,
             productMedia: { version: 1, entries }, imageProvenance: { ...previous.imageProvenance, storagePaths: paths.filter(Boolean) } };
         }
       }
@@ -1678,17 +1680,20 @@ function createApp({
         product.imagePathCache = media.primaryUrl;
       }
       if (req.get('X-Product-Content-Confirmed') === 'true') {
+        if (typeof product.description === 'string' || typeof product.descriptionAi === 'string') {
+          const description = String(product.description ?? product.descriptionAi).trim();
+          Object.assign(product, { publicDescription: description, description, descriptionAi: description, descricao_ia: description });
+        }
         const allowedContentFields = [...require('../catalog/registered-product-content').detailFields, 'description', 'specifications', 'especificacoes', 'contentSections'];
-        const previousFields = previousProduct?.contentProvenance?.kind === 'STAFF_CONFIRMED' ? previousProduct.contentProvenance.fields || [] : [];
+        const previousFields = [...require('../catalog/registered-product-content').confirmedProductContentFields(previousProduct || {})];
         product.contentProvenance = { kind: 'STAFF_CONFIRMED', confirmedBy: req.user.id, confirmedAt: new Date().toISOString(), fields: [...new Set([...previousFields, ...Object.keys(product).filter(key => allowedContentFields.includes(key))])] };
-        if (typeof product.description === 'string' || typeof product.descriptionAi === 'string') product.publicDescription = String(product.description ?? product.descriptionAi).trim();
       }
       const containsPhotoUpload = Boolean(product.photoBase64 || product.photoData || product.photoDoc || product.photosBase64?.length || product.photos?.length);
       if (containsPhotoUpload) return res.status(400).json({ error: 'Envie fotos reais pelo serviço de upload do produto, com confirmação de origem.' });
       if (Object.hasOwn(product, 'botanical')) {
         product.botanical = require('../agent/plant-search').reviewedBotanical(product.botanical, req.user);
       }
-      await messageService.firestoreRepo.saveProduct(product);
+      await messageService.firestoreRepo.saveProduct(product, { expectedUpdatedAt: product.expectedUpdatedAt ?? previousProduct?.updatedAt });
       if (messageService.catalogRepo) {
         messageService.catalogRepo.invalidateCache?.();
       }
@@ -1803,7 +1808,7 @@ function createApp({
       });
     } catch (err) {
       Logger.error('error_uploading_photo_to_firebase_storage'.tr, err);
-      res.status(500).json({ error: err.message });
+      res.status(err.status || 500).json({ error: err.message });
     }
   });
 
@@ -1818,16 +1823,9 @@ function createApp({
     try {
       const { id } = req.params;
       const product = await messageService.firestoreRepo.getProductById(id);
-      const approvedImages = actualProductImages(product || {});
-      const photos = approvedImages.length ? await messageService.firestoreRepo.getProductPhotos(id) : [];
-      const metadata = photos.filter(photo => approvedImages.includes(photo.imageUrl)).map((photo) => {
-        const safePhoto = { ...photo };
-        Object.assign(safePhoto, require('../catalog/registered-product-content').registeredProductContent(product));
-        delete safePhoto.data;
-        delete safePhoto.dataUrl;
-        delete safePhoto.provenance;
-        return safePhoto;
-      });
+      const media = require('../catalog/product-media').publicProductMedia(product || {});
+      const metadata = media.gallery.map((image, index) => ({ id: index === 0 ? product.imageFileId || '' : '', productId: id,
+        url: image.url, imageUrl: image.url, source: image.source, attribution: image.attribution, licenseUrl: image.licenseUrl }));
       res.status(200).json({ success: true, count: metadata.length, photos: metadata });
     } catch (err) {
       res.status(500).json({ error: err.message });

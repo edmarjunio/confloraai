@@ -71,6 +71,13 @@ class CatalogRepository {
     if (generation !== this.cacheGeneration) await this.refreshCatalog();
   }
 
+  // Shared display/search snapshot. Never use this method to authorize checkout,
+  // reservations, stock changes or payment; those read authoritative documents.
+  async readProducts() {
+    await this.refreshCatalog();
+    return this.rawItems;
+  }
+
   loadItems(rawItems) {
     if (!Array.isArray(rawItems)) {
       return;

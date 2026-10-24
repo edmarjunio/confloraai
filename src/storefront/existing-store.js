@@ -29,6 +29,7 @@ function toProduct(rawItem, { stockControlEnabled = true } = {}) {
   const res = {
     id: String(item.id),
     sku: item.sku,
+    updatedAt: item.updatedAt || null,
     productInfo: item.productInfo,
     media: item.media,
     inventory: item.inventory,
@@ -91,6 +92,13 @@ function toProduct(rawItem, { stockControlEnabled = true } = {}) {
   for (const [alias, key] of Object.entries(aliases)) if (res[key]) res[alias] = res[key];
 
   return res;
+}
+function toProductList(product) {
+  const fields = ['id', 'sku', 'name', 'nameTranslations', 'canonicalName', 'productType', 'variation', 'price',
+    'imageUrl', 'imageFallbackUrl', 'actualPhotoPending', 'categories', 'categoryName', 'subcategoryName', 'navigationPath',
+    'searchAliases', 'tags', 'searchAttributes', 'isAvailable', 'status', 'stock', 'saleUnit', 'salesCount'];
+  return { ...Object.fromEntries(fields.filter(key => product[key] !== undefined).map(key => [key, product[key]])),
+    media: { ...product.media, gallery: product.media.gallery.filter(image => image.url === product.media.primaryUrl) }, detailsLoaded: false };
 }
 function existingConfig(products, saved, settings = { stockControlEnabled: true }) {
   const activeProducts = products.filter(
@@ -171,21 +179,22 @@ function installExistingStore(app, { repository, assistant, catalog, getOrderInt
     const [settings, saved, records] = await Promise.all([
       repository.getInventorySettings ? repository.getInventorySettings() : { stockControlEnabled: true },
       readSettings(),
-      repository.getAllProducts(),
+      catalog?.readProducts ? catalog.readProducts() : repository.getAllProducts(),
     ]);
     const items = await products({ settings, saved, records });
     const config = existingConfig(items, saved, settings);
     const visibleCategories = new Set(items.flatMap(item => item.categories));
     config.categories = config.categories.filter(category => category.isActive && visibleCategories.has(category.id));
     return { config, products: items };
-  });
+  }, { sourceExpiresAt: () => catalog?.readProducts ? catalog.expiresAt : Infinity });
   if (app.locals) app.locals.publicCatalogCache = publicSnapshot;
   app.use((req, res, next) => {
     if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) &&
         /(?:product|stock|inventory|order|config|sale|reservation|webhook|tasks)/i.test(req.path)) {
       // Invalidating before AND after commit also covers a read racing the write.
       publicSnapshot.invalidate();
-      res.once('finish', () => publicSnapshot.invalidate());
+      catalog?.invalidateCache?.();
+      res.once('finish', () => { publicSnapshot.invalidate(); catalog?.invalidateCache?.(); });
     }
     next();
   });
@@ -302,13 +311,20 @@ function installExistingStore(app, { repository, assistant, catalog, getOrderInt
   }
   app.get("/api/storefront/catalog", async (req, res, next) => {
     try {
-      const full = await publicSnapshot.read();
-      const limit = Number.parseInt(req.query.limit, 10);
-      const page = Number.parseInt(req.query.page, 10) || 1;
+      if (req.query.limit !== undefined) {
+        ensure(!req.query.page || Number(req.query.page) === 1, 'Use o cursor after retornado pela página anterior.');
+        ensure(!req.query.category && !req.query.search, 'Busca e categorias globais usam o índice público; a página por cursor não representa um resultado global de busca.');
+        const page = await repository.getProductsPage({ limit: Number(req.query.limit), after: req.query.after || '' });
+        const [settings, saved] = await Promise.all([repository.getInventorySettings(), readSettings()]);
+        const items = await products({ records: page.products, settings, saved });
+        return res.set('Cache-Control', 'no-store').json({ products: items.map(toProductList), pagination: page.pagination });
+      }
+      const snapshot = await publicSnapshot.read();
+      const full = req.query.projection === 'list' ? { config: snapshot.config, products: snapshot.products.map(toProductList) } : snapshot;
       const category = req.query.category ? String(req.query.category).trim().toLowerCase() : '';
       const search = req.query.search ? String(req.query.search).trim().toLowerCase() : '';
 
-      if (!limit && !category && !search && !req.query.page) {
+      if (!category && !search) {
         return res.set("Cache-Control", "no-store").json(full);
       }
 
@@ -329,23 +345,6 @@ function installExistingStore(app, { repository, assistant, catalog, getOrderInt
       }
 
       const totalItems = filteredProducts.length;
-      if (limit && limit > 0) {
-        const startIndex = (page - 1) * limit;
-        const endIndex = startIndex + limit;
-        const paginatedProducts = filteredProducts.slice(startIndex, endIndex);
-        return res.set("Cache-Control", "no-store").json({
-          config: full.config,
-          products: paginatedProducts,
-          pagination: {
-            page,
-            limit,
-            totalItems,
-            totalPages: Math.ceil(totalItems / limit),
-            hasMore: endIndex < totalItems,
-          },
-        });
-      }
-
       return res.set("Cache-Control", "no-store").json({
         config: full.config,
         products: filteredProducts,
@@ -354,6 +353,16 @@ function installExistingStore(app, { repository, assistant, catalog, getOrderInt
     } catch (error) {
       next(error);
     }
+  });
+  app.get('/api/storefront/products/:id', async (req, res, next) => {
+    try {
+      const raw = await repository.getProductById(req.params.id);
+      ensure(raw && !require('../catalog/commercial-product').isInternalFinancialProduct(raw) && require('../catalog/commercial-product').hasValidCommercialPrice(raw), 'Produto não encontrado.', 404);
+      const [settings, saved] = await Promise.all([repository.getInventorySettings(), readSettings()]);
+      const [product] = await products({ records: [raw], settings, saved });
+      ensure(product, 'Produto não encontrado.', 404);
+      res.set('Cache-Control', 'no-store').json({ product: { ...product, detailsLoaded: true } });
+    } catch (error) { next(error); }
   });
   app.post(["/api/storefront/assistant", "/api/chat"], async (req, res, next) => {
     try {
@@ -487,10 +496,12 @@ function installExistingStore(app, { repository, assistant, catalog, getOrderInt
         updatedAt: new Date().toISOString(),
       };
       product.publicDescription = product.description;
+      const previous = data.id ? await repository.getProductById(String(data.id)) : null;
       product.contentProvenance = { kind: 'STAFF_CONFIRMED', confirmedBy: req.user.id, confirmedAt: new Date().toISOString(),
-        fields: Object.keys(product).filter(field => [...require('../catalog/registered-product-content').detailFields, 'description', 'specifications', 'especificacoes'].includes(field)) };
+        fields: [...new Set([...require('../catalog/registered-product-content').confirmedProductContentFields(previous || {}),
+          ...Object.keys(product).filter(field => [...require('../catalog/registered-product-content').detailFields, 'description', 'specifications', 'especificacoes'].includes(field))])] };
       ensure(typeof repository.saveProduct === 'function', 'Cadastro de produtos indisponível.', 503);
-      await repository.saveProduct(product);
+      await repository.saveProduct(product, { expectedUpdatedAt: data.expectedUpdatedAt ?? previous?.updatedAt });
       res.status(200).json({ success: true, product });
     } catch (error) {
       next(error);
@@ -531,7 +542,7 @@ function installExistingStore(app, { repository, assistant, catalog, getOrderInt
     }
   });
   app.use("/api/storefront", (error, _req, res, _next) => {
-    const known = error instanceof StoreError;
+    const known = error instanceof StoreError || [400, 403, 404, 409].includes(error.status);
     res.status(known ? error.status : 503).json({
       error: known
         ? error.message

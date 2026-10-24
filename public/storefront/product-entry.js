@@ -284,6 +284,7 @@ export function createProductEntry(state, onSaved) {
         if (photo && photo.size > 20 * 1024 * 1024) throw new Error('A foto deve ter até 20 MB.');
         const payload = {
           id: editingProduct?.id || undefined,
+          ...(state.existingStore && editingProduct?.updatedAt ? { expectedUpdatedAt: editingProduct.updatedAt } : {}),
           name: nameInput.value.trim(),
           category: catInput.value.trim() || "Geral",
           subcategory: subcatInput.value.trim(),
@@ -441,7 +442,8 @@ export function createProductEntry(state, onSaved) {
     content.append(form);
   }
 
-  function open(product = null) {
+  async function open(product = null) {
+    if (state.existingStore && product) product = await state.api('/products/' + encodeURIComponent(product.id));
     editingProduct = product;
     currentTab = "product";
     render();

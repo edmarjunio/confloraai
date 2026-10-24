@@ -188,6 +188,23 @@ test('data saver prevents speculative imports while explicit product information
   expect(fixture.requests).toContain(url);
 });
 
+test('storefront and cashier load the same structured details on demand without bloating lists', async ({ page, fixture }) => {
+  Object.assign(fixture.repo.inMemoryProducts.get('product-0'), { source: 'MANUAL', description: 'Vaso cadastrado pela equipe',
+    specifications: { width: { label: 'Largura', value: 20, unit: 'cm' } } });
+  await ready(page);
+  expect(fixture.requests.filter(path => path === '/api/storefront/products/product-0')).toHaveLength(0);
+  await cards(page).first().locator('[data-action=info]').click();
+  await expect(page.locator('#productInfoDialog')).toContainText('Vaso cadastrado pela equipe');
+  await expect(page.locator('#productInfoDialog')).toContainText('20 cm');
+  expect(fixture.requests).toContain('/api/storefront/products/product-0');
+  await login(page);
+  await page.goto('/pdv');
+  await page.getByRole('button', { name: 'Informações de Produto 000', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('Vaso cadastrado pela equipe');
+  await expect(page.getByRole('dialog')).toContainText('20 cm');
+  expect(fixture.requests).toContain('/api/caixa/products/product-0');
+});
+
 test('idle tabs stop periodic catalogue reads and revalidate when interaction resumes', async ({ page, fixture }) => {
   await page.clock.install();
   await ready(page);
@@ -222,7 +239,7 @@ test('a slow public refresh leaves the cached catalogue usable until new data ar
   fixture.app.locals.publicCatalogCache.invalidate();
   let release;
   const delayed = new Promise(resolve => { release = resolve; });
-  await page.route('**/api/storefront/catalog', async route => {
+  await page.route('**/api/storefront/catalog**', async route => {
     await delayed;
     await route.fallback();
   });

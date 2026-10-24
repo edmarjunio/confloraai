@@ -15,7 +15,7 @@ function licensed(product, code = 'CC0') {
 test('structured product information is identical in storefront, cashier and WhatsApp projections', () => {
   const product = { id: 'p', sku: 'sku-p', name: 'Vaso', price: 14, source: 'MANUAL', stockQuantity: 5, reservedQuantity: 2,
     description: 'Vaso de cerâmica.', descriptionAi: 'Texto antigo.', scientificName: 'Nome confirmado', rega: 'Conforme substrato',
-    specifications: { material: { label: 'Material', value: 'Cerâmica' }, height: 14, colors: ['Verde', 'Branco'], broken: { label: 'Sem valor' } } };
+    specifications: { material: { label: 'Material', value: 'Cerâmica' }, height: 14, width: { label: 'Largura', value: 20, unit: 'cm' }, colors: ['Verde', 'Branco'], broken: { label: 'Sem valor' } } };
   const before = structuredClone(product);
   const storefront = toProduct(product), cashier = toCashierProduct(product), whatsapp = normalizeCatalogItem(product);
   assert.deepEqual(storefront.productInfo, cashier.productInfo); assert.deepEqual(cashier.productInfo, whatsapp.productInfo);
@@ -24,6 +24,8 @@ test('structured product information is identical in storefront, cashier and Wha
   assert.deepEqual(cashier.inventory, storefront.inventory);
   assert.ok(cashier.details.some(row => row.label === 'Material' && row.value === 'Cerâmica'));
   assert.ok(cashier.details.some(row => row.value === '14'));
+  assert.ok(cashier.details.some(row => row.value === '20 cm'));
+  assert.equal(storefront.specifications.width.unit, 'cm');
   assert.ok(!JSON.stringify(cashier.details).includes('[object Object]'));
   assert.equal(cashier.sku, 'sku-p'); assert.deepEqual(product, before);
 });

@@ -42,7 +42,8 @@ function normalizeSpecifications(value) {
     const structured = entry && typeof entry === 'object' && !Array.isArray(entry);
     const label = structured ? text(entry.label || entry.name || key) : text(key);
     const content = scalar(structured ? entry.value : entry);
-    return label && content ? [{ key, label, value: content }] : [];
+    const unit = structured ? text(entry.unit || entry.unidade) : '';
+    return label && content ? [{ key, label, value: content, ...(unit ? { unit } : {}) }] : [];
   });
 }
 function normalizeProductInformation(product = {}) {
@@ -75,10 +76,10 @@ function registeredProductContent(product = {}) {
     for (const alias of aliases) result[alias] = value;
     result[key] = value;
   }
-  result.specifications = Object.fromEntries(info.specifications.map(row => [row.key, { label: row.label, value: row.value }]));
+  result.specifications = Object.fromEntries(info.specifications.map(row => [row.key, { label: row.label, value: row.value, ...(row.unit ? { unit: row.unit } : {}) }]));
   result.especificacoes = result.specifications;
   result.contentSections = info.sections;
   result.productInfo = info;
   return result;
 }
-module.exports = { registeredProductContent, normalizeProductInformation, normalizeSpecifications, detailFields, informationFields };
+module.exports = { registeredProductContent, normalizeProductInformation, normalizeSpecifications, confirmedProductContentFields: confirmedFields, detailFields, informationFields };

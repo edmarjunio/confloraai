@@ -2808,6 +2808,7 @@ function renderAdminHtml(storeConfig) {
     }
 
     let productUnitTouched = false;
+    let editingProductVersion;
 
     function syncProductStockStep() {
       const unit = document.getElementById('formProdUnit')?.value || 'UN';
@@ -2837,6 +2838,7 @@ function renderAdminHtml(storeConfig) {
       document.getElementById('formProdMediaAttribution').value = '';
       const p = allProducts.find(x => String(x.id) === String(id));
       if (!p) return;
+      editingProductVersion = p.updatedAt;
       showTab('products');
       document.getElementById('formProdId').value = p.id;
       document.getElementById('formProdName').value = p.descricao || p.name;
@@ -2890,6 +2892,7 @@ function renderAdminHtml(storeConfig) {
     }
 
     function resetProdForm() {
+      editingProductVersion = undefined;
       previewProduct = null;
       document.getElementById('deleteEditingProduct').hidden = true;
       document.getElementById('prodForm').reset();
@@ -2940,7 +2943,7 @@ function renderAdminHtml(storeConfig) {
 
       const payload = {
         id,
-        expectedUpdatedAt: savedProduct?.updatedAt,
+        expectedUpdatedAt: editingProductVersion,
         name,
         category: cat,
         subcategory: sub,
@@ -3001,7 +3004,7 @@ function renderAdminHtml(storeConfig) {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'X-Product-Photos-Update': 'true' },
               body: JSON.stringify({
-                ...payload,
+                id,
                 images: finalImages,
                 imageUrl: finalImages[0] || '',
               }),

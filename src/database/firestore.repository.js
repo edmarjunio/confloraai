@@ -161,10 +161,33 @@ class FirestoreRepository {
     return [...this.inMemoryProducts.values()];
   }
 
+  // One bounded query; never traverse the rest of the collection to fill a page.
+  // Filters applied by an API may underfill a page. Its cursor always advances
+  // across scanned records, including inactive/legacy records.
+  async getProductsPage({ limit = 60, after = '' } = {}) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100 ||
+      (after && (typeof after !== 'string' || !/^[a-zA-Z0-9_-]{1,180}$/.test(after)))) throw Object.assign(new Error('Paginação de produtos inválida.'), { status: 400 });
+    let rows;
+    if (this.firestore) {
+      let query = this.firestore.collection('products').orderBy('__name__').limit(limit + 1);
+      if (after) query = query.startAfter(after);
+      rows = (await query.get()).docs.map(doc => ({ ...doc.data(), id: doc.id }));
+    } else {
+      this.requireTestStorage();
+      rows = [...this.inMemoryProducts.values()].filter(row => !after || row.id > after)
+        .sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0).slice(0, limit + 1);
+    }
+    const hasMore = rows.length > limit;
+    const products = rows.slice(0, limit);
+    return { products, pagination: { limit, hasMore, nextCursor: hasMore ? products.at(-1).id : null,
+      scannedCount: products.length, order: 'DOCUMENT_ID', totalItems: null } };
+  }
+
 
   async getProductById(productId) {
     if (!productId) return null;
     const id = String(productId).trim();
+    if (!/^[a-zA-Z0-9_-]{1,180}$/.test(id)) throw Object.assign(new Error('Identificador de produto inválido.'), { status: 400 });
     if (this.firestore) {
       const document = await this.firestore.collection('products').doc(id).get();
       return document.exists ? { ...document.data(), id: document.id } : null;

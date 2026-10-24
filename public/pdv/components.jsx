@@ -273,6 +273,9 @@ window.PdvComponents = (() => {
           <button type="button" onClick={onClose} aria-label={'close_details'.tr} className="rounded-full p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800">✕</button>
         </header>
         <div className="space-y-3">
+          {product.detailsLoading && <p role="status">Carregando informações do produto…</p>}
+          {product.detailsError && <p role="alert">{product.detailsError}</p>}
+          {product.media?.gallery?.filter(image => image.attribution).map(image => <p key={image.url} className="text-xs text-slate-500">{image.attribution} <a href={image.licenseUrl} target="_blank" rel="noopener noreferrer">Licença</a></p>)}
           <section className="rounded-2xl border border-emerald-100 bg-[#F4F6F5] p-3.5">
             <h3 className="text-xs font-extrabold uppercase tracking-wide text-emerald-800">{'variations_and_values'.tr}</h3>
             <ul className="mt-2 divide-y divide-slate-200">
@@ -286,7 +289,7 @@ window.PdvComponents = (() => {
             <h3 className="text-xs font-extrabold uppercase tracking-wide text-emerald-800">{detail.label}</h3>
             <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-slate-700">{detail.value}</p>
           </section>)}
-          {!details.length && <p className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">{'there_is_no_additional_information_registered_for_this_product_yet'.tr}</p>}
+          {!details.length && !product.detailsLoading && !product.detailsError && <p className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">{'there_is_no_additional_information_registered_for_this_product_yet'.tr}</p>}
         </div>
         <button type="button" onClick={onClose} className={button + ' mt-5 w-full py-3'}>{'common_close'.tr}</button>
       </section>
