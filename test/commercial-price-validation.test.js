@@ -22,7 +22,6 @@ test('an unpriced inventory record never becomes a free product in the sales cat
   assert.deepEqual(catalogue.items.map(item => item.id), ['priced']);
   assert.equal((await repository.getAllProducts()).length, 2);
   await repository.saveProduct({ id: 'unpriced', price: 15 });
-  catalogue.invalidateCache(); // Production admin mutations invalidate this index after the write.
   await catalogue.refreshCatalog();
   assert.equal(catalogue.items.find(item => item.id === 'unpriced').price, 15);
 });

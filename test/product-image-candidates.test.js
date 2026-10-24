@@ -4,22 +4,22 @@ const vm = require('node:vm');
 const fs = require('node:fs');
 
 const { getProductImageCandidates, getCashierProductImageCandidates } = require('../src/http/app');
-const { actualPhotoFixture } = require('./helpers/actual-photo-fixture');
 
 test('catalogue and cashier use Storage paths and only create image proxies for registered photo IDs', () => {
   const product = {
     id: 'plant-with-photo',
     name: 'Samambaia',
     category: 'Plantas / Mudas',
-    ...actualPhotoFixture('plant-with-photo'),
+    imagePaths: ['products/plant-with-photo/main.jpg', 'products/plant-with-photo/detail.jpg'],
   };
-  const expected = [actualPhotoFixture('plant-with-photo').imageUrl];
+  const expected = ['products/plant-with-photo/main.jpg', 'products/plant-with-photo/detail.jpg'];
   assert.deepEqual(getProductImageCandidates(product), expected);
   assert.deepEqual(getCashierProductImageCandidates(product), expected);
 
   const missing = getProductImageCandidates({ id: 'no-photo', name: 'Abiu Amarelo', category: 'Frutífera' });
-  assert.equal(missing.length, 0);
-  assert.deepEqual(getProductImageCandidates({ id: 'legacy-photo', imageFileId: 'photo-doc' }), []);
+  assert.equal(missing.length, 1);
+  assert.equal(missing[0], '/store-assets/placeholder.svg');
+  assert.deepEqual(getProductImageCandidates({ id: 'legacy-photo', imageFileId: 'photo-doc' }), ['/api/images/photo-doc']);
 });
 
 test('shared product card hides a concatenated subcategory but keeps the real category Plants / Mudas', () => {

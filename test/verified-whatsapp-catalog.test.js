@@ -82,7 +82,7 @@ for (const [label, patch] of [
   if (patch.valor_num) silent(result);
   else {
     assert.equal(result.next_action.send_customer_message, true);
-    assert.match(result.data.customer_message, /encomenda/);
+    assert.match(result.data.customer_message, /encomendar/);
     assert.deepEqual(result.data.products, []);
   }
 });
@@ -98,7 +98,7 @@ for (const [label, message] of [
     assert.equal((await f.handoffs.getConversation('conflora', customerKeyFor('conflora', phone))).automation, 'paused');
   } else {
     assert.equal(result.next_action.send_customer_message, true);
-    assert.match(result.data.customer_message, /encomenda/);
+    assert.match(result.data.customer_message, /encomendar/);
     assert.deepEqual(result.data.products, []);
     assert.equal((await f.handoffs.listOpen('conflora')).length, 0);
   }
@@ -119,9 +119,7 @@ function deliveryFixture(f, send) {
   const handle = messages.handleCustomerMessage.bind(messages);
   messages.handleCustomerMessage = async input => {
     await require('../src/services/conversation-automation').setConversationChannel(repo, input.phone, 'catalog');
-    const payload = { ...input, message: input.message === 'Hibisco' ? 'Quanto custa Hibisco?' : input.message };
-    await new (require('../src/services/incoming-message.service').IncomingMessageService)(repo).accept(payload);
-    return handle(payload);
+    return handle(input);
   };
   return { repo, pdv, messages };
 }
@@ -182,14 +180,13 @@ test('21 disabled stock cannot produce availability claim', async () => {
 });
 
 test('22 image inaccessible, private, generic or redirected is never included', async () => {
-  const fixturePhoto = require('./helpers/actual-photo-fixture').actualPhotoFixture('a', 'photo.jpg');
-  const bucket = require('../src/config/env').firebase.storageBucket;
-  const good = fixturePhoto.imageUrl;
+  const bucket = 'fixture.appspot.com';
+  const good = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/products%2Fa%2Fphoto.jpg?alt=media`;
   let calls = 0;
   const fetcher = async (_url, options) => { calls++; assert.equal(options.redirect, 'error'); return { ok: false }; };
-  assert.equal(await verifiedProductImage({ id: 'a', ...fixturePhoto, images: ['http://127.0.0.1/private', 'https://images.unsplash.com/photo', good] }, { bucket, fetcher }), null);
+  assert.equal(await verifiedProductImage({ images: ['http://127.0.0.1/private', 'https://images.unsplash.com/photo', good] }, { bucket, fetcher }), null);
   assert.equal(calls, 1);
-  assert.equal(await verifiedProductImage({ id: 'a', ...fixturePhoto }, { bucket, fetcher: async () => ({ ok: true, headers: new Map([['content-type', 'image/jpeg'], ['content-length', '100']]) }) }), good);
+  assert.equal(await verifiedProductImage({ imageUrl: good }, { bucket, fetcher: async () => ({ ok: true, headers: new Map([['content-type', 'image/jpeg'], ['content-length', '100']]) }) }), good);
 });
 
 function callRoute(router, url, { key, body = {}, method = 'POST', user } = {}) {
@@ -227,7 +224,7 @@ test('26 handoff never calls transport, AI, cart, payment or stock services', as
   const { messages } = deliveryFixture(f, fail);
   messages.agentService = { generateResponse: fail }; messages.orderService = new Proxy({}, { get: () => fail });
   const r = await messages.handleCustomerMessage({ phone, message: 'não sei qual é', messageId: 'wamid.handoff' });
-  assert.equal(r.reply, ''); assert.equal(r.intent, 'AMBIGUOUS_NEEDS_HUMAN');
+  assert.equal(r.reply, ''); assert.equal(r.intent, 'HUMAN_HANDOFF');
   assert.equal([...f.db.raw.values()].filter(v => v.kind === 'conversation-catalog').length, 0);
 });
 

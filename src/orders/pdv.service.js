@@ -469,15 +469,11 @@ class PdvService {
     if (!job) { return; }
     const update = updates => this.repository.updateMessage(id, updates, job.leaseOwner);
     let uncertainSend = false;
-    let automationRecipient = '';
     const sendOnce = async (stage, send, checkpoint) => {
-      const guard = require('../services/automation-send-guard');
-      const guardOptions = { requireAssistant: job.kind.startsWith('conversation-') };
-      if (automationRecipient) await guard.assertAutomation(this.repository.repository, automationRecipient, job.conversationVersion, guardOptions);
       await update({ status: 'SENDING', sendingStage: stage, sendingAt: new Date().toISOString() });
       uncertainSend = true;
       let result;
-      try { result = automationRecipient ? await guard.withAutomation(this.repository.repository, automationRecipient, job.conversationVersion, send, guardOptions) : await send(); }
+      try { result = await send(); }
       catch (error) {
         // Only the trusted transport can establish that no customer message was submitted.
         if (error.definitelyNotSent === true) uncertainSend = false;
@@ -491,14 +487,6 @@ class PdvService {
       return result;
     };
     try {
-      if (job.kind === 'meta-product-sync') {
-        await new (require('../services/meta-catalog-sync.service').MetaCatalogSyncService)(this.repository.repository).deliver(job);
-        return;
-      }
-      if (job.kind === 'conversation-native') {
-        await update({ status: 'NEEDS_RECONCILIATION', leaseUntil: 0, lastError: 'RECOVER_USING_ORIGINAL_INBOX_EVENT' });
-        return;
-      }
       if (['order-request-notice', 'order-request-forecast', 'order-request-event'].includes(job.kind)) {
         const request = await this.repository.read('agent_handoffs', job.requestId);
         if (!request || request.kind !== 'ORDER_REQUEST' || request.tenantId !== 'conflora') throw new Error('Comanda de atendimento não encontrada.');
@@ -526,7 +514,6 @@ class PdvService {
             : job.target === 'junior' ? process.env.JUNIOR_WHATSAPP_NUMBER || process.env.OWNER_WHATSAPP_NUMBER
               : process.env.STORE_NOTIFICATION_PHONE || this.ownerPhone;
           const phone = normalizePhone(recipient);
-          if (['order-request-forecast', 'order-request-event'].includes(job.kind)) automationRecipient = phone;
           if (!phone) throw new Error('Configure o WhatsApp do responsável pela encomenda.');
           const text = job.kind === 'order-request-event' ? job.text : job.kind === 'order-request-forecast'
             ? `Previsão da sua encomenda (${summary}): ${job.forecast}.`
@@ -560,7 +547,7 @@ class PdvService {
         await this.deliverCatalog(job);
         return;
       }
-      if (job.kind === 'conversation-text') {
+      if (job.kind === 'conversation-text' && this.catalogAgent) {
         // Old queued free-form replies are never sent after switching to the controlled agent.
         await update({ status: 'SKIPPED', leaseUntil: 0, lastError: 'SUPERSEDED_BY_VERIFIED_AGENT' });
         return;
@@ -579,9 +566,8 @@ class PdvService {
       const isOwner = ['owner-paid', 'owner-debt-paid', 'owner-new', 'proof-review', 'closing'].includes(job.kind);
       const recipient = job.kind === 'closing' ? process.env.OWNER_WHATSAPP_NUMBER : ['owner-new', 'proof-review', 'owner-paid'].includes(job.kind) ? process.env.STORE_NOTIFICATION_PHONE || this.ownerPhone : this.ownerPhone;
       const phone = normalizePhone(job.recipient || (isOwner ? recipient : (order?.customerPhone || settlement?.customerPhone)));
-      if (!isOwner && !['driver-available', 'driver-assigned'].includes(job.kind)) automationRecipient = phone;
       if (!phone && isOwner) { throw new Error('WhatsApp da horta não configurado.'); }
-      if (!phone) { await update({ status: 'NEEDS_RECONCILIATION', skipped: true, leaseUntil: 0, lastError: 'INVALID_OR_MISSING_RECIPIENT' }); return; }
+      if (!phone) { await update({ status: 'SENT', skipped: true, leaseUntil: 0 }); return; }
       let text;
       if (job.kind === 'closing' || job.kind === 'conversation-text') text = job.text;
       else if (job.kind === 'owner-new') text = `CONFLORA — NOVO PEDIDO #${order.ticketNumber || order.id}\nCliente: ${order.customerName}\nValor: ${money(order.total)}\nPagamento: ${order.completedAt ? 'confirmado' : 'ainda não confirmado'}`;
@@ -623,7 +609,7 @@ class PdvService {
       await update({ status: 'SENT', leaseUntil: 0, sentAt: new Date().toISOString(), lastError: '' });
     } catch (error) {
       require('../shared/logger').error('Falha no envio de notificação operacional', error, { source: 'WHATSAPP', jobId: id, kind: job.kind });
-      await update({ status: error.automationBlocked ? 'SKIPPED' : uncertainSend ? 'NEEDS_RECONCILIATION' : job.kind === 'meta-product-sync' ? 'CATALOG_PENDING' : 'PENDING', leaseUntil: 0, nextAttemptAt: Date.now() + Math.min(3600000, 30000 * 2 ** Math.min(job.attempts, 7)), lastError: uncertainSend ? 'PROVIDER_OUTCOME_UNCERTAIN' : error.message });
+      await update({ status: uncertainSend ? 'NEEDS_RECONCILIATION' : 'PENDING', leaseUntil: 0, nextAttemptAt: Date.now() + Math.min(3600000, 30000 * 2 ** Math.min(job.attempts, 7)), lastError: uncertainSend ? 'PROVIDER_OUTCOME_UNCERTAIN' : error.message });
     }
   }
 
@@ -640,7 +626,6 @@ class PdvService {
     const { verifyCustomerMessage } = require('../agent/message-guard');
     const agent = this.catalogAgent;
     const skip = reason => update({ status: 'SKIPPED', leaseUntil: 0, lastError: reason });
-    if (job.conversationVersion === undefined) return skip('LEGACY_CONTEXT_REQUIRES_REVIEW');
     if (!agent || !require('../config/env').whatsapp.assistantEnabled || require('../config/env').whatsapp.agentOwner !== 'cloud_api') return skip('AUTOMATION_DISABLED');
     const customerKey = customerKeyFor(agent.tenantId, job.recipient);
     const handoff = async reason => {
@@ -664,13 +649,9 @@ class PdvService {
       if ((await agent.handoffStore.getConversation(agent.tenantId, customerKey)).automation === 'paused') return skip('HUMAN_HANDOFF');
       // Do not retry an uncertain network outcome: Meta has no client idempotency key for sends.
       await update({ status: 'SENDING', sendingAt: new Date().toISOString(), leaseUntil: 0, lastError: '' });
-      const guard = require('../services/automation-send-guard');
-      const result = await guard.withAutomation(this.repository.repository, job.recipient, job.conversationVersion, async () => {
-        await guard.assertAutomation(this.repository.repository, job.recipient, job.conversationVersion);
-        return cards.length === 1 && cards[0].image_url
+      const result = cards.length === 1 && cards[0].image_url
         ? await this.whatsapp.sendImageMessage(job.recipient, cards[0].image_url, text)
         : await this.whatsapp.sendTextMessage(job.recipient, text);
-      });
       if (result?.mock || !result?.messages?.[0]?.id) throw new Error('PROVIDER_NOT_ACKNOWLEDGED');
       await update({ status: 'SENT', providerMessageId: result.messages[0].id, sentAt: new Date().toISOString(), leaseUntil: 0, lastError: '' });
       if (!job.photoRequested && !intake) await agent.handoffStore.rememberProducts(agent.tenantId, customerKey, cards);
@@ -716,11 +697,6 @@ class PdvService {
     const pending = await this.repository.scanPage('pdv_outbox', 'status', 'PENDING');
     const eligible = pending.filter((job) => !(job.nextAttemptAt > Date.now()) && !(job.leaseUntil > Date.now()));
     for (const job of eligible.slice(0, 100)) { await this.deliver(job.id); }
-    // Catalog work shares the official outbox but is not consumed by older/disabled notification workers.
-    if (process.env.WHATSAPP_META_SYNC_ENABLED === 'true') {
-      const catalog = await this.repository.scanPage('pdv_outbox', 'status', 'CATALOG_PENDING');
-      for (const job of catalog.filter(job => job.kind === 'meta-product-sync' && !(job.nextAttemptAt > Date.now()) && !(job.leaseUntil > Date.now())).slice(0, 100)) await this.deliver(job.id);
-    }
   }
 
   async submitFeedback(orderId, input, user) {

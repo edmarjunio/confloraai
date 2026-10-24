@@ -2,7 +2,7 @@ require('../i18n/default');
 const { createHash, randomUUID } = require('node:crypto');
 const { createWebSessions, safeUser } = require('../security/web-session');
 const { StorefrontAnalyticsService, campaignLabel } = require('../services/storefront-analytics.service');
-const { actualProductImages, actualProductPhotoFields, actualPhotoProvenance } = require('../catalog/actual-product-photo');
+const { resolveHdProductImage } = require('../catalog/image-resolver');
 const { getCashierProductDetails } = require('../catalog/cashier-product-details');
 const { normalizeDeliveryLocation } = require('../orders/pdv.service');
 let expressModule = null;
@@ -38,11 +38,62 @@ function withoutIdempotencyFingerprint(order) {
 }
 
 function getProductImageCandidates(product = {}) {
-  return actualProductImages(product);
+  const images = [
+    ...(Array.isArray(product.images) ? product.images : []),
+    ...(Array.isArray(product.imagePaths) ? product.imagePaths : []),
+    product.imageUrl,
+    product.imageurl,
+    product.imageURL,
+    product.image_url,
+    product.imagePathCache,
+    product.imagePath,
+    product.storagePath,
+    product.photoUrl,
+    product.fotoUrl,
+  ]
+    .map((image) => (typeof image === 'string' ? image : image?.url || image?.imageUrl || image?.src || image?.downloadURL || image?.storagePath || image?.fullPath || image?.path || ''))
+    .filter(Boolean);
+  const registeredImages = [...new Set([
+    ...images,
+  ].filter(isRenderableProductImageUrl))];
+  const imageFileId = String(product.imageFileId || product.image_file_id || '').trim();
+  const storageImageProxy = imageFileId
+    ? `/api/images/${encodeURIComponent(imageFileId)}`
+    : '';
+  if (registeredImages.length) {
+    return [...new Set([...registeredImages, storageImageProxy].filter(Boolean))];
+  }
+  if (storageImageProxy) {
+    return [storageImageProxy];
+  }
+
+  const illustrativeImage = resolveHdProductImage(
+    product.name || product.descricao || '',
+    product.category || product.categoria || '',
+    product.subcategory || product.subcategoria || '',
+  );
+  return illustrativeImage ? [illustrativeImage] : [];
+}
+
+function isRenderableProductImageUrl(value) {
+  if (typeof value !== 'string') return false;
+  const source = value.trim();
+  return Boolean(source) && (
+    /^https:\/\/(?:firebasestorage|storage)\.googleapis\.com\//i.test(value.trim()) ||
+    /^https:\/\/images\.unsplash\.com\//i.test(source) ||
+    /^\/api\/images\//i.test(value.trim()) ||
+    /^\/store-assets\//i.test(value.trim()) ||
+    /^gs:\/\/[a-z0-9._-]+\/products\/[a-z0-9_-]+\/[a-z0-9._-]+$/i.test(source) ||
+    /^products\/[a-z0-9_-]+\/[a-z0-9._-]+$/i.test(source)
+  );
 }
 
 function getCashierProductImageCandidates(product = {}) {
-  return actualProductImages(product);
+  return [...new Set(
+    getProductImageCandidates(product)
+      .map((image) => String(image || '').trim())
+      .filter((image) => isRenderableProductImageUrl(image) || /^https:\/\/images\.unsplash\.com\//i.test(image)),
+  )];
 }
 
 const config = require('../config/env');
@@ -216,19 +267,55 @@ function renderTermsOfServiceHtml() {
 </html>`;
 }
 
-async function sendCustomerOrderReceipt(app, order) {
-  const id = order.id + '-receipt';
-  await app.locals.pdv.store.transaction(async tx => {
-    if (await tx.get('pdv_outbox', id)) return;
-    tx.set('pdv_outbox', id, { id, orderId: order.id, kind: 'receipt', status: 'PENDING', attempts: 0 });
-  });
-  await app.locals.pdv.service.deliver(id);
-  const job = await app.locals.pdv.store.read('pdv_outbox', id);
-  return { sent: job?.status === 'SENT' && !job.skipped, reason: job?.lastError || '' };
+function whatsappCustomerPhone(phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  return digits && !digits.startsWith('55') && digits.length <= 11
+    ? `55${digits}`
+    : digits;
+}
+
+async function sendCustomerOrderReceipt(whatsappClient, phone, receiptText) {
+  const targetPhone = whatsappCustomerPhone(phone);
+  if (!/^\d{12,15}$/.test(targetPhone)) {
+    return { sent: false, reason: 'invalid_or_missing_customer_phone_number'.tr };
+  }
+  const template = config.whatsapp.templates.customerOrder;
+  if (!template) {
+    return { sent: false, reason: 'configure_an_approved_whatsapp_receipt_template'.tr };
+  }
+  try {
+    const result = await whatsappClient.sendTemplate(
+      targetPhone,
+      template,
+      config.whatsapp.templates.language,
+      [
+        {
+          type: 'body',
+          parameters: [{ type: 'text', text: receiptText }],
+        },
+      ],
+    );
+    if (result?.mock || result?.success === false) {
+      return { sent: false, reason: 'whatsapp_without_valid_credentials_or_unconfirmed_sending'.tr };
+    }
+    return { sent: true };
+  } catch (error) {
+    Logger.error('failed_to_send_order_receipt_via_whatsapp'.tr, error);
+    return { sent: false, reason: 'could_not_send_receipt_via_whatsapp'.tr };
+  }
 }
 
 async function prepareSicrediCheckoutOrder({ app, sicrediClient, taskQueueClient, order }) {
-  if (order.paymentMethod !== 'PIX' || order.pixMode === 'MANUAL') return { order, receiptDelivery: await sendCustomerOrderReceipt(app, order) };
+  if (order.paymentMethod !== 'PIX' || order.pixMode === 'MANUAL') {
+    const id = `${order.id}-receipt`;
+    await app.locals.pdv.store.transaction(async (tx) => {
+      if (await tx.get('pdv_outbox', id)) return;
+      tx.set('pdv_outbox', id, { id, orderId: order.id, kind: 'receipt', status: 'PENDING', attempts: 0 });
+    });
+    await app.locals.pdv.service.deliver(id);
+    const job = await app.locals.pdv.store.read('pdv_outbox', id);
+    return { order, receiptDelivery: { sent: job?.status === 'SENT' && !job.skipped, reason: job?.lastError || '' } };
+  }
   if (order.pixProvider !== 'SICREDI' || !order.pixData?.txid) {
     return { order, receiptDelivery: { sent: false, reason: 'pix_order_prior_to_sicredi_integration_do_not_generate_a_new_charge'.tr } };
   }
@@ -411,7 +498,7 @@ function createApp({
   app.use('/api/admin', (req, res, next) => {
     if (req.path === '/auth/login' || (req.path === '/auth/users' && req.method === 'GET')) {return next();}
     if (!req.user) {return res.status(401).json({ error: 'sign_in_to_your_account_249741'.tr });}
-    const cashierRoute = /^(?:\/orders(?:\/manual)?|\/daily-metrics|\/stock\/quick-entry|\/alterations|\/notifications(?:\/[^/]+\/read)?)$/.test(req.path) || /^\/whatsapp\/conversations(?:\/|$)/.test(req.path);
+    const cashierRoute = /^(?:\/orders(?:\/manual)?|\/daily-metrics|\/stock\/quick-entry|\/alterations|\/notifications(?:\/[^/]+\/read)?)$/.test(req.path);
     if (req.user.role !== 'ADMIN' && !(["CAIXA", 'VENDEDOR'].includes(req.user.role) && cashierRoute)) {
       return res.status(403).json({ error: 'unauthorized_access_for_this_profile'.tr });
     }
@@ -535,30 +622,11 @@ function createApp({
     if (body.object !== 'whatsapp_business_account' || !Array.isArray(body.entry)) {
       return res.sendStatus(200);
     }
-    if (!process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || !config.whatsapp.phoneNumberId) {
-      Logger.error('Recebimento WhatsApp bloqueado: configure a conta e o número oficiais antes de aceitar eventos.');
-      return res.sendStatus(503);
-    }
 
     try {
     for (const entry of body.entry) {
       for (const change of entry.changes || []) {
         const value = change.value;
-        if (!['messages', 'smb_message_echoes'].includes(change.field)) {
-          Logger.debug('Evento WhatsApp ignorado: campo sem consumidor neste webhook.', { field: change.field || 'missing' });
-          continue;
-        }
-        if (!process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || entry.id !== process.env.WHATSAPP_BUSINESS_ACCOUNT_ID ||
-            !config.whatsapp.phoneNumberId || value?.metadata?.phone_number_id !== config.whatsapp.phoneNumberId) {
-          Logger.warn('Evento WhatsApp recusado: conta/número não conferem com a configuração.',
-            require('../integrations/whatsapp-diagnostics').eventDiagnostic(entry, change, config));
-          continue;
-        }
-        if (change.field === 'smb_message_echoes') {
-          await require('../services/whatsapp-echo.service').processHumanEcho(messageService.firestoreRepo, value);
-          continue;
-        }
-        if (change.field !== 'messages') continue;
         for (const status of Array.isArray(value?.statuses) ? value.statuses : []) {
           if (!status.id || !['sent', 'delivered', 'read', 'failed'].includes(status.status)) continue;
           if (typeof app.locals.pdv?.store?.recordWhatsAppStatus === 'function') { await app.locals.pdv.store.recordWhatsAppStatus(status); }
@@ -572,25 +640,9 @@ function createApp({
           const messageId = msg.id;
           const isMedia = Boolean(msg.image || msg.document);
           const mediaCaption = msg.image?.caption || msg.document?.caption || '';
-          if (!/^\d{10,15}$/.test(phone || '') || typeof messageId !== 'string' || !messageId.startsWith('wamid.') || messageId.length > 512) continue;
-          const interactiveId = require('../integrations/whatsapp-inbound').normalizeAction(msg);
+          const interactiveId = msg.interactive?.button_reply?.id || msg.interactive?.list_reply?.id || '';
           const buttonText = msg.button?.text || msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || '';
-          let commerceOrder = null;
-          if (msg.type === 'order') {
-            try { commerceOrder = require('../integrations/whatsapp-inbound').normalizeOrder(msg.order); }
-            catch {
-              const rejectedId = incoming.id(messageId);
-              const newRejectedEvent = await incoming.store.transaction(async tx => {
-                if (await tx.get('incoming_messages', rejectedId)) return false;
-                tx.set('incoming_messages', rejectedId, { id: rejectedId, payload: { phone, message: '[CARRINHO_META_INVALIDO]', messageId },
-                  status: 'NEEDS_RECONCILIATION', attempts: 0, lastError: 'INVALID_META_CART', createdAt: new Date().toISOString(), expiresAt: null });
-                return true;
-              });
-              if (newRejectedEvent) await require('../services/conversation-automation').conversationAutomation(messageService.firestoreRepo, phone, { pauseReason: 'invalid_meta_cart', messageId });
-              continue;
-            }
-          }
-          const text = msg.text?.body || buttonText || mediaCaption || (commerceOrder ? '[CARRINHO_META]' : isMedia ? '[COMPROVANTE_ENVIADO]' : '');
+          const text = msg.text?.body || buttonText || mediaCaption || (isMedia ? '[COMPROVANTE_ENVIADO]' : '');
           const customerName = value.contacts?.[0]?.profile?.name || '';
 
           if (!text && !isMedia) {
@@ -599,22 +651,14 @@ function createApp({
 
           systemStatusService.recordWebhookHit(phone);
 
-          if (text.length > 4096 || interactiveId.length > 256) continue;
-          const taskPayload = { phone, message: text, ...(interactiveId ? { interactiveId } : {}), ...(commerceOrder ? { commerceOrder } : {}), customerName, messageId,
-            receivedByRevision: process.env.K_REVISION || process.env.APP_REVISION || 'local' };
+          const taskPayload = { phone, message: text, ...(interactiveId ? { interactiveId } : {}), customerName, messageId };
 
           await incoming.accept(taskPayload);
-          Logger.debug('Evento WhatsApp persistido na inbox.', { eventFingerprint: incoming.id(messageId).slice(0, 12),
-            assistantEnabled: config.whatsapp.assistantEnabled, field: change.field, inputType: msg.type || 'text',
-            revision: process.env.K_REVISION || process.env.APP_REVISION || 'local' });
           if (process.env.NODE_ENV === 'production' && config.whatsapp.assistantEnabled && taskQueueClient) {
             await taskQueueClient.enqueueProcessMessage(taskPayload).catch(error => Logger.warn('message_persisted_queue_will_be_resumed_by_the_worker'.tr, { messageId, error: error.message }));
           }
           // The durable inbox is authoritative even when Cloud Tasks is unavailable.
-          if (process.env.NODE_ENV !== 'production') setImmediate(() => messageService.handleCustomerMessage({ ...taskPayload, ...(!config.whatsapp.assistantEnabled ? { verifyOnly: true } : {}) }).catch(error => {
-            Logger.error('Falha ao processar evento WhatsApp persistido; conferir inbox e reconciliação.', error,
-              { code: 'WHATSAPP_MESSAGE_PROCESSING_FAILED', eventFingerprint: incoming.id(messageId).slice(0, 12), diagnosticCode: error.diagnosticCode || null });
-          }));
+          if (process.env.NODE_ENV !== 'production') setImmediate(() => messageService.handleCustomerMessage({ ...taskPayload, ...(!config.whatsapp.assistantEnabled ? { verifyOnly: true } : {}) }).catch(() => {}));
         }
       }
     }
@@ -653,12 +697,10 @@ function createApp({
         const imageCandidates = getProductImageCandidates(product);
         return {
           ...product,
-          ...actualProductPhotoFields(product),
-          ...require('../catalog/registered-product-content').registeredProductContent(product),
           images: imageCandidates,
           imageUrl: imageCandidates[0] || '',
           imageurl: imageCandidates[0] || '',
-          imageIsIllustrative: false,
+          imageIsIllustrative: /^https:\/\/images\.unsplash\.com\//i.test(imageCandidates[0] || ''),
           imageFallbackUrl: '/store-assets/placeholder.svg',
         };
       });
@@ -738,9 +780,6 @@ function createApp({
 
   // Mantém compatibilidade de URL redirecionando IDs de imagem para o Firebase Storage.
   app.get('/api/images/:id', async (req, res) => {
-    // Stable metadata IDs can change or lose approval. Cache immutable Storage
-    // bytes, never a redirect that could restore a removed/reference photograph.
-    res.setHeader('Cache-Control', 'no-store');
     try {
       const { id } = req.params;
       const photo = await messageService.firestoreRepo.getProductPhoto(id);
@@ -752,16 +791,15 @@ function createApp({
         res.setHeader('Content-Type', contentType);
         return res.status(200).send(Buffer.from(photo.data, 'base64'));
       }
-      const cleanProdId = String(photo?.productId || id.replace(/^img_/, ''));
-      const prod = await messageService.firestoreRepo.getProductById(cleanProdId);
-      const approvedImages = actualProductImages(prod || {});
-      if (photo?.imageUrl && approvedImages.includes(photo.imageUrl)) {
+      if (photo?.imageUrl && photo.imageUrl !== `/api/images/${id}`) {
         // The photo ID can be repointed; only content-hashed URLs are immutable.
-        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
         return res.redirect(302, photo.imageUrl);
       }
-      if (approvedImages[0]) {
-        return res.redirect(approvedImages[0]);
+      const cleanProdId = String(photo?.productId || id.replace(/^img_/, ''));
+      const prod = await messageService.firestoreRepo.getProductById(cleanProdId);
+      if (prod && isRenderableProductImageUrl(prod.imageUrl) && prod.imageUrl.startsWith('https://')) {
+        return res.redirect(prod.imageUrl);
       }
       return res.redirect(302, '/store-assets/placeholder.svg');
     } catch (err) {
@@ -1401,7 +1439,11 @@ function createApp({
       });
       let receiptDelivery = { sent: false, reason: 'shipping_not_requested'.tr };
       if (resolvedPaymentMethod === 'PIX') {
-        receiptDelivery = await sendCustomerOrderReceipt(app, order);
+        receiptDelivery = await sendCustomerOrderReceipt(
+          messageService.whatsappClient,
+          customerPhone,
+          receiptText,
+        );
         if (!receiptDelivery.sent) {
           Logger.warn('manual_pix_sale_created_unable_to_send_receipt_to_customer'.tr, {
             orderId: order.id,
@@ -1525,10 +1567,8 @@ function createApp({
     try {
       const products = await messageService.firestoreRepo.getAllProducts();
       const active = products
-        .filter(p => !require('../catalog/commercial-product').isInternalFinancialProduct(p))
         .filter((p) => String(p.status || p.STATUS || '').trim().toUpperCase() === 'ATIVO')
         .map((p) => {
-          const commercial = require('../catalog/commercial-product').commercialProduct(p);
           const imageCandidates = getCashierProductImageCandidates(p);
           const imageUrl = imageCandidates[0] || '';
           const name = p.name || p.descricao || 'product'.tr;
@@ -1539,7 +1579,7 @@ function createApp({
             id: p.id,
             status: String(p.status || p.STATUS || '').trim().toUpperCase(),
             name,
-            price: commercial.price,
+            price: Number(p.price || p.valor_num || 0),
             stock: Number(p.stockQuantity ?? p.estoque ?? 0),
             unit,
             saleUnit: {
@@ -1554,12 +1594,11 @@ function createApp({
             variation: p.variation || p.variacao || '',
             imageUrl,
             images: imageCandidates,
-            imageFileId: imageUrl ? p.imageFileId || p.image_file_id || '' : '',
-            imageIsIllustrative: false,
-            actualPhotoPending: !imageUrl,
-            imagePathCache: imageUrl,
+            imageFileId: p.imageFileId || p.image_file_id || '',
+            imageIsIllustrative: /^https:\/\/images\.unsplash\.com\//i.test(imageUrl),
+            imagePathCache: p.imagePathCache || '',
             imageFallbackUrl: '/store-assets/placeholder.svg',
-            descriptionAi: require('../catalog/registered-product-content').registeredProductContent(p).description,
+            descriptionAi: p.descriptionAi || p.descricao_ia || '',
             tagsAi: p.tagsAi || p.tags_ia || '',
             details: getCashierProductDetails(p),
           };
@@ -1677,33 +1716,6 @@ function createApp({
   app.post('/api/admin/products', async (req, res) => {
     try {
       const product = req.body;
-      let photoUpdate;
-      if (req.get('X-Product-Photos-Update') === 'true') {
-        const previous = await messageService.firestoreRepo.getProductById(product.id);
-        const allowed = actualProductImages(previous);
-        const selected = product.images;
-        if (!previous || !Array.isArray(selected) || selected.some(url => !allowed.includes(url))) return res.status(400).json({ error: 'Use o upload de fotos reais antes de selecionar imagens do produto.' });
-        // Only explicit reordering/removal of existing attested photos. Price
-        // edits cannot erase unreviewed historical references by accident.
-        if (allowed.length) {
-          const paths = selected.map(url => decodeURIComponent(new URL(url).pathname.split('/o/')[1]));
-          photoUpdate = { images: selected, imageUrl: selected[0] || '', imagePath: paths[0] || '', imagePaths: paths,
-            imageProvenance: { ...previous.imageProvenance, storagePaths: paths } };
-        }
-      }
-      delete product.imageProvenance;
-      delete product.contentProvenance;
-      // Photo writes have their own authenticated upload contract. A masked/old
-      // listing submitted while editing price must never erase stored references.
-      for (const field of ['imageUrl', 'images', 'imagePath', 'imagePaths', 'imagePathCache', 'imageFileId', 'imageIsIllustrative']) delete product[field];
-      if (photoUpdate) Object.assign(product, photoUpdate);
-      if (req.get('X-Product-Content-Confirmed') === 'true') {
-        const allowedContentFields = [...require('../catalog/registered-product-content').detailFields, 'description', 'specifications', 'especificacoes', 'contentSections'];
-        product.contentProvenance = { kind: 'STAFF_CONFIRMED', confirmedBy: req.user.id, confirmedAt: new Date().toISOString(), fields: Object.keys(product).filter(key => allowedContentFields.includes(key)) };
-        if (typeof product.descriptionAi === 'string') product.publicDescription = product.descriptionAi.trim();
-      }
-      const containsPhotoUpload = Boolean(product.photoBase64 || product.photoData || product.photoDoc || product.photosBase64?.length || product.photos?.length);
-      if (containsPhotoUpload) return res.status(400).json({ error: 'Envie fotos reais pelo serviço de upload do produto, com confirmação de origem.' });
       if (Object.hasOwn(product, 'botanical')) {
         product.botanical = require('../agent/plant-search').reviewedBotanical(product.botanical, req.user);
       }
@@ -1724,9 +1736,7 @@ function createApp({
       const { id } = req.params;
       const rawPhoto = Buffer.isBuffer(req.body) ? req.body : null;
       const body = rawPhoto ? {} : (req.body || {});
-      const prod = await messageService.firestoreRepo.getProductById(id);
-      if (!prod) return res.status(404).json({ error: 'Produto não encontrado. Cadastre o produto antes de enviar a foto real.' });
-      if (req.get('X-Photo-Actual-Product') !== 'true' && req.body?.actualProductPhoto !== true) return res.status(400).json({ error: 'Confirme que a foto é do produto real da Conflora. Imagens de referência e geradas não são aceitas.' });
+      const prod = (await messageService.firestoreRepo.getProductById(id)) || { id, name: req.headers['x-product-name'] || 'product'.tr };
 
       const { photoBase64, photosBase64, photos, contentType, maxWidth, maxHeight, quality, format, append } = body;
       const incomingList = rawPhoto
@@ -1743,10 +1753,14 @@ function createApp({
       const { buildOptimizedFirestorePhotoDocument } = require('../catalog/product-photo.service');
       const savedPhotos = [];
       const existingImages = shouldAppend
-        ? actualProductImages(prod)
+        ? (Array.isArray(prod.images) ? [...prod.images] : (prod.imageUrl ? [prod.imageUrl] : []))
         : [];
       const existingImagePaths = shouldAppend
-        ? existingImages.map(url => decodeURIComponent(new URL(url).pathname.split('/o/')[1]))
+        ? existingImages.map((_, index) => (
+          Array.isArray(prod.imagePaths)
+            ? prod.imagePaths[index] || ''
+            : (index === 0 ? prod.imagePath || '' : '')
+        ))
         : [];
       const startIndex = existingImages.length;
 
@@ -1771,7 +1785,6 @@ function createApp({
 
         const storedImage = await messageService.firestoreRepo.uploadProductImage(photoDoc);
         const storedPhoto = { ...photoDoc, ...storedImage };
-        storedPhoto.provenance = actualPhotoProvenance(req.user, [storedImage.imagePath]);
         await messageService.firestoreRepo.saveProductPhoto(storedPhoto);
         savedPhotos.push(storedPhoto);
       }
@@ -1793,8 +1806,6 @@ function createApp({
         imagePaths: allImages.map((image) => image.path),
         images: allImages.map((image) => image.url),
         imageFileId: primaryPhoto.id,
-        imageIsIllustrative: false,
-        imageProvenance: actualPhotoProvenance(req.user, allImages.map(image => image.path)),
         imagePathCache: allImages[0]?.url || primaryPhoto.imageUrl,
         tagsAi: primaryPhoto.tagsAi,
         tags_ia: primaryPhoto.tagsAi,
@@ -1803,7 +1814,7 @@ function createApp({
         updatedAt: new Date().toISOString(),
       };
 
-      await messageService.firestoreRepo.saveProduct(updatedProduct, { expectedImageUrl: prod.imageUrl });
+      await messageService.firestoreRepo.saveProduct(updatedProduct);
 
       if (messageService.catalogRepo) {
         messageService.catalogRepo.invalidateCache?.();
@@ -1845,15 +1856,11 @@ function createApp({
   app.get('/api/products/:id/photos', async (req, res) => {
     try {
       const { id } = req.params;
-      const product = await messageService.firestoreRepo.getProductById(id);
-      const approvedImages = actualProductImages(product || {});
-      const photos = approvedImages.length ? await messageService.firestoreRepo.getProductPhotos(id) : [];
-      const metadata = photos.filter(photo => approvedImages.includes(photo.imageUrl)).map((photo) => {
+      const photos = await messageService.firestoreRepo.getProductPhotos(id);
+      const metadata = photos.map((photo) => {
         const safePhoto = { ...photo };
-        Object.assign(safePhoto, require('../catalog/registered-product-content').registeredProductContent(product));
         delete safePhoto.data;
         delete safePhoto.dataUrl;
-        delete safePhoto.provenance;
         return safePhoto;
       });
       res.status(200).json({ success: true, count: metadata.length, photos: metadata });
@@ -2190,7 +2197,11 @@ function createApp({
       let receiptDelivery = { sent: false, reason: 'shipping_not_requested'.tr };
       const orderWithReceipt = { ...order, receiptText };
       if (isPix) {
-        receiptDelivery = await sendCustomerOrderReceipt(app, order);
+        receiptDelivery = await sendCustomerOrderReceipt(
+          messageService.whatsappClient,
+          approval.customerPhone,
+          receiptText,
+        );
         if (!receiptDelivery.sent) {
           Logger.warn('discount_approved_unable_to_send_pix_receipt_to_customer'.tr, {
             orderId: order.id,

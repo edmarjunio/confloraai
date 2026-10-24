@@ -53,7 +53,7 @@ test('incremental FinOps load: web checkouts, navigation/search and WhatsApp at 
     const inbox = new IncomingMessageService(repo);
     await batches(salesPerDay * 2, 20, async i => {
       const messageId = `wamid.isolated-${i}`;
-      await inbox.accept({ messageId, phone: `5564${String(i).padStart(9, '0')}`, message: 'consulta de produto de teste' });
+      await inbox.accept({ messageId, phone: '5564999990000', message: 'consulta de produto de teste' });
       const claim = await inbox.claim(messageId); await inbox.finish(claim);
       assert.equal((await inbox.claim(messageId)).completed, true);
     });

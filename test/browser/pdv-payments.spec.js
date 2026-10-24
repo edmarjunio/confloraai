@@ -57,20 +57,11 @@ test('caixa divide pagamento e pode encaminhar uma comanda Pix sem emitir cobran
 
 test('quadro permite apenas avançar etapas e abre recebimento ao arrastar para pagos', async ({ page }) => {
   const customerName = 'Arrastar Teste ' + require('node:crypto').randomUUID().slice(0, 8);
-  await page.setViewportSize({ width: 2800, height: 1000 });
+  await page.setViewportSize({ width: 1600, height: 1000 });
   expect((await page.request.post('/api/admin/auth/login', { data: { userId: 'usr-caixa1', pin: '0000' } })).ok()).toBe(true);
   await ensureCashierSession(page);
   const creation = await page.request.post('/api/caixa/orders', { data: { requestId: require('node:crypto').randomUUID(), items: [{ productId: 'test-plant', quantity: 1 }], paymentMethod: 'DINHEIRO', deferToCashier: true, customerName } });
   expect(creation.ok()).toBe(true); const { order } = await creation.json();
-  // Isolate this gesture from records created by earlier specs on the shared
-  // test server. Movement/payment still hit the real isolated backend services.
-  await page.route(url => url.pathname === '/api/caixa/orders', async route => {
-    const response = await route.fetch(); const data = await response.json();
-    for (const key of ['pendingConfirmation', 'pendingPayment', 'awaitingDriver', 'outForDelivery', 'paid', 'confirmed', 'history', 'procurementOrders']) {
-      if (Array.isArray(data[key])) data[key] = data[key].filter(row => row.id === order.id);
-    }
-    await route.fulfill({ response, json: data });
-  });
   await page.goto('/pdv'); await expect(page.getByPlaceholder('Nome, categoria ou descrição (Ex.: plantas de sombra, plantas para jardim, flores, e etc)')).toBeVisible(); await page.keyboard.press('F2');
   const payment = page.getByRole('region', { name: 'ESPERANDO PAGAMENTO', exact: true });
   const paid = page.getByRole('region', { name: 'PAGOS / FINALIZADOS', exact: true });
@@ -79,11 +70,10 @@ test('quadro permite apenas avançar etapas e abre recebimento ao arrastar para 
   const dialog = page.getByRole('dialog', { name: `Comanda #${order.ticketNumber}` });
   await expect(card(payment)).toHaveCSS('background-color', 'rgb(189, 221, 255)');
   await card(payment).scrollIntoViewIfNeeded();
+  const sourceBounds = await card(payment).boundingBox();
   const targetBounds = await paid.boundingBox();
   const move = page.waitForResponse(response => response.url().endsWith('/api/caixa/orders/' + order.id + '/move'));
-  // Drop inside the target column, independent of the source card's position
-  // in a shared test board that already contains earlier completed orders.
-  await card(payment).dragTo(paid, { targetPosition: { x: targetBounds.width / 2, y: 80 } });
+  await card(payment).dragTo(paid, { targetPosition: { x: targetBounds.width / 2, y: sourceBounds.y - targetBounds.y + sourceBounds.height / 2 } });
   expect((await (await move).json()).order).toMatchObject({ id: order.id, ticketNumber: order.ticketNumber });
   await expect(dialog.getByRole('heading', { name: 'Receber no caixa' })).toBeVisible();
   await dialog.getByLabel('Valor nesta forma de pagamento (R$)').fill('10');

@@ -1,8 +1,10 @@
+const config = require('../config/env');
 const { randomUUID, createHash } = require('node:crypto');
 const { commercialLine } = require('../catalog/commercial-product');
 const { pixMode, manualPixSettings } = require('./pix-mode');
 const { formatOrderReceipt } = require('./receipt.util');
 const { formatCurrency, normalizeText } = require('../shared/string.util');
+const Logger = require('../shared/logger');
 
 const ORDER_STATUS = Object.freeze({
   DISCOVERY: 'DISCOVERY',
@@ -213,6 +215,38 @@ class OrderService {
       ? '\n\nPedido registrado. O pagamento permanece pendente até a confirmação financeira da loja.' : '') };
   }
 
+  /**
+   * Envia o recibo fechado diretamente para o WhatsApp do proprietário.
+   * @param {Object} order
+   * @param {string} customerName
+   */
+  async notifyOwner(order, customerName = '') {
+    const ownerNumber = config.whatsapp.ownerNumber;
+    if (!ownerNumber || !this.whatsappClient) {
+      return;
+    }
+
+    const itemsText = order.items
+      .map((item) => `• ${item.quantity}x ${item.name} (${formatCurrency(item.price)} un) = ${formatCurrency(item.subtotal)}`)
+      .join('\n');
+
+    const notificationText = (
+      `🔔 *NOVO PEDIDO FECHADO - CONFLORA* 🔔\n\n` +
+      `👤 *Cliente:* ${customerName || order.phone}\n` +
+      `📱 *WhatsApp:* ${order.phone}\n\n` +
+      `📋 *Itens do Pedido:*\n` +
+      `${itemsText}\n\n` +
+      `💰 *Valor Total:* ${formatCurrency(order.total)}\n` +
+      `📍 *Endereço de Entrega:* ${order.deliveryAddress || 'A combinar / Retirada'}\n` +
+      `💳 *Forma de Pagamento:* ${order.paymentMethod || 'PIX'}`
+    );
+
+    await this.whatsappClient.sendTextMessage(ownerNumber, notificationText);
+    Logger.info(`Notificação de novo pedido enviada com sucesso para o proprietário: ${ownerNumber}`);
+  }
 }
 
-module.exports = { ORDER_STATUS, OrderService };
+module.exports = {
+  ORDER_STATUS,
+  OrderService,
+};

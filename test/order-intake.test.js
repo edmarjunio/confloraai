@@ -228,27 +228,22 @@ test('a quantity answer completes an already accepted mixed request without drop
   assert.deepEqual(saved.items.map(item => item.fulfillment), ['IMMEDIATE', 'PROCUREMENT']);
 });
 
-test('main intake registers permitted unknown items only after consent, with durable duplicate suppression', async () => {
+test('legacy intake registers unknown items after the customer selected a conversation channel', async () => {
   const { repo } = fixture();
   const sent = [];
   const { MessageService } = require('../src/services/message.service');
-  const send = async (_phone, text) => { sent.push(text); return { messages: [{ id: 'wamid.' + sent.length }] }; };
-  const service = new MessageService({ firestoreRepo: repo, whatsappClient: { sendTextMessage: send, sendInteractiveButtons: (to, body) => send(to, body.bodyText) } });
-  const inbox = new (require('../src/services/incoming-message.service').IncomingMessageService)(repo);
-  const deliver = async (message, messageId) => {
-    const payload = { phone, message, messageId, customerName: 'Cliente' };
-    await inbox.accept(payload);
-    return service.handleCustomerMessage(payload);
-  };
-  const offer = await deliver('Quero 2 vasos autoirrigáveis e 3 lavandas', 'offer');
-  assert.equal(offer.intent, 'SALES_AGENT');
-  assert.match(offer.reply, /2 vasos autoirrigáveis/);
-  assert.match(offer.reply, /3 lavandas/);
-  assert.equal(repo.inMemoryOrders.size, 0);
-  const registered = await deliver('Pode registrar', 'confirm');
-  assert.equal(registered.intent, 'SALES_AGENT');
-  assert.match(sent.at(-1), /Solicitação de procura registrada, sem compra ou cobrança/);
-  const duplicate = await deliver('Pode registrar', 'confirm');
+  const service = new MessageService({ firestoreRepo: repo, whatsappClient: { sendTextMessage: async (_phone, text) => {
+    sent.push(text); return { messages: [{ id: 'wamid.' + sent.length }] };
+  } } });
+  await require('../src/services/conversation-automation').setConversationChannel(repo, phone, 'catalog');
+  const offer = await service.handleCustomerMessage({ phone, message: 'Quero 2 galos combatentes e 3 galinhas da angola', messageId: 'offer', customerName: 'Cliente' });
+  assert.equal(offer.intent, 'ORDER_INTAKE_CONFIRM');
+  assert.match(offer.reply, /2 galos combatentes e 3 galinhas da angola/);
+  const registered = await service.handleCustomerMessage({ phone, message: 'Pode registrar', messageId: 'confirm', customerName: 'Cliente' });
+  assert.equal(registered.intent, 'ORDER_INTAKE_REGISTERED');
+  assert.match(sent.at(-1), /Pedido registrado/);
+  assert.ok(sent.at(-1).split(/\s+/).length < 20);
+  const duplicate = await service.handleCustomerMessage({ phone, message: 'Pode registrar', messageId: 'confirm', customerName: 'Cliente' });
   assert.equal(duplicate.intent, 'DUPLICATE');
   assert.equal(sent.length, 2);
 });

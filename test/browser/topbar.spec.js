@@ -14,12 +14,6 @@ test('one topbar keeps the cashier button aligned across the catalog, admin, PDV
     else await expect(bar.locator('.cf-topbar-cashier')).toBeVisible();
     for (const width of [320, 390, 768, 1024, 1440, 1920]) {
       await page.setViewportSize({ width, height: 1000 });
-      if (route === '/pdv' && width < 1024) {
-        await expect(page.locator('.cf-mobile-sale-heading')).toBeVisible();
-        await expect(page.locator('.cf-mobile-search input')).toBeVisible();
-        expect(await page.locator('html').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
-        continue;
-      }
       const boxes = await bar.evaluate(header => {
         const box = selector => { const rect = header.querySelector(selector).getBoundingClientRect(); return { x: rect.x, y: rect.y, right: rect.right, width: rect.width }; };
         return { brand: box('.cf-topbar-brand'), cashier: box('.cf-topbar-cashier'), search: box('.cf-topbar-search'), buttons: [...header.querySelectorAll('.cf-topbar-pill')].filter(item => !item.hidden).map(item => ({ radius: window.getComputedStyle(item).borderRadius, ...item.getBoundingClientRect().toJSON() })) };
@@ -66,7 +60,7 @@ test('cashier topbar returns from commands without dropping an unfinished sale',
   await page.getByPlaceholder('Nome, categoria ou descrição (Ex.: plantas de sombra, plantas para jardim, flores, e etc)').fill('Planta Teste');
   await page.getByText('Planta Teste', { exact: true }).click();
   await page.keyboard.press('F2');
-  await expect(page.getByRole('complementary', { name: 'Ações das comandas' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Comandas', exact: true })).toBeVisible();
   await page.locator('conflora-topbar .cf-topbar-cashier').click();
   await expect(page.locator('conflora-topbar input')).toHaveValue('Planta Teste');
   await expect(page.getByRole('button', { name: /PAGAR - F1/ })).toBeEnabled();

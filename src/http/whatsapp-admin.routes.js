@@ -1,14 +1,7 @@
 const { customerKeyFor } = require('../agent/agent-store');
-const { createHash } = require('node:crypto');
+const { randomUUID } = require('node:crypto');
 
 function installWhatsappAdminRoutes(app, { whatsapp, store }) {
-  app.use('/api/admin/whatsapp', (req, res, next) => {
-    res.set('Cache-Control', 'private, no-store');
-    if (!req.user || !['ADMIN', 'CAIXA', 'VENDEDOR'].includes(req.user.role)) return res.sendStatus(403);
-    const phone = req.path.match(/^\/conversations\/([^/]+)/)?.[1];
-    if (phone && !/^\d{10,15}$/.test(phone)) return res.status(400).json({ error: 'Telefone inválido.' });
-    next();
-  });
   app.post('/api/admin/whatsapp/verify', async (_req, res) => {
     if (process.env.NODE_ENV === 'test') return res.status(409).json({ error: 'Conexões reais desativadas nos testes.' });
     try {
@@ -31,18 +24,33 @@ function installWhatsappAdminRoutes(app, { whatsapp, store }) {
       const limit = Math.min(25, Math.max(1, Number.parseInt(req.query.limit, 10) || 25));
       const cursor = String(req.query.cursor || '');
 
-      const { items: conversations, nextCursor } = await store.page('agent_conversations', 'tenantId', 'conflora', { limit, cursor });
+      let conversations = [];
+      try {
+        conversations = await store.scanPage('agent_conversations', 'tenantId', 'conflora', 100);
+      } catch {
+        conversations = [];
+      }
 
       // Filtragem no backend
-      const filtered = conversations.filter(c => {
-        if (filter === 'needs_vendor') return c.automation === 'paused';
+      let filtered = conversations.filter(c => {
+        if (filter === 'needs_vendor') return c.automation === 'paused' && c.reason === 'needs_vendor';
         if (filter === 'awaiting_pix') return c.paymentStatus === 'AWAITING_PIX';
         if (filter === 'completed') return c.status === 'COMPLETED';
         if (filter === 'closed_no_sale') return c.status === 'CLOSED_NO_SALE';
         return c.status !== 'CLOSED' && c.status !== 'CLOSED_NO_SALE';
       });
 
-      const page = filtered;
+      // Ordenação determinística por data
+      filtered.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+
+      // Cursor real
+      if (cursor) {
+        const idx = filtered.findIndex(c => c.id === cursor);
+        if (idx !== -1) filtered = filtered.slice(idx + 1);
+      }
+
+      const page = filtered.slice(0, limit);
+      const nextCursor = page.length === limit ? page[page.length - 1].id : null;
 
       res.json({
         success: true,
@@ -52,7 +60,7 @@ function installWhatsappAdminRoutes(app, { whatsapp, store }) {
         isTotalExact: false,
       });
     } catch (error) {
-      res.status(error.status || 500).json({ error: error.message });
+      res.status(500).json({ error: error.message });
     }
   });
 
@@ -64,12 +72,15 @@ function installWhatsappAdminRoutes(app, { whatsapp, store }) {
     try {
       const rawPhone = String(req.params.phone || '').replace(/\D/g, '');
       const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 25));
-      const page = await store.page('incoming_messages', 'payload.phone', rawPhone, { limit, cursor: String(req.query.cursor || '') });
-      const manual = await store.page('whatsapp_delivery', 'phone', rawPhone, { limit, cursor: String(req.query.manualCursor || '') });
-      const messages = [...page.items, ...manual.items].sort((a, b) => (a.createdAt || a.sentAt || '').localeCompare(b.createdAt || b.sentAt || ''));
-      res.json({ success: true, messages, nextCursor: page.nextCursor, manualCursor: manual.nextCursor });
+      let messages = [];
+      try {
+        messages = await store.scanPage('incoming_messages', 'payload.phone', rawPhone, limit);
+      } catch {
+        messages = [];
+      }
+      res.json({ success: true, messages });
     } catch (error) {
-      res.status(error.status || 500).json({ error: error.message });
+      res.status(500).json({ error: error.message });
     }
   });
 
@@ -105,7 +116,6 @@ function installWhatsappAdminRoutes(app, { whatsapp, store }) {
           ...current,
           tenantId: 'conflora',
           customerKey,
-          customerPhone: rawPhone,
           automation: 'paused',
           pausedAt: current.pausedAt || now,
           reason: 'human_takeover',
@@ -123,7 +133,7 @@ function installWhatsappAdminRoutes(app, { whatsapp, store }) {
       }
       res.json(result);
     } catch (error) {
-      res.status(error.status || 500).json({ error: error.message });
+      res.status(500).json({ error: error.message });
     }
   });
 
@@ -135,10 +145,10 @@ function installWhatsappAdminRoutes(app, { whatsapp, store }) {
     try {
       const rawPhone = String(req.params.phone || '').replace(/\D/g, '');
       const { resumeAgentRequestedConversation } = require('../services/conversation-automation');
-      const updated = await resumeAgentRequestedConversation(store.repository, rawPhone, req.user);
+      const updated = await resumeAgentRequestedConversation(store.repository, rawPhone);
       res.json({ success: true, conversation: updated });
     } catch (error) {
-      res.status(error.status || 500).json({ error: error.message });
+      res.status(500).json({ error: error.message });
     }
   });
 
@@ -154,13 +164,11 @@ function installWhatsappAdminRoutes(app, { whatsapp, store }) {
       await store.transaction(async tx => {
         const id = `conflora__${customerKey}`;
         const current = await tx.get('agent_conversations', id) || { tenantId: 'conflora', customerKey };
-        if (current.assignedTo && current.assignedTo.id !== req.user.id && req.user.role !== 'ADMIN') throw Object.assign(new Error('Atendimento atribuído a outro operador.'), { status: 409 });
-        tx.set('agent_conversations', id, { ...current, customerPhone: rawPhone, status, automation: 'paused', reason: 'human_closed',
-          version: Number(current.version || 0) + 1, pausedAt: new Date().toISOString(), closedAt: new Date().toISOString(), closedBy: req.user.id });
+        tx.set('agent_conversations', id, { ...current, status, closedAt: new Date().toISOString(), closedBy: req.user.id });
       });
       res.json({ success: true, status });
     } catch (error) {
-      res.status(error.status || 500).json({ error: error.message });
+      res.status(500).json({ error: error.message });
     }
   });
 
@@ -172,134 +180,29 @@ function installWhatsappAdminRoutes(app, { whatsapp, store }) {
     try {
       const rawPhone = String(req.params.phone || '').replace(/\D/g, '');
       const text = String(req.body?.text || '').trim();
-      if (!text || text.length > 4096) return res.status(400).json({ error: 'Informe uma mensagem com até 4096 caracteres.' });
+      if (!text) return res.status(400).json({ error: 'Texto da mensagem não pode ser vazio.' });
       if (!whatsapp?.sendTextMessage) return res.status(503).json({ error: 'WhatsApp oficial não configurado.' });
 
-      // Pause before transport; sending without client-side composition protection still claims ownership.
-      await store.transaction(async tx => {
-        const id = `conflora__${customerKeyFor('conflora', rawPhone)}`;
-        const current = await tx.get('agent_conversations', id) || { tenantId: 'conflora', customerKey: customerKeyFor('conflora', rawPhone) };
-        if (current.assignedTo && current.assignedTo.id !== req.user.id) throw Object.assign(new Error('Atendimento atribuído a outro operador.'), { status: 409 });
-        tx.set('agent_conversations', id, { ...current, customerPhone: rawPhone, automation: 'paused', reason: 'human_takeover',
-          assignedTo: { id: req.user.id, name: req.user.name || req.user.id, role: req.user.role }, version: Number(current.version || 0) + 1, updatedAt: new Date().toISOString() });
-      });
-      const requestId = String(req.body?.requestId || '');
-      if (!/^[a-zA-Z0-9-]{16,80}$/.test(requestId)) return res.status(400).json({ error: 'Identificador único do envio obrigatório.' });
-      const deliveryId = createHash('sha256').update(`manual_${rawPhone}_${requestId}`).digest('hex');
-      const claim = await store.transaction(async tx => {
-        const previous = await tx.get('whatsapp_delivery', deliveryId);
-        if (previous) return previous;
-        tx.set('whatsapp_delivery', deliveryId, { id: deliveryId, phone: rawPhone, text, status: 'SENDING', createdAt: new Date().toISOString(), sentBy: { id: req.user.id, name: req.user.name || req.user.id } });
-        return null;
-      });
-      if (claim?.text !== undefined && (claim.text !== text || claim.sentBy.id !== req.user.id)) return res.sendStatus(409);
-      if (claim) return res.status(claim.status === 'SENT' ? 200 : 409).json({ success: claim.status === 'SENT', messageId: claim.providerMessageId, status: claim.status });
-      let result;
-      try {
-        const ownership = await store.read('agent_conversations', `conflora__${customerKeyFor('conflora', rawPhone)}`);
-        if (ownership?.automation !== 'paused' || ownership?.assignedTo?.id !== req.user.id) throw Object.assign(new Error('A posse do atendimento mudou antes do envio.'), { status: 409, definitelyNotSent: true });
-        result = await whatsapp.sendTextMessage(rawPhone, text);
-      }
-      catch (error) {
-        await store.transaction(async tx => {
-          const current = await tx.get('whatsapp_delivery', deliveryId);
-          tx.set('whatsapp_delivery', deliveryId, { ...current, status: 'NEEDS_RECONCILIATION', lastError: error.definitelyNotSent ? 'NOT_SUBMITTED' : 'UNKNOWN_PROVIDER_OUTCOME' });
-        });
-        throw error;
-      }
-      const msgId = result?.messages?.[0]?.id;
-      if (!msgId || result.mock) throw new Error('A Meta não confirmou o envio; conciliação necessária.');
+      const result = await whatsapp.sendTextMessage(rawPhone, text);
+      const msgId = result?.messages?.[0]?.id || `out_${randomUUID()}`;
 
       // Gravar outbox / histórico de envios
       await store.transaction(async tx => {
-        const id = deliveryId;
+        const id = store.id(`outbox_${msgId}`);
         tx.set('whatsapp_delivery', id, {
           id,
           phone: rawPhone,
-          providerMessageId: msgId,
           text,
           status: 'SENT',
-          sentBy: { id: req.user.id, name: req.user.name || req.user.id },
+          sentBy: { id: req.user.id, name: req.user.name },
           sentAt: new Date().toISOString(),
         });
       });
 
       res.json({ success: true, messageId: msgId });
     } catch (error) {
-      res.status(error.status || 500).json({ error: error.message });
+      res.status(500).json({ error: error.message });
     }
-  });
-
-  app.post('/api/admin/whatsapp/conversations/:phone/reset-test-context', async (req, res) => {
-    if (req.user.role !== 'ADMIN') return res.sendStatus(403);
-    const phone = req.params.phone;
-    if (!process.env.WHATSAPP_TEST_PHONE || phone !== process.env.WHATSAPP_TEST_PHONE || req.body?.confirm !== 'RESET_CONVERSATION_CONTEXT') return res.sendStatus(409);
-    try {
-      const result = await require('../services/conversation-automation').resetConversationContext(store.repository, phone, req.user);
-      res.json(result);
-    } catch { res.sendStatus(503); }
-  });
-
-  app.post('/api/admin/whatsapp/catalog/authorize-sync', async (req, res) => {
-    if (req.user.role !== 'ADMIN' || req.body?.authorizeInitialSync !== true || !/^\d+$/.test(req.body?.catalogId || '') || req.body.catalogId !== process.env.WHATSAPP_META_CATALOG_ID) return res.sendStatus(403);
-    await store.transaction(async tx => {
-      const current = await tx.get('store_settings', 'whatsapp_commerce') || {};
-      tx.set('store_settings', 'whatsapp_commerce', { ...current, catalogId: req.body.catalogId, enabled: true,
-        initialSyncAuthorizedAt: current.initialSyncAuthorizedAt || new Date().toISOString(), authorizedBy: req.user.id });
-    });
-    res.json({ authorized: true, queued: 0 });
-  });
-  app.post('/api/admin/whatsapp/catalog/products/:id/review', async (req, res) => {
-    if (req.user.role !== 'ADMIN' || typeof req.body?.approved !== 'boolean' || !/^[a-zA-Z0-9_-]{1,180}$/.test(req.params.id)) return res.sendStatus(403);
-    try {
-      const product = await store.repository.getProductById(req.params.id);
-      if (!product) return res.sendStatus(404);
-      const { restrictedProduct, MetaCatalogSyncService, policyIdentity, internalProduct } = require('../services/meta-catalog-sync.service');
-      if (req.body.approved && (internalProduct(product) || require('../shared/string.util').normalizeText(product.category || '') === 'pets')) return res.status(409).json({ error: 'Item interno ou categoria não habilitada para publicação.' });
-      if (req.body.approved && (req.body.category !== 'PERMITTED_PLANT_OR_GARDEN_PRODUCT' || !String(req.body.policyVersion || '').trim() || String(req.body.policyVersion).length > 120 || restrictedProduct(product))) return res.status(409).json({ error: 'Revise a política e a elegibilidade real da categoria antes de aprovar.' });
-      await store.repository.saveProduct({ id: product.id, metaCommerceReview: { approved: req.body.approved, reviewedBy: req.user.id,
-        reviewedAt: new Date().toISOString(), productIdentity: policyIdentity(product), policyVersion: String(req.body.policyVersion || '').trim().slice(0, 120), category: req.body.approved ? req.body.category : 'NOT_APPROVED' } });
-      await new MetaCatalogSyncService(store.repository).queue(product.id, req.user);
-      res.json({ reviewed: true, approved: req.body.approved, publicationPending: true });
-    } catch { res.sendStatus(503); }
-  });
-  app.post('/api/admin/whatsapp/catalog/sync', async (req, res) => {
-    if (req.user.role !== 'ADMIN' || !Array.isArray(req.body?.productIds) || !req.body.productIds.length || req.body.productIds.length > 50) return res.sendStatus(403);
-    try {
-      const sync = new (require('../services/meta-catalog-sync.service').MetaCatalogSyncService)(store.repository);
-      const ids = [];
-      for (const id of new Set(req.body.productIds)) ids.push(await sync.queue(id, req.user));
-      res.json({ queued: ids });
-    } catch { res.sendStatus(400); }
-  });
-  app.post('/api/admin/whatsapp/catalog/pause-sync', async (req, res) => {
-    if (req.user.role !== 'ADMIN' || req.body?.pause !== true) return res.sendStatus(403);
-    await store.transaction(async tx => {
-      const current = await tx.get('store_settings', 'whatsapp_commerce') || {};
-      tx.set('store_settings', 'whatsapp_commerce', { ...current, enabled: false, pausedBy: req.user.id, pausedAt: new Date().toISOString() });
-    });
-    res.json({ paused: true });
-  });
-  app.get('/api/admin/whatsapp/operations', async (req, res) => {
-    if (req.user.role !== 'ADMIN') return res.sendStatus(403);
-    const collection = req.query.source === 'inbox' ? 'incoming_messages' : 'pdv_outbox';
-    const status = ['NEEDS_RECONCILIATION', 'BLOCKED_CONFIGURATION', 'RETRYABLE', 'SKIPPED'].includes(req.query.status) ? req.query.status : 'NEEDS_RECONCILIATION';
-    try {
-      res.json(await store.page(collection, 'status', status, { limit: 25, cursor: String(req.query.cursor || '') }));
-    } catch { res.sendStatus(503); }
-  });
-  app.post('/api/admin/whatsapp/operations/:id/resolve', async (req, res) => {
-    if (req.user.role !== 'ADMIN' || req.body?.resolvedByTeam !== true || !/^[a-zA-Z0-9_-]{1,180}$/.test(req.params.id) || String(req.body.note || '').trim().length < 8) return res.sendStatus(403);
-    const collection = req.body.source === 'inbox' ? 'incoming_messages' : 'pdv_outbox';
-    try {
-      await store.transaction(async tx => {
-        const current = await tx.get(collection, req.params.id);
-        if (!current || current.leaseUntil > Date.now() || !['NEEDS_RECONCILIATION', 'BLOCKED_CONFIGURATION', 'RETRYABLE', 'SKIPPED'].includes(current.status)) throw new Error('Operação não conciliável.');
-        tx.set(collection, req.params.id, { ...current, status: collection === 'incoming_messages' ? 'COMPLETED' : 'SKIPPED',
-          completedAt: new Date().toISOString(), resolvedBy: req.user.id, resolutionNote: String(req.body.note).trim().slice(0, 500), leaseUntil: 0, expiresAt: null });
-      });
-      res.json({ resolved: true, resent: false });
-    } catch { res.sendStatus(409); }
   });
 }
 module.exports = { installWhatsappAdminRoutes };

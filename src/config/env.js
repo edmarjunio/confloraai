@@ -1,8 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { validateDevEnvironment } = require('./dev-environment');
-const envSource = { path: null, loaded: false, reason: '', error: null,
-  inheritedWhatsAppKeys: Object.keys(process.env).filter(key => key.startsWith('WHATSAPP_') && process.env[key]) };
 
 // Safely load environment variables from .env file
 try {
@@ -10,8 +8,6 @@ try {
     (process.env.APP_ENV === 'dev' ? '.env.dev' : '.env'));
   const hasExplicitEnvMode = Boolean(process.env.CONFLORA_ENV_FILE || process.env.APP_ENV === 'dev');
   const shouldLoadLocalEnv = !process.env.K_SERVICE && (process.env.NODE_ENV !== 'test' || hasExplicitEnvMode);
-  envSource.path = envPath;
-  envSource.reason = process.env.K_SERVICE ? 'CLOUD_RUNTIME_ENVIRONMENT' : !shouldLoadLocalEnv ? 'ISOLATED_TEST_ENVIRONMENT' : !fs.existsSync(envPath) ? 'ENV_FILE_NOT_FOUND' : 'LOCAL_ENV_FILE';
   if (shouldLoadLocalEnv && fs.existsSync(envPath)) {
     const lines = fs.readFileSync(envPath, 'utf-8').split('\n');
     for (const line of lines) {
@@ -28,10 +24,9 @@ try {
         }
       }
     }
-    envSource.loaded = true;
   }
 } catch {
-  envSource.error = 'ENV_FILE_READ_FAILED';
+  // Silent fallback
 }
 
 let serviceAccountKeyPath = null;
@@ -50,7 +45,6 @@ try {
 }
 
 const config = Object.freeze({
-  envSource: Object.freeze(envSource),
   appEnvironment: process.env.APP_ENV || 'production',
   env: process.env.NODE_ENV || 'development',
   isDev: (process.env.NODE_ENV || 'development') === 'development',

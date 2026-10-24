@@ -1,5 +1,5 @@
 const fs = require('node:fs');
-const { TAXON_MAPPING } = require('./catalog-breed-taxon-map');
+const { normalizeKey, LOCAL_BREED_PHOTOS, TAXON_MAPPING } = require('./catalog-breed-taxon-map');
 
 // Complete scientific taxon mapping for all botanical, produce, and natural products
 // Format: [iNatQuery, photoIndex, scientificName, cultivarOrVarietyNote]
@@ -468,7 +468,7 @@ const BOTANICAL_TAXA = {
             fetched++;
           }
         }
-      } catch {
+      } catch (err) {
         // ignore transient error
       }
     }));

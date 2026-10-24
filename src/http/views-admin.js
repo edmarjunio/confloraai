@@ -733,7 +733,6 @@ function renderAdminHtml(storeConfig) {
               <div style="font-size:12px; font-weight:bold; color:#14532d;">📸 Galeria de Fotos (<span id="formProdPhotoCount">0</span> foto(s)):</div>
               <button type="button" onclick="clearAllPendingPhotos()" style="font-size:11px; background:none; border:none; color:#ef4444; cursor:pointer; text-decoration:underline;">Limpar todas as fotos</button>
             </div>
-            <label style="display:block; margin:8px 0; font-size:12px;"><input type="checkbox" id="formProdRealPhotoConfirmed" /> Confirmo que as fotos enviadas mostram os produtos reais da Conflora, sem imagens de banco, referência ou geradas.</label>
             <div id="formProdPhotosGrid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(130px, 1fr)); gap:10px;"></div>
             <div id="formProdPhotoTags" style="font-size:11px; color:#475569; margin-top:8px;"></div>
           </div>
@@ -744,8 +743,7 @@ function renderAdminHtml(storeConfig) {
         </div>
         <div>
           <label style="font-size:12px; font-weight:bold;">Ou URLs Externas de Fotos (separadas por vírgula):</label>
-          <input type="text" id="formProdImages" hidden disabled aria-hidden="true" />
-          <small>Envie fotos dos produtos reais pelo campo de upload. URLs externas não são utilizadas.</small>
+          <input type="text" id="formProdImages" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="https://..., https://..." />
         </div>
         <div style="grid-column: 1/-1;">
           <label style="font-size:12px; font-weight:bold;">🏷️ Tags Padronizadas (Conflora &amp; IA):</label>
@@ -2825,7 +2823,6 @@ function renderAdminHtml(storeConfig) {
     }
 
     function editProduct(id) {
-      document.getElementById('formProdRealPhotoConfirmed').checked = false;
       const p = allProducts.find(x => String(x.id) === String(id));
       if (!p) return;
       showTab('products');
@@ -2945,10 +2942,9 @@ function renderAdminHtml(storeConfig) {
         descriptionAi: desc,
       };
 
-      if (newUploads.length && !document.getElementById('formProdRealPhotoConfirmed')?.checked) throw new Error('Confirme a origem das fotos reais do produto antes de enviar.');
       const res = await window.ConfloraSession.apiFetch('/api/admin/products', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Product-Content-Confirmed': desc.trim() ? 'true' : 'false' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
       const data = await res.json();
@@ -2963,7 +2959,7 @@ function renderAdminHtml(storeConfig) {
                 'Content-Type': 'application/octet-stream',
                 'X-Photo-Content-Type': upload.file.type || 'image/jpeg',
                 'X-Photo-Append': 'true',
-                'X-Photo-Actual-Product': 'true',
+                'X-Product-Name': name,
               },
               body: upload.file,
             });
@@ -2983,10 +2979,10 @@ function renderAdminHtml(storeConfig) {
             ...pendingPhotosList.filter(photo => photo.isExisting && photo.url).map(photo => photo.url),
             ...externalImgs,
           ])];
-          if (newUploads.length || storedImages.length) {
+          if (newUploads.length) {
             const finalResponse = await window.ConfloraSession.apiFetch('/api/admin/products', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'X-Product-Photos-Update': 'true' },
+              headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 ...payload,
                 images: finalImages,

@@ -178,9 +178,6 @@ export function createProductEntry(state, onSaved) {
       placeholder: "https://... (URL da foto do produto)",
       value: editingProduct?.imageUrl || "",
     });
-    const photoInput = element('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp' });
-    const photoConfirmed = element('input', { type: 'checkbox' });
-    if (state.existingStore) imageInput.hidden = true;
     const previewImg = element("img", {
       class: "pe-preview-img",
       src: editingProduct?.imageUrl || "/store-assets/placeholder.svg",
@@ -193,11 +190,9 @@ export function createProductEntry(state, onSaved) {
     advanced.append(
       element("label", { class: "pe-label" }, [
         element("span", { text: 'product_photo_url'.tr }),
-        element("div", { class: "pe-img-row" }, [state.existingStore ? photoInput : imageInput, previewImg]),
+        element("div", { class: "pe-img-row" }, [imageInput, previewImg]),
       ]),
     );
-    if (state.existingStore) advanced.append(element('label', { class: 'pe-label' }, [photoConfirmed,
-      document.createTextNode('Confirmo que esta é uma foto do produto real da Conflora, sem imagem de referência ou gerada.')]));
 
     // Description
     const descTextarea = element("textarea", {
@@ -279,9 +274,6 @@ export function createProductEntry(state, onSaved) {
       submitBtn.textContent = 'product_entry_saving'.tr;
 
       try {
-        const photo = state.existingStore ? photoInput.files?.[0] : null;
-        if (photo && !photoConfirmed.checked) throw new Error('Confirme a origem da foto real antes de enviar.');
-        if (photo && photo.size > 20 * 1024 * 1024) throw new Error('A foto deve ter até 20 MB.');
         const payload = {
           id: editingProduct?.id || undefined,
           name: nameInput.value.trim(),
@@ -299,21 +291,10 @@ export function createProductEntry(state, onSaved) {
             .filter(Boolean),
         };
 
-        const saved = await state.api("/products", {
+        await state.api("/products", {
           method: "POST",
           body: payload,
         });
-        // The Conflora upload endpoint stores bytes in Storage and references in
-        // Firestore. Other tenants retain their own independent API contract.
-        if (photo) {
-          editingProduct = { ...payload, id: saved.id };
-          const response = await window.ConfloraSession.apiFetch('/api/admin/products/' + encodeURIComponent(saved.id) + '/photo', {
-            method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'X-Photo-Content-Type': photo.type,
-              'X-Photo-Actual-Product': 'true' }, body: photo,
-          });
-          const result = await response.json();
-          if (!response.ok) throw new Error('Produto salvo, mas a foto não foi enviada: ' + (result.error || 'tente novamente.'));
-        }
 
         notify('product_successfully_saved_to_catalog'.tr);
         dialog.close();

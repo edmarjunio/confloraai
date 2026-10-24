@@ -1,3 +1,6 @@
+const fs = require('node:fs');
+const path = require('node:path');
+
 function normalizeKey(value) {
   return String(value || '')
     .normalize('NFD')

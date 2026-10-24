@@ -1570,22 +1570,9 @@ window.PdvComponents = (() => {
     const [sending, setSending] = useState(false);
     const [error, setError] = useState('');
     const rawPhone = String(conversation?.phone || conversation?.customerPhone || '').replace(/\D/g, '');
-    const compositionClaim = useRef(null);
-    const manualRequest = useRef(null);
-    const [compositionReady, setCompositionReady] = useState(false);
-    const ensureCompositionClaim = () => {
-      if (!compositionClaim.current) compositionClaim.current = api(`/api/admin/whatsapp/conversations/${rawPhone}/takeover`, {})
-        .then(() => { setCompositionReady(true); })
-        .catch(err => { compositionClaim.current = null; setCompositionReady(false); setError(err.message); throw err; });
-      return compositionClaim.current;
-    };
 
     useEffect(() => {
       if (!rawPhone) return;
-      compositionClaim.current = null;
-      manualRequest.current = null;
-      setCompositionReady(false);
-      setText('');
       let active = true;
       api(`/api/admin/whatsapp/conversations/${rawPhone}/messages`)
         .then(res => { if (active && res.messages) setMessages(res.messages); })
@@ -1603,10 +1590,7 @@ window.PdvComponents = (() => {
       setSending(true);
       setError('');
       try {
-        await ensureCompositionClaim();
-        if (!manualRequest.current || manualRequest.current.text !== text.trim()) manualRequest.current = { text: text.trim(), requestId: crypto.randomUUID() };
-        await api(`/api/admin/whatsapp/conversations/${rawPhone}/send`, manualRequest.current);
-        manualRequest.current = null;
+        await api(`/api/admin/whatsapp/conversations/${rawPhone}/send`, { text: text.trim() });
         setText('');
         const res = await api(`/api/admin/whatsapp/conversations/${rawPhone}/messages`);
         if (res.messages) setMessages(res.messages);
@@ -1649,8 +1633,8 @@ window.PdvComponents = (() => {
           {/* Bar de Ações do Operador */}
           <div className="p-3 bg-emerald-50/60 border-b border-emerald-100 flex flex-wrap gap-2 shrink-0">
             {conversation.automation === 'paused' ? (
-              <button type="button" onClick={() => { compositionClaim.current = null; setCompositionReady(false); onRelease(conversation); }} className="cf-btn-3d cf-btn-3d--secondary cf-btn-3d--sm">
-                Retomar automação
+              <button type="button" onClick={() => onRelease(conversation)} className="cf-btn-3d cf-btn-3d--secondary cf-btn-3d--sm">
+                🤖 Devolver ao Agente
               </button>
             ) : (
               <button type="button" onClick={() => onTakeover(conversation)} className="cf-btn-3d cf-btn-3d--primary cf-btn-3d--sm">
@@ -1696,8 +1680,6 @@ window.PdvComponents = (() => {
               <textarea
                 rows={1}
                 value={text}
-                readOnly={!compositionReady}
-                onFocus={() => { ensureCompositionClaim().catch(() => {}); }}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Digite sua mensagem… (Enter envia, Shift+Enter quebra linha)"

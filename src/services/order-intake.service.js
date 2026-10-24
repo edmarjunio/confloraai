@@ -17,9 +17,9 @@ function parseRequest(message) {
   let value = String(message || '').trim();
   const normalized = normalizeText(value);
   const query = /^(?:(?:voces?|vcs)\s+)?(?:tem|teria|vendem|vende|trabalham com|conseguem|pode encomendar|podem encomendar|encomenda de|encomendar|quanto custa|qual o preco de|qual o valor de)\b/.test(normalized);
-  const buying = /^(?:quero|vou querer|gostaria de|preciso de|me manda|manda|separa|encomende|adiciona|adicionar|muda|mudar|tira|tirar|altera|alterar)\s|^\d+[,.]?\d*\s/.test(normalized);
+  const buying = /^(?:quero|vou querer|gostaria de|preciso de|me manda|manda|separa|encomende)\s|^\d+[,.]?\d*\s/.test(normalized);
   if (!query && !buying) return null;
-  value = value.replace(/^(?:(?:vocês?|voces?|vcs)\s+)?(?:tem|têm|teria|vendem|vende|trabalham com|conseguem|pode encomendar|podem encomendar|encomenda de|encomendar|quanto custa|qual o preço de|qual o preco de|qual o valor de|quero|vou querer|gostaria de|preciso de|me manda|manda pra mim|manda|separa|encomende|adiciona|adicionar|muda para|muda|mudar para|mudar|tira|tirar|altera para|altera|alterar)\s+/i, '')
+  value = value.replace(/^(?:(?:vocês?|voces?|vcs)\s+)?(?:tem|têm|teria|vendem|vende|trabalham com|conseguem|pode encomendar|podem encomendar|encomenda de|encomendar|quanto custa|qual o preço de|qual o preco de|qual o valor de|quero|vou querer|gostaria de|preciso de|me manda|manda pra mim|manda|separa|encomende)\s+/i, '')
     .replace(/[?!;.]+$/g, '').trim();
   if (!value || /^(?:entrega|retirada|pagar|pix|confirmar|comprar|falar|saber|ver|conhecer|opcoes|ajuda|o pedido|minha sacola)\b/.test(normalizeText(value))) return null;
   if (/\bplantas?\b.*\b(?:para|pra|que|dentro|cerca)\b/.test(normalizeText(value))) return null;
@@ -154,7 +154,6 @@ class OrderIntakeService {
 
   async changeDraft(phone, previous, next) {
     return runTransaction(this.repository, async tx => {
-      await require('./automation-send-guard').assertTransactionAutomation(tx);
       const session = await tx.get('sessions', phone) || {};
       if (session.orderIntake?.id !== previous?.id || session.orderIntake?.version !== previous?.version) throw conflict();
       const saved = { ...next, version: Number(previous?.version || 0) + 1, updatedAt: this.now().toISOString() };
@@ -180,7 +179,6 @@ class OrderIntakeService {
     const items = await this.classify(draft.items);
     const profile = await this.procurement.customerProfile(phone);
     const result = await runTransaction(this.repository, async tx => {
-      await require('./automation-send-guard').assertTransactionAutomation(tx);
       const session = await tx.get('sessions', phone) || {};
       const previous = await tx.get('agent_handoffs', draft.id);
       if (previous) {
@@ -212,7 +210,6 @@ class OrderIntakeService {
     const forecast = String(input.forecast || '').trim();
     if (input.confirmed !== true || !forecast || forecast.length > 120 || /[\r\n]/.test(forecast) || !Number.isSafeInteger(input.version)) throw Object.assign(new Error('Informe a previsão confirmada e a versão da comanda.'), { status: 400 });
     const result = await runTransaction(this.repository, async tx => {
-      await require('./automation-send-guard').assertTransactionAutomation(tx);
       const request = await tx.get('agent_handoffs', id);
       if (!request || request.kind !== 'ORDER_REQUEST' || request.tenantId !== 'conflora') throw Object.assign(new Error('Solicitação não encontrada.'), { status: 404 });
       if (request.quoteVersion || request.acceptedAt) throw Object.assign(new Error('Use a cotação da encomenda para atualizar valores e datas antes do aceite.'), { status: 409 });

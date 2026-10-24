@@ -38,22 +38,6 @@ class PdvRepository {
     return require('../database/repositories/whatsapp-delivery').recordWhatsAppStatus(this.repository, callback);
   }
 
-  async page(collection, field, value, { limit = 25, cursor = '' } = {}) {
-    const size = Math.max(1, Math.min(50, Number(limit) || 25));
-    if (cursor && (typeof cursor !== 'string' || cursor.includes('/') || cursor.length > 512)) throw new Error('Cursor inválido.');
-    let items;
-    const repo = this.repository;
-    if (repo.firestore && !repo._firestoreClientDisabled) {
-      let query = repo.firestore.collection(collection).where(field, '==', value).orderBy('__name__').limit(size);
-      if (cursor) query = query.startAfter(cursor);
-      items = (await query.get()).docs.map(doc => ({ ...doc.data(), id: doc.id }));
-    } else {
-      if (!repo.isInMemory || repo.firestore) throw new Error('Firestore indisponível.');
-      items = (await this.list(collection, field, value)).sort((a, b) => a.id.localeCompare(b.id)).filter(row => !cursor || row.id > cursor).slice(0, size);
-    }
-    return { items, nextCursor: items.length === size ? items.at(-1).id : null };
-  }
-
   // Cursor rotation prevents delayed/leased jobs at the beginning from starving later jobs.
   // Equality + document ID ordering uses the existing automatic single-field index.
   async scanPage(collection, field, value, limit = 100) {
@@ -575,25 +559,7 @@ class PdvRepository {
   async claimMessage(id) {
     return this.transaction(async (tx) => {
       const job = await tx.get('pdv_outbox', id);
-      if (!job || !(job.status === 'PENDING' || job.kind === 'meta-product-sync' && job.status === 'CATALOG_PENDING') || job.nextAttemptAt > Date.now() || job.leaseUntil > Date.now()) { return null; }
-      const customerKinds = new Set(['receipt', 'pix-charge', 'customer-paid', 'order-completed', 'proof-rejected', 'delivery-departure', 'delivery-arriving', 'conversation-text', 'conversation-catalog', 'order-request-forecast', 'order-request-event', 'debt-receipt']);
-      if (customerKinds.has(job.kind)) {
-        const record = job.orderId ? await tx.get('orders', job.orderId) : job.requestId ? await tx.get('agent_handoffs', job.requestId) : job.settlementId ? await tx.get('debt_settlements', job.settlementId) : null;
-        const phone = String(job.recipient || record?.customerPhone || '').replace(/\D/g, '');
-        if (phone) {
-          const { customerKeyFor, scopedId } = require('../agent/agent-store');
-          const conversation = await tx.get('agent_conversations', scopedId('conflora', customerKeyFor('conflora', phone)));
-          const version = Number(conversation?.version || 0);
-          const invalidatedAt = [conversation?.pausedAt, conversation?.resumedAt, conversation?.contextResetAt].filter(Boolean).sort().at(-1);
-          const createdAt = job.createdAt;
-          const legacyStale = job.conversationVersion === undefined && version > 0 && (!createdAt || invalidatedAt >= createdAt);
-          if (conversation?.automation === 'paused' || conversation?.assignedTo || legacyStale || job.conversationVersion !== undefined && job.conversationVersion !== version) {
-            tx.set('pdv_outbox', id, { ...job, status: 'SKIPPED', leaseUntil: 0, completedAt: new Date().toISOString(), lastError: 'HUMAN_OWNERSHIP_OR_STALE_CONTEXT' });
-            return null;
-          }
-          job.conversationVersion = version;
-        }
-      }
+      if (!job || job.status !== 'PENDING' || job.nextAttemptAt > Date.now() || job.leaseUntil > Date.now()) { return null; }
       const maxAttempts = Math.max(1, Number(process.env.PDV_OUTBOX_MAX_ATTEMPTS) || 12);
       if (Number(job.attempts || 0) >= maxAttempts) {
         tx.set('pdv_outbox', id, { ...job, status: 'NEEDS_RECONCILIATION', lastError: 'MAX_ATTEMPTS', leaseUntil: 0 });
@@ -615,10 +581,6 @@ class PdvRepository {
       if (['SENT', 'SKIPPED'].includes(updated.status) && !updated.completedAt) updated.completedAt = new Date().toISOString();
       if (Object.keys(updated).every(key => Object.is(updated[key], job[key]))) return;
       tx.set('pdv_outbox', id, updated);
-      for (const providerMessageId of [updates.providerMessageId, updates.providerDocumentId].filter(Boolean)) {
-        const key = createHash('sha256').update(providerMessageId).digest('hex');
-        tx.set('whatsapp_delivery', key, { id: key, providerMessageId, outboxId: id, source: 'CLOUD_API_AUTOMATION', createdAt: new Date().toISOString() });
-      }
     });
   }
 

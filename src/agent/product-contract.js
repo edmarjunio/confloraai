@@ -110,7 +110,6 @@ function evaluateProduct(raw, ctx = {}) {
   if (new Set(statuses).size > 1) issues.push({ code: 'status_conflict' });
   else if (!['ATIVO', 'INATIVO'].includes(status)) issues.push({ code: 'status_invalid' });
   else if (status === 'INATIVO') issues.push({ code: 'product_inactive' });
-  if (require('../catalog/commercial-product').isInternalFinancialProduct(data) && !issues.some(issue => issue.code === 'product_inactive')) issues.push({ code: 'product_inactive' });
   fieldsUsed.push('status');
 
   // Nome

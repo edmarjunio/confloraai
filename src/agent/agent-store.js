@@ -118,7 +118,7 @@ class HandoffStore {
       tx.set(this.db.collection(this.handoffs).doc(id), handoff);
       tx.set(conversationRef, {
         ...state, tenantId: record.tenantId, customerKey: record.customerKey, automation: 'paused',
-        pausedAt: iso, reason: record.reason, handoffId: id, updatedAt: iso, version: Number(state.version || 0) + 1, customerPhone: record.customerPhone || state.customerPhone || '',
+        pausedAt: iso, reason: record.reason, handoffId: id, updatedAt: iso,
       });
       return handoff;
     });
@@ -149,7 +149,6 @@ class HandoffStore {
 
   /** Retomada autorizada: só atua em handoff aberto da mesma empresa. */
   async resume(tenantId, handoffId, actor) {
-    if (!actor?.id || !['ADMIN', 'CAIXA', 'VENDEDOR'].includes(actor.role)) return { ok: false, code: 'forbidden' };
     const ref = this.db.collection(this.handoffs).doc(handoffId);
     return this.db.runTransaction(async (tx) => {
       const snap = await tx.get(ref);
@@ -160,13 +159,11 @@ class HandoffStore {
       const conversationRef = this.conversationRef(tenantId, handoff.customerKey);
       const conversation = await tx.get(conversationRef);
       if (conversation.data()?.handoffId !== handoffId) return { ok: false, code: 'superseded_handoff' };
-      if (conversation.data()?.assignedTo && conversation.data().assignedTo.id !== actor.id && actor.role !== 'ADMIN') return { ok: false, code: 'assigned_to_another_operator' };
       const iso = this.now().toISOString();
       tx.update(ref, { status: 'resumed', resumedAt: iso, resumedBy: { id: actor.id, role: actor.role } });
       tx.set(this.conversationRef(tenantId, handoff.customerKey), {
-        ...conversation.data(),
         tenantId, customerKey: handoff.customerKey, automation: 'active', resumedAt: iso,
-        assignedTo: null, resumedBy: actor.id, handoffId, updatedAt: iso, version: Number(conversation.data()?.version || 0) + 1,
+        resumedBy: actor.id, handoffId, updatedAt: iso, version: Number(conversation.data()?.version || 0) + 1,
       });
       return { ok: true, handoff: { ...handoff, status: 'resumed' } };
     });
@@ -177,7 +174,6 @@ class HandoffStore {
    * Se outro operador tentar assumir simultaneamente, o backend resolve com conflito 409.
    */
   async takeover(tenantId, customerKey, actor, expectedVersion = null) {
-    if (!actor?.id || !['ADMIN', 'CAIXA', 'VENDEDOR'].includes(actor.role)) return { ok: false, code: 'forbidden' };
     const conversationRef = this.conversationRef(tenantId, customerKey);
     return this.db.runTransaction(async tx => {
       const snap = await tx.get(conversationRef);

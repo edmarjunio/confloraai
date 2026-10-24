@@ -1,8 +1,4 @@
 const { productStatus } = require('./product-status');
-function isInternalFinancialProduct(raw = {}) {
-  const { normalizeText } = require('../shared/string.util');
-  return [raw.name || raw.descricao, raw.category || raw.categoria].some(value => /^(troco(?: do dia)?|recebimento)$/.test(normalizeText(value || '')));
-}
 
 // Editable fields take precedence over import aliases. This is a view, never a migration.
 function commercialProduct(raw) {
@@ -23,7 +19,7 @@ function commercialProduct(raw) {
     priceMinor: Math.round(price * 100), unit,
     saleUnit: { code: unit, minimum: Number(raw.saleUnit?.minimum ?? (unit === 'KG' ? 0.1 : 1)),
       increment: Number(raw.saleUnit?.increment ?? (unit === 'KG' ? 0.1 : 1)) },
-    active: productStatus(raw) === 'ATIVO' && raw.isAvailable !== false && !isInternalFinancialProduct(raw),
+    active: productStatus(raw) === 'ATIVO' && raw.isAvailable !== false,
     stockQuantity: Number(raw.stockQuantity ?? raw.estoque ?? 0),
     reservedQuantity: Number(raw.reservedQuantity ?? 0),
   };
@@ -53,4 +49,4 @@ function hasValidCommercialPrice(raw) {
     Math.abs(price * 100 - priceMinor) < 0.00001;
 }
 
-module.exports = { commercialProduct, commercialLine, hasValidCommercialPrice, isInternalFinancialProduct };
+module.exports = { commercialProduct, commercialLine, hasValidCommercialPrice };

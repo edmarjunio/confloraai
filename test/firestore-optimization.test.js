@@ -63,7 +63,7 @@ test('two repository instances claim once; stale owners cannot persist or send',
 });
 
 test('uncertain provider acceptance is never retried automatically after a restart', async () => {
-  const { store, base } = setup({ 'pdv_outbox/a': { id: 'a', kind: 'closing', text: 'ok', recipient: '5564999991234', status: 'PENDING', attempts: 0 } });
+  const { store, base } = setup({ 'pdv_outbox/a': { id: 'a', kind: 'conversation-text', text: 'ok', recipient: '5564999991234', status: 'PENDING', attempts: 0 } });
   let calls = 0;
   const whatsapp = { sendTextMessage: async () => { calls++; throw new Error('timeout after acceptance'); } };
   await new PdvService({ repository: store, whatsapp }).deliver('a');
@@ -76,7 +76,7 @@ test('uncertain provider acceptance is never retried automatically after a resta
 test('crashed SENDING is quarantined; safe pre-send failures retain backoff', async () => {
   const { store } = setup({
     'pdv_outbox/a': { id: 'a', status: 'SENDING', sendingAt: new Date(Date.now() - 300000).toISOString(), leaseUntil: 0 },
-    'pdv_outbox/b': { id: 'b', kind: 'closing', text: 'ok', recipient: '5564999991234', status: 'PENDING', attempts: 0 },
+    'pdv_outbox/b': { id: 'b', kind: 'conversation-text', text: 'ok', recipient: '5564999991234', status: 'PENDING', attempts: 0 },
   });
   let sends = 0;
   const service = new PdvService({ repository: store, whatsapp: { sendTextMessage: async () => { sends++; throw Object.assign(new Error('rejected'), { definitelyNotSent: true }); } } });

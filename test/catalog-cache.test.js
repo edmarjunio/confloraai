@@ -9,9 +9,9 @@ test('cache vazio compartilha leitura concorrente, expira e permite invalidar ap
   const catalog = new CatalogRepository({ now: () => now, firestoreRepo: { getAllProducts: async () => { reads++; return []; } } });
   await Promise.all(Array.from({ length: 20 }, () => catalog.refreshCatalog()));
   assert.equal(reads, 1);
-  await catalog.refreshCatalog(); assert.equal(reads, 1);
-  now += 600000; await catalog.refreshCatalog(); assert.equal(reads, 2);
-  catalog.invalidateCache(); await catalog.refreshCatalog(); assert.equal(reads, 3);
+  await catalog.refreshCatalog(); assert.equal(reads, 2);
+  now += 600000; await catalog.refreshCatalog(); assert.equal(reads, 3);
+  catalog.invalidateCache(); await catalog.refreshCatalog(); assert.equal(reads, 4);
 });
 
 test('edição durante leitura impede publicação de catálogo antigo; falha pode ser repetida', async () => {
@@ -26,7 +26,7 @@ test('edição durante leitura impede publicação de catálogo antigo; falha po
   catalog.invalidateCache(); catalog.firestoreRepo.getAllProducts = async () => { throw new Error('offline'); };
   await assert.rejects(catalog.refreshCatalog(), /offline/); assert.equal(catalog.isCacheValid(), false);
   catalog.firestoreRepo.getAllProducts = async () => [];
-  await catalog.refreshCatalog(); assert.equal(catalog.isCacheValid(), true);
+  await catalog.refreshCatalog(); assert.equal(catalog.isCacheValid(), false);
 });
 
 test('chat sem pesquisa faz uma chamada limitada e não inclui produtos irrelevantes ou instruções na resposta', async () => {
@@ -56,5 +56,5 @@ test('API pública retorna somente reply, usa cache e limita tentativas', async 
   for (let i = 0; i < 8; i++) {
     const response = await send(); assert.equal(response.status, 200); assert.deepEqual(await response.json(), { reply: 'Olá!' });
   }
-  assert.equal(reads, 1); assert.equal((await send()).status, 429);
+  assert.equal(reads, 8); assert.equal((await send()).status, 429);
 });

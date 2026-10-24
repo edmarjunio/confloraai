@@ -6,7 +6,6 @@ async function recordWhatsAppStatus(repo, callback) {
   const providerStatus = String(callback.status || '').toUpperCase();
   if (!callback.id || !['SENT', 'DELIVERED', 'READ', 'FAILED'].includes(providerStatus)) return false;
   const id = createHash('sha256').update(`${callback.id}:${providerStatus}`).digest('hex');
-  const providerKey = createHash('sha256').update(callback.id).digest('hex');
   let jobs;
   if (repo.firestore && !repo._firestoreClientDisabled) {
     const snapshots = await Promise.all(['providerMessageId', 'providerDocumentId'].map(field =>
@@ -19,9 +18,7 @@ async function recordWhatsAppStatus(repo, callback) {
   return runTransaction(repo, async tx => {
     const event = await tx.get('whatsapp_delivery_events', id);
     if (event?.status === 'DONE') return false;
-    const indexed = await tx.get('whatsapp_delivery', providerKey);
-    const jobIds = [...new Set([...jobs, ...(indexed?.outboxId ? [indexed.outboxId] : [])])];
-    const matches = (await Promise.all(jobIds.map(jobId => tx.get('pdv_outbox', jobId)))).filter(Boolean);
+    const matches = (await Promise.all(jobs.map(jobId => tx.get('pdv_outbox', jobId)))).filter(Boolean);
     const now = new Date().toISOString();
     for (const job of matches) {
       if ((RANK[job.deliveryStatus] ?? 0) >= RANK[providerStatus]) continue;

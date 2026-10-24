@@ -364,7 +364,7 @@ test('Agent Service: consulta, adição ao carrinho, alteração, finalização 
   assert.equal(notFoundRes.status, 'found');
   assert.equal(notFoundRes.next_action.send_customer_message, true);
   assert.equal(notFoundRes.next_action.handoff_to_human, false);
-  assert.match(notFoundRes.data.customer_message, /encomenda/);
+  assert.match(notFoundRes.data.customer_message, /encomendar/);
   assert.deepEqual(notFoundRes.data.products, []);
 
   // Missing catalogue entries no longer pause automation; explicit human requests still do.
@@ -393,7 +393,7 @@ test('Agent Service: consulta, adição ao carrinho, alteração, finalização 
   // 10. Retomada da automação por atendente humano
   const resumeResult = await handoffStore.resume('conflora', openHandoffs[0].id, {
     id: 'atendente_marcos',
-    role: 'VENDEDOR',
+    role: 'support',
   });
   assert.equal(resumeResult.ok, true);
 
