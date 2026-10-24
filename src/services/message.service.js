@@ -157,14 +157,15 @@ class MessageService {
     const isReceiptPayload = String(message || '') === '[COMPROVANTE_ENVIADO]';
     const isActiveAgent = conversation.channel === 'agent';
     const isActiveCart = conversation.channel === 'cart';
-    const greeting = recognizeGreeting(message);
-    if (!interactiveId && greeting && (isActiveAgent || isActiveCart)) {
-      const reply = `${greeting} ${isActiveCart ? 'Como posso ajudar com sua sacola?' : 'Qual produto você procura?'}`;
+    const standaloneGreeting = recognizeGreeting(message);
+    if (!interactiveId && standaloneGreeting && (isActiveAgent || isActiveCart)) {
+      const formalGreeting = standaloneGreeting.split('!')[0] + '!';
+      const reply = `${formalGreeting} ${isActiveCart ? 'Como posso ajudar com sua sacola?' : 'Qual produto você procura?'}`;
       if (whatsapp) await whatsapp.sendTextMessage(phone, reply);
       await this.firestoreRepo.appendMessage(phone, 'assistant', reply);
       return { reply, intent: 'GREETING_SENT', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
     }
-    const wantsMenu = greeting || /^(?:menu|quero ver as op[cç][oõ]es)[!,.?\s]*$/i.test(String(message || '').trim());
+    const wantsMenu = standaloneGreeting || /^(?:menu|quero ver as op[cç][oõ]es)[!,.?\s]*$/i.test(String(message || '').trim());
     if (!interactiveId && !isReceiptPayload && !isActiveAgent && !isActiveCart && wantsMenu) {
       return this.sendMainMenu(phone, whatsapp, startTime);
     }
