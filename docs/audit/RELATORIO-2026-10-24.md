@@ -2,6 +2,8 @@
 
 ## Estado da entrega
 
+**Bloqueio de integração identificado ao abrir o [PR #14](https://github.com/edmarjunio/confloraai/pull/14):** a main recebeu `d7ddee9` e `73a98a2` enquanto a branch isolada era implementada. O primeiro remove sincronização Meta, proveniência, testes e documentos e reintroduz `validated-catalog-profiles.js` como leitor do JSON. A simulação somente leitura `git merge-tree --write-tree HEAD origin/main` encontrou conflitos de conteúdo e modify/delete. Não houve merge/rebase nem substituição desses commits. É necessária definição do contrato funcional vigente antes de resolver os conflitos; a pergunta foi enviada ao usuário. Os números abaixo validam esta branch sobre `42a573c`, **não a combinação com a nova main**. O PR permanece draft e não integrável no estado atual.
+
 Branch `codex/contratos-produtos`, base `42a573c`; diagnóstico registrado antes da implementação em `96567f9`. Contratos de mídia/conteúdo em `6e66c28`; consumidores, concorrência e leituras em `c66f0c9`. Worktree isolado; main, servidor real na porta 8080 e túnel não foram reiniciados. Sem deploy, merge, sincronização Meta, upload, migração ou alteração comercial remota nesta entrega.
 
 Complemento `0ff1cc5`: upload/migração de foto também exigem a versão lida, além da referência anterior. Dois uploads simultâneos não podem substituir a galeria um do outro só porque a foto principal permaneceu igual. Storage e Firestore não formam uma transação única: um upload que conclua antes do conflito pode deixar objeto sem referência; não é excluído automaticamente e exige reconciliação/manutenção autorizada.
