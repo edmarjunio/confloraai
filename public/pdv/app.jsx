@@ -152,19 +152,7 @@ const { useState, useEffect, useRef, useMemo } = React;
 
     function toPdvProduct(item, favoriteIds) {
             const productId = String(item.id ?? item.productId ?? item.sku ?? '').trim();
-            const images = (Array.isArray(item.images) ? item.images : [])
-              .map((entry) => (typeof entry === 'string' ? entry : entry?.url || entry?.imageUrl || entry?.src || entry?.downloadURL || ''))
-              .filter(Boolean);
-            const imageCandidates = item.media?.version === 1
-              ? [...new Set([item.media.primaryUrl, ...item.media.gallery.map(image => image.url)].filter(Boolean))]
-              : window.ConfloraProductCard?.getImageCandidates({
-              ...item,
-              images,
-            }) || [...new Set([...images, item.imageUrl, item.imagePathCache]
-              .map((image) => String(image || '').trim())
-              .filter((image) => /^https:\/\/(?:firebasestorage|storage)\.googleapis\.com\//i.test(image)
-                || /^\/api\/images\//i.test(image)
-                || /^\/store-assets\//i.test(image)))];
+            const imageCandidates = window.ConfloraProductCard?.getImageCandidates(item) || [];
             const image = imageCandidates[0] || item.imageFallbackUrl || '/store-assets/placeholder.svg';
             return {
               ...item,
@@ -371,7 +359,7 @@ const { useState, useEffect, useRef, useMemo } = React;
         return window.ConfloraNotifications.createCashierNotifications(currentUser, id => {
           setNotificationOrderId(id);
           navigateCashierPage('orders');
-        });
+        }, { onArrival: () => { if (!document.querySelector('.cf-orders-page')) PdvComponents.playOrderAlertSound(); } });
       }, [currentUser?.id, currentUser?.role]);
       const [authReady, setAuthReady] = useState(false);
       const [customerId, setCustomerId] = useState('');

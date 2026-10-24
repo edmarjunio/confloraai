@@ -441,8 +441,8 @@ body > .container .nav-tabs, body > .container .tab-content { padding-inline:24p
 :is(.cf-back-button,.cf-danger-button):hover:not(:disabled) { transform:translateY(-2px); box-shadow:0 7px 16px rgb(20 44 28 / 18%); }
 
 /* Oculta botão Voltar na vitrine / home page onde não há navegação anterior */
-body:not(:has(#productView:not([hidden]))):not(:has(#adminView:not([hidden]))) .cf-back-button:not(.cf-pos-context *),
-body:not(:has(#productView:not([hidden]))):not(:has(#adminView:not([hidden]))) [data-site-back]:not(.cf-pos-context *) {
+body:has(#catalogView):not(:has(#productView:not([hidden]))):not(:has(#adminView:not([hidden]))) .cf-back-button:not(.cf-pos-context *),
+body:has(#catalogView):not(:has(#productView:not([hidden]))):not(:has(#adminView:not([hidden]))) [data-site-back]:not(.cf-pos-context *) {
   display: none !important;
 }
 :is(.cf-danger-button,.account-logout,#cartClearButton) { background:#dc2626 !important; color:white !important; border-color:#c81e1e !important; border-radius:999px !important; font-weight:800; box-shadow:0 2px 5px rgb(170 20 20 / 18%); }

@@ -1954,7 +1954,7 @@ window.PdvComponents = (() => {
       red: 'border-red-300 bg-red-50 text-red-950',
     };
     const acceptsDrop = canMove && ((dragFrom === 'confirmation' && stage === 'payment') || (dragFrom === 'payment' && stage === 'paid'));
-    return <section data-column-stage={stage} data-column-title={title} onDragOver={(event) => { if (acceptsDrop) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; } }} onDrop={(event) => { event.preventDefault(); if (!acceptsDrop) return; try { const payload = JSON.parse(event.dataTransfer.getData('application/x-conflora-order')); onMove(payload.id, payload.from, stage); } catch { /* Ignore unrelated drag payloads. */ } onDragEnd(); }} className={`w-[340px] min-w-[340px] shrink-0 snap-start flex flex-col rounded-2xl border border-slate-200 bg-slate-100 p-3 ${acceptsDrop ? 'cf-order-column--drop' : ''} ${isTargetGlow ? 'cf-order-column--target-glow' : ''}`} aria-label={title}>
+    return <section data-empty={orders.length === 0} data-column-stage={stage} data-column-title={title} onDragOver={(event) => { if (acceptsDrop) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; } }} onDrop={(event) => { event.preventDefault(); if (!acceptsDrop) return; try { const payload = JSON.parse(event.dataTransfer.getData('application/x-conflora-order')); onMove(payload.id, payload.from, stage); } catch { /* Ignore unrelated drag payloads. */ } onDragEnd(); }} className={`w-[340px] min-w-[340px] shrink-0 snap-start flex flex-col rounded-2xl border border-slate-200 bg-slate-100 p-3 ${acceptsDrop ? 'cf-order-column--drop' : ''} ${isTargetGlow ? 'cf-order-column--target-glow' : ''}`} aria-label={title}>
       <header className={`mb-3 rounded-xl border px-3 py-2 ${themes[tone]}`}>
         <div className="flex items-center justify-between gap-2"><h3 className="text-xs font-black tracking-wide">{title}</h3><span className="rounded-full bg-white/80 px-2 py-0.5 text-xs font-extrabold">{orders.length}</span></div>
         <p className="mt-1 text-[10px] opacity-75">{hint}</p>
@@ -2508,7 +2508,7 @@ window.PdvComponents = (() => {
         setIsFlying(false);
         setFlyingToStage(null);
 
-        if (options.playSound !== false) {
+        if (options.playSound !== false && window.ConfloraNotifications.cashierAlertsEnabled(user)) {
           playOrderAlertSound(soundSettingsRef.current, nextBatch.length > 1);
         }
 
@@ -2640,6 +2640,7 @@ window.PdvComponents = (() => {
     const [whatsappFilter, setWhatsappFilter] = useState('all_open');
     const [selectedConversation, setSelectedConversation] = useState(null);
     const [mobileTab, setMobileTab] = useState('orders'); // 'orders' | 'whatsapp'
+    const [queueStage, setQueueStage] = useState('pending');
 
     const fetchWhatsappConversations = async () => {
       try {
@@ -2683,6 +2684,7 @@ window.PdvComponents = (() => {
       { title: 'paid_completed'.tr, hint: 'payments_received_and_completed_orders'.tr, orders: data.paid.filter(order => !deliveryOrderIds.has(order.id)), tone: 'green', stage: 'paid' },
       { title: 'FIADOS', hint: 'sales_registered_for_later_payment'.tr, orders: data.confirmed.filter(order => !deliveryOrderIds.has(order.id)), tone: 'red', stage: 'debt' },
     ] : [];
+    const displayedColumns = columns.filter(column => queueStage === 'all' || (queueStage === 'pending' ? column.stage !== 'paid' : column.stage === queueStage));
     const title = view === 'orders' ? 'Comandas' : view === 'history' ? 'sales_history'.tr : 'report'.tr;
     const cashierOrderIds = new Set(data?.cashierOrderIds || []);
     const reportOrders = data ? (user.role === 'CAIXA'
@@ -2786,9 +2788,16 @@ window.PdvComponents = (() => {
 
               {newOrderNotice && <div role="status" className="mb-3 rounded-xl border border-amber-300 bg-amber-100 px-4 py-3 text-sm font-extrabold text-amber-950 shadow-sm" aria-live="polite">🔔 {newOrderNotice}</div>}
 
+              <label className={`cf-orders-stage-filter ${mobileTab === 'whatsapp' ? 'cf-orders-stage-filter--whatsapp' : ''}`}>Exibir comandas
+                <select value={queueStage} onChange={event => setQueueStage(event.target.value)} aria-label="Etapa das comandas">
+                  <option value="pending">Operações pendentes</option><option value="all">Todas as etapas</option>
+                  {columns.map(column => <option key={column.stage} value={column.stage}>{column.title} ({column.orders.length})</option>)}
+                </select>
+              </label>
+
               <div className="cf-cashier-board cf-orders-board flex w-full gap-4 overflow-x-auto pb-4 pt-1 snap-x select-none">
                 {/* Coluna Desktop de WhatsApp */}
-                <section className={`w-[340px] min-w-[340px] shrink-0 snap-start flex flex-col rounded-2xl border border-slate-200 bg-slate-100 p-3 ${mobileTab === 'whatsapp' ? 'block md:block' : 'hidden md:block'}`}>
+                <section className={`cf-orders-whatsapp w-[340px] min-w-[340px] shrink-0 snap-start flex flex-col rounded-2xl border border-slate-200 bg-slate-100 p-3 ${mobileTab === 'whatsapp' ? 'block md:block' : 'hidden md:block'}`}>
                   <header className="mb-3 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-950 px-3 py-2">
                     <div className="flex items-center justify-between gap-2">
                       <h3 className="text-xs font-black tracking-wide">WHATSAPP</h3>
@@ -2824,8 +2833,9 @@ window.PdvComponents = (() => {
                 </section>
 
                 {/* Colunas de Comandas */}
-                <div className={`flex gap-4 ${mobileTab === 'orders' ? 'block md:flex' : 'hidden md:flex'}`}>
-                  {columns.map((column) => <CashierColumn key={column.title} {...column} isTargetGlow={flyingToStage === column.stage} canMove={['ADMIN', "CAIXA"].includes(user.role) && !busy} dragFrom={dragFrom} onMove={moveOrder} onDragStart={setDragFrom} onDragEnd={() => setDragFrom(null)} pulsedOrderIds={pulsedOrderIds} selectedOrderId={selectedOrder?.id} onDetails={setSelectedOrder} />)}
+                <div className={`cf-orders-stages flex gap-4 ${mobileTab === 'orders' ? 'block md:flex' : 'hidden md:flex'}`} data-pending-only={queueStage === 'pending'}>
+                  {queueStage === 'pending' && displayedColumns.every(column => !column.orders.length) && <p className="cf-orders-empty-pending" role="status">Nenhuma operação pendente nesta consulta.</p>}
+                  {displayedColumns.map((column) => <CashierColumn key={column.title} {...column} isTargetGlow={flyingToStage === column.stage} canMove={['ADMIN', "CAIXA"].includes(user.role) && !busy} dragFrom={dragFrom} onMove={moveOrder} onDragStart={setDragFrom} onDragEnd={() => setDragFrom(null)} pulsedOrderIds={pulsedOrderIds} selectedOrderId={selectedOrder?.id} onDetails={setSelectedOrder} />)}
                 </div>
               </div>
             </>}
@@ -3003,14 +3013,14 @@ window.PdvComponents = (() => {
             </>}
           </>}
       </main>
-      {view === 'orders' && data && <section className="cf-orders-metrics-sheet" aria-label="Resumo de valores das comandas">
-        <div className="cf-orders-sheet-handle" aria-hidden="true"><span /></div>
+      {view === 'orders' && data && <details className="cf-orders-metrics-sheet" aria-label="Resumo de valores das comandas">
+        <summary>Resumo do período</summary>
         <div className="cf-orders-metrics-grid">
           <MetricCard label={'sales_assigned_to_me'.tr} value={money(data.metrics.sales)} description={`${data.metrics.orderCount} comanda(s)`} />
           <MetricCard label={'received_by_me'.tr} value={money(data.metrics.receipts)} description="Vendas pagas no período" />
           <MetricCard label={'store_credits_settled_by_me'.tr} value={money(data.metrics.debtReceipts)} description="Recebimentos no período" />
         </div>
-      </section>}
+      </details>}
       {selectedConversation && (
         <WhatsappChatDrawer
           conversation={selectedConversation}

@@ -192,7 +192,7 @@ function updateHeaderActions() {
   const identity = $("#headerAccountIdentity");
 
   identity.hidden = !isLoggedIn;
-  $("#customerAccountShortcut").hidden = !isLoggedIn || !existingStore || (allowedCashierRoles.includes(role) && role !== 'ENTREGADOR');
+  $("#customerAccountShortcut").hidden = !isLoggedIn || !existingStore || allowedCashierRoles.includes(role);
   $('#customerDebtBadge').hidden = true;
   if (isLoggedIn && existingStore && ['CLIENTE', 'ENTREGADOR'].includes(role)) {
     const userId = state.user.id;
@@ -1170,7 +1170,7 @@ try {
     state.products = saved.products;
     catalogSource = 'cache';
     lastCatalogRefresh = bootRevision === catalogRevision ? saved.savedAt : 0;
-    catalogStatus('Dados salvos no dispositivo. Preços e estoque são conferidos ao enviar o pedido.');
+    catalogStatus('');
     performanceMonitor.count('publicCacheHit');
   } else {
     [state.config, state.products] = await Promise.all([state.api('/config'), state.api('/products')]);

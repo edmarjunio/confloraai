@@ -61,9 +61,72 @@ test('fresh second visit reuses the public snapshot and defers secondary modules
   const initialCatalog = fixture.requests.filter(file => file === '/api/storefront/catalog').length;
   await page.reload(); await expect(cards(page).first()).toBeVisible();
   expect(fixture.requests.filter(file => file === '/api/storefront/catalog').length).toBe(initialCatalog);
-  await expect(page.locator('#catalogSyncStatus')).toContainText('Dados salvos');
+  await expect(page.locator('#catalogSyncStatus')).toBeHidden();
   expect(await cards(page).first().locator('img').getAttribute('loading')).toBe('eager');
   expect(await cards(page).nth(10).locator('img').getAttribute('loading')).toBe('lazy');
+});
+
+test('operational layout fits the viewport, preserves WhatsApp width and keeps metrics compact', async ({ page, fixture: _fixture }) => {
+  await ready(page); await login(page); await page.goto('/pdv?view=commands');
+  await expect(page.getByLabel('Etapa das comandas')).toHaveValue('pending');
+  const compact = page.getByLabel('Resumo de valores das comandas');
+  await expect(compact).not.toHaveAttribute('open');
+  if (page.viewportSize().width < 768) await page.getByRole('button', { name: /^WhatsApp \(/ }).click();
+  const whatsapp = page.locator('.cf-orders-whatsapp');
+  await expect(whatsapp).toBeVisible();
+  expect((await whatsapp.boundingBox()).width).toBeGreaterThan(220);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: `test-results/operations-${page.viewportSize().width}.png`, fullPage: true });
+});
+
+test('delivery role has its own orange shortcut and a deterministic way home', async ({ page, fixture: _fixture }) => {
+  await ready(page); await login(page, 'usr-entregador1', '2222'); await page.reload();
+  await expect(page.locator('#cashierShortcut')).toBeVisible();
+  await expect(page.locator('#customerAccountShortcut')).toBeHidden();
+  await expect(page.locator('#cashierShortcut')).toContainText(/entregas/i);
+  await page.locator('#cashierShortcut').click();
+  const home = page.getByRole('link', { name: 'Início', exact: true });
+  await expect(home).toBeVisible(); await home.click();
+  await expect(cards(page).first()).toBeVisible();
+});
+
+test('cashier alerts start active and an explicit opt-out survives reload', async ({ page, fixture: _fixture }) => {
+  await ready(page); await login(page); await page.goto('/pdv');
+  await page.getByRole('button', { name: 'Desativar alertas do caixa' }).click();
+  await expect(page.getByRole('button', { name: 'Ativar alertas do caixa' })).toHaveAttribute('aria-pressed', 'false');
+  await page.reload();
+  await page.getByRole('button', { name: 'Ativar alertas do caixa' }).click();
+  await expect(page.getByRole('button', { name: 'Desativar alertas do caixa' })).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('a confirmed product uses the identical visible image in storefront and cashier', async ({ page, context, fixture }) => {
+  const photo = require('../helpers/actual-photo-fixture').actualPhotoFixture('product-0');
+  Object.assign(fixture.repo.inMemoryProducts.get('product-0'), photo);
+  await context.route('**/v0/b/**', route => route.fulfill({ contentType: 'image/jpeg', body: fs.readFileSync('test/fixtures/images/store-assets/products/rolinha-diamante.jpg') }));
+  await ready(page);
+  const image = cards(page).first().locator('img');
+  await expect(image).toHaveAttribute('src', photo.imageUrl);
+  await expect.poll(() => image.evaluate(img => img.naturalWidth)).toBeGreaterThan(0);
+  await login(page); await page.goto('/pdv');
+  const cashierImage = page.locator('render-product-card').first().locator('img');
+  await expect(cashierImage).toHaveAttribute('src', photo.imageUrl);
+  await expect.poll(() => cashierImage.evaluate(img => img.naturalWidth)).toBeGreaterThan(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: `test-results/cashier-${page.viewportSize().width}.png` });
+});
+
+test('mobile cashier buttons stay aligned at narrow store-phone widths', async ({ page, fixture: _fixture }) => {
+  test.skip(page.viewportSize().width >= 768, 'Mobile layout only');
+  await ready(page); await login(page); await page.goto('/pdv');
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    const buttons = page.locator('.cf-mobile-sale-heading > button');
+    await expect(buttons).toHaveCount(4);
+    const rects = await buttons.evaluateAll(nodes => nodes.map(node => { const box = node.getBoundingClientRect(); return { top: box.top, width: box.width, height: box.height }; }));
+    expect(Math.max(...rects.map(rect => rect.top)) - Math.min(...rects.map(rect => rect.top))).toBeLessThan(1);
+    expect(rects.every(rect => rect.width >= 44 && rect.height >= 44)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  }
 });
 
 test('product editor uploads a confirmed photo through the official Storage service and refreshes the listing', async ({ page, fixture }) => {
