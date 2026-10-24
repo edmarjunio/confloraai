@@ -271,6 +271,81 @@ const { useState, useEffect, useRef, useMemo } = React;
       // Mobile Bottom Sheet mode: 'collapsed' | 'peek' (tempo real) | 'expanded'
       const [mobileSheetMode, setMobileSheetMode] = useState('collapsed');
       const [showQuickProduct, setShowQuickProduct] = useState(false);
+      const [showInventoryCheck, setShowInventoryCheck] = useState(false);
+      const [inventorySearch, setInventorySearch] = useState('');
+      const [autocompleteDismissed, setAutocompleteDismissed] = useState(false);
+      const [recentSearches, setRecentSearches] = useState(() => {
+        try {
+          const raw = window.localStorage.getItem('conflora:recent-searches:v1');
+          const parsed = raw ? JSON.parse(raw) : [];
+          return Array.isArray(parsed) ? parsed.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 5) : [];
+        } catch (_) {
+          return [];
+        }
+      });
+      const [showRecentSearches, setShowRecentSearches] = useState(false);
+      const [isVoiceListening, setIsVoiceListening] = useState(false);
+      const voiceRecognitionRef = useRef(null);
+      const saveRecentSearch = (term) => {
+        const cleaned = String(term || '').trim();
+        if (cleaned.length < 2) return;
+        setRecentSearches((prev) => {
+          const filtered = prev.filter((item) => item.toLowerCase() !== cleaned.toLowerCase());
+          const next = [cleaned, ...filtered].slice(0, 5);
+          try {
+            window.localStorage.setItem('conflora:recent-searches:v1', JSON.stringify(next));
+          } catch (_) {}
+          return next;
+        });
+      };
+      const clearRecentSearches = () => {
+        setRecentSearches([]);
+        try {
+          window.localStorage.removeItem('conflora:recent-searches:v1');
+        } catch (_) {}
+      };
+      const handleVoiceSearch = () => {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+          setProductNotice('Busca por voz não disponível neste navegador.');
+          return;
+        }
+        if (isVoiceListening && voiceRecognitionRef.current) {
+          try { voiceRecognitionRef.current.stop(); } catch (_) {}
+          setIsVoiceListening(false);
+          return;
+        }
+        try {
+          const recognition = new SpeechRecognition();
+          recognition.lang = 'pt-BR';
+          recognition.interimResults = false;
+          recognition.maxAlternatives = 1;
+          voiceRecognitionRef.current = recognition;
+          setIsVoiceListening(true);
+          recognition.onresult = (event) => {
+            const transcript = String(event?.results?.[0]?.[0]?.transcript || '').trim();
+            if (transcript) {
+              setSearchQuery(transcript);
+              saveRecentSearch(transcript);
+              setShowRecentSearches(false);
+            }
+          };
+          recognition.onerror = () => {
+            setIsVoiceListening(false);
+          };
+          recognition.onend = () => {
+            setIsVoiceListening(false);
+          };
+          recognition.start();
+        } catch (_) {
+          setIsVoiceListening(false);
+        }
+      };
+      useEffect(() => () => {
+        if (voiceRecognitionRef.current) {
+          try { voiceRecognitionRef.current.abort(); } catch (_) {}
+        }
+      }, []);
       const [productNotice, setProductNotice] = useState('');
       const [showMobileOptions, setShowMobileOptions] = useState(false);
       const [activeModal, setActiveModal] = useState(null); // 'pay' | 'discount' | 'freight' | 'receipt' | 'customer' | 'debt_settle'
@@ -605,6 +680,45 @@ const { useState, useEffect, useRef, useMemo } = React;
           return matchesCategory && matchesSubcategory && matchesSearch;
         });
       }, [products, selectedCategories, showingFavorites, selectedSubcategories, searchQuery]);
+
+      useEffect(() => {
+        setAutocompleteDismissed(false);
+      }, [searchQuery]);
+
+      const autocompleteSuggestions = useMemo(() => {
+        const raw = searchQuery.trim();
+        if (raw.length < 3) return [];
+        const normalizeText = (val) => String(val || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+        const q = normalizeText(raw);
+        if (q.length < 3) return [];
+        const tokens = q.split(/\s+/).filter(Boolean);
+        const scored = [];
+        for (const product of products) {
+          const nameNorm = normalizeText(product.name);
+          const catNorm = normalizeText(product.categoryName || product.category);
+          const skuNorm = normalizeText(product.sku);
+          const fullText = `${nameNorm} ${catNorm} ${skuNorm}`;
+          if (!tokens.every((token) => fullText.includes(token))) continue;
+          let score = 0;
+          if (nameNorm === q) score += 100;
+          else if (nameNorm.startsWith(q)) score += 60;
+          else if (nameNorm.includes(q)) score += 35;
+          if (product.isShortcut) score += 10;
+          if (Number(product.stock || 0) > 0) score += 5;
+          scored.push({ product, score });
+        }
+        scored.sort((a, b) => b.score - a.score || a.product.name.localeCompare(b.product.name, 'pt-BR'));
+        return scored.slice(0, 6).map((entry) => entry.product);
+      }, [products, searchQuery]);
+
+      const inventoryFilteredProducts = useMemo(() => {
+        const normalizeText = (val) => String(val || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+        const q = normalizeText(inventorySearch);
+        if (!q) return products.slice(0, 80);
+        return products
+          .filter((p) => normalizeText(`${p.name} ${p.categoryName || p.category} ${p.sku || ''}`).includes(q))
+          .slice(0, 80);
+      }, [products, inventorySearch]);
 
       useEffect(() => {
         if (typeof IntersectionObserver === 'undefined' || !loadMoreRef.current) return undefined;
@@ -1288,10 +1402,208 @@ const { useState, useEffect, useRef, useMemo } = React;
             <div className="cf-pos-header sticky top-0 z-20 bg-white">
               <div className="cf-mobile-sale-header">
                 <div className="cf-mobile-sale-heading"><button aria-label="Voltar" type="button" onClick={() => window.ConfloraNavigation.back()}>‹</button><div><strong>Caixa</strong><small>Nova venda</small></div><button type="button" aria-label="Notificações e comandas" onClick={() => navigateCashierPage('orders')}><IconBase className="h-5 w-5"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></IconBase></button><button type="button" aria-label="Atualizar produtos" onClick={async () => { try { await loadProducts(); setProductNotice('Catálogo atualizado.'); } catch (error) { setProductNotice(error.message); } }}>↻</button><button type="button" aria-label="Mais opções" aria-expanded={showMobileOptions} onClick={() => setShowMobileOptions(!showMobileOptions)}>☰</button></div>
-                <label className="cf-mobile-search"><span aria-hidden="true">⌕</span><input aria-label="Buscar produto" placeholder="Nome, categoria ou código…" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} /><button type="button" aria-label="Limpar busca" onClick={() => setSearchQuery('')}>×</button><button type="button" aria-label="Filtros" onClick={() => setShowMobileOptions(!showMobileOptions)}>☷</button></label>
+                <div className="cf-mobile-search-wrap">
+                  <label className="cf-mobile-search" data-has-value={Boolean(searchQuery)}>
+                    <span aria-hidden="true">⌕</span>
+                    <input
+                      aria-label="Buscar produto"
+                      placeholder="Nome, categoria ou código…"
+                      value={searchQuery}
+                      onFocus={() => setShowRecentSearches(true)}
+                      onBlur={() => {
+                        if (searchQuery.trim().length >= 2) saveRecentSearch(searchQuery);
+                        setTimeout(() => setShowRecentSearches(false), 180);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' && searchQuery.trim().length >= 2) {
+                          saveRecentSearch(searchQuery);
+                          setShowRecentSearches(false);
+                        }
+                      }}
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="cf-mobile-search-mic"
+                      data-listening={String(isVoiceListening)}
+                      aria-label={isVoiceListening ? 'Parar busca por voz' : 'Busca por voz'}
+                      aria-pressed={isVoiceListening}
+                      title="Busca por voz"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        handleVoiceSearch();
+                      }}
+                    >
+                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                        <line x1="12" x2="12" y1="19" y2="22"/>
+                      </svg>
+                    </button>
+                    <button type="button" className="cf-mobile-search-clear" aria-label="Limpar busca" onClick={() => setSearchQuery('')}>×</button>
+                    <button type="button" aria-label="Filtros" onClick={() => setShowMobileOptions(!showMobileOptions)}>☷</button>
+                  </label>
+                  {showRecentSearches && recentSearches.length > 0 && (
+                    <div className="cf-recent-searches-dropdown" role="listbox" aria-label="Buscas recentes">
+                      <div className="cf-recent-searches-header">
+                        <span>Buscas recentes</span>
+                        <button
+                          type="button"
+                          className="cf-recent-searches-clear"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={clearRecentSearches}
+                        >
+                          Limpar
+                        </button>
+                      </div>
+                      <div className="cf-recent-searches-list">
+                        {recentSearches.slice(0, 5).map((term) => (
+                          <button
+                            key={term}
+                            type="button"
+                            role="option"
+                            className="cf-recent-searches-item"
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => {
+                              setSearchQuery(term);
+                              saveRecentSearch(term);
+                              setShowRecentSearches(false);
+                            }}
+                          >
+                            <span className="cf-recent-searches-icon" aria-hidden="true">🕘</span>
+                            <span className="cf-recent-searches-text">{term}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="cf-mobile-quick-grid" role="group" aria-label="Atalhos rápidos do caixa">
+                  <button
+                    type="button"
+                    className="cf-mobile-quick-btn"
+                    data-quick-action="check-inventory"
+                    aria-label="Atalho: Conferir Estoque (Check Inventory)"
+                    onClick={() => {
+                      setInventorySearch(searchQuery);
+                      setShowInventoryCheck(true);
+                    }}
+                  >
+                    <span className="cf-mobile-quick-emoji" aria-hidden="true">📦</span>
+                    <span className="cf-mobile-quick-label">Estoque</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="cf-mobile-quick-btn"
+                    data-quick-action="new-sale"
+                    aria-label="Atalho: Nova Venda (New Sale)"
+                    onClick={() => {
+                      handleNewOrder();
+                      setSearchQuery('');
+                    }}
+                  >
+                    <span className="cf-mobile-quick-emoji" aria-hidden="true">🛒</span>
+                    <span className="cf-mobile-quick-label">Nova Venda</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="cf-mobile-quick-btn"
+                    data-quick-action="daily-report"
+                    aria-label="Atalho: Relatório Diário (Open Daily Report)"
+                    onClick={() => navigateCashierPage('report')}
+                  >
+                    <span className="cf-mobile-quick-emoji" aria-hidden="true">📊</span>
+                    <span className="cf-mobile-quick-label">Relatório</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="cf-mobile-quick-btn"
+                    data-quick-action="orders"
+                    aria-label="Atalho: Comandas (Orders)"
+                    onClick={() => navigateCashierPage('orders')}
+                  >
+                    <span className="cf-mobile-quick-emoji" aria-hidden="true">📋</span>
+                    <span className="cf-mobile-quick-label">Comandas</span>
+                  </button>
+                </div>
                 {showMobileOptions && <nav className="cf-mobile-options"><button onClick={() => navigateCashierPage('orders')}>Comandas</button><button onClick={() => navigateCashierPage('deliveries')}>Entregas</button><button onClick={() => navigateCashierPage('report')}>Relatório</button><button onClick={() => navigateCashierPage('history')}>Histórico</button><button onClick={() => setActiveModal('discount')}>Desconto</button><button onClick={() => setActiveModal('freight')}>Entrega</button><button onClick={openCustomerModal}>Cliente</button><a href="/">Loja</a><button className="cf-danger-button" onClick={async () => { await window.ConfloraSession.apiFetch('/api/auth/logout', { method: 'POST' }); window.location.reload(); }}>{'team_logout'.tr}</button></nav>}
               </div>
               <PdvComponents.Topbar hideCashier user={currentUser} onCashier={() => navigateCashierPage(null)} onSearch={setSearchQuery} searchValue={searchQuery} searchInputRef={searchInputRef} />
+              {searchQuery.trim().length >= 3 && !autocompleteDismissed && (
+                <div
+                  className="cf-search-autocomplete mx-3 sm:mx-6 my-1.5 rounded-2xl border border-emerald-200 bg-emerald-50/95 px-3 py-2 shadow-sm lg:w-[calc(66.6667%-32px)]"
+                  role="region"
+                  aria-label="Sugestões rápidas de produtos"
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-900">
+                      Sugestões para “{searchQuery.trim()}”
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSearchQuery('')}
+                        className="text-[11px] font-bold text-emerald-800 hover:underline"
+                      >
+                        Limpar
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Fechar sugestões"
+                        onClick={() => setAutocompleteDismissed(true)}
+                        className="w-5 h-5 inline-flex items-center justify-center rounded-full bg-white/80 text-slate-600 text-xs font-bold hover:bg-white"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </div>
+                  {autocompleteSuggestions.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {autocompleteSuggestions.map((suggestion) => (
+                        <div
+                          key={suggestion.id}
+                          className="inline-flex items-center rounded-xl border border-emerald-200 bg-white p-1 shadow-2xs"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSearchQuery(suggestion.name);
+                              saveRecentSearch(suggestion.name);
+                              setAutocompleteDismissed(true);
+                            }}
+                            className="px-2 py-1 text-left text-xs font-bold text-slate-800 hover:text-emerald-800 transition"
+                            title={`Filtrar por ${suggestion.name}`}
+                          >
+                            {`${suggestion.name} · ${formatBRL(suggestion.price)}`}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              saveRecentSearch(suggestion.name);
+                              addProductToCart(suggestion);
+                            }}
+                            className="ml-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 px-2 py-1 text-[11px] font-extrabold text-white transition active:scale-95"
+                            title={`Adicionar ${suggestion.name} à venda`}
+                          >
+                            + Vender
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
+                      <span>Nenhum produto encontrado com esse termo.</span>
+                      <button
+                        type="button"
+                        onClick={() => setShowQuickProduct(true)}
+                        className="rounded-lg bg-emerald-700 px-2.5 py-1 text-[11px] font-extrabold text-white hover:bg-emerald-800"
+                      >
+                        + Cadastrar agora
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="cf-page-toolbar cf-pos-context">
                 {/* Left group: Navigation & Title badge */}
                 <div className="cf-pos-group-left flex items-center gap-3">
@@ -1368,10 +1680,10 @@ const { useState, useEffect, useRef, useMemo } = React;
                   ? 'col-span-12'
                   : 'col-span-12 lg:col-span-8 cf-pos-products') + " flex flex-col gap-3"}
               >
-                {/* Section Title & Counter */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-sm sm:text-base font-bold text-slate-800 flex items-center gap-1">
+                {/* Section Title, Counter & Quick New Product Action */}
+                <div className="flex flex-wrap items-center justify-between gap-2 bg-white/80 px-3 py-2 rounded-xl border border-slate-200/80 shadow-2xs">
+                  <div className="flex items-center gap-2.5">
+                    <h2 className="text-sm sm:text-base font-extrabold text-[#0F381E] flex items-center gap-1.5 m-0">
                       {showingFavorites ? (
                         <>
                           <span>FAVORITOS</span>
@@ -1381,11 +1693,30 @@ const { useState, useEffect, useRef, useMemo } = React;
                         <span>{'product_catalog'.tr}</span>
                       )}
                     </h2>
-
+                    <span className="px-2 py-0.5 rounded-full bg-slate-100 text-[11px] text-slate-600 font-bold">
+                      {filteredProducts.length} {'mobile_cart_items'.tr}
+                    </span>
                   </div>
 
-                  <span className="text-xs text-slate-400 font-medium">
-                    {filteredProducts.length} {'mobile_cart_items'.tr} </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-emerald-50 text-xs font-bold text-slate-700 transition"
+                      onClick={() => {
+                        setInventorySearch(searchQuery);
+                        setShowInventoryCheck(true);
+                      }}
+                    >
+                      <span>📦 Conferir Estoque</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="cf-btn-3d cf-btn-3d--primary cf-btn-3d--sm"
+                      onClick={() => setShowQuickProduct(true)}
+                    >
+                      + Novo produto
+                    </button>
+                  </div>
                 </div>
 
                 {/* Compact 4-to-5-Per-Row Cards Grid on Desktop (1 extra column) */}
@@ -1394,7 +1725,6 @@ const { useState, useEffect, useRef, useMemo } = React;
                     ? 'grid-cols-2'
                     : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5')}
                 >
-                  <button type="button" className="cf-btn-3d cf-btn-3d--secondary cf-btn-3d--sm col-span-full justify-self-start" onClick={() => setShowQuickProduct(true)}>+ Novo produto</button>
                   {filteredProducts.length === 0 && <p role="status" className="col-span-full p-4 text-sm text-slate-600">{'catalog_empty_title'.tr}</p>}
                   {filteredProducts.slice(0, visibleCount).map((product) => {
                     const productId = String(product?.id ?? product?.productId ?? product?.sku ?? '').trim();
@@ -1486,6 +1816,97 @@ const { useState, useEffect, useRef, useMemo } = React;
 
           {productNotice && <div role="status" className="cf-product-notice" onClick={() => setProductNotice('')}>{productNotice}</div>}
           {showQuickProduct && <PdvComponents.QuickProductDialog products={products} initialName={searchQuery} canAdd onClose={() => setShowQuickProduct(false)} onCreated={handleQuickProductCreated} onUseExisting={(product) => { addProductToCart(product); setShowQuickProduct(false); }} />}
+          {showInventoryCheck && (
+            <div
+              className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4"
+              onMouseDown={(event) => { if (event.target === event.currentTarget) setShowInventoryCheck(false); }}
+            >
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-label="Conferência rápida de estoque"
+                className="bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl p-4 sm:p-5 shadow-2xl border border-slate-200 max-h-[86dvh] flex flex-col"
+              >
+                <div className="flex items-center justify-between gap-2 pb-3 border-b border-slate-100">
+                  <div>
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700">Consulta rápida</span>
+                    <h3 className="text-base font-black text-[#0F381E] m-0">Conferir Estoque</h3>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="Fechar conferência de estoque"
+                    onClick={() => setShowInventoryCheck(false)}
+                    className="w-8 h-8 rounded-full border border-slate-200 inline-flex items-center justify-center text-slate-600 font-bold hover:bg-slate-100"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div className="my-3 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 focus-within:border-emerald-600 focus-within:bg-white">
+                  <Search className="w-4 h-4 text-slate-400 shrink-0" />
+                  <input
+                    type="search"
+                    aria-label="Filtrar estoque"
+                    value={inventorySearch}
+                    onChange={(e) => setInventorySearch(e.target.value)}
+                    placeholder="Digite o nome ou categoria para ver saldo…"
+                    className="w-full bg-transparent text-sm text-slate-800 outline-none"
+                  />
+                  {inventorySearch && (
+                    <button
+                      type="button"
+                      onClick={() => setInventorySearch('')}
+                      aria-label="Limpar filtro de estoque"
+                      className="text-xs font-bold text-slate-400 hover:text-slate-700 px-1"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+                <div className="flex-1 overflow-y-auto divide-y divide-slate-100 pr-1">
+                  {inventoryFilteredProducts.map((item) => {
+                    const stockVal = Number(item.stock ?? item.stockQuantity ?? 0);
+                    const isLow = stockVal <= 3;
+                    return (
+                      <div key={item.id} className="py-2.5 flex items-center justify-between gap-2 text-xs">
+                        <div className="min-w-0 flex-1">
+                          <strong className="block truncate text-slate-900 font-bold">{item.name}</strong>
+                          <span className="text-[11px] text-slate-500">
+                            {item.categoryName || item.category || 'Geral'} · {formatBRL(item.price)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span
+                            className={`px-2 py-1 rounded-lg font-extrabold text-[11px] ${
+                              stockVal <= 0
+                                ? 'bg-rose-100 text-rose-800'
+                                : isLow
+                                  ? 'bg-amber-100 text-amber-900'
+                                  : 'bg-emerald-100 text-emerald-900'
+                            }`}
+                          >
+                            {stockVal} {isSoldByKg(item) ? 'kg' : 'un'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              addProductToCart(item);
+                              setShowInventoryCheck(false);
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg bg-[#109E46] text-white font-extrabold text-[11px] hover:bg-[#0d853a] active:scale-95"
+                          >
+                            + Vender
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {inventoryFilteredProducts.length === 0 && (
+                    <p className="py-6 text-center text-xs text-slate-500">Nenhum produto encontrado para este filtro.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
           {/* MODALS */}
           {weightProduct && <PdvComponents.WeightPrompt product={weightProduct} onCancel={() => setWeightProduct(null)} onConfirm={confirmWeightAdd} />}
           {customerSearchOpen && <PdvComponents.CustomerSearch onClose={() => setCustomerSearchOpen(false)} onSelect={selectCustomerFromList} />}
