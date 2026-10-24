@@ -205,6 +205,38 @@ class WhatsAppClient {
   }
 
   /**
+   * Envia mensagem do catálogo nativo da Meta (Single or Multi-Product Message)
+   */
+  async sendCatalogMessage(to, { bodyText = '', catalogId = '', sections = [], headerText = '', footerText = '' } = {}) {
+    const cleanCatalogId = catalogId || process.env.META_CATALOG_ID || process.env.WHATSAPP_CATALOG_ID || '';
+    if (!cleanCatalogId) {
+      throw new Error('META_CATALOG_ID_NOT_CONFIGURED');
+    }
+
+    const interactive = {
+      type: sections.length > 0 ? 'product_list' : 'catalog',
+      body: { text: String(bodyText || 'Confira nosso catálogo de produtos').slice(0, 1024) },
+      action: {
+        catalog_id: cleanCatalogId,
+        ...(sections.length > 0 ? { sections } : {}),
+      },
+    };
+
+    if (headerText) interactive.header = { type: 'text', text: String(headerText).slice(0, 60) };
+    if (footerText) interactive.footer = { text: String(footerText).slice(0, 60) };
+
+    const payload = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      type: 'interactive',
+      interactive,
+    };
+
+    return this.postRequest('/messages', payload);
+  }
+
+  /**
    * Envia botões interativos rápidos nativos no WhatsApp (até 3 botões)
    */
   async sendInteractiveButtons(to, { bodyText, buttons, headerText = '', footerText = '' }) {

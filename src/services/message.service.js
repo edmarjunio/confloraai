@@ -197,32 +197,7 @@ class MessageService {
       }
     }
 
-    const nativeCommerce = /^(add_|cat_|sub_|pay_|order_)/.test(interactiveId) || ['montar_sacola', 'btn_sacola'].includes(interactiveId) ||
-      /^(montar sacola|fazer pedido|comprar|fazer compras|abrir sacola|entrega|retirada|quero entrega|quero retirar|pix|cartao|cartão)$/i.test(String(message || '').trim());
-    const activeDraft = this.metaAgentService && !nativeCommerce ? await this.firestoreRepo.getOrder(phone) : null;
-    const draftIntent = activeDraft?.status === 'AWAITING_CONFIRMATION' ? this.router?.route(message, { pendingOrder: activeDraft })?.intent : null;
-    const draftAction = [INTENTS.ORDER_CONFIRMATION, INTENTS.UPDATE_ORDER_DETAILS, INTENTS.PLACE_ORDER, INTENTS.ASK_SIZE_CONFIRMATION].includes(draftIntent);
-    if (this.metaAgentService && !nativeCommerce && !draftAction && !isActiveAgent) {
-      const envelope = await this.metaAgentService.execute('atender_mensagem', { customer_phone: phone, message_id: messageId || require('node:crypto').randomUUID(), message });
-      if (!envelope.next_action.send_customer_message) return { reply: '', intent: 'HUMAN_HANDOFF', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
-      if (envelope.data.kind === 'ORDER_INTAKE') {
-        const reply = envelope.data.customer_message;
-        await this.firestoreRepo.appendMessage(phone, 'assistant', reply, { requirePersistence: true, messageId });
-        if (whatsapp) await whatsapp.sendTextMessage(phone, reply);
-        return { reply, intent: 'ORDER_INTAKE', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
-      }
-      const { runTransaction } = require('../database/transactions');
-      const id = 'catalog-' + require('node:crypto').createHash('sha256').update(messageId || require('node:crypto').randomUUID()).digest('hex');
-      await runTransaction(this.firestoreRepo, async tx => {
-        if (await tx.get('pdv_outbox', id)) return;
-        tx.set('pdv_outbox', id, { id, kind: 'conversation-catalog', recipient: phone,
-          productIds: envelope.data.products.map(product => product.id), photoRequested: Boolean(envelope.data.photo_requested),
-          criteriaQuery: message, status: 'PENDING', attempts: 0, createdAt: new Date().toISOString() });
-      });
-      return { reply: '', intent: 'VERIFIED_CATALOG_QUEUED', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
-    }
-
-    // 2. Opção 2 — 100% Nativo no WhatsApp: Falar com atendente
+    // 2. Opção 2 — 100% Nativo no WhatsApp: Falar com atendente / Negativa
     const isNegativeResponse = /^(n[aã]o|nao era|não era|nenhum|nenhuma|errado|outro|outra|nada disso|queria outr[oa])\b/i.test(trimmed);
 
     if (isNegativeResponse && !isActiveAgent) {
@@ -262,13 +237,25 @@ class MessageService {
       };
     }
 
-    // 3. Opção 2 — 100% Nativo no WhatsApp: Montar Sacola
+    // 3. Opção 2 — 100% Nativo no WhatsApp: Comprar agora / Montar Sacola
     const isMontarSacola = interactiveId === 'montar_sacola' ||
       interactiveId === 'btn_sacola' ||
-      /\b(montar sacola|fazer pedido|comprar|fazer compras|abrir sacola)\b/i.test(trimmed);
+      /\b(montar sacola|fazer pedido|comprar agora|comprar|fazer compras|abrir sacola)\b/i.test(trimmed);
 
     if (isMontarSacola) {
       await this.catalogRepo.refreshCatalog();
+      const catalogId = process.env.META_CATALOG_ID || process.env.WHATSAPP_CATALOG_ID || '';
+      if (whatsapp && catalogId) {
+        try {
+          const bodyText = '🛍️ *Comprar agora na Conflora*\n\nAcesse nosso catálogo comercial no WhatsApp para escolher seus produtos e montar sua sacola:';
+          await whatsapp.sendCatalogMessage(phone, { bodyText, catalogId });
+          await this.firestoreRepo.appendMessage(phone, 'assistant', bodyText);
+          return { reply: bodyText, intent: 'NATIVE_META_CATALOG_SENT', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
+        } catch (catErr) {
+          Logger.warn('Catálogo nativo Meta não enviado, utilizando lista interativa:', { error: catErr.message });
+        }
+      }
+
       const categories = this.catalogRepo.getCategories();
       if (!categories.length) {
         const reply = 'O catálogo está vazio no momento. Me diga qual produto você procura.';
@@ -287,10 +274,10 @@ class MessageService {
         },
       ];
 
-      const bodyText = '🛍️ *Montar sua Sacola*\n\nEscolha uma das categorias abaixo para ver os produtos disponíveis na Conflora:';
+      const bodyText = '🛍️ *Comprar agora*\n\nEscolha uma das categorias abaixo para ver os produtos disponíveis na Conflora:';
       if (whatsapp) {
         await whatsapp.sendInteractiveList(phone, {
-          headerText: '🌿 Conflora Garden',
+          headerText: '🌿 Conflora Horta e Viveiro',
           bodyText,
           footerText: 'Toque para abrir a lista',
           buttonText: 'Ver Categorias',
