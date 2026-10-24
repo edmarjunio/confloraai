@@ -1,5 +1,7 @@
 # Fontes oficiais e compatibilidade
 
+Contrato de produto atualizado em 24/10/2026: `products.productMedia` v1 mantém referências e comprovação da imagem, com origem `FIREBASE_STORAGE` ou `EXTERNAL`. Bytes próprios ficam no Storage; referências externas autorizadas não são apresentadas como uploads. `contentProvenance` registra campos confirmados pela equipe. `media`, `productInfo` e `inventory` são projeções de API, não novas coleções nem outra fonte comercial. Aliases legados são derivados pela normalização compartilhada. [Auditoria e plano de migração](audit/RELATORIO-2026-10-24.md).
+
 O inventário de referências está em [firestore-collection-map.json](firestore-collection-map.json). É estático: chamadas dinâmicas, falsos positivos de métodos `get/set` e subcoleções exigem a revisão contextual abaixo. Não é um dump do banco remoto.
 
 | Coleções/caminhos | Escrita e leitura principais | Contrato |
