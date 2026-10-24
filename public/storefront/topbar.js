@@ -28,7 +28,7 @@
       const admin = this.getAttribute('context') === 'admin';
       this.innerHTML = '<header class="cf-topbar-layout conflora-site-header">' +
         '<a class="cf-topbar-brand" href="/" aria-label="Conflora - página inicial"><img width="240" height="88" fetchpriority="high" decoding="async" src="/store-assets/brands/conflora-logo.webp" alt="Conflora Horta e Viveiro"></a>' +
-        '<form class="cf-topbar-search" role="search">' + icon('search') + '<input type="search" aria-label="Buscar produtos" placeholder="O que você procura?"><button type="submit">Buscar</button></form>' +
+        '<form class="cf-topbar-search" role="search">' + icon('search') + '<input type="search" aria-label="Buscar produtos" placeholder="O que você procura?"><button type="button" class="cf-topbar-search-clear" aria-label="Limpar busca" title="Limpar busca">×</button><button type="submit">Buscar</button></form>' +
         '<div class="cf-topbar-actions">' +
         '<select class="cf-topbar-language" aria-label="Idioma do catálogo"><option value="pt">PT 🇧🇷</option><option value="en">EN 🇺🇸</option><option value="es">ES 🇪🇸</option><option value="fr">FR 🇫🇷</option></select>' +
         '<button class="cf-topbar-identity" type="button" aria-label="Abrir minha conta">' + icon('user') + '<img hidden ' + (admin ? 'id="loggedUserPhoto"' : '') + ' alt="Foto do operador" referrerpolicy="no-referrer"><span><strong ' + (admin ? 'id="loggedUserName"' : '') + '></strong><small ' + (admin ? 'id="loggedUserRole"' : '') + '></small></span></button>' +
@@ -38,15 +38,40 @@
         '<button class="cf-topbar-menu" type="button" aria-label="Menu da loja">' + icon('menu') + '</button>' +
         '</div></header>';
       this.header = this.querySelector('header');
+      this.searchForm = this.querySelector('.cf-topbar-search');
       this.input = this.querySelector('input');
+      this.clearBtn = this.querySelector('.cf-topbar-search-clear');
       this.input.placeholder = this.getAttribute('search-placeholder') || 'header_search_placeholder'.tr;
       this.input.value = this.getAttribute('search-value') || '';
+      this.syncSearchState = () => {
+        if (this.searchForm) {
+          this.searchForm.setAttribute('data-has-value', this.input.value ? 'true' : 'false');
+        }
+      };
+      this.syncSearchState();
       this.querySelector('form').onsubmit = event => {
         event.preventDefault();
         if (this.hasAttribute('local-search')) this.search();
         else window.location.assign('/?q=' + encodeURIComponent(this.input.value.trim()));
       };
-      this.input.oninput = () => { if (this.hasAttribute('local-search')) this.search(); };
+      this.input.oninput = () => {
+        this.syncSearchState();
+        if (this.hasAttribute('local-search')) this.search();
+      };
+      this.input.onfocus = () => {
+        if (this.searchForm) this.searchForm.setAttribute('data-focused', 'true');
+      };
+      this.input.onblur = () => {
+        if (this.searchForm) this.searchForm.removeAttribute('data-focused');
+      };
+      if (this.clearBtn) {
+        this.clearBtn.onclick = () => {
+          this.input.value = '';
+          this.syncSearchState();
+          if (this.hasAttribute('local-search')) this.search();
+          this.input.focus();
+        };
+      }
       this.querySelector('.cf-topbar-cashier').onclick = event => {
         if (!this.hasAttribute('local-cashier')) return;
         event.preventDefault(); this.dispatchEvent(new CustomEvent('cf-topbar-cashier', { bubbles: true }));
@@ -100,7 +125,10 @@
     }
     attributeChangedCallback(name) {
       if (!this.header) return;
-      if (name === 'search-value') { if (this.input.value !== (this.getAttribute(name) || '')) this.input.value = this.getAttribute(name) || ''; }
+      if (name === 'search-value') {
+        if (this.input.value !== (this.getAttribute(name) || '')) this.input.value = this.getAttribute(name) || '';
+        this.syncSearchState?.();
+      }
       else this.updateIdentity();
     }
     disconnectedCallback() { if (this.onLangChange) window.removeEventListener('conflora-lang-change', this.onLangChange); this.sizeObserver?.disconnect(); window.removeEventListener('resize', this.updateSize); }

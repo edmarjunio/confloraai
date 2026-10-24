@@ -81,11 +81,15 @@ export function createCashierNotifications(user, onDetails, { onArrival = () => 
   control.setAttribute('aria-label', 'Notificações do caixa');
   const toggle = document.createElement('button');
   toggle.type = 'button';
+  toggle.className = 'cashier-notification-fab';
   const permission = permissionButton('Permitir no navegador');
+  const bellActiveSvg = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
+  const bellMutedSvg = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M18.63 13A17.89 17.89 0 0 1 18 8"/><path d="M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h14"/><path d="M18 8a6 6 0 0 0-9.33-5"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
   const paint = () => {
-    toggle.textContent = enabled ? '🔔 Alertas ativos' : 'Alertas desativados';
+    toggle.innerHTML = enabled ? bellActiveSvg : bellMutedSvg;
     toggle.setAttribute('aria-pressed', String(enabled));
     toggle.setAttribute('aria-label', enabled ? 'Desativar alertas do caixa' : 'Ativar alertas do caixa');
+    toggle.setAttribute('title', enabled ? 'Alertas ativos (clique para silenciar)' : 'Alertas desativados (clique para ativar)');
     permission.hidden = !enabled || !notificationSupport() || window.Notification.permission === 'granted';
   };
   toggle.addEventListener('click', () => {

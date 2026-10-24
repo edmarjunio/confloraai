@@ -1097,9 +1097,9 @@ window.PdvComponents = (() => {
           </div>
         </div>
 
-        {/* Minimalist receipt view: button to open dedicated Separation / Receipt Modal */}
+        {/* Inline item preview + button to open dedicated Separation / Receipt Modal */}
         <div className="border border-slate-200 rounded-2xl bg-white p-3 shadow-2xs">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <div>
               <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
                 <span>📦</span>
@@ -1117,6 +1117,24 @@ window.PdvComponents = (() => {
               <span>→</span>
             </button>
           </div>
+          {Array.isArray(order.items) && order.items.length > 0 && (
+            <div className="mt-2 pt-2 border-t border-slate-100 space-y-1 max-h-28 overflow-y-auto">
+              {order.items.slice(0, 4).map((item, idx) => (
+                <div key={idx} className="flex items-center justify-between text-xs text-slate-700">
+                  <span className="truncate pr-2">
+                    <strong className="text-emerald-800 mr-1">{item.quantity}x</strong>
+                    {item.name}
+                  </span>
+                  <span className="font-bold text-slate-900 shrink-0">{money(item.total || item.price * item.quantity)}</span>
+                </div>
+              ))}
+              {order.items.length > 4 && (
+                <p className="text-[11px] font-bold text-emerald-700 pt-0.5">
+                  +{order.items.length - 4} item(ns) na comanda…
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         <SeparationModal
@@ -1821,7 +1839,21 @@ window.PdvComponents = (() => {
               <p className="mt-1 text-xs"> {'count_all_drawer_cash'.tr} </p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5">
-              <h4 className="text-xs font-black uppercase text-slate-700">{'enter_the_physically_counted_amounts'.tr}</h4>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h4 className="text-xs font-black uppercase text-slate-700">{'enter_the_physically_counted_amounts'.tr}</h4>
+                <button
+                  type="button"
+                  onClick={() => setCounted({
+                    cash: Number(expected.cash || 0).toFixed(2),
+                    pix: Number(expected.pix || 0).toFixed(2),
+                    debit: Number(expected.debit || 0).toFixed(2),
+                    credit: Number(expected.credit || 0).toFixed(2),
+                  })}
+                  className="rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-[11px] font-extrabold text-emerald-900 hover:bg-emerald-100 transition"
+                >
+                  ✓ Preencher conforme sistema
+                </button>
+              </div>
               <div className="mt-3 space-y-2.5">
                 {[
                   { key: 'cash', label: 'cash_in_drawer'.tr, exp: expected.cash, hint: 'cash_and_coins'.tr },
@@ -1834,7 +1866,15 @@ window.PdvComponents = (() => {
                       <span className="block text-xs font-bold text-slate-800">{item.label}</span>
                       <span className="text-[11px] text-slate-400"> {'system_total'.tr} <strong>{money(item.exp)}</strong></span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        title="Usar valor do sistema"
+                        onClick={() => setCounted({ ...counted, [item.key]: Number(item.exp || 0).toFixed(2) })}
+                        className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-extrabold text-emerald-800 hover:bg-emerald-50 hover:border-emerald-300 transition shrink-0"
+                      >
+                        = Sistema
+                      </button>
                       <div className="relative w-32">
                         <span className="absolute left-2.5 top-1.5 text-xs text-slate-400">R$</span>
                         <input
@@ -2299,21 +2339,42 @@ window.PdvComponents = (() => {
     };
 
     const fieldClass = 'mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100';
+    const quickCategories = categories.slice(0, 6);
     return <div className="cf-quick-product-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
       <form ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="cf-quick-product-title" className="cf-quick-product-dialog" onSubmit={submit}>
         <header className="flex items-start justify-between gap-3">
           <div><p className="text-[10px] font-extrabold uppercase tracking-[.14em] text-emerald-700">Cadastro rápido</p><h2 id="cf-quick-product-title" className="mt-1 text-xl font-black text-[#0F381E]">Novo produto</h2><p className="mt-1 text-xs text-slate-500">Cadastre o essencial e já continue a venda.</p></div>
           <button type="button" className="cf-quick-product-close" aria-label="Fechar cadastro" onClick={onClose} disabled={busy}>×</button>
         </header>
-        <label className="mt-5 block text-xs font-extrabold text-slate-700">Nome do produto <span className="text-red-600">*</span>
+        <label className="mt-4 block text-xs font-extrabold text-slate-700">Nome do produto <span className="text-red-600">*</span>
           <input autoFocus required minLength={2} maxLength={180} className={fieldClass} value={name} onChange={(event) => setName(event.target.value)} placeholder="Ex.: Alface crespa" />
         </label>
         {matches.length > 0 && <aside className="mt-2 rounded-xl bg-amber-50 p-3 text-xs"><p className="font-bold">Já existe um produto parecido.</p>{matches.map((product) => <div key={product.id} className="mt-2 flex items-center justify-between gap-2"><span>{product.name} · {money(product.price)}</span><button type="button" className="cf-btn-3d cf-btn-3d--secondary cf-btn-3d--sm" onClick={() => onUseExisting?.(product)}>{canAdd ? 'Adicionar à venda' : 'Ver produto'}</button></div>)}</aside>}
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="block text-xs font-extrabold text-slate-700">Categoria
-            <input list="quick-product-categories" maxLength={80} className={fieldClass} value={category} onChange={(event) => setCategory(event.target.value)} placeholder="Geral" />
-            <datalist id="quick-product-categories">{categories.map((value) => <option key={value} value={value} />)}</datalist>
-          </label>
+          <div>
+            <label className="block text-xs font-extrabold text-slate-700">Categoria
+              <input list="quick-product-categories" maxLength={80} className={fieldClass} value={category} onChange={(event) => setCategory(event.target.value)} placeholder="Geral" />
+              <datalist id="quick-product-categories">{categories.map((value) => <option key={value} value={value} />)}</datalist>
+            </label>
+            {quickCategories.length > 0 && (
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {quickCategories.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setCategory(cat)}
+                    className={`rounded-lg border px-2 py-0.5 text-[10px] font-bold transition ${
+                      category === cat
+                        ? 'border-emerald-600 bg-emerald-50 text-emerald-900'
+                        : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-emerald-300'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <fieldset className="block text-xs font-extrabold text-slate-700"><legend>Vendido por</legend>
             <div className="mt-1.5 grid grid-cols-2 gap-2" role="group" aria-label="Unidade de venda">
               {[['UN', 'Unidade'], ['KG', 'Quilo']].map(([value, label]) => <button key={value} type="button" aria-pressed={unit === value} onClick={() => { setUnit(value); if (value === 'KG' && Number.isInteger(Number(stockQuantity))) setStockQuantity(Number(stockQuantity).toFixed(3)); if (value === 'UN' && !Number.isInteger(Number(stockQuantity))) setStockQuantity(''); }} className={`cf-quick-product-unit ${unit === value ? 'is-selected' : ''}`}>{label}</button>)}
@@ -2328,7 +2389,7 @@ window.PdvComponents = (() => {
             <input required min="0" step={unit === 'KG' ? '0.001' : '1'} type="number" inputMode="decimal" className={fieldClass} value={stockQuantity} onChange={(event) => setStockQuantity(event.target.value)} />
           </label><p className="mt-1">Informe somente a quantidade real disponível. O cadastro não movimenta vendas anteriores.</p></details>
         </div>
-        <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2.5 text-xs leading-relaxed text-emerald-900">Imagem e outras informações podem ser completadas depois. O produto ficará disponível no catálogo assim que for salvo.</p>
+        <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-xs leading-relaxed text-emerald-900">Imagem e outras informações podem ser completadas depois. O produto ficará disponível no catálogo assim que for salvo.</p>
         {canAdd && stockValue <= 0 && <p className="mt-2 text-xs text-amber-800">Para vender agora, informe o estoque real disponível em Mais opções.</p>}
         {error && <p role="alert" className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs font-semibold text-red-800">{error}</p>}
         <footer className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -2719,7 +2780,31 @@ window.PdvComponents = (() => {
 
     return <div className={`cf-cashier-queue min-h-screen w-full bg-[#F4F6F5] font-sans text-slate-800 ${view === 'orders' ? 'cf-orders-page' : ''}`}>
       <div className="bg-white"><Topbar user={user} onCashier={onBack} />
-        {view === 'orders' ? <aside className="cf-orders-fab-rail" aria-label="Ações das comandas">
+        {view === 'orders' ? <>
+          <div className="cf-orders-topbar flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-2.5 sm:px-6">
+            <div className="flex items-center gap-2.5">
+              <button type="button" onClick={onBack} className="cf-back-button">{'back_59dc92'.tr}</button>
+              <h1 className="text-base sm:text-lg font-black text-[#0F381E] m-0">{title}</h1>
+              {data && (
+                <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-extrabold text-emerald-900">
+                  {columns.reduce((sum, col) => sum + col.orders.length, 0)} no quadro
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="hidden sm:inline-block text-xs font-semibold text-slate-500">
+                {dateFrom === dateTo ? `Hoje (${dateFrom})` : `${dateFrom} a ${dateTo}`}
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowQuickProductDialog(true)}
+                className="cf-btn-3d cf-btn-3d--primary cf-btn-3d--sm"
+              >
+                + Cadastrar produto
+              </button>
+            </div>
+          </div>
+          <aside className="cf-orders-fab-rail" aria-label="Ações das comandas">
           <button type="button" className="cf-btn-3d cf-btn-3d--primary cf-orders-fab" aria-label={title} title={title} onClick={() => document.querySelector('.cf-cashier-board')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
             <svg viewBox="0 0 24 24" aria-hidden="true" className="cf-orders-fab-icon" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4.5h6M9 10h6M9 14h6M9 18h3" /></svg>
             <span className="cf-orders-fab-tooltip">{title}</span>
@@ -2734,7 +2819,7 @@ window.PdvComponents = (() => {
             <svg viewBox="0 0 24 24" aria-hidden="true" className={`cf-orders-fab-icon ${refreshing ? 'cf-orders-refreshing' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 7v5h-5M4 17v-5h5" /><path d="M5.6 9a7 7 0 0 1 11.7-2L20 12M4 12l2.7 5a7 7 0 0 0 11.7-2" /></svg>
             <span className="cf-orders-fab-tooltip">{refreshing ? 'updating'.tr : 'refresh'.tr}</span>
           </button>
-        </aside> : <div className="cf-page-toolbar">
+        </aside></> : <div className="cf-page-toolbar">
           <div className="flex flex-col items-start gap-2"><button type="button" onClick={onBack} className="cf-back-button">{'back_59dc92'.tr}</button></div>
           <div className="flex flex-wrap items-center gap-2"><h1 className="mr-2 text-lg font-black text-[#0F381E]">{title}</h1><OrderSoundAlert settings={soundSettings} onChange={setSoundSettings} />{view === 'report' && user.role !== 'VENDEDOR' && <button className={button} onClick={onDebt}>{'receive_payment'.tr}</button>}<button className={button} disabled={refreshing} onClick={() => refresh()} aria-label={'refresh'.tr}>{refreshing ? 'updating'.tr : 'refresh_8557d8'.tr}</button></div>
         </div>}

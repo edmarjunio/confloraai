@@ -1,4 +1,4 @@
-﻿.conflora-site-header {
+.conflora-site-header {
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -92,12 +92,51 @@ conflora-topbar { display:block; width:100%; }
 .cf-topbar-layout .cf-topbar-brand img { width:240px !important; max-width:100% !important; height:88px !important; max-height:88px; object-fit:contain; transition:transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1); }
 .cf-topbar-layout .cf-topbar-brand:hover img { transform:translateY(-1px) scale(1.03); }
 .cf-topbar-layout .cf-topbar-brand > span { display:none !important; }
-.cf-topbar-layout .cf-topbar-search { display:flex !important; grid-column:2 !important; grid-row:1 !important; align-items:center; flex:1; width:100% !important; max-width:none !important; min-width:0 !important; margin:0 !important; padding:2px 2px 2px 14px !important; gap:8px; min-height:42px; border:2px solid #dfe5e9; border-radius:var(--topbar-radius) !important; background:white; }
-.cf-topbar-layout .cf-topbar-search:focus-within { border-color:#109e46; box-shadow:0 0 0 3px rgb(16 158 70 / 12%); }
+.cf-topbar-layout .cf-topbar-search { display:flex !important; grid-column:2 !important; grid-row:1 !important; align-items:center; flex:1; width:100% !important; max-width:none !important; min-width:0 !important; margin:0 !important; padding:2px 2px 2px 14px !important; gap:8px; min-height:42px; border:2px solid #dfe5e9; border-radius:var(--topbar-radius) !important; background:white; transition:max-width 0.22s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease; }
+.cf-topbar-layout .cf-topbar-search:focus-within { border-color:#109e46 !important; background:#fcfffd !important; box-shadow:0 0 0 4px rgb(16 158 70 / 16%), 0 6px 18px rgb(15 56 30 / 10%); }
+@media (min-width: 1024px) {
+  .cf-topbar-layout .cf-topbar-search { max-width: 600px !important; justify-self: start; }
+  .cf-topbar-layout .cf-topbar-search:focus-within { max-width: 100% !important; }
+  .cf-topbar-layout.conflora-site-header:has(.cf-topbar-search:focus-within) { grid-template-columns: 196px minmax(260px, 1.55fr) auto !important; }
+}
 .cf-topbar-layout svg { width:18px; height:18px; flex:none; }
-.cf-topbar-layout .cf-topbar-search > svg { color:#8d9cab; }
+.cf-topbar-layout .cf-topbar-search > svg { color:#8d9cab; transition:color 0.15s ease; }
+.cf-topbar-layout .cf-topbar-search:focus-within > svg { color:#109e46; }
 .cf-topbar-layout .cf-topbar-search input { flex:1; min-width:0; width:100%; padding:5px 0; border:0 !important; outline:none; border-radius:0; background:transparent; color:#20392d; font:inherit; font-size:14px; }
-.cf-topbar-layout .cf-topbar-search button {
+.cf-topbar-layout .cf-topbar-search input::-webkit-search-cancel-button { -webkit-appearance:none; appearance:none; display:none; }
+.cf-topbar-layout .cf-topbar-search .cf-topbar-search-clear {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px !important;
+  min-width: 28px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  padding: 0 !important;
+  border: 1px solid #d5e1d8 !important;
+  border-radius: 999px !important;
+  background: #f1f5f3 !important;
+  color: #365242 !important;
+  font-size: 16px !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
+  cursor: pointer;
+  box-shadow: none !important;
+  transition: background-color 0.14s ease, color 0.14s ease, border-color 0.14s ease, transform 0.12s ease !important;
+}
+.cf-topbar-layout .cf-topbar-search[data-has-value="true"] .cf-topbar-search-clear {
+  background: #dcfce7 !important;
+  border-color: #86efac !important;
+  color: #0f381e !important;
+}
+.cf-topbar-layout .cf-topbar-search .cf-topbar-search-clear:hover {
+  background: #bbf7d0 !important;
+  border-color: #22c55e !important;
+  color: #082612 !important;
+  transform: scale(1.06) !important;
+}
+.cf-topbar-layout .cf-topbar-search button:not(.cf-topbar-search-clear) {
   flex: none;
   min-height: 32px !important;
   height: 32px !important;
@@ -114,12 +153,12 @@ conflora-topbar { display:block; width:100%; }
   user-select: none;
   -webkit-user-select: none;
 }
-.cf-topbar-layout .cf-topbar-search button:hover:not(:disabled) {
+.cf-topbar-layout .cf-topbar-search button:not(.cf-topbar-search-clear):hover:not(:disabled) {
   transform: translateY(-1px) !important;
   background: #166534 !important;
   box-shadow: 0 4px 0 #0f381e, 0 6px 12px rgba(15, 56, 30, 0.25) !important;
 }
-.cf-topbar-layout .cf-topbar-search button:active {
+.cf-topbar-layout .cf-topbar-search button:not(.cf-topbar-search-clear):active {
   transform: translateY(2px) !important;
   box-shadow: 0 1px 0 #0f381e !important;
 }
