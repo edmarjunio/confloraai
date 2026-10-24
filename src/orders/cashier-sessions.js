@@ -1,4 +1,3 @@
-const { money } = require('./receipt.util');
 const businessDate = (value = new Date()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date(value));
 const conflict = message => Object.assign(new Error(message), { status: 409 });
 const round = value => Math.round(value * 100) / 100;
@@ -92,8 +91,9 @@ async function close(store, user, input) {
     if (jobId) {
       const rows = Object.values(sessions);
       const sum = fn => round(rows.reduce((n, row) => n + fn(row), 0));
-      const text = `📊 *CONFLORA — FECHAMENTO GERAL DE TODOS OS CAIXAS*\nData: ${session.date} · revisão ${revision}\nTodos os caixas abertos nesta data estão fechados.\n\n${rows.map(row => `👤 ${row.name} · Caixa ${row.id.slice(0, 8)}\nTroco do dia: ${money(row.openingFloat)}\nRecebimentos em dinheiro: ${money(row.expected.cashReceipts)}\nTotal em dinheiro esperado (troco + recebimentos): ${money(row.expected.cash)}\nDinheiro contado: ${money(row.counted.cash)}\nDiferença em dinheiro: ${money(row.differences.cash)}`).join('\n\n')}\n\nTroco total das aberturas: ${money(sum(r => r.openingFloat))}\nRecebimentos em dinheiro: ${money(sum(r => r.expected.cashReceipts))}\nTotal em dinheiro esperado: ${money(sum(r => r.expected.cash))}\nTotal Conferido em Caixa — dinheiro: ${money(sum(r => r.counted.cash))}\nPix: ${money(sum(r => r.counted.pix))}\nDébito: ${money(sum(r => r.counted.debit))}\nCrédito: ${money(sum(r => r.counted.credit))}\nDiferença geral: ${money(sum(r => r.differences.total))}\nTroco é fundo de caixa, não faturamento. Se houver nova abertura, será enviado um resumo atualizado após o fechamento.`;
-      tx.set('pdv_outbox', jobId, { id: jobId, kind: 'closing', recipient: process.env.JUNIOR_WHATSAPP_NUMBER || process.env.OWNER_WHATSAPP_NUMBER || '', text, status: 'PENDING', attempts: 0, createdAt: closing.closedAt });
+      tx.set('pdv_outbox', jobId, { id: jobId, kind: 'closing', closingDate: session.date, closingRevision: revision,
+        cashierTotals: { cash: sum(r => r.counted.cash), pix: sum(r => r.counted.pix), debit: sum(r => r.counted.debit), credit: sum(r => r.counted.credit), difference: sum(r => r.differences.total), openingFloat: sum(r => r.openingFloat) },
+        status: 'PENDING', attempts: 0, createdAt: closing.closedAt });
     }
     return { success: true, closing, allClosed, jobId, whatsappQueued: Boolean(jobId) };
   });

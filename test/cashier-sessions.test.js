@@ -53,7 +53,7 @@ test('troco + venda líquida + recebimento de dívida; novo turno não duplica v
   assert.notEqual(secondClose.jobId, result.jobId);
   assert.equal(secondClose.closing.expected.cashReceipts, 50);
   assert.equal((await store.list('cashier_closings')).length, 2);
-  assert.match((await store.read('pdv_outbox', secondClose.jobId)).text, /120,00/);
+  assert.equal((await store.read('pdv_outbox', secondClose.jobId)).cashierTotals.cash, 260);
 });
 
 test('caixa sem vendas impede resumo; fechamentos simultâneos criam apenas um envio', async () => {
@@ -116,12 +116,13 @@ test('falha de WhatsApp preserva fechamento e intenção de envio; outro caixa n
   const result = await close(store, session, 100);
   const service = new PdvService({ repository: store, whatsapp: { sendTextMessage: async () => { throw Object.assign(new Error('Sem conexão'), { definitelyNotSent: true }); } } });
   await store.transaction(async tx => {
-    const job = await tx.get('pdv_outbox', result.jobId);
-    tx.set('pdv_outbox', job.id, { ...job, recipient: '5564999994321' });
+    tx.set('store_settings', 'whatsapp_notifications', { version: 1, recipients: [{ id: 'junior', phone: '5564999994321', enabled: true, closing: true }] });
   });
   await service.deliver(result.jobId);
   assert.equal((await store.read('cashier_sessions', session.id)).status, 'CLOSED');
-  assert.equal((await store.read('pdv_outbox', result.jobId)).status, 'PENDING');
+  const parent = await store.read('pdv_outbox', result.jobId);
+  assert.equal(parent.deliveryStatus, 'FANOUT_QUEUED');
+  assert.equal((await store.read('pdv_outbox', parent.childIds[0])).status, 'PENDING');
   const otherView = await sessions.status(store, edmar);
   assert.equal(otherView.activeOperators[0].counted, undefined);
   assert.equal(otherView.activeOperators[0].expected, undefined);

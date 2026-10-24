@@ -253,7 +253,10 @@ class PdvRepository {
       if (reservation) applyStockReservation(tx, reservation, now);
       const updated = { ...order, deliveryStatus: 'PENDING_DELIVERY', dispatchedBy: actor, dispatchedAt: order.dispatchedAt || now, updatedAt: now,
         ...(reservation ? { inventoryReserved: !reservation.trackingDisabled, reservedItems: reservation.reservedItems } : {}) };
-      tx.set('orders', orderId, updated); return updated;
+      tx.set('orders', orderId, updated);
+      const id = `${orderId}-owner-delivery-pending-${now.replace(/\D/g, '')}`;
+      tx.set('pdv_outbox', id, { id, orderId, kind: 'owner-delivery-pending', status: 'PENDING', attempts: 0 });
+      return updated;
     });
   }
 
@@ -304,7 +307,10 @@ class PdvRepository {
       if (!isDelivery(order) || order.status === 'CANCELLED' || !['PREPARING_DELIVERY', 'OUT_FOR_DELIVERY'].includes(order.deliveryStatus) || (actor?.role !== 'ADMIN' && order.assignedDriver?.id !== actor?.id)) throw new Error('Apenas o responsável pode devolver esta entrega.');
       const now = new Date().toISOString();
       const updated = { ...order, deliveryStatus: 'PENDING_DELIVERY', assignedDriver: null, acceptedAt: null, departedAt: null, deliveryRoute: null, deliveryMetrics: null, updatedAt: now, deliveryHistory: recordDeliveryEvent(tx, order, 'PENDING_DELIVERY', actor, now, { previousDriver: order.assignedDriver || null, previousDeparture: order.departedAt || '' }) };
-      tx.set('orders', orderId, updated); return updated;
+      tx.set('orders', orderId, updated);
+      const id = `${orderId}-owner-delivery-pending-${now.replace(/\D/g, '')}`;
+      tx.set('pdv_outbox', id, { id, orderId, kind: 'owner-delivery-pending', status: 'PENDING', attempts: 0 });
+      return updated;
     });
   }
 
@@ -321,7 +327,10 @@ class PdvRepository {
       const updated = { ...order, deliveryStatus: 'DELIVERED', deliveredAt: now, deliveredBy: actor, deliveryNotes: String(notes).slice(0, 500), deliveryMetrics, deliveryHistory: recordDeliveryEvent(tx, order, 'DELIVERED', actor, now), updatedAt: now };
       tx.set('delivery_driver_metrics', driver.id, mergeDriverPerformance(previousStats, updated, now));
       updated.receiptText = formatOrderReceipt(updated);
-      tx.set('orders', orderId, updated); return updated;
+      tx.set('orders', orderId, updated);
+      const id = `${orderId}-owner-delivered`;
+      tx.set('pdv_outbox', id, { id, orderId, kind: 'owner-delivered', status: 'PENDING', attempts: 0 });
+      return updated;
     });
   }
 
@@ -516,6 +525,10 @@ class PdvRepository {
         tx.set('delivery_driver_metrics', deliveryDriver.id, mergeDriverPerformance(previousDeliveryStats, completed, now));
       }
       tx.set('orders', order.id, completed);
+      if (!verification) {
+        const id = `${order.id}-owner-paid`;
+        tx.set('pdv_outbox', id, { id, kind: 'owner-paid', orderId: order.id, status: 'PENDING', attempts: 0 });
+      }
       if (procurementRequest) tx.set('agent_handoffs', procurementRequest.id, { ...procurementRequest, status: 'closed', requestStatus: 'COMPLETED', version: procurementRequest.version + 1, updatedAt: now });
       if (!onAccount && completed.source === 'WEB_CATALOG' && /^[a-f0-9-]{36}$/.test(completed.analyticsClientId || '') && require('../integrations/ga4-purchase.client').ga4PurchaseEnabled()) {
         const id = `${order.id}-ga4-purchase`;

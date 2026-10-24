@@ -4,11 +4,10 @@ const config = require('../config/env');
 function renderFirebaseAuthScript() {
   const publicConfig = JSON.stringify(config.firebase).replace(/</g, '\\u003c');
   return `<script type="module">
-    const buttons = document.querySelectorAll('[data-google-login]');
     try {
       const firebaseConfig = ${publicConfig};
       if (!firebaseConfig.apiKey || !firebaseConfig.authDomain) {
-        throw new Error('google_login_unavailable_configure_firebase_authentication'.tr);
+        throw new Error('Login Google indisponível: configuração Firebase ausente.');
       }
       const [{ initializeApp }, { getAuth, GoogleAuthProvider, signInWithPopup, signOut, setPersistence, browserSessionPersistence }] = await Promise.all([
         import('https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js'),
@@ -34,10 +33,10 @@ function renderFirebaseAuthScript() {
         }
         return data;
       };
-      buttons.forEach(button => { button.disabled = false; });
+      document.querySelectorAll('[data-google-login]').forEach(button => { button.disabled = false; });
     } catch (error) {
       document.querySelectorAll('[data-google-status]').forEach(element => {
-        element.textContent = error.message || 'unable_to_load_google_login_reload_the_page'.tr;
+        element.textContent = error.message || 'Não foi possível carregar o login Google. Recarregue a página.';
       });
     }
   </script>`;

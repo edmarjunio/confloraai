@@ -874,6 +874,16 @@ function renderAdminHtml(storeConfig) {
       <div id="adminStatusDashboardContainer">
         <div style="padding:30px; text-align:center; color:#64748b;">Carregando diagnósticos em tempo real...</div>
       </div>
+      <section style="margin-top:24px" aria-labelledby="whatsappRecipientsTitle">
+        <h2 id="whatsappRecipientsTitle">Destinatários WhatsApp</h2>
+        <p>Preencha os números com DDD. Operacional: aprovações, recibos e entregas. Fechamento: resumo ao encerrar o último caixa.</p>
+        <p>Cadastre somente destinatários que concordaram com os avisos. O envio depende das permissões e dos modelos aprovados na Meta.</p>
+        <form id="whatsappRecipientsForm" style="display:grid;gap:12px">
+          <div id="whatsappRecipientsFields" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px"></div>
+          <button type="submit" class="action-btn btn-green" disabled>Salvar destinatários</button>
+          <p id="whatsappRecipientsStatus" role="status"></p>
+        </form>
+      </section>
       <section id="sicrediPixMonitorSection" style="margin-top:28px">
         <h2>Teste do Pix Sicredi</h2>
         <p>Valida QR Code, conferência bancária e baixa do estoque em uma simulação isolada, sem pagamento nem dados reais.</p>
@@ -1203,7 +1213,7 @@ function renderAdminHtml(storeConfig) {
       if (tab === 'products') loadAdminProducts();
       if (tab === 'team') loadTeam();
       if (tab === 'notifs') loadNotifications();
-      if (tab === 'status') { loadAdminStatusData(); window.ConfloraErrorHistory?.load(); }
+      if (tab === 'status') { loadAdminStatusData(); loadWhatsappRecipients(); window.ConfloraErrorHistory?.load(); }
     }
 
     // 1. EVENTOS DO CATÁLOGO & INDICADORES PARA MARKETING
@@ -2150,6 +2160,53 @@ function renderAdminHtml(storeConfig) {
       }
     }
 
+    let whatsappRecipientsVersion = null;
+    async function loadWhatsappRecipients() {
+      if (currentUser?.role !== 'ADMIN') return;
+      const form = document.getElementById('whatsappRecipientsForm');
+      const status = document.getElementById('whatsappRecipientsStatus');
+      form.querySelector('button').disabled = true;
+      try {
+        const response = await window.ConfloraSession.apiFetch('/api/admin/whatsapp/notification-settings');
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Falha ao consultar destinatários.');
+        whatsappRecipientsVersion = data.version;
+        const fields = document.getElementById('whatsappRecipientsFields');
+        fields.replaceChildren();
+        const names = { horta: 'Horta', edmar: 'Edmar Júnio', junior: 'Junior', telvia: 'Telvia', rose: 'Rose' };
+        for (const row of data.recipients) {
+          const group = document.createElement('fieldset'); group.dataset.recipientId = row.id;
+          const legend = document.createElement('legend'); legend.textContent = names[row.id]; group.append(legend);
+          const label = document.createElement('label'); label.textContent = 'WhatsApp com DDD ';
+          const phone = document.createElement('input'); phone.type = 'tel'; phone.name = 'phone'; phone.maxLength = 22; phone.value = row.phone; phone.placeholder = 'DDD + número'; phone.autocomplete = 'off';
+          phone.style.cssText = 'width:100%;min-height:44px;margin:8px 0'; label.append(phone); group.append(label);
+          for (const pair of [['enabled', 'Ativo'], ['operational', 'Vendas e entregas'], ['closing', 'Fechamento diário']]) {
+            const option = document.createElement('label'); option.style.cssText = 'display:block;margin:8px 0';
+            const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.name = pair[0]; checkbox.checked = row[pair[0]];
+            option.append(checkbox, document.createTextNode(' ' + pair[1])); group.append(option);
+          }
+          fields.append(group);
+        }
+        status.textContent = 'Campos vazios não recebem mensagens. Salvar não envia mensagens.';
+        form.querySelector('button').disabled = false;
+      } catch (error) { status.textContent = error.message; }
+    }
+    document.getElementById('whatsappRecipientsForm').addEventListener('submit', async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const button = form.querySelector('button'); button.disabled = true;
+      const status = document.getElementById('whatsappRecipientsStatus');
+      try {
+        const recipients = Array.from(form.querySelectorAll('fieldset')).map(group => ({ id: group.dataset.recipientId,
+          phone: group.querySelector('[name=phone]').value,
+          ...Object.fromEntries(['enabled', 'operational', 'closing'].map(key => [key, group.querySelector('[name=' + key + ']').checked])) }));
+        const response = await window.ConfloraSession.apiFetch('/api/admin/whatsapp/notification-settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ version: whatsappRecipientsVersion, recipients }) });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Falha ao salvar.');
+        whatsappRecipientsVersion = data.version; status.textContent = 'Destinatários salvos. Nenhuma mensagem de teste foi enviada.';
+      } catch (error) { status.textContent = error.message; }
+      finally { button.disabled = false; }
+    });
     // 11. Diagnóstico das conexões WhatsApp e Firestore
     async function loadAdminStatusData() {
       const container = document.getElementById('adminStatusDashboardContainer');

@@ -327,7 +327,8 @@ function installPdvRoutes(app, { repository, pix, whatsapp, ownerPhone, taskQueu
     const result = await cashierSessions.close(store, req.user, req.body);
     if (result.jobId) await service.deliver(result.jobId);
     const job = result.jobId ? await store.read('pdv_outbox', result.jobId) : null;
-    res.json({ ...result, whatsappSent: job?.status === 'SENT' });
+    const children = await Promise.all((job?.childIds || []).map(id => store.read('pdv_outbox', id)));
+    res.json({ ...result, whatsappSent: children.length > 0 && children.every(child => child?.status === 'SENT' && child.providerMessageId) });
   }));
 
   const findOrder = async (req) => {

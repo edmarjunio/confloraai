@@ -101,4 +101,21 @@ function normalizeWhatsAppNumber(value) {
   return /^55\d{10,11}$/.test(normalized) ? normalized : '';
 }
 
-module.exports = { formatDailyExecutiveReport, normalizeWhatsAppNumber };
+function formatCompactClosing(metrics, counted = {}) {
+  const top = (rows, byValue) => rows?.length ? rows.slice(0, 3).map(row => `${safeText(row.name)}: ${byValue ? currency(row.revenue) : row.quantity + ' un.'}`).join(' · ') : 'Sem vendas';
+  return [
+    `*CONFLORA · FECHAMENTO ${formatDate(metrics.date)}*`,
+    `*Vendas: ${currency(metrics.totalRevenue)} · ${metrics.orderCount} vendas*`,
+    `Recebido em vendas: *${currency(metrics.totalReceivedSales)}*`,
+    `Ticket médio: ${currency(metrics.ticketMedio)}`,
+    `Fiado: ${currency(metrics.onAccountSales)} · Dívidas recebidas: ${currency(metrics.debtReceived)}`,
+    `*CONFERIDO NOS CAIXAS*`,
+    `Dinheiro: ${currency(counted.cash)} · Pix: ${currency(counted.pix)}`,
+    `Débito: ${currency(counted.debit)} · Crédito: ${currency(counted.credit)}`,
+    `Fundo de caixa: ${currency(counted.openingFloat)} · Diferença: *${currency(counted.difference)}*`,
+    `*TOP 3 · QUANTIDADE*`, top(metrics.topProductsByQuantity, false),
+    `*TOP 3 · VALOR*`, top(metrics.topProductsByValue, true),
+    `Todos os caixas fechados. Fundo de caixa não é venda.`,
+  ].join('\n');
+}
+module.exports = { formatDailyExecutiveReport, formatCompactClosing, normalizeWhatsAppNumber };

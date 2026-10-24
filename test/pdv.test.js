@@ -144,7 +144,7 @@ test('customer debt Pix applies once, validates Sicredi, isolates accounts and p
   assert.equal(s.base.inMemoryCustomers.get('customer').creditBalance, 15);
   assert.equal(s.base.inMemoryDebtSettlements.length, 1);
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 20);
-  assert.equal(s.sent.length, 2);
+  assert.equal(s.sent.length, 1); // Customer receipt remains; owner debt alerts are outside the selected policy.
 });
 
 test('HTTP autonomous debt payment updates the logged-in customer through the official webhook only', async (t) => {
@@ -347,7 +347,7 @@ test('WhatsApp failure is retried independently from the sale and resumes after 
   await s.repository.updateMessage(`${order.id}-receipt`, { nextAttemptAt: 0 });
   await s.service.retryMessages();
   assert.equal(s.sent.filter(message => message.image || message.phone === order.customerPhone).length, 2);
-  assert.equal(s.sent.filter(message => message.text?.includes('NOVO PEDIDO')).length, 1);
+  assert.equal(s.sent.filter(message => message.text?.includes('NOVO PEDIDO')).length, 0);
   assert.equal((await s.repository.read('pdv_outbox', `${order.id}-receipt`)).status, 'SENT');
 });
 
@@ -539,7 +539,7 @@ test('HTTP sale flow sends fixed Pix receipt and QR, confirms by Sicredi webhook
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
   assert.equal((await app.locals.pdv.store.read('stock_movements', `${pixOrder.id}-plant`)).quantityDeducted, 2);
   assert.equal((await app.locals.pdv.store.read('pdv_pix_events', `${pixOrder.pixData.txid}-${endToEndId}`)).status, 'DONE');
-  assert.equal(s.sent.filter((message) => message.text?.includes('PIX CONFIRMADO')).length, 1);
+  assert.equal(s.sent.filter((message) => message.text?.includes('VENDA CONFIRMADA · RECIBO')).length, 1);
   const finalCustomerReceipt = s.sent.find((message) => message.phone === pixOrder.customerPhone && message.text?.includes('Pago e finalizado'));
   assert.ok(finalCustomerReceipt, 'cliente recebe o comprovante completo após a confirmação do Pix');
   assert.match(finalCustomerReceipt.text, /Muda/);

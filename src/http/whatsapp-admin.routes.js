@@ -20,6 +20,28 @@ function installWhatsappAdminRoutes(app, { whatsapp, store }) {
   });
 
   app.get('/api/admin/whatsapp/settings', (_req, res) => res.json({ configured: Boolean(whatsapp?.token && process.env.WHATSAPP_PHONE_NUMBER_ID), storePhone: process.env.STORE_NOTIFICATION_PHONE || '', ownerPhone: process.env.OWNER_WHATSAPP_NUMBER || '' }));
+  app.get('/api/admin/whatsapp/notification-settings', async (req, res) => {
+    if (req.user.role !== 'ADMIN') return res.sendStatus(403);
+    try { res.json(await require('../orders/operational-notifications').settings(store)); }
+    catch { res.status(503).json({ error: 'Não foi possível consultar os destinatários.' }); }
+  });
+  app.put('/api/admin/whatsapp/notification-settings', async (req, res) => {
+    if (req.user.role !== 'ADMIN') return res.sendStatus(403);
+    const notifications = require('../orders/operational-notifications');
+    let data;
+    try { data = notifications.validate(req.body); }
+    catch (error) { return res.status(400).json({ error: error.message }); }
+    try {
+      const result = await store.transaction(async tx => {
+        const current = await tx.get('store_settings', notifications.SETTINGS_ID) || notifications.defaults();
+        if (req.body.version !== current.version) throw Object.assign(new Error('Configuração alterada por outro administrador. Recarregue.'), { status: 409 });
+        const saved = { ...data, version: current.version + 1, updatedBy: req.user.id, updatedAt: new Date().toISOString() };
+        tx.set('store_settings', notifications.SETTINGS_ID, saved);
+        return saved;
+      });
+      res.json(result);
+    } catch (error) { res.status(error.status || 503).json({ error: error.status === 409 ? error.message : 'Não foi possível salvar os destinatários.' }); }
+  });
 
   // Listar conversas paginadas do WhatsApp com filtros (até 25 registros por página)
   app.get('/api/admin/whatsapp/conversations', async (req, res) => {

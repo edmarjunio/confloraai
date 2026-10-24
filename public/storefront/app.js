@@ -27,6 +27,11 @@ import { createPurchaseInsights } from "./purchase-insights.mjs";
 import { createOrderFeedback } from "./order-feedback.js";
 
 const existingStore = !location.pathname.startsWith("/shop/");
+// Authentication is independent of catalogue requests and secondary resources.
+if (existingStore) import('/storefront-auth.js').catch(() => {
+  const status = document.querySelector('[data-google-status]');
+  if (status) status.textContent = 'Login Google indisponível. Recarregue ou utilize e-mail e senha.';
+});
 const performanceMonitor = startPerformanceMonitor();
 const shellLogoUrl = $('#logo').getAttribute('src') || '/store-assets/brands/conflora-logo.webp';
 const slug = existingStore
@@ -1269,9 +1274,6 @@ try {
   window.addEventListener('pageshow', () => { refreshOnReturn(); scheduleCatalogRefresh(); });
   if ("serviceWorker" in navigator && window.isSecureContext) {
     navigator.serviceWorker.register("/storefront/sw.js", { scope: "/", updateViaCache: "none" }).catch(() => {});
-  }
-  if (existingStore) {
-    import("/storefront-auth.js").catch(() => {});
   }
 } catch (error) {
   $('#products').removeAttribute('aria-busy');

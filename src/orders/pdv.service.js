@@ -161,6 +161,8 @@ class PdvService {
         }
         const pending = { id, source: 'PDV', requestHash, input: requestPayload, createdBy, requestedBy: user.id, operatorName: createdBy.name, operatorEmail: createdBy.email, customerName: input.customerName || customer?.name || 'Cliente Balcão', customerPhone: phone, items, paymentMethod, subtotal: subtotalMinor / 100, discountPercent, discountAmount: discountMinor / 100, total, status: 'PENDING', createdAt: new Date().toISOString() };
         tx.set('discount_approvals', id, pending);
+        const notificationId = `${id}-owner-approval`;
+        tx.set('pdv_outbox', notificationId, { id: notificationId, approvalId: id, kind: 'owner-approval', status: 'PENDING', attempts: 0 });
         return pending;
       });
       if (approval.status === 'REJECTED') { throw new Error('Desconto recusado: ' + approval.rejectionReason); }
@@ -566,6 +568,52 @@ class PdvService {
         return;
       }
       const order = job.orderId ? await this.repository.read('orders', job.orderId) : null;
+      const notifications = require('./operational-notifications');
+      if (['owner-new', 'owner-paid', 'owner-delivered', 'owner-delivery-pending', 'owner-approval', 'closing'].includes(job.kind)) {
+        if (job.kind === 'closing' && !job.closingDate) {
+          await update({ status: 'NEEDS_RECONCILIATION', leaseUntil: 0, lastError: 'LEGACY_CLOSING_REQUIRES_REVIEW' }); return;
+        }
+        if (job.kind === 'closing' && job.closingDate) {
+          const day = await this.repository.read('cashier_days', job.closingDate);
+          if (day?.revision !== job.closingRevision || Object.values(day.sessions || {}).some(session => !session.closed)) {
+            await update({ status: 'SKIPPED', leaseUntil: 0, lastError: 'CLOSING_SUPERSEDED' }); return;
+          }
+          if (!job.summaryPrepared) {
+            const metrics = await this.repository.repository.getDailyExecutiveMetrics({ date: job.closingDate });
+            job.text = require('../reports/daily-executive-report').formatCompactClosing(metrics, job.cashierTotals);
+            await update({ text: job.text, summaryPrepared: true });
+          }
+        }
+        const subject = job.approvalId ? await this.repository.read('discount_approvals', job.approvalId) : order;
+        const childIds = await notifications.expand(this.repository, job, subject);
+        await update({ status: childIds.length ? 'SENT' : 'SKIPPED', deliveryStatus: 'FANOUT_QUEUED', childIds, leaseUntil: 0, lastError: childIds.length ? '' : 'NO_ELIGIBLE_EVENT_OR_RECIPIENT' });
+        for (const childId of childIds) await this.deliver(childId);
+        return;
+      }
+      if (['proof-review', 'owner-debt-paid'].includes(job.kind)) {
+        await update({ status: 'SKIPPED', leaseUntil: 0, lastError: 'STAFF_NOTIFICATION_POLICY' }); return;
+      }
+      if (job.kind === 'staff-notification') {
+        const revalidate = async () => {
+          const config = await notifications.settings(this.repository);
+          if (!notifications.targets(config, job.event).includes(job.recipient)) return null;
+          if (job.event === 'closing') {
+            const day = await this.repository.read('cashier_days', job.closingDate);
+            return day?.revision === job.closingRevision && Object.values(day.sessions || {}).every(session => session.closed) ? job.text : null;
+          }
+          const subject = await this.repository.read(job.approvalId ? 'discount_approvals' : 'orders', job.approvalId || job.orderId);
+          return notifications.current(job.event, subject) ? notifications.format(job.event, subject) : null;
+        };
+        const text = await revalidate();
+        if (!text) { await update({ status: 'SKIPPED', leaseUntil: 0, lastError: 'STAFF_EVENT_SUPERSEDED' }); return; }
+        const chunks = messageChunks(text, this.whatsapp.sendPdvText ? 900 : 3500);
+        for (let index = job.textChunksSent || 0; index < chunks.length; index++) {
+          if (await revalidate() !== text) { await update({ status: 'NEEDS_RECONCILIATION', leaseUntil: 0, lastError: 'STAFF_EVENT_CHANGED' }); return; }
+          const send = this.whatsapp.sendPdvText || this.whatsapp.sendTextMessage;
+          await sendOnce('text', () => send.call(this.whatsapp, job.recipient, chunks[index]), { textChunksSent: index + 1, deliveryStatus: 'ACCEPTED' });
+        }
+        await update({ status: 'SENT', leaseUntil: 0, sentAt: new Date().toISOString(), lastError: '' }); return;
+      }
       const staleDeparture = job.kind === 'delivery-departure' && order?.deliveryStatus !== 'OUT_FOR_DELIVERY';
       const staleArriving = job.kind === 'delivery-arriving' && order?.deliveryStatus !== 'OUT_FOR_DELIVERY';
       const staleAvailability = job.kind === 'driver-available' && (!order || order.assignedDriver?.id || ['DELIVERED', 'OUT_FOR_DELIVERY'].includes(order.deliveryStatus));
@@ -576,17 +624,11 @@ class PdvService {
       const settlement = job.settlementId ? await this.repository.read('debt_settlements', job.settlementId) : null;
       const settlementMethods = settlement ? (settlement.paymentParts || [{ method: settlement.paymentMethod, amount: settlement.amount }])
         .map((part) => `${part.method}: ${money(part.amount)}`).join(' + ') : '';
-      const isOwner = ['owner-paid', 'owner-debt-paid', 'owner-new', 'proof-review', 'closing'].includes(job.kind);
-      const recipient = job.kind === 'closing' ? process.env.OWNER_WHATSAPP_NUMBER : ['owner-new', 'proof-review', 'owner-paid'].includes(job.kind) ? process.env.STORE_NOTIFICATION_PHONE || this.ownerPhone : this.ownerPhone;
-      const phone = normalizePhone(job.recipient || (isOwner ? recipient : (order?.customerPhone || settlement?.customerPhone)));
-      if (!isOwner && !['driver-available', 'driver-assigned'].includes(job.kind)) automationRecipient = phone;
-      if (!phone && isOwner) { throw new Error('WhatsApp da horta não configurado.'); }
+      const phone = normalizePhone(job.recipient || order?.customerPhone || settlement?.customerPhone);
+      if (!['driver-available', 'driver-assigned'].includes(job.kind)) automationRecipient = phone;
       if (!phone) { await update({ status: 'NEEDS_RECONCILIATION', skipped: true, leaseUntil: 0, lastError: 'INVALID_OR_MISSING_RECIPIENT' }); return; }
       let text;
-      if (job.kind === 'closing' || job.kind === 'conversation-text') text = job.text;
-      else if (job.kind === 'owner-new') text = `CONFLORA — NOVO PEDIDO #${order.ticketNumber || order.id}\nCliente: ${order.customerName}\nValor: ${money(order.total)}\nPagamento: ${order.completedAt ? 'confirmado' : 'ainda não confirmado'}`;
-      else if (job.kind === 'proof-review') text = `CONFLORA — COMPROVANTE AGUARDANDO CONFERÊNCIA\nPedido #${order.ticketNumber || order.id}\nValor: ${money(partAmount(order, 'PIX'))}\nConfira o recebimento na conta bancária antes de aprovar no caixa.`;
-      else if (job.kind === 'proof-rejected') text = `CONFLORA — COMPROVANTE RECUSADO\nPedido #${order.ticketNumber || order.id}\n${order.paymentReviewNote}\nEnvie um novo comprovante na página do seu pedido.`;
+      if (job.kind === 'proof-rejected') text = `CONFLORA — COMPROVANTE RECUSADO\nPedido #${order.ticketNumber || order.id}\n${order.paymentReviewNote}\nEnvie um novo comprovante na página do seu pedido.`;
       else if (job.kind === 'driver-available') text = 'CONFLORA — ENTREGA DISPONÍVEL\nAbra a aba Entregas para consultar e assumir o pedido.';
       else if (job.kind === 'driver-assigned') text = `CONFLORA — ENTREGA ATRIBUÍDA\nPedido #${order.ticketNumber || order.id}\nConsulte os detalhes na aba Entregas.`;
       else if (job.kind === 'delivery-departure') { text = `Seu pedido #${order.ticketNumber || order.id.slice(-6)} saiu para entrega! Responsável: ${order.assignedDriver?.name || 'Equipe Conflora'}. ${isDeliverySettled(order) ? 'Pagamento já registrado.' : 'Pagamento será recebido na entrega.'}`; }
@@ -601,11 +643,7 @@ class PdvService {
       }
       else if (settlement?.entryType === 'CREDITO_CLIENTE') { text = `CONFLORA — CRÉDITO DO CLIENTE\nCliente: ${settlement.customerName}\nValor recebido: ${money(settlement.amount)}\nCrédito disponível: ${money(settlement.newCreditBalance)}\nRecebido por: ${settlement.receivedBy.name}\nForma: ${settlementMethods}`; }
       else if (settlement) { text = `CONFLORA — QUITAÇÃO DE FIADO\nCliente: ${settlement.customerName}\nValor: ${money(settlement.amount)}\nSaldo devedor: ${money(settlement.newBalance)}${settlement.excessCredit ? '\nExcedente registrado como crédito: ' + money(settlement.excessCredit) : ''}\nRecebido por: ${settlement.receivedBy.name}\nForma: ${settlementMethods}`; }
-      else {
-        const author = order.createdBy?.name || order.customerName || 'Catálogo online';
-        const receiver = order.receivedBy?.name || (order.verifiedVia === 'SICREDI_PIX_WEBHOOK' ? 'Sicredi · confirmação automática' : 'Equipe Conflora');
-        text = `CONFLORA — PIX CONFIRMADO\nPedido #${order.ticketNumber}\nCliente: ${order.customerName}\nTotal da venda: ${money(order.total)}\nValor Pix: ${money(partAmount(order, 'PIX'))}\nPedido feito por: ${author}\nRecebido por: ${receiver}\nPedido finalizado. Estoque atualizado.`;
-      }
+      else { throw new Error('UNSUPPORTED_NOTIFICATION_KIND'); }
       const chunks = messageChunks(text, this.whatsapp.sendPdvText ? 900 : 3500);
       for (let index = job.textChunksSent || 0; index < chunks.length; index++) {
         const send = this.whatsapp.sendPdvText || this.whatsapp.sendTextMessage;
