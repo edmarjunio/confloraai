@@ -523,13 +523,14 @@ class PdvService {
             data: { requestId: request.id },
           });
         } else {
+          if (job.kind === 'order-request-notice') {
+            // Requests remain in the staff panel; WhatsApp staff alerts follow the selected event policy.
+            await update({ status: 'SKIPPED', leaseUntil: 0, lastError: 'STAFF_NOTIFICATION_POLICY' }); return;
+          }
           if (typeof this.whatsapp?.sendTextMessage !== 'function' && typeof this.whatsapp?.sendPdvText !== 'function') throw new Error('PROVIDER_NOT_CONFIGURED');
-          const recipient = ['order-request-forecast', 'order-request-event'].includes(job.kind) ? request.customerPhone
-            : job.target === 'junior' ? process.env.JUNIOR_WHATSAPP_NUMBER || process.env.OWNER_WHATSAPP_NUMBER
-              : process.env.STORE_NOTIFICATION_PHONE || this.ownerPhone;
-          const phone = normalizePhone(recipient);
-          if (['order-request-forecast', 'order-request-event'].includes(job.kind)) automationRecipient = phone;
-          if (!phone) throw new Error('Configure o WhatsApp do responsável pela encomenda.');
+          const phone = normalizePhone(request.customerPhone);
+          automationRecipient = phone;
+          if (!phone) throw new Error('WhatsApp do cliente da encomenda inválido.');
           const text = job.kind === 'order-request-event' ? job.text : job.kind === 'order-request-forecast'
             ? `Previsão da sua encomenda (${summary}): ${job.forecast}.`
             : `CONFLORA — PEDIDO ${request.id}\n${request.customerName || 'Cliente'}: ${request.customerPhone}\n${summary}\nPendente de cotação e previsão. Sem pagamento ou reserva de estoque.`;
@@ -580,7 +581,7 @@ class PdvService {
           }
           if (!job.summaryPrepared) {
             const metrics = await this.repository.repository.getDailyExecutiveMetrics({ date: job.closingDate });
-            job.text = require('../reports/daily-executive-report').formatCompactClosing(metrics, job.cashierTotals, job.cashierSessions);
+            job.text = require('../reports/daily-executive-report').formatCompactClosing(metrics, job.cashierTotals);
             await update({ text: job.text, summaryPrepared: true });
           }
         }
@@ -603,6 +604,7 @@ class PdvService {
         };
         const text = await revalidate();
         if (!text) { await update({ status: 'SKIPPED', leaseUntil: 0, lastError: 'STAFF_EVENT_SUPERSEDED' }); return; }
+        if (typeof this.whatsapp?.sendPdvText !== 'function' && typeof this.whatsapp?.sendTextMessage !== 'function') throw new Error('PROVIDER_NOT_CONFIGURED');
         const chunks = messageChunks(text, this.whatsapp.sendPdvText ? 900 : 3500);
         for (let index = job.textChunksSent || 0; index < chunks.length; index++) {
           if (await revalidate() !== text) { await update({ status: 'NEEDS_RECONCILIATION', leaseUntil: 0, lastError: 'STAFF_EVENT_CHANGED' }); return; }
@@ -610,6 +612,9 @@ class PdvService {
           await sendOnce('text', () => send.call(this.whatsapp, job.recipient, chunks[index]), { textChunksSent: index + 1, deliveryStatus: 'ACCEPTED' });
         }
         await update({ status: 'SENT', leaseUntil: 0, sentAt: new Date().toISOString(), lastError: '' }); return;
+      }
+      if (['proof-review', 'owner-debt-paid'].includes(job.kind)) {
+        await update({ status: 'SKIPPED', leaseUntil: 0, lastError: 'STAFF_NOTIFICATION_POLICY' }); return;
       }
       const staleDeparture = job.kind === 'delivery-departure' && order?.deliveryStatus !== 'OUT_FOR_DELIVERY';
       const staleArriving = job.kind === 'delivery-arriving' && order?.deliveryStatus !== 'OUT_FOR_DELIVERY';
@@ -621,14 +626,11 @@ class PdvService {
       const settlement = job.settlementId ? await this.repository.read('debt_settlements', job.settlementId) : null;
       const settlementMethods = settlement ? (settlement.paymentParts || [{ method: settlement.paymentMethod, amount: settlement.amount }])
         .map((part) => `${part.method}: ${money(part.amount)}`).join(' + ') : '';
-      const isOwner = ['proof-review', 'owner-debt-paid'].includes(job.kind);
-      const ownerRecipient = job.kind === 'proof-review' ? process.env.STORE_NOTIFICATION_PHONE || this.ownerPhone : this.ownerPhone;
-      const phone = normalizePhone(job.recipient || (isOwner ? ownerRecipient : order?.customerPhone || settlement?.customerPhone));
-      if (!isOwner && !['driver-available', 'driver-assigned'].includes(job.kind)) automationRecipient = phone;
+      const phone = normalizePhone(job.recipient || order?.customerPhone || settlement?.customerPhone);
+      if (!['driver-available', 'driver-assigned'].includes(job.kind)) automationRecipient = phone;
       if (!phone) { await update({ status: 'NEEDS_RECONCILIATION', skipped: true, leaseUntil: 0, lastError: 'INVALID_OR_MISSING_RECIPIENT' }); return; }
       let text;
-      if (job.kind === 'proof-review') text = `CONFLORA — COMPROVANTE AGUARDANDO CONFERÊNCIA\nPedido #${order.ticketNumber || order.id}\nValor: ${money(partAmount(order, 'PIX'))}\nConfira o recebimento na conta bancária antes de aprovar no caixa.`;
-      else if (job.kind === 'proof-rejected') text = `CONFLORA — COMPROVANTE RECUSADO\nPedido #${order.ticketNumber || order.id}\n${order.paymentReviewNote}\nEnvie um novo comprovante na página do seu pedido.`;
+      if (job.kind === 'proof-rejected') text = `CONFLORA — COMPROVANTE RECUSADO\nPedido #${order.ticketNumber || order.id}\n${order.paymentReviewNote}\nEnvie um novo comprovante na página do seu pedido.`;
       else if (job.kind === 'driver-available') text = 'CONFLORA — ENTREGA DISPONÍVEL\nAbra a aba Entregas para consultar e assumir o pedido.';
       else if (job.kind === 'driver-assigned') text = `CONFLORA — ENTREGA ATRIBUÍDA\nPedido #${order.ticketNumber || order.id}\nConsulte os detalhes na aba Entregas.`;
       else if (job.kind === 'delivery-departure') { text = `Seu pedido #${order.ticketNumber || order.id.slice(-6)} saiu para entrega! Responsável: ${order.assignedDriver?.name || 'Equipe Conflora'}. ${isDeliverySettled(order) ? 'Pagamento já registrado.' : 'Pagamento será recebido na entrega.'}`; }

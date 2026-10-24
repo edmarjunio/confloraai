@@ -92,7 +92,6 @@ async function close(store, user, input) {
       const rows = Object.values(sessions);
       const sum = fn => round(rows.reduce((n, row) => n + fn(row), 0));
       tx.set('pdv_outbox', jobId, { id: jobId, kind: 'closing', closingDate: session.date, closingRevision: revision,
-        cashierSessions: rows,
         cashierTotals: { cash: sum(r => r.counted.cash), pix: sum(r => r.counted.pix), debit: sum(r => r.counted.debit), credit: sum(r => r.counted.credit), difference: sum(r => r.differences.total), openingFloat: sum(r => r.openingFloat) },
         status: 'PENDING', attempts: 0, createdAt: closing.closedAt });
     }

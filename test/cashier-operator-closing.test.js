@@ -1,5 +1,6 @@
 process.env.NODE_ENV = 'test';
 process.env.OWNER_WHATSAPP_NUMBER = '5564999994321';
+process.env.JUNIOR_WHATSAPP_NUMBER = '5564999994321';
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -187,8 +188,8 @@ test('fluxo de fechamento de caixa: operador confere valores, anexa foto da maqu
     assert.ok(juniorMessages.length >= 1, 'Resumo diário enviado ao WhatsApp do Júnior');
     const lastJuniorMsg = juniorMessages[juniorMessages.length - 1];
     assert.match(lastJuniorMsg.text, /FECHAMENTO GERAL DE TODOS OS CAIXAS/);
-    assert.match(lastJuniorMsg.text, /Rose/);
-    assert.match(lastJuniorMsg.text, /Edmar/);
+    assert.match(lastJuniorMsg.text, /TOP 3/);
+    assert.doesNotMatch(lastJuniorMsg.text, /Caixa [a-f0-9]{8}/);
     assert.match(lastJuniorMsg.text, /Total Conferido em Caixa/);
   } finally {
     server.close();
