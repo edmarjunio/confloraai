@@ -2,7 +2,7 @@ require('../i18n/default');
 const { createHash, randomUUID } = require('node:crypto');
 const { createWebSessions, safeUser } = require('../security/web-session');
 const { StorefrontAnalyticsService, campaignLabel } = require('../services/storefront-analytics.service');
-const { resolveHdProductImage } = require('../catalog/image-resolver');
+const { actualProductImages, actualProductPhotoFields, actualPhotoProvenance } = require('../catalog/actual-product-photo');
 const { getCashierProductDetails } = require('../catalog/cashier-product-details');
 const { normalizeDeliveryLocation } = require('../orders/pdv.service');
 let expressModule = null;
@@ -38,62 +38,11 @@ function withoutIdempotencyFingerprint(order) {
 }
 
 function getProductImageCandidates(product = {}) {
-  const images = [
-    ...(Array.isArray(product.images) ? product.images : []),
-    ...(Array.isArray(product.imagePaths) ? product.imagePaths : []),
-    product.imageUrl,
-    product.imageurl,
-    product.imageURL,
-    product.image_url,
-    product.imagePathCache,
-    product.imagePath,
-    product.storagePath,
-    product.photoUrl,
-    product.fotoUrl,
-  ]
-    .map((image) => (typeof image === 'string' ? image : image?.url || image?.imageUrl || image?.src || image?.downloadURL || image?.storagePath || image?.fullPath || image?.path || ''))
-    .filter(Boolean);
-  const registeredImages = [...new Set([
-    ...images,
-  ].filter(isRenderableProductImageUrl))];
-  const imageFileId = String(product.imageFileId || product.image_file_id || '').trim();
-  const storageImageProxy = imageFileId
-    ? `/api/images/${encodeURIComponent(imageFileId)}`
-    : '';
-  if (registeredImages.length) {
-    return [...new Set([...registeredImages, storageImageProxy].filter(Boolean))];
-  }
-  if (storageImageProxy) {
-    return [storageImageProxy];
-  }
-
-  const illustrativeImage = resolveHdProductImage(
-    product.name || product.descricao || '',
-    product.category || product.categoria || '',
-    product.subcategory || product.subcategoria || '',
-  );
-  return illustrativeImage ? [illustrativeImage] : [];
-}
-
-function isRenderableProductImageUrl(value) {
-  if (typeof value !== 'string') return false;
-  const source = value.trim();
-  return Boolean(source) && (
-    /^https:\/\/(?:firebasestorage|storage)\.googleapis\.com\//i.test(value.trim()) ||
-    /^https:\/\/images\.unsplash\.com\//i.test(source) ||
-    /^\/api\/images\//i.test(value.trim()) ||
-    /^\/store-assets\//i.test(value.trim()) ||
-    /^gs:\/\/[a-z0-9._-]+\/products\/[a-z0-9_-]+\/[a-z0-9._-]+$/i.test(source) ||
-    /^products\/[a-z0-9_-]+\/[a-z0-9._-]+$/i.test(source)
-  );
+  return actualProductImages(product);
 }
 
 function getCashierProductImageCandidates(product = {}) {
-  return [...new Set(
-    getProductImageCandidates(product)
-      .map((image) => String(image || '').trim())
-      .filter((image) => isRenderableProductImageUrl(image) || /^https:\/\/images\.unsplash\.com\//i.test(image)),
-  )];
+  return actualProductImages(product);
 }
 
 const config = require('../config/env');
@@ -704,10 +653,12 @@ function createApp({
         const imageCandidates = getProductImageCandidates(product);
         return {
           ...product,
+          ...actualProductPhotoFields(product),
+          ...require('../catalog/registered-product-content').registeredProductContent(product),
           images: imageCandidates,
           imageUrl: imageCandidates[0] || '',
           imageurl: imageCandidates[0] || '',
-          imageIsIllustrative: product.imageIsIllustrative === true || /^https:\/\/images\.unsplash\.com\//i.test(imageCandidates[0] || ''),
+          imageIsIllustrative: false,
           imageFallbackUrl: '/store-assets/placeholder.svg',
         };
       });
@@ -798,15 +749,16 @@ function createApp({
         res.setHeader('Content-Type', contentType);
         return res.status(200).send(Buffer.from(photo.data, 'base64'));
       }
-      if (photo?.imageUrl && photo.imageUrl !== `/api/images/${id}`) {
+      const cleanProdId = String(photo?.productId || id.replace(/^img_/, ''));
+      const prod = await messageService.firestoreRepo.getProductById(cleanProdId);
+      const approvedImages = actualProductImages(prod || {});
+      if (photo?.imageUrl && approvedImages.includes(photo.imageUrl)) {
         // The photo ID can be repointed; only content-hashed URLs are immutable.
         res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
         return res.redirect(302, photo.imageUrl);
       }
-      const cleanProdId = String(photo?.productId || id.replace(/^img_/, ''));
-      const prod = await messageService.firestoreRepo.getProductById(cleanProdId);
-      if (prod && isRenderableProductImageUrl(prod.imageUrl) && prod.imageUrl.startsWith('https://')) {
-        return res.redirect(prod.imageUrl);
+      if (approvedImages[0]) {
+        return res.redirect(approvedImages[0]);
       }
       return res.redirect(302, '/store-assets/placeholder.svg');
     } catch (err) {
@@ -1570,8 +1522,10 @@ function createApp({
     try {
       const products = await messageService.firestoreRepo.getAllProducts();
       const active = products
+        .filter(p => !require('../catalog/commercial-product').isInternalFinancialProduct(p))
         .filter((p) => String(p.status || p.STATUS || '').trim().toUpperCase() === 'ATIVO')
         .map((p) => {
+          const commercial = require('../catalog/commercial-product').commercialProduct(p);
           const imageCandidates = getCashierProductImageCandidates(p);
           const imageUrl = imageCandidates[0] || '';
           const name = p.name || p.descricao || 'product'.tr;
@@ -1582,7 +1536,7 @@ function createApp({
             id: p.id,
             status: String(p.status || p.STATUS || '').trim().toUpperCase(),
             name,
-            price: Number(p.price || p.valor_num || 0),
+            price: commercial.price,
             stock: Number(p.stockQuantity ?? p.estoque ?? 0),
             unit,
             saleUnit: {
@@ -1597,11 +1551,12 @@ function createApp({
             variation: p.variation || p.variacao || '',
             imageUrl,
             images: imageCandidates,
-            imageFileId: p.imageFileId || p.image_file_id || '',
-            imageIsIllustrative: p.imageIsIllustrative === true || /^https:\/\/images\.unsplash\.com\//i.test(imageUrl),
-            imagePathCache: p.imagePathCache || '',
+            imageFileId: imageUrl ? p.imageFileId || p.image_file_id || '' : '',
+            imageIsIllustrative: false,
+            actualPhotoPending: !imageUrl,
+            imagePathCache: imageUrl,
             imageFallbackUrl: '/store-assets/placeholder.svg',
-            descriptionAi: p.descriptionAi || p.descricao_ia || '',
+            descriptionAi: require('../catalog/registered-product-content').registeredProductContent(p).description,
             tagsAi: p.tagsAi || p.tags_ia || '',
             details: getCashierProductDetails(p),
           };
@@ -1719,6 +1674,33 @@ function createApp({
   app.post('/api/admin/products', async (req, res) => {
     try {
       const product = req.body;
+      let photoUpdate;
+      if (req.get('X-Product-Photos-Update') === 'true') {
+        const previous = await messageService.firestoreRepo.getProductById(product.id);
+        const allowed = actualProductImages(previous);
+        const selected = product.images;
+        if (!previous || !Array.isArray(selected) || selected.some(url => !allowed.includes(url))) return res.status(400).json({ error: 'Use o upload de fotos reais antes de selecionar imagens do produto.' });
+        // Only explicit reordering/removal of existing attested photos. Price
+        // edits cannot erase unreviewed historical references by accident.
+        if (allowed.length) {
+          const paths = selected.map(url => decodeURIComponent(new URL(url).pathname.split('/o/')[1]));
+          photoUpdate = { images: selected, imageUrl: selected[0] || '', imagePath: paths[0] || '', imagePaths: paths,
+            imageProvenance: { ...previous.imageProvenance, storagePaths: paths } };
+        }
+      }
+      delete product.imageProvenance;
+      delete product.contentProvenance;
+      // Photo writes have their own authenticated upload contract. A masked/old
+      // listing submitted while editing price must never erase stored references.
+      for (const field of ['imageUrl', 'images', 'imagePath', 'imagePaths', 'imagePathCache', 'imageFileId', 'imageIsIllustrative']) delete product[field];
+      if (photoUpdate) Object.assign(product, photoUpdate);
+      if (req.get('X-Product-Content-Confirmed') === 'true') {
+        const allowedContentFields = [...require('../catalog/registered-product-content').detailFields, 'description', 'specifications', 'especificacoes', 'contentSections'];
+        product.contentProvenance = { kind: 'STAFF_CONFIRMED', confirmedBy: req.user.id, confirmedAt: new Date().toISOString(), fields: Object.keys(product).filter(key => allowedContentFields.includes(key)) };
+        if (typeof product.descriptionAi === 'string') product.publicDescription = product.descriptionAi.trim();
+      }
+      const containsPhotoUpload = Boolean(product.photoBase64 || product.photoData || product.photoDoc || product.photosBase64?.length || product.photos?.length);
+      if (containsPhotoUpload) return res.status(400).json({ error: 'Envie fotos reais pelo serviço de upload do produto, com confirmação de origem.' });
       if (Object.hasOwn(product, 'botanical')) {
         product.botanical = require('../agent/plant-search').reviewedBotanical(product.botanical, req.user);
       }
@@ -1739,7 +1721,9 @@ function createApp({
       const { id } = req.params;
       const rawPhoto = Buffer.isBuffer(req.body) ? req.body : null;
       const body = rawPhoto ? {} : (req.body || {});
-      const prod = (await messageService.firestoreRepo.getProductById(id)) || { id, name: req.headers['x-product-name'] || 'product'.tr };
+      const prod = await messageService.firestoreRepo.getProductById(id);
+      if (!prod) return res.status(404).json({ error: 'Produto não encontrado. Cadastre o produto antes de enviar a foto real.' });
+      if (req.get('X-Photo-Actual-Product') !== 'true' && req.body?.actualProductPhoto !== true) return res.status(400).json({ error: 'Confirme que a foto é do produto real da Conflora. Imagens de referência e geradas não são aceitas.' });
 
       const { photoBase64, photosBase64, photos, contentType, maxWidth, maxHeight, quality, format, append } = body;
       const incomingList = rawPhoto
@@ -1756,14 +1740,10 @@ function createApp({
       const { buildOptimizedFirestorePhotoDocument } = require('../catalog/product-photo.service');
       const savedPhotos = [];
       const existingImages = shouldAppend
-        ? (Array.isArray(prod.images) ? [...prod.images] : (prod.imageUrl ? [prod.imageUrl] : []))
+        ? actualProductImages(prod)
         : [];
       const existingImagePaths = shouldAppend
-        ? existingImages.map((_, index) => (
-          Array.isArray(prod.imagePaths)
-            ? prod.imagePaths[index] || ''
-            : (index === 0 ? prod.imagePath || '' : '')
-        ))
+        ? existingImages.map(url => decodeURIComponent(new URL(url).pathname.split('/o/')[1]))
         : [];
       const startIndex = existingImages.length;
 
@@ -1788,6 +1768,7 @@ function createApp({
 
         const storedImage = await messageService.firestoreRepo.uploadProductImage(photoDoc);
         const storedPhoto = { ...photoDoc, ...storedImage };
+        storedPhoto.provenance = actualPhotoProvenance(req.user, [storedImage.imagePath]);
         await messageService.firestoreRepo.saveProductPhoto(storedPhoto);
         savedPhotos.push(storedPhoto);
       }
@@ -1809,6 +1790,8 @@ function createApp({
         imagePaths: allImages.map((image) => image.path),
         images: allImages.map((image) => image.url),
         imageFileId: primaryPhoto.id,
+        imageIsIllustrative: false,
+        imageProvenance: actualPhotoProvenance(req.user, allImages.map(image => image.path)),
         imagePathCache: allImages[0]?.url || primaryPhoto.imageUrl,
         tagsAi: primaryPhoto.tagsAi,
         tags_ia: primaryPhoto.tagsAi,
@@ -1817,7 +1800,7 @@ function createApp({
         updatedAt: new Date().toISOString(),
       };
 
-      await messageService.firestoreRepo.saveProduct(updatedProduct);
+      await messageService.firestoreRepo.saveProduct(updatedProduct, { expectedImageUrl: prod.imageUrl });
 
       if (messageService.catalogRepo) {
         messageService.catalogRepo.invalidateCache?.();
@@ -1859,11 +1842,15 @@ function createApp({
   app.get('/api/products/:id/photos', async (req, res) => {
     try {
       const { id } = req.params;
-      const photos = await messageService.firestoreRepo.getProductPhotos(id);
-      const metadata = photos.map((photo) => {
+      const product = await messageService.firestoreRepo.getProductById(id);
+      const approvedImages = actualProductImages(product || {});
+      const photos = approvedImages.length ? await messageService.firestoreRepo.getProductPhotos(id) : [];
+      const metadata = photos.filter(photo => approvedImages.includes(photo.imageUrl)).map((photo) => {
         const safePhoto = { ...photo };
+        Object.assign(safePhoto, require('../catalog/registered-product-content').registeredProductContent(product));
         delete safePhoto.data;
         delete safePhoto.dataUrl;
+        delete safePhoto.provenance;
         return safePhoto;
       });
       res.status(200).json({ success: true, count: metadata.length, photos: metadata });

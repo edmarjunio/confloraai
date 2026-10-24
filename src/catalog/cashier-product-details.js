@@ -12,6 +12,7 @@ function firstText(...values) {
 }
 
 function getCashierProductDetails(product = {}) {
+  product = { ...product, ...require('./registered-product-content').registeredProductContent(product) };
   const defaults = {};
   const savedDescription = firstText(product.descriptionAi, product.descricao_ia, product.description, product.descricaoProduto);
   const normalizedDescription = normalizeText(savedDescription);

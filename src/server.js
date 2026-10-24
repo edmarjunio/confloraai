@@ -75,7 +75,9 @@ async function bootstrap() {
   const host = '0.0.0.0';
   const primaryPort = Number(process.env.PORT) || 3000;
 
-  const server = app.listen(primaryPort, host, () => {
+  const server = app.listen(primaryPort, host, (error) => {
+    // Express 5 also invokes this callback for bind errors.
+    if (error) return;
     Logger.info(`Conflora AI rodando com sucesso na porta principal ${primaryPort} (${host})`);
     console.log(`\n==================================================`);
     console.log(`🚀 Conflora AI online com sucesso!`);
@@ -85,7 +87,11 @@ async function bootstrap() {
   });
   server.once('close', stopCatalogWatch);
 
-  server.on('error', error => { Logger.error('Erro no servidor HTTP', error); process.exitCode = 1; });
+  server.on('error', error => {
+    stopCatalogWatch();
+    Logger.error('Erro no servidor HTTP; processo encerrado sem iniciar outro worker.', error, { port: primaryPort, processId: process.pid });
+    process.exit(1);
+  });
   process.on('unhandledRejection', error => {
     Logger.error('Falha assíncrona não tratada; reiniciando processo', error instanceof Error ? error : new Error(String(error)));
     server.close(() => app.locals.errorHistory.queue.finally(() => process.exit(1)));

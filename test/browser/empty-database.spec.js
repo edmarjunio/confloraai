@@ -39,7 +39,8 @@ test('every main screen works with no business records and no cached catalogue',
   await expect(page.locator('render-product-card')).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
-  await expect(page.locator('.cashier-command-nav')).toBeVisible();
+  await expect(page.locator('.cf-mobile-sale-heading')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Atualizar produtos', exact: true })).toBeVisible();
   await page.screenshot({ path: 'test-results/empty-cashier-mobile.png' });
   expect(errors).toEqual([]);
 });

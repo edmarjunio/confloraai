@@ -69,7 +69,7 @@ test('isolated load: 100, 500 and 1000 sales, 20 concurrent checkouts, catalog a
   const incoming = new IncomingMessageService(base);
   await concurrent(Array.from({ length: 100 }, (_, i) => i), 20, async i => {
     const id = `mock-incoming-${i}`;
-    await incoming.accept({ messageId: id, message: 'produto' });
+    await incoming.accept({ messageId: id, phone: `5564${String(i).padStart(9, '0')}`, message: 'produto' });
     const claim = await incoming.claim(id);
     await incoming.finish(claim);
     assert.equal((await incoming.claim(id)).completed, true);

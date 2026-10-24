@@ -2,8 +2,16 @@ const { test, expect } = require("@playwright/test");
 
 async function selectPortuguese(page) {
   const language = page.locator("#languageSelect");
-  if (await language.count()) await language.selectOption("pt");
+  if (await language.count() && await language.inputValue() !== 'pt') await language.selectOption("pt");
 }
+
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/storefront/catalog', async route => {
+    const response = await route.fetch(); const data = await response.json();
+    data.config.assistant.enabled = true;
+    await route.fulfill({ json: data });
+  });
+});
 
 test("chat presents a friendly error when an upstream proxy returns HTML", async ({
   page,
@@ -11,6 +19,7 @@ test("chat presents a friendly error when an upstream proxy returns HTML", async
   await page.route("**/api/storefront/catalog", async route => {
     const response = await route.fetch(); const data = await response.json();
     data.config.assistant.mode = "AI";
+    data.config.assistant.enabled = true;
     await route.fulfill({ json: data });
   });
   await page.route("**/api/chat", (route) =>
@@ -53,6 +62,7 @@ test.beforeAll(async ({ request }) => {
   expect(
     (
       await request.post("/api/admin/products", {
+        headers: { 'X-Product-Content-Confirmed': 'true' },
         data: {
           id: "test-plant",
           name: "Planta Teste",

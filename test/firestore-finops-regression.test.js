@@ -57,15 +57,15 @@ test('public catalog shares a short snapshot and invalidates after a product edi
   let body;
   const res = { set() { return this; }, json(value) { body = value; } };
   const next = error => { throw error; };
-  await routes.get('/api/storefront/catalog')({}, res, next);
+  await routes.get('/api/storefront/catalog')({ query: {} }, res, next);
   assert.equal(configReads, 1); assert.equal(inventoryReads, 1);
   assert.equal(body.products[0].price.amountMinor, 1200);
-  await routes.get('/api/storefront/catalog')({}, res, next);
-  assert.equal(configReads, 2); assert.equal(inventoryReads, 2);
+  await routes.get('/api/storefront/catalog')({ query: {} }, res, next);
+  assert.equal(configReads, 1); assert.equal(inventoryReads, 1);
   db.data.get('products/p').price = 20;
   app.locals.publicCatalogCache.invalidate();
-  await routes.get('/api/storefront/catalog')({}, res, next);
-  assert.equal(configReads, 3); assert.equal(body.products[0].price.amountMinor, 2000);
+  await routes.get('/api/storefront/catalog')({ query: {} }, res, next);
+  assert.equal(configReads, 2); assert.equal(body.products[0].price.amountMinor, 2000);
 });
 
 test('completed inbox compaction preserves deduplication indefinitely and never compacts active work', async () => {

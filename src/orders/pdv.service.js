@@ -623,7 +623,7 @@ class PdvService {
       await update({ status: 'SENT', leaseUntil: 0, sentAt: new Date().toISOString(), lastError: '' });
     } catch (error) {
       require('../shared/logger').error('Falha no envio de notificação operacional', error, { source: 'WHATSAPP', jobId: id, kind: job.kind });
-      await update({ status: error.automationBlocked ? 'SKIPPED' : uncertainSend ? 'NEEDS_RECONCILIATION' : 'PENDING', leaseUntil: 0, nextAttemptAt: Date.now() + Math.min(3600000, 30000 * 2 ** Math.min(job.attempts, 7)), lastError: uncertainSend ? 'PROVIDER_OUTCOME_UNCERTAIN' : error.message });
+      await update({ status: error.automationBlocked ? 'SKIPPED' : uncertainSend ? 'NEEDS_RECONCILIATION' : job.kind === 'meta-product-sync' ? 'CATALOG_PENDING' : 'PENDING', leaseUntil: 0, nextAttemptAt: Date.now() + Math.min(3600000, 30000 * 2 ** Math.min(job.attempts, 7)), lastError: uncertainSend ? 'PROVIDER_OUTCOME_UNCERTAIN' : error.message });
     }
   }
 
@@ -716,6 +716,11 @@ class PdvService {
     const pending = await this.repository.scanPage('pdv_outbox', 'status', 'PENDING');
     const eligible = pending.filter((job) => !(job.nextAttemptAt > Date.now()) && !(job.leaseUntil > Date.now()));
     for (const job of eligible.slice(0, 100)) { await this.deliver(job.id); }
+    // Catalog work shares the official outbox but is not consumed by older/disabled notification workers.
+    if (process.env.WHATSAPP_META_SYNC_ENABLED === 'true') {
+      const catalog = await this.repository.scanPage('pdv_outbox', 'status', 'CATALOG_PENDING');
+      for (const job of catalog.filter(job => job.kind === 'meta-product-sync' && !(job.nextAttemptAt > Date.now()) && !(job.leaseUntil > Date.now())).slice(0, 100)) await this.deliver(job.id);
+    }
   }
 
   async submitFeedback(orderId, input, user) {

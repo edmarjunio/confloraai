@@ -3,13 +3,13 @@ const fs = require('node:fs');
 require('../../scripts/test-env');
 const { dispatch } = require('../helpers/in-process-http');
 const { createApp } = require('../../src/http/app');
-const { FirestoreRepository } = require('../../src/database/firestore.repository');
+const { FirestoreRepository } = require('../helpers/repository-fixture');
 const { StoreRepository } = require('../../src/storefront/repository');
 const { seedStores } = require('../storefront-fixture');
 
 const test = base.extend({
   fixture: async ({ context }, use) => {
-    const repo = new FirestoreRepository({ isInMemory: true });
+    const repo = new FirestoreRepository({ isInMemory: true, productImageStorage: require('../helpers/actual-photo-fixture').isolatedPhotoStorage() });
     for (let index = 0; index < 80; index++) await repo.saveProduct({
       id: 'product-' + index, name: 'Produto ' + String(index).padStart(3, '0'),
       category: 'Horta', price: 10 + index, stockQuantity: 100, status: 'ATIVO',
@@ -24,7 +24,7 @@ const test = base.extend({
       if (url.hostname !== 'conflora.test') return route.abort();
       requests.push(url.pathname);
       if (url.pathname.endsWith('/stream')) return route.fulfill({ contentType: 'text/event-stream', body: '' });
-      const response = await dispatch(app, url, { method: request.method(), headers: request.headers(), body: request.postData() });
+      const response = await dispatch(app, url, { method: request.method(), headers: request.headers(), body: request.postDataBuffer() });
       const body = Buffer.from(await response.arrayBuffer());
       const headers = Object.fromEntries(response.headers.entries());
       delete headers['content-length']; delete headers['transfer-encoding'];
@@ -36,6 +36,17 @@ const test = base.extend({
 });
 const cards = page => page.locator('#products render-product-card');
 const ready = async page => { await page.goto('/'); await expect(cards(page).first()).toBeVisible(); };
+const agePublicCache = page => page.evaluate(() => new Promise((resolve, reject) => {
+  const request = window.indexedDB.open('cf-public-20261023-real-products1', 1);
+  request.onerror = () => reject(request.error);
+  request.onsuccess = () => {
+    const db = request.result; const tx = db.transaction('catalog', 'readwrite'); const store = tx.objectStore('catalog');
+    const read = store.get('main:conflora');
+    read.onsuccess = () => store.put({ ...read.result, savedAt: Date.now() - 61000 }, 'main:conflora');
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onabort = () => { db.close(); reject(tx.error); };
+  };
+}));
 const login = (page, userId = 'usr-edmar', pin = '1234') => page.evaluate(async ({ userId, pin }) => {
   const response = await window.ConfloraSession.apiFetch('/api/admin/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, pin }) });
   if (!response.ok) throw new Error('login rejected');
@@ -50,9 +61,28 @@ test('fresh second visit reuses the public snapshot and defers secondary modules
   const initialCatalog = fixture.requests.filter(file => file === '/api/storefront/catalog').length;
   await page.reload(); await expect(cards(page).first()).toBeVisible();
   expect(fixture.requests.filter(file => file === '/api/storefront/catalog').length).toBe(initialCatalog);
-  expect(await page.evaluate(() => window.ConfloraPerformance.snapshot().counters.catalogCacheHits)).toBe(1);
+  await expect(page.locator('#catalogSyncStatus')).toContainText('Dados salvos');
   expect(await cards(page).first().locator('img').getAttribute('loading')).toBe('eager');
   expect(await cards(page).nth(10).locator('img').getAttribute('loading')).toBe('lazy');
+});
+
+test('product editor uploads a confirmed photo through the official Storage service and refreshes the listing', async ({ page, fixture }) => {
+  await ready(page); await login(page); await page.reload();
+  await expect(page.locator('#headerAccountRole')).toHaveText('ADMIN');
+  await page.evaluate(() => window.state.productEntry.open());
+  const dialog = page.locator('#productEntryDialog');
+  await expect(dialog).toBeVisible();
+  await dialog.locator('[name=name]').fill('Produto com foto real');
+  await dialog.locator('[name=price]').fill('12.50');
+  await dialog.locator('details').evaluate(node => { node.open = true; });
+  await dialog.locator('input[type=file]').setInputFiles('test/fixtures/images/store-assets/products/rolinha-diamante.jpg');
+  await dialog.locator('input[type=checkbox]').check();
+  await dialog.locator('button[type=submit]').click();
+  await expect(dialog).not.toBeVisible();
+  const product = [...fixture.repo.inMemoryProducts.values()].find(row => row.name === 'Produto com foto real');
+  expect(product.imageProvenance.kind).toBe('CONFLORA_ACTUAL_PRODUCT');
+  expect(product.imageUrl).toMatch(/^https:\/\/firebasestorage.googleapis.com\//);
+  await expect.poll(() => page.evaluate(id => window.state.products.find(row => row.id === id)?.imageUrl, product.id)).toBe(product.imageUrl);
 });
 
 test('revalidation preserves unchanged cards and updates live price and stock in the cart', async ({ page, fixture }) => {
@@ -104,7 +134,9 @@ test('lazy administration opens, logout and switching users keep private drafts 
   await second.evaluate(() => window.ConfloraSession.apiFetch('/api/auth/logout', { method: 'POST' }));
   await second.reload(); await expect(second.locator('#accountButton')).toBeVisible();
   await page.reload(); await expect(page.locator('#headerAccountRole')).toHaveText('ADMIN');
-  await expect(page.locator('#cartCount')).toHaveText('1');
+  // The current session keeps drafts in memory; reload never restores a private
+  // cart from public persistence or from the other tab's user.
+  await expect(page.locator('#cartCount')).toHaveText('0');
   const shared = await page.evaluate(() => Object.entries(localStorage).filter(([key]) => key.startsWith('conflora:public-catalog:')).map(([, value]) => value).join(''));
   expect(shared).not.toMatch(/usr-edmar|usr-caixa1|Bearer|conflora_tab_token/);
   expect(fixture.errors).toEqual([]);
@@ -112,11 +144,7 @@ test('lazy administration opens, logout and switching users keep private drafts 
 
 test('stale public data remains visible through a failed update and tenant caches stay isolated', async ({ page, fixture }) => {
   await ready(page);
-  await page.evaluate(() => {
-    for (const key of Object.keys(localStorage).filter(key => key.startsWith('conflora:public-catalog:'))) {
-      const value = JSON.parse(localStorage.getItem(key)); value.savedAt -= 61000; localStorage.setItem(key, JSON.stringify(value));
-    }
-  });
+  await agePublicCache(page);
   await page.route('**/api/storefront/catalog', route => route.fulfill({ status: 503, json: { error: 'offline fixture' } }));
   await page.reload(); await expect(cards(page).first()).toBeVisible();
   await expect(page.locator('#storeName')).toHaveText('Conflora Horta e Viveiro');
@@ -173,33 +201,23 @@ test('idle tabs stop periodic catalogue reads and revalidate when interaction re
   await expect.poll(count).toBe(3);
 });
 
-test('storage invalidation refreshes only the current shop and handles storage clear', async ({ page, fixture }) => {
+test('storage invalidation ignores unrelated apps and refreshes after an explicit shared generation', async ({ page, fixture }) => {
   await ready(page);
   const count = () => fixture.requests.filter(file => file === '/api/storefront/catalog').length;
   const invalidate = key => page.evaluate(key => {
     window.dispatchEvent(new window.StorageEvent('storage', { key, newValue: null }));
   }, key);
-  const currentKey = await page.evaluate(() => Object.keys(localStorage).find(key => key.startsWith('conflora:public-catalog:')));
-  expect(currentKey).toBeTruthy();
   await invalidate('conflora:public-catalog:v1:tenant%3Agarden%3Av4');
   // Flush asynchronous handlers before checking that another shop caused no request.
   await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 0)));
   expect(count()).toBe(1);
-  await invalidate(currentKey);
+  await invalidate('cf-public-invalidated');
   await expect.poll(count).toBe(2);
-  await invalidate(null);
-  await expect.poll(count).toBe(3);
 });
 
 test('a slow public refresh leaves the cached catalogue usable until new data arrives', async ({ page, fixture }) => {
   await ready(page);
-  await page.evaluate(() => {
-    for (const key of Object.keys(localStorage).filter(key => key.startsWith('conflora:public-catalog:'))) {
-      const value = JSON.parse(localStorage.getItem(key));
-      value.savedAt -= 61000;
-      localStorage.setItem(key, JSON.stringify(value));
-    }
-  });
+  await agePublicCache(page);
   fixture.repo.inMemoryProducts.get('product-0').price = 31;
   fixture.app.locals.publicCatalogCache.invalidate();
   let release;

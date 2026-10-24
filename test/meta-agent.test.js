@@ -393,7 +393,7 @@ test('Agent Service: consulta, adição ao carrinho, alteração, finalização 
   // 10. Retomada da automação por atendente humano
   const resumeResult = await handoffStore.resume('conflora', openHandoffs[0].id, {
     id: 'atendente_marcos',
-    role: 'support',
+    role: 'VENDEDOR',
   });
   assert.equal(resumeResult.ok, true);
 

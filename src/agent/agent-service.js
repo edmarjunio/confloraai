@@ -358,7 +358,7 @@ class ConfloraAgentService {
   async _productCards(products, rawDocs) {
     return Promise.all(products.map(async p => ({
       id: p.id, name: p.name, presentation: p.presentation, price_cents: p.priceCents, unit: p.unit,
-      image_url: products.length === 1 ? await this.imageResolver(rawDocs.find(doc => doc.id === p.id)?.data || {}) : null,
+      image_url: products.length === 1 ? await this.imageResolver({ ...rawDocs.find(doc => doc.id === p.id)?.data, id: p.id }) : null,
     })));
   }
 

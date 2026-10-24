@@ -575,7 +575,7 @@ class PdvRepository {
   async claimMessage(id) {
     return this.transaction(async (tx) => {
       const job = await tx.get('pdv_outbox', id);
-      if (!job || job.status !== 'PENDING' || job.nextAttemptAt > Date.now() || job.leaseUntil > Date.now()) { return null; }
+      if (!job || !(job.status === 'PENDING' || job.kind === 'meta-product-sync' && job.status === 'CATALOG_PENDING') || job.nextAttemptAt > Date.now() || job.leaseUntil > Date.now()) { return null; }
       const customerKinds = new Set(['receipt', 'pix-charge', 'customer-paid', 'order-completed', 'proof-rejected', 'delivery-departure', 'delivery-arriving', 'conversation-text', 'conversation-catalog', 'order-request-forecast', 'order-request-event', 'debt-receipt']);
       if (customerKinds.has(job.kind)) {
         const record = job.orderId ? await tx.get('orders', job.orderId) : job.requestId ? await tx.get('agent_handoffs', job.requestId) : job.settlementId ? await tx.get('debt_settlements', job.settlementId) : null;

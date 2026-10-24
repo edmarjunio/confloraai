@@ -33,7 +33,7 @@ setGlobalOptions({maxInstances: 10});
 initializeApp();
 // Identity-only invalidation; stale events cannot publish their old product payload.
 // Disabled until an ADMIN explicitly authorizes the first synchronization.
-export const queueWhatsAppProduct = onDocumentWritten("products/{productId}", async (event) => {
+export const queueWhatsAppProduct = onDocumentWritten({document: "products/{productId}", region: "southamerica-east1", retry: true}, async (event) => {
   const db = getFirestore();
   const settings = await db.doc("store_settings/whatsapp_commerce").get();
   if (!settings.data()?.enabled || !settings.data()?.initialSyncAuthorizedAt) return;
@@ -46,7 +46,7 @@ export const queueWhatsAppProduct = onDocumentWritten("products/{productId}", as
     const leased = Number(old.leaseUntil || 0) > Date.now();
     tx.set(ref, {...old, id, productId, kind: "meta-product-sync",
       requestedGeneration: Number(old.requestedGeneration || 0) + 1,
-      status: leased ? old.status : "PENDING", attempts: leased ? old.attempts : 0,
+      status: leased ? old.status : "CATALOG_PENDING", attempts: leased ? old.attempts : 0,
       nextAttemptAt: 0, updatedAt: new Date().toISOString(), requestedBy: "product-trigger"});
   });
 });

@@ -1,9 +1,9 @@
 'use strict';
 const config = require('../config/env');
 
-// Use original product fields, never the storefront resolver (which has generic images).
+// Apply the same staff-attested Storage photo contract as every product listing.
 async function verifiedProductImage(data, { bucket = config.firebase.storageBucket, fetcher = fetch } = {}) {
-  const urls = [...(Array.isArray(data.images) ? data.images : []), data.imageUrl, data.imageurl, data.ImageURL, data.imagePathCache];
+  const urls = require('../catalog/actual-product-photo').actualProductImages(data);
   for (const candidate of [...new Set(urls)].slice(0, 3)) {
     if (typeof candidate !== 'string' || !bucket) continue;
     try {

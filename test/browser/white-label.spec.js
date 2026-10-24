@@ -6,6 +6,7 @@ test("Conflora settings keep the official logo, save colors and support guided p
     data: { userId: "usr-edmar", pin: "1234" },
   });
   await page.request.post("/api/admin/products", {
+    headers: { 'X-Product-Content-Confirmed': 'true' },
     data: {
       id: "glue-test",
       name: "Cola Multiuso 2m",

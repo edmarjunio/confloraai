@@ -15,19 +15,8 @@ async function main() {
   const repository = new FirestoreRepository();
   const migrationService = new ImageMigrationService({ firestoreRepo: repository });
 
-  let products = [];
-  try {
-    if (process.env.NODE_ENV === 'test' || !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-      throw new Error('Ambiente local sem credenciais GCP');
-    }
-    products = await repository.getAllProducts();
-  } catch {
-    console.log('Ambiente sem conexão ativa ao Firestore; utilizando catálogo validado em disco para auditoria estática...');
-    const catalogPath = path.resolve(__dirname, '../config/stores/conflora-validated-catalog.json');
-    const raw = await fs.readFile(catalogPath, 'utf8');
-    const catalogData = JSON.parse(raw);
-    products = Array.isArray(catalogData) ? catalogData : catalogData.products || [];
-  }
+  if (process.env.NODE_ENV === 'test') throw new Error('Use o serviço injetado nos testes isolados; este comando exige Firestore real.');
+  const products = await repository.getAllProducts();
 
   console.log(`📊 Produtos carregados para auditoria: ${products.length}`);
 

@@ -475,13 +475,14 @@ class FirestoreRepository {
       delete dataWithTs.photoDoc;
     } else {
       // Garante que o padrão de tags e descrição sempre acompanhe o produto
-      const { tagsString } = generateStandardTags(dataWithTs);
+      const mergedProduct = { ...previousProduct, ...dataWithTs };
+      const { tagsString } = generateStandardTags(mergedProduct);
       if (!dataWithTs.tagsAi && !dataWithTs.tags_ia) {
-        dataWithTs.tagsAi = tagsString;
-        dataWithTs.tags_ia = tagsString;
+        dataWithTs.tagsAi = mergedProduct.tagsAi || mergedProduct.tags_ia || tagsString;
+        dataWithTs.tags_ia = mergedProduct.tags_ia || mergedProduct.tagsAi || tagsString;
       }
       if (!dataWithTs.descriptionAi && !dataWithTs.descricao_ia) {
-        const desc = generateStandardDescription(dataWithTs);
+        const desc = generateStandardDescription(mergedProduct);
         dataWithTs.descriptionAi = desc;
         dataWithTs.descricao_ia = desc;
       }

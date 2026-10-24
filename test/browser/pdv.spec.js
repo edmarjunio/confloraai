@@ -29,7 +29,9 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
   await page.getByLabel('Usuário').selectOption('usr-caixa1');
   await page.getByLabel('PIN', { exact: true }).fill('0000');
   await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+  await expect(page.locator('.cf-topbar-identity').getByText('Atendente do Caixa', { exact: true })).toBeVisible();
   await ensureCashierSession(page);
+  await page.reload();
   await expect(page.getByRole('link', { name: 'Conflora - página inicial' }).first()).toHaveAttribute('href', '/');
   await expect(page.locator('.cf-topbar-identity').getByText('Atendente do Caixa', { exact: true })).toBeVisible();
   await expect(page.locator('.cf-topbar-identity small')).toHaveText('CAIXA');
@@ -71,7 +73,7 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
   await page.getByRole('button', { name: 'Nova venda', exact: true }).click();
   await search.fill('');
   await page.keyboard.press('F2');
-  await expect(page.getByRole('heading', { name: 'Comandas', exact: true })).toBeVisible();
+  await expect(page.getByRole('complementary', { name: 'Ações das comandas' })).toBeVisible();
   for (const column of ['ESPERANDO CONFIRMAÇÃO', 'ESPERANDO PAGAMENTO', 'PAGOS / FINALIZADOS', 'FIADOS']) {
     await expect(page.getByRole('region', { name: column })).toBeVisible();
   }
@@ -103,7 +105,8 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
   expect(cashierPlaceholder.status()).toBe(200);
   await page.screenshot({ path: 'test-results/pdv-mobile.png', fullPage: false });
   await page.setViewportSize({ width: 800, height: 900 });
-  await expect(page.getByText('Recibo em Tempo Real', { exact: true })).toBeVisible();
+  await expect(page.locator('.cf-mobile-sale-heading')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ver carrinho →' })).toBeVisible();
   await page.screenshot({ path: 'test-results/pdv-tablet.png', fullPage: false });
   expect(errors).toEqual([]);
 });

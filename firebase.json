@@ -89,6 +89,7 @@
       "**/.*",
       "**/node_modules/**",
       "reports/**",
+        "store-assets/products/**",
       "**/*.jsx",
       "pdv/*.styles.js",
       "pdv/styles.css",

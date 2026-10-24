@@ -21,11 +21,12 @@ const { durableConversationTransport } = require('../src/services/durable-conver
 const { MetaCatalogSyncService, projection } = require('../src/services/meta-catalog-sync.service');
 const phone = '5564999991000';
 const review = { approved: true, reviewedBy: 'isolated-admin', reviewedAt: '2026-10-23T12:00:00Z', policyVersion: 'isolated-policy', category: 'PERMITTED_PLANT_OR_GARDEN_PRODUCT' };
+const { actualPhotoFixture } = require('./helpers/actual-photo-fixture');
 function fixture() {
   const repository = new FirestoreRepository({ isInMemory: true });
   repository.getInventorySettings = async () => ({ stockControlEnabled: true });
   for (const [id, name, price] of [['arugula', 'Rúcula', 14], ['lettuce', 'Alface', 8], ['mustard', 'Mostarda', 6]]) repository.inMemoryProducts.set(id,
-    { id, name, price, unit: 'UN', status: 'ATIVO', stockQuantity: 100, reservedQuantity: 0, metaCommerceReview: review, imageUrl: 'https://isolated.invalid/photo.png' });
+    { id, name, price, unit: 'UN', status: 'ATIVO', stockQuantity: 100, reservedQuantity: 0, metaCommerceReview: review, ...actualPhotoFixture(id) });
   const store = new PdvRepository(repository);
   const orders = new OrderService({ firestoreRepo: repository, catalogRepo: {} });
   const service = new SalesConversationService({ repository, orders });

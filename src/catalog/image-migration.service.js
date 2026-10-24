@@ -5,9 +5,10 @@ const { buildOptimizedFirestorePhotoDocument } = require('./product-photo.servic
 const { uploadProductImage } = require('./product-image-storage');
 
 class ImageMigrationService {
-  constructor({ firestoreRepo = null, storage = null } = {}) {
+  constructor({ firestoreRepo = null, storage = null, localPhotoRoot = path.resolve(__dirname, '../../public') } = {}) {
     this.firestoreRepo = firestoreRepo;
     this.storage = storage || { uploadProductImage };
+    this.localPhotoRoot = path.resolve(localPhotoRoot);
   }
 
   /**
@@ -170,8 +171,9 @@ class ImageMigrationService {
 
       // Execução real somente se não for dryRun
       try {
-        if (status === 'LOCAL_APPROVED' && primaryUrl.startsWith('/store-assets/')) {
-          const localPath = path.resolve(__dirname, '../../public', primaryUrl.replace(/^\//, ''));
+        if (status === 'LOCAL_APPROVED' && /^\/store-assets\/products\/[a-zA-Z0-9_-]+\.(?:jpg|jpeg|png|webp)$/.test(primaryUrl)) {
+          const localPath = path.resolve(this.localPhotoRoot, primaryUrl.slice(1));
+          if (!localPath.startsWith(this.localPhotoRoot + path.sep)) throw new Error('Foto fora do diretório autorizado.');
           const buffer = await fs.readFile(localPath);
           const photoDoc = await buildOptimizedFirestorePhotoDocument(prod, {
             base64Data: buffer.toString('base64'),

@@ -17,9 +17,9 @@ não pressupõe acesso à implementação interna nem igualdade de arquitetura.
 ## Cache novo
 
 - Não importe snapshots antigos, mocks ou initialData de demonstração.
-- O namespace IndexedDB `cf-public-20261023-reset1` começa vazio e recebe somente a
+- O namespace IndexedDB `cf-public-20261023-real-products1` começa vazio e recebe somente a
   projeção pública do catálogo principal após resposta do backend.
-- A geração anterior `cf-public-20261023` é excluída pela rotina compartilhada
+- As gerações anteriores `cf-public-20261023` e `cf-public-20261023-reset1` são excluídas pela rotina compartilhada
   de limpeza, inclusive quando a entrada é pelo PDV ou administração. Não copie
   os dados antigos. Se a exclusão estiver bloqueada por outra aba, tente na
   próxima visita; não declare exclusão física concluída antes de verificar.

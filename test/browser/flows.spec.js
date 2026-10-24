@@ -30,7 +30,7 @@ async function pinLogin(page, name, pin) {
 
 async function selectPortuguese(page) {
   const language = page.locator('#languageSelect');
-  if (await language.count()) await language.selectOption('pt');
+  if (await language.count() && await language.inputValue() !== 'pt') await language.selectOption('pt');
 }
 
 test('Catálogo: pesquisa abre o produto correto', async ({ page }) => {

@@ -65,9 +65,10 @@ test('local migration persists photo and all image consumers without rewriting c
   const { FirestoreRepository } = require('../src/database/firestore.repository');
   const repository = new FirestoreRepository({ isInMemory: true });
   const product = { id: 'isolated-local-image', name: 'Foto local', price: 12, stockQuantity: 7,
+    tagsAi: 'foto local, preservada', descriptionAi: 'Descrição original preservada.',
     imageUrl: '/store-assets/products/rolinha-diamante.jpg', images: ['/store-assets/products/rolinha-diamante.jpg'] };
   await repository.saveProduct(product);
-  const service = new ImageMigrationService({ firestoreRepo: repository, storage: {
+  const service = new ImageMigrationService({ firestoreRepo: repository, localPhotoRoot: require('node:path').resolve(__dirname, 'fixtures/images'), storage: {
     uploadProductImage: async ({ buffer }) => { assert.ok(buffer.length > 0); return { imageUrl: 'https://storage.invalid/photo.jpg', imagePath: 'products/isolated-local-image/photo.jpg' }; },
   } });
   const [result] = await service.processMigrationBatch([product], { dryRun: false });
@@ -77,6 +78,8 @@ test('local migration persists photo and all image consumers without rewriting c
   assert.equal(updated.imageUrl, updated.images[0]);
   assert.equal(updated.price, 12);
   assert.equal(updated.stockQuantity, 7);
+  assert.equal(updated.descriptionAi, product.descriptionAi);
+  assert.ok(updated.tagsAi.includes('preservada'));
   assert.equal((await repository.getProductPhoto(product.id)).source, 'MIGRATED_LOCAL');
   await assert.rejects(repository.saveProduct({ id: product.id, imageUrl: 'https://stale.invalid' }, { expectedImageUrl: product.imageUrl }), /imagem mudou/);
 });

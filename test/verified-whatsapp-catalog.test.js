@@ -182,13 +182,14 @@ test('21 disabled stock cannot produce availability claim', async () => {
 });
 
 test('22 image inaccessible, private, generic or redirected is never included', async () => {
-  const bucket = 'fixture.appspot.com';
-  const good = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/products%2Fa%2Fphoto.jpg?alt=media`;
+  const fixturePhoto = require('./helpers/actual-photo-fixture').actualPhotoFixture('a', 'photo.jpg');
+  const bucket = require('../src/config/env').firebase.storageBucket;
+  const good = fixturePhoto.imageUrl;
   let calls = 0;
   const fetcher = async (_url, options) => { calls++; assert.equal(options.redirect, 'error'); return { ok: false }; };
-  assert.equal(await verifiedProductImage({ images: ['http://127.0.0.1/private', 'https://images.unsplash.com/photo', good] }, { bucket, fetcher }), null);
+  assert.equal(await verifiedProductImage({ id: 'a', ...fixturePhoto, images: ['http://127.0.0.1/private', 'https://images.unsplash.com/photo', good] }, { bucket, fetcher }), null);
   assert.equal(calls, 1);
-  assert.equal(await verifiedProductImage({ imageUrl: good }, { bucket, fetcher: async () => ({ ok: true, headers: new Map([['content-type', 'image/jpeg'], ['content-length', '100']]) }) }), good);
+  assert.equal(await verifiedProductImage({ id: 'a', ...fixturePhoto }, { bucket, fetcher: async () => ({ ok: true, headers: new Map([['content-type', 'image/jpeg'], ['content-length', '100']]) }) }), good);
 });
 
 function callRoute(router, url, { key, body = {}, method = 'POST', user } = {}) {
