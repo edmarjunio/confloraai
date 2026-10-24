@@ -498,7 +498,7 @@ function createApp({
   app.use('/api/admin', (req, res, next) => {
     if (req.path === '/auth/login' || (req.path === '/auth/users' && req.method === 'GET')) {return next();}
     if (!req.user) {return res.status(401).json({ error: 'sign_in_to_your_account_249741'.tr });}
-    const cashierRoute = /^(?:\/orders(?:\/manual)?|\/daily-metrics|\/stock\/quick-entry|\/alterations|\/notifications(?:\/[^/]+\/read)?)$/.test(req.path);
+    const cashierRoute = /^(?:\/orders(?:\/manual)?|\/daily-metrics|\/stock\/quick-entry|\/alterations|\/notifications(?:\/[^/]+\/read)?)$/.test(req.path) || /^\/whatsapp\/conversations(?:\/|$)/.test(req.path);
     if (req.user.role !== 'ADMIN' && !(["CAIXA", 'VENDEDOR'].includes(req.user.role) && cashierRoute)) {
       return res.status(403).json({ error: 'unauthorized_access_for_this_profile'.tr });
     }

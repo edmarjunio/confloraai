@@ -1570,9 +1570,22 @@ window.PdvComponents = (() => {
     const [sending, setSending] = useState(false);
     const [error, setError] = useState('');
     const rawPhone = String(conversation?.phone || conversation?.customerPhone || '').replace(/\D/g, '');
+    const compositionClaim = useRef(null);
+    const manualRequest = useRef(null);
+    const [compositionReady, setCompositionReady] = useState(false);
+    const ensureCompositionClaim = () => {
+      if (!compositionClaim.current) compositionClaim.current = api(`/api/admin/whatsapp/conversations/${rawPhone}/takeover`, {})
+        .then(() => { setCompositionReady(true); })
+        .catch(err => { compositionClaim.current = null; setCompositionReady(false); setError(err.message); throw err; });
+      return compositionClaim.current;
+    };
 
     useEffect(() => {
       if (!rawPhone) return;
+      compositionClaim.current = null;
+      manualRequest.current = null;
+      setCompositionReady(false);
+      setText('');
       let active = true;
       api(`/api/admin/whatsapp/conversations/${rawPhone}/messages`)
         .then(res => { if (active && res.messages) setMessages(res.messages); })
@@ -1590,7 +1603,10 @@ window.PdvComponents = (() => {
       setSending(true);
       setError('');
       try {
-        await api(`/api/admin/whatsapp/conversations/${rawPhone}/send`, { text: text.trim() });
+        await ensureCompositionClaim();
+        if (!manualRequest.current || manualRequest.current.text !== text.trim()) manualRequest.current = { text: text.trim(), requestId: crypto.randomUUID() };
+        await api(`/api/admin/whatsapp/conversations/${rawPhone}/send`, manualRequest.current);
+        manualRequest.current = null;
         setText('');
         const res = await api(`/api/admin/whatsapp/conversations/${rawPhone}/messages`);
         if (res.messages) setMessages(res.messages);
@@ -1680,6 +1696,8 @@ window.PdvComponents = (() => {
               <textarea
                 rows={1}
                 value={text}
+                readOnly={!compositionReady}
+                onFocus={() => { ensureCompositionClaim().catch(() => {}); }}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Digite sua mensagem… (Enter envia, Shift+Enter quebra linha)"

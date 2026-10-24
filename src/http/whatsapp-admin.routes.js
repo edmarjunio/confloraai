@@ -1,5 +1,4 @@
 const { customerKeyFor } = require('../agent/agent-store');
-const { randomUUID } = require('node:crypto');
 
 function installWhatsappAdminRoutes(app, { whatsapp, store }) {
   app.use('/api/admin/whatsapp', (req, res, next) => {
