@@ -95,12 +95,14 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
   await page.screenshot({ path: 'test-results/pdv-desktop.png', fullPage: false });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.evaluate(() => window.scrollTo(0, 0));
-  await expect(page.getByRole('link', { name: 'Conflora - página inicial' }).first()).toBeInViewport();
-  await expect(page.getByRole('button', { name: 'Sair', exact: true })).toBeInViewport();
+  await expect(page.locator('.cf-mobile-sale-heading')).toBeInViewport();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
-  await expect(page.getByRole('button', { name: 'Voltar ao início da página' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Ir para pagamento' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Selecionar cliente' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ver carrinho →' })).toBeVisible();
+  await page.getByRole('button', { name: 'Mais opções', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Cliente', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Loja', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sair', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Mais opções', exact: true }).click();
   const cashierPlaceholder = await page.request.get('/store-assets/placeholder.svg');
   expect(cashierPlaceholder.status()).toBe(200);
   await page.screenshot({ path: 'test-results/pdv-mobile.png', fullPage: false });
@@ -108,5 +110,8 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
   await expect(page.locator('.cf-mobile-sale-heading')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Ver carrinho →' })).toBeVisible();
   await page.screenshot({ path: 'test-results/pdv-tablet.png', fullPage: false });
+  await page.getByRole('button', { name: 'Mais opções', exact: true }).click();
+  await page.getByRole('button', { name: 'Sair', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Frente de caixa' })).toBeVisible();
   expect(errors).toEqual([]);
 });

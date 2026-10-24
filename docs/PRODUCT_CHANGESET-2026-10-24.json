@@ -1,0 +1,22 @@
+{
+  "at": "2026-10-24T11:03:44.369Z",
+  "baseCommit": "a81764d7bf5d9dbe458f40a015bc6678aa7513f9",
+  "scope": "Shared working tree snapshot, including earlier preserved changes; not a commit or deployment",
+  "files": [
+    {
+      "status": " M",
+      "file": "public/pdv/app.jsx",
+      "sha256": "892aa37e6d72133c2bb4d93dcf775fee4f8a571909881b35df077fd1ac155d71"
+    },
+    {
+      "status": " M",
+      "file": "src/http/app.js",
+      "sha256": "dba19b510e373865178a0e96111c5764b547b1bd8cccbbf183a097f03ba9f467"
+    },
+    {
+      "status": " M",
+      "file": "test/browser/pdv.spec.js",
+      "sha256": "565b6bafd3d28f3969b3b62e811d56464dd84c3edce869f6b347914ea4b0c048"
+    }
+  ]
+}

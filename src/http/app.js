@@ -738,6 +738,9 @@ function createApp({
 
   // Mantém compatibilidade de URL redirecionando IDs de imagem para o Firebase Storage.
   app.get('/api/images/:id', async (req, res) => {
+    // Stable metadata IDs can change or lose approval. Cache immutable Storage
+    // bytes, never a redirect that could restore a removed/reference photograph.
+    res.setHeader('Cache-Control', 'no-store');
     try {
       const { id } = req.params;
       const photo = await messageService.firestoreRepo.getProductPhoto(id);
@@ -754,7 +757,7 @@ function createApp({
       const approvedImages = actualProductImages(prod || {});
       if (photo?.imageUrl && approvedImages.includes(photo.imageUrl)) {
         // The photo ID can be repointed; only content-hashed URLs are immutable.
-        res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
+        res.setHeader('Cache-Control', 'no-store');
         return res.redirect(302, photo.imageUrl);
       }
       if (approvedImages[0]) {
