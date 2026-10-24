@@ -73,6 +73,7 @@ test('quadro permite apenas avançar etapas e abre recebimento ao arrastar para 
   });
   await page.goto('/pdv'); await expect(page.getByPlaceholder('Nome, categoria ou descrição (Ex.: plantas de sombra, plantas para jardim, flores, e etc)')).toBeVisible(); await page.keyboard.press('F2');
   const payment = page.getByRole('region', { name: 'ESPERANDO PAGAMENTO', exact: true });
+  await page.getByRole('combobox', { name: 'Etapa das comandas' }).selectOption('all');
   const paid = page.getByRole('region', { name: 'PAGOS / FINALIZADOS', exact: true });
   const card = (region) => region.locator('cf-card').filter({ hasText: customerName });
   await expect(card(payment)).toHaveAttribute('draggable', 'true');

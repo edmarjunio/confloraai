@@ -49,11 +49,15 @@ test('real receive path queues compact receipt; owner-new and owner-paid do not 
   assert.ok(sent.every(row => /VENDA CONFIRMADA · RECIBO/.test(row.text)));
   assert.equal((await store.read('orders', order.id)).total, 20);
 });
-test('pending payment alone is silent; stale approval and claimed delivery are skipped', async () => {
+test('pending payment preserves the new-order alert; claimed delivery is skipped', async () => {
   const { store, service, sent } = await fixture();
   const order = { id: 'stale', total: 20, status: 'AWAITING_PAYMENT', orderType: 'DELIVERY', deliveryStatus: 'PENDING_DELIVERY', createdAt: new Date().toISOString(), paymentMethod: 'PIX' };
   await store.transaction(tx => { tx.set('orders', order.id, order); tx.set('pdv_outbox', 'parent', { id: 'parent', orderId: order.id, kind: 'owner-new', status: 'PENDING', attempts: 0 }); });
-  await service.deliver('parent'); assert.equal(sent.length, 0);
+  await service.deliver('parent');
+  assert.equal(sent.length, 2);
+  assert.ok(sent.every(row => /NOVO PEDIDO/.test(row.text) && /ainda não confirmado/.test(row.text)));
+  assert.equal((await store.read('orders', order.id)).paymentStatus, undefined);
+  sent.length = 0;
   order.paymentMethod = 'DINHEIRO';
   const childIds = await notifications.expand(store, { kind: 'owner-new' }, order);
   await store.transaction(tx => tx.set('orders', order.id, { ...order, assignedDriver: { id: 'driver' } }));
@@ -70,6 +74,28 @@ test('provider uncertainty is reconciled separately for each recipient, never bl
   assert.equal((await store.read('pdv_outbox', ids[0])).status, 'NEEDS_RECONCILIATION');
   await service.deliver(ids[0]);
   assert.equal(sent.length, 0);
+});
+
+test('manual Pix proof keeps its review alert without confirming payment or sending twice', async () => {
+  const { store, service, sent } = await fixture();
+  const order = { id: 'proof-order', total: 20, paymentMethod: 'PIX', paymentStatus: 'PENDING', status: 'AWAITING_PIX' };
+  await store.transaction(tx => {
+    tx.set('orders', order.id, order);
+    tx.set('pdv_outbox', 'proof-alert', { id: 'proof-alert', kind: 'proof-review', orderId: order.id, recipient: phones[0], status: 'PENDING', attempts: 0 });
+  });
+  await service.deliver('proof-alert');
+  await service.deliver('proof-alert');
+  assert.equal(sent.length, 1);
+  assert.match(sent[0].text, /COMPROVANTE AGUARDANDO CONFERÊNCIA/);
+  assert.deepEqual(await store.read('orders', order.id), order);
+});
+
+test('legacy closing without a revision is quarantined without submission', async () => {
+  const { store, service, sent } = await fixture();
+  await store.transaction(tx => tx.set('pdv_outbox', 'legacy-closing', { id: 'legacy-closing', kind: 'closing', text: 'old summary', recipient: phones[0], status: 'PENDING', attempts: 0 }));
+  await service.deliver('legacy-closing');
+  assert.equal(sent.length, 0);
+  assert.equal((await store.read('pdv_outbox', 'legacy-closing')).status, 'NEEDS_RECONCILIATION');
 });
 test('last cashier creates one closing, uses official report metrics and Junior target only', async () => {
   const { store, service, sent } = await fixture();

@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 
 test('chat mostra envio antes da resposta, Enter envia e Escape limpa sem fechar', async ({ page }) => {
   await page.route(/https:\/\/.*/, route => route.abort());
-  await page.route('**/api/storefront/catalog', async route => {
+  await page.route(/\/api\/storefront\/catalog(?:\?.*)?$/, async route => {
     const response = await route.fetch(); const body = await response.json();
     body.config.assistant.mode = 'AI'; body.config.assistant.enabled = true;
     await route.fulfill({ response, json: body });

@@ -580,7 +580,7 @@ class PdvService {
           }
           if (!job.summaryPrepared) {
             const metrics = await this.repository.repository.getDailyExecutiveMetrics({ date: job.closingDate });
-            job.text = require('../reports/daily-executive-report').formatCompactClosing(metrics, job.cashierTotals);
+            job.text = require('../reports/daily-executive-report').formatCompactClosing(metrics, job.cashierTotals, job.cashierSessions);
             await update({ text: job.text, summaryPrepared: true });
           }
         }
@@ -589,9 +589,6 @@ class PdvService {
         await update({ status: childIds.length ? 'SENT' : 'SKIPPED', deliveryStatus: 'FANOUT_QUEUED', childIds, leaseUntil: 0, lastError: childIds.length ? '' : 'NO_ELIGIBLE_EVENT_OR_RECIPIENT' });
         for (const childId of childIds) await this.deliver(childId);
         return;
-      }
-      if (['proof-review', 'owner-debt-paid'].includes(job.kind)) {
-        await update({ status: 'SKIPPED', leaseUntil: 0, lastError: 'STAFF_NOTIFICATION_POLICY' }); return;
       }
       if (job.kind === 'staff-notification') {
         const revalidate = async () => {
@@ -624,11 +621,14 @@ class PdvService {
       const settlement = job.settlementId ? await this.repository.read('debt_settlements', job.settlementId) : null;
       const settlementMethods = settlement ? (settlement.paymentParts || [{ method: settlement.paymentMethod, amount: settlement.amount }])
         .map((part) => `${part.method}: ${money(part.amount)}`).join(' + ') : '';
-      const phone = normalizePhone(job.recipient || order?.customerPhone || settlement?.customerPhone);
-      if (!['driver-available', 'driver-assigned'].includes(job.kind)) automationRecipient = phone;
+      const isOwner = ['proof-review', 'owner-debt-paid'].includes(job.kind);
+      const ownerRecipient = job.kind === 'proof-review' ? process.env.STORE_NOTIFICATION_PHONE || this.ownerPhone : this.ownerPhone;
+      const phone = normalizePhone(job.recipient || (isOwner ? ownerRecipient : order?.customerPhone || settlement?.customerPhone));
+      if (!isOwner && !['driver-available', 'driver-assigned'].includes(job.kind)) automationRecipient = phone;
       if (!phone) { await update({ status: 'NEEDS_RECONCILIATION', skipped: true, leaseUntil: 0, lastError: 'INVALID_OR_MISSING_RECIPIENT' }); return; }
       let text;
-      if (job.kind === 'proof-rejected') text = `CONFLORA — COMPROVANTE RECUSADO\nPedido #${order.ticketNumber || order.id}\n${order.paymentReviewNote}\nEnvie um novo comprovante na página do seu pedido.`;
+      if (job.kind === 'proof-review') text = `CONFLORA — COMPROVANTE AGUARDANDO CONFERÊNCIA\nPedido #${order.ticketNumber || order.id}\nValor: ${money(partAmount(order, 'PIX'))}\nConfira o recebimento na conta bancária antes de aprovar no caixa.`;
+      else if (job.kind === 'proof-rejected') text = `CONFLORA — COMPROVANTE RECUSADO\nPedido #${order.ticketNumber || order.id}\n${order.paymentReviewNote}\nEnvie um novo comprovante na página do seu pedido.`;
       else if (job.kind === 'driver-available') text = 'CONFLORA — ENTREGA DISPONÍVEL\nAbra a aba Entregas para consultar e assumir o pedido.';
       else if (job.kind === 'driver-assigned') text = `CONFLORA — ENTREGA ATRIBUÍDA\nPedido #${order.ticketNumber || order.id}\nConsulte os detalhes na aba Entregas.`;
       else if (job.kind === 'delivery-departure') { text = `Seu pedido #${order.ticketNumber || order.id.slice(-6)} saiu para entrega! Responsável: ${order.assignedDriver?.name || 'Equipe Conflora'}. ${isDeliverySettled(order) ? 'Pagamento já registrado.' : 'Pagamento será recebido na entrega.'}`; }

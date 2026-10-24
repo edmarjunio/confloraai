@@ -4,7 +4,7 @@ const { test, expect } = require('@playwright/test');
 test('PDV opens without test banner, uses real login and sends an empty cart until selected', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  await page.route('**/api/caixa/products', async (route) => {
+  await page.route(/\/api\/caixa\/products(?:\?.*)?$/, async (route) => {
     const response = await route.fetch();
     const existing = await response.json();
     const additions = Array.from({ length: 130 }, (_, index) => ({
@@ -21,7 +21,11 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
       descriptionAi: index === 129 ? 'Plantas de sombra para jardim.' : '',
       details: index === 129 ? [{ label: 'Cuidados', value: 'Manter em local protegido.' }] : [],
     }));
-    await route.fulfill({ response, json: [...additions, ...existing] });
+    await page.route(/\/api\/caixa\/products\/lazy-product-\d+$/, route => {
+      const id = route.request().url().split('/').pop();
+      return route.fulfill({ json: additions.find(product => product.id === id) });
+    });
+    await route.fulfill({ response, json: [...additions.map(product => ({ ...product, details: [], detailsLoaded: false })), ...existing] });
   });
   await page.goto('/pdv');
   await expect(page.getByRole('heading', { name: 'Frente de caixa' })).toBeVisible();
@@ -74,6 +78,7 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
   await search.fill('');
   await page.keyboard.press('F2');
   await expect(page.getByRole('complementary', { name: 'Ações das comandas' })).toBeVisible();
+  await page.getByRole('combobox', { name: 'Etapa das comandas' }).selectOption('all');
   for (const column of ['ESPERANDO CONFIRMAÇÃO', 'ESPERANDO PAGAMENTO', 'PAGOS / FINALIZADOS', 'FIADOS']) {
     await expect(page.getByRole('region', { name: column })).toBeVisible();
   }

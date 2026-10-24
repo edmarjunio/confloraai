@@ -42,7 +42,7 @@ test('Minha conta não aparece para visitante; equipe mantém o atalho do caixa'
 
 test('cliente vê dívida no cabeçalho e paga Pix sem contato com o caixa', async ({ page }) => {
   let paid = false;
-  await page.route('**/api/storefront/catalog', async route => {
+  await page.route(/\/api\/storefront\/catalog(?:\?.*)?$/, async route => {
     const response = await route.fetch();
     const data = await response.json();
     data.config.checkout.pix.mode = 'SICREDI';

@@ -2,6 +2,12 @@
 
 ## Estado
 
+Atualização posterior: a integração e as correções de preservação estão descritas
+em [MERGE-SEGURO-PR14-2026-10-24.md](MERGE-SEGURO-PR14-2026-10-24.md).
+Esse relatório posterior substitui as pendências de merge e a política de
+supressão de avisos descritas historicamente abaixo: avisos de novo pedido,
+comprovante e quitação foram preservados, assim como os detalhes por caixa.
+
 Implementação local em andamento, sem deploy, sem mensagens reais e sem alteração
 de configurações persistidas reais. A conclusão foi interrompida por merge externo
 no mesmo worktree, com conflitos em `src/services/message.service.js` e

@@ -6,7 +6,7 @@ async function selectPortuguese(page) {
 }
 
 test.beforeEach(async ({ page }) => {
-  await page.route('**/api/storefront/catalog', async route => {
+  await page.route(/\/api\/storefront\/catalog(?:\?.*)?$/, async route => {
     const response = await route.fetch(); const data = await response.json();
     data.config.assistant.enabled = true;
     await route.fulfill({ json: data });
@@ -16,7 +16,7 @@ test.beforeEach(async ({ page }) => {
 test("chat presents a friendly error when an upstream proxy returns HTML", async ({
   page,
 }) => {
-  await page.route("**/api/storefront/catalog", async route => {
+  await page.route(/\/api\/storefront\/catalog(?:\?.*)?$/, async route => {
     const response = await route.fetch(); const data = await response.json();
     data.config.assistant.mode = "AI";
     data.config.assistant.enabled = true;

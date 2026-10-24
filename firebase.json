@@ -4,7 +4,7 @@
     "indexes": "firestore.indexes.json"
   },
   "hosting": {
-    "site": "confloraai",
+    "target": "loja",
     "public": "public",
     "headers": [
       {
@@ -96,6 +96,10 @@
       "storefront/sw.js"
     ],
     "rewrites": [
+      {
+        "source": "/storefront-auth.js",
+        "run": { "serviceId": "confloraai", "region": "southamerica-east1" }
+      },
       {
         "source": "/storefront/sw.js",
         "destination": "/storefront/sw-built.js"

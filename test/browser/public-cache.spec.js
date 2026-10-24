@@ -23,7 +23,7 @@ test('legacy catalogue is discarded while the new public cache renders during re
   }));
   let release;
   const gate = new Promise(resolve => { release = resolve; });
-  await page.route('**/api/storefront/catalog', async route => {
+  await page.route(/\/api\/storefront\/catalog(?:\?.*)?$/, async route => {
     await gate;
     const response = await route.fetch();
     const data = await response.json();

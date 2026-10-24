@@ -118,7 +118,7 @@ class MessageService {
       whatsapp = require('./durable-conversation-transport').durableConversationTransport(this.firestoreRepo, this.whatsappClient, { phone, messageId, version: reset.conversation.version });
       return this.sendMainMenu(phone, whatsapp, startTime, customerName);
     }
-    if (command === 'menu') return this.sendMainMenu(phone, whatsapp, startTime, customerName);
+    if (!interactiveId && /^(?:menu|quero ver as op[cç][oõ]es)[!,.?\s]*$/i.test(String(message || '').trim())) return this.sendMainMenu(phone, whatsapp, startTime, customerName);
     if (!interactiveId && isAmbiguousMessage(message)) {
       await conversationAutomation(this.firestoreRepo, phone, { pauseReason: 'ambiguous_customer_needs_human', messageId });
       return { reply: '', intent: 'AMBIGUOUS_NEEDS_HUMAN', latencyMs: 0 };
@@ -170,9 +170,11 @@ class MessageService {
         return { reply: '', intent: 'VERIFIED_CATALOG_QUEUED', latencyMs: 0 };
       }
     }
-    if (!interactiveId && require('../shared/greeting').recognizeGreeting(message)) {
+    const standaloneGreeting = require('../shared/greeting').recognizeGreeting(message);
+    if (!interactiveId && standaloneGreeting) {
       if (!conversation.channel || conversation.channel === 'menu') return this.sendMainMenu(phone, whatsapp, startTime, customerName);
-      const reply = `${require('../shared/greeting').recognizeGreeting(message)} Qual produto você procura?`;
+      const formalGreeting = standaloneGreeting.split('!')[0] + '!';
+      const reply = `${formalGreeting} ${conversation.channel === 'cart' ? 'Como posso ajudar com sua sacola?' : 'Qual produto você procura?'}`;
       return this.sendSalesResult(phone, whatsapp, { reply, intent: 'GREETING_SENT' }, messageId, startTime);
     }
     if ((!conversation.channel || conversation.channel === 'menu') && !objective && !interactiveId && !session.salesConversation?.items?.length) {

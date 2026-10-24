@@ -52,9 +52,28 @@ for (const channel of ['cart', 'agent']) {
     const result = await service.handleCustomerMessage({ phone, message: 'Boa noiteeee' });
     assert.equal(result.intent, 'GREETING_SENT');
     assert.match(result.reply, /^Boa noite!/);
+    assert.match(result.reply, channel === 'cart' ? /Como posso ajudar com sua sacola\?/ : /Qual produto você procura\?/);
     assert.equal(sends[0].kind, 'text');
     assert.equal((await conversationAutomation(repository, phone)).channel, channel);
     assert.deepEqual((await store.read('sessions', phone)).orderIntake, draft);
+  });
+}
+
+for (const message of ['menu!', 'quero ver as opções', 'quero ver as opcoes?']) {
+  test(`explicit menu phrase keeps the durable welcome flow: ${message}`, async () => {
+    const { repository, service, sends } = fixture();
+    await evaluateDailyReset(repository, phone);
+    await setConversationChannel(repository, phone, 'cart');
+    const payload = { phone, message, messageId: `menu-${message}` };
+    await new (require('../src/services/incoming-message.service').IncomingMessageService)(repository).accept(payload);
+    const result = await service.handleCustomerMessage(payload);
+    assert.equal(result.intent, 'MAIN_MENU_SENT');
+    assert.equal(sends.length, 1);
+    assert.equal(sends[0].kind, 'template');
+    const jobs = await new PdvRepository(repository).list('pdv_outbox');
+    assert.equal(jobs.filter(job => job.kind === 'conversation-native' && job.status === 'SENT' && job.providerMessageId).length, 1);
+    assert.equal((await service.handleCustomerMessage(payload)).intent, 'DUPLICATE');
+    assert.equal(sends.length, 1);
   });
 }
 
