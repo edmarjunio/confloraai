@@ -49,13 +49,12 @@ test('real receive path queues compact receipt; owner-new and owner-paid do not 
   assert.ok(sent.every(row => /VENDA CONFIRMADA · RECIBO/.test(row.text)));
   assert.equal((await store.read('orders', order.id)).total, 20);
 });
-test('pending payment preserves the new-order alert; claimed delivery is skipped', async () => {
+test('pending payment alone is silent; claimed delivery is skipped', async () => {
   const { store, service, sent } = await fixture();
   const order = { id: 'stale', total: 20, status: 'AWAITING_PAYMENT', orderType: 'DELIVERY', deliveryStatus: 'PENDING_DELIVERY', createdAt: new Date().toISOString(), paymentMethod: 'PIX' };
   await store.transaction(tx => { tx.set('orders', order.id, order); tx.set('pdv_outbox', 'parent', { id: 'parent', orderId: order.id, kind: 'owner-new', status: 'PENDING', attempts: 0 }); });
   await service.deliver('parent');
-  assert.equal(sent.length, 2);
-  assert.ok(sent.every(row => /NOVO PEDIDO/.test(row.text) && /ainda não confirmado/.test(row.text)));
+  assert.equal(sent.length, 0);
   assert.equal((await store.read('orders', order.id)).paymentStatus, undefined);
   sent.length = 0;
   order.paymentMethod = 'DINHEIRO';
@@ -63,6 +62,26 @@ test('pending payment preserves the new-order alert; claimed delivery is skipped
   await store.transaction(tx => tx.set('orders', order.id, { ...order, assignedDriver: { id: 'driver' } }));
   for (const id of childIds) await service.deliver(id);
   assert.equal(sent.length, 0);
+});
+test('official delivery transitions notify unassigned and delivered states without duplicating the receipt', async () => {
+  const { store, service, sent } = await fixture();
+  const driver = { id: 'driver', name: 'Entregador', role: 'ENTREGADOR' };
+  const order = await service.create({ requestId: randomUUID(), items: [{ productId: 'p', quantity: 1 }],
+    paymentMethod: 'DINHEIRO', cashReceived: 20, orderType: 'DELIVERY', customerName: 'Cliente isolado',
+    customerPhone: '5564999990009', deliveryAddress: 'Rua de teste, 123, Centro, Cidade de teste' },
+  { id: 'admin', name: 'Admin', role: 'ADMIN' });
+  await service.deliver(`${order.id}-owner-new`);
+  assert.equal(sent.filter(row => row.text.includes('ENTREGA SEM ENTREGADOR')).length, 2);
+  await store.assignDelivery(order.id, driver);
+  await store.startDelivery(order.id, driver);
+  await store.receive(order.id, driver, null, 20);
+  await store.markDelivered(order.id, driver);
+  await service.deliver(`${order.id}-owner-delivered`);
+  assert.equal(sent.filter(row => row.text.includes('ENTREGA FINALIZADA')).length, 2);
+  assert.equal(sent.filter(row => row.text.includes('VENDA CONFIRMADA · RECIBO')).length, 2);
+  assert.ok(sent.filter(row => row.text.includes('ENTREGA FINALIZADA')).every(row => row.text.includes('Entregue e recebido')));
+  await service.deliver(`${order.id}-owner-delivered`);
+  assert.equal(sent.filter(row => phones.includes(row.phone)).length, 6);
 });
 test('provider uncertainty is reconciled separately for each recipient, never blindly resent', async () => {
   const { store, service, sent } = await fixture();
@@ -76,7 +95,7 @@ test('provider uncertainty is reconciled separately for each recipient, never bl
   assert.equal(sent.length, 0);
 });
 
-test('manual Pix proof keeps its review alert without confirming payment or sending twice', async () => {
+test('manual Pix proof preserves pending payment without unsolicited owner messages', async () => {
   const { store, service, sent } = await fixture();
   const order = { id: 'proof-order', total: 20, paymentMethod: 'PIX', paymentStatus: 'PENDING', status: 'AWAITING_PIX' };
   await store.transaction(tx => {
@@ -85,8 +104,8 @@ test('manual Pix proof keeps its review alert without confirming payment or send
   });
   await service.deliver('proof-alert');
   await service.deliver('proof-alert');
-  assert.equal(sent.length, 1);
-  assert.match(sent[0].text, /COMPROVANTE AGUARDANDO CONFERÊNCIA/);
+  assert.equal(sent.length, 0);
+  assert.equal((await store.read('pdv_outbox', 'proof-alert')).lastError, 'STAFF_NOTIFICATION_POLICY');
   assert.deepEqual(await store.read('orders', order.id), order);
 });
 

@@ -1,19 +1,15 @@
-# Notificações operacionais e login Google — alterações locais em integração
+# Notificações operacionais e login Google — implementação local integrada
 
 ## Estado
 
-Atualização posterior: a integração e as correções de preservação estão descritas
-em [MERGE-SEGURO-PR14-2026-10-24.md](MERGE-SEGURO-PR14-2026-10-24.md).
-Esse relatório posterior substitui as pendências de merge e a política de
-supressão de avisos descritas historicamente abaixo: avisos de novo pedido,
-comprovante e quitação foram preservados, assim como os detalhes por caixa.
-
-Implementação local em andamento, sem deploy, sem mensagens reais e sem alteração
-de configurações persistidas reais. A conclusão foi interrompida por merge externo
-no mesmo worktree, com conflitos em `src/services/message.service.js` e
-`docs/AI_AGENT_FLOW.md`. O merge externo também substituiu a alteração de
-`firebase.json` que encaminhava `/storefront-auth.js` ao Cloud Run. Não confundir
-as edições desta entrega com as exclusões de `output/` provenientes desse merge.
+Integração retomada sobre `6684eca`, sem conflitos pendentes. Sem deploy, mensagens
+reais ou alterações de configurações persistidas reais. O merge preservou o código;
+a revisão final restabeleceu a seleção de avisos solicitada pelo usuário: sem
+novo pedido genérico, sem comprovante/quitacão avulsa para proprietários e sem usar
+o número do responsável como substituto silencioso do Junior. Detalhes por caixa
+continuam nos registros e relatórios; o WhatsApp recebe o resumo compacto.
+Este documento substitui as decisões divergentes de notificações em
+[MERGE-SEGURO-PR14-2026-10-24.md](MERGE-SEGURO-PR14-2026-10-24.md).
 
 ## Login Google
 
@@ -24,7 +20,7 @@ As três variáveis Firebase públicas necessárias estão presentes no `.env` l
 original; isso não comprova configuração do ambiente hospedado, provedor Google
 habilitado nem domínios autorizados.
 
-Correção necessária em `firebase.json`, antes do catch-all:
+Correção integrada em `firebase.json`, antes do catch-all:
 
 ```json
 {
@@ -82,10 +78,11 @@ informa envio quando todos os filhos possuem ack. Meta aceitar não prova entreg
 
 `proof-review` e `owner-debt-paid` deixam de gerar avisos WhatsApp de proprietário
 sob a política selecionada; conferência Pix e quitação continuam nos fluxos
-oficiais e painéis. Avisos de encomendas/atendimento e relatórios solicitados
-manualmente pertencem a fluxos independentes preservados: a filtragem global
-desses destinos ainda precisa ser revisada antes de afirmar que nenhum outro
-tipo de mensagem alcançará os números configurados.
+oficiais e painéis. Encomendas continuam notificando o painel da equipe; o aviso
+WhatsApp inicial para responsáveis foi suprimido. Cotação, previsão e eventos de
+encomenda para clientes permanecem. Relatórios solicitados manualmente continuam
+independentes da assinatura automática. Notificações de cliente e entregador
+mantêm seus destinatários legítimos, mesmo se um telefone também estiver na equipe.
 
 ## Dependências externas
 
@@ -109,14 +106,55 @@ ambiente hospedado não refletem correções locais sem publicação autorizada.
 
 ## Verificação e custos
 
-Antes do merge externo: check:full e lint aprovados; 73 testes Node isolados de
-PDV, caixa e notificações aprovados. Após ajustes adicionais: 9 testes focados de
-notificações aprovados, incluindo permissão Admin, atualização concorrente,
-deduplicação, retry incerto e resumo invalidado por nova abertura. Um teste de
-contrato Hosting detectou a perda da rota durante o merge. Validação integrada,
-build e navegador finais permanecem pendentes até resolver a concorrência.
-Não houve sessão de performance ou homologação real nova. Sem tempos reais de
-resposta medidos; duração de teste não representa latência da loja.
+Build, check:full e lint aprovados. Suíte funcional isolada: 510 aprovados,
+1 ignorado por depender do emulador, zero falhas. Seleção exclui testes de carga,
+performance e benchmark. O glob inicial incluiu inadvertidamente o teste
+instrumentado `firestore-finops-load.test.js`; foi interrompido sem concluir.
+Isso não constituiu homologação de performance, não tocou Firestore real e nenhum
+resultado parcial foi adotado como medição. A execução funcional posterior usou
+seleção explícita sem esse arquivo.
+
+Testes de navegador adicionados: formulário real Admin com cinco destinatários,
+persistência/reload, viewport móvel/desktop; habilitação do botão e exibição de
+erro Google usando módulo SDK substituído exclusivamente no teste. Cenário
+existente confirmou a mesma URL Storage e imagem carregada (naturalWidth > 0)
+no Caixa e vitrine. Esses testes não autenticam conta Google real, não enviam à
+Meta e não comprovam que todas as fotografias do banco real sejam Storage.
+Resultado final da suíte de navegador em `NOTIFICACOES-validation.json`.
+Sem tempos reais de resposta medidos; duração de teste não representa latência
+da loja. LCP/INP/CLS e teste Safari/iPhone real permanecem pendentes.
+
+Navegador: 45 aprovados e 1 exclusivo de layout móvel ignorado no desktop.
+Suíte de notificações: 13 regressões, incluindo transições oficiais de entrega
+desde disponibilidade até recebimento e conclusão, sem duplicação do recibo.
+
+## Arquivos e consumidores
+
+| Arquivo | Alteração e consumidor real |
+| --- | --- |
+| `firebase.json` | Rewrite da autenticação ao backend, antes do shell. |
+| `public/storefront/app.js`, `src/http/firebase-client.js` | Inicialização independente do catálogo, habilitação após SDK, falhas visíveis. |
+| `src/http/views-admin.js` | Cinco posições, preferências, persistência e proteção contra resposta de outro usuário/perfil. |
+| `src/http/whatsapp-admin.routes.js` | GET/PUT privados, Admin, validação e versão concorrente. |
+| `src/orders/operational-notifications.js` | Seleção, formatação e expansão idempotente dos destinos na outbox oficial. |
+| `src/orders/pdv.service.js` | Intenção de aprovação; worker revalida destinatários/estado por chunk e usa transporte existente. |
+| `src/orders/pdv.repository.js` | Intenções nas transações de recebimento e entrega. |
+| `src/orders/cashier-sessions.js` | Intenção somente após último caixa, revisão e valores conferidos; sem duplicar sessões no novo job. |
+| `src/reports/daily-executive-report.js` | Resumo compacto das métricas oficiais; relatório completo preservado. |
+| `src/http/pdv.routes.js` | Distingue fanout enfileirado de filhos aceitos pelo provedor. |
+| Testes de notificações/navegador, PDV, Sicredi, fechamento e encomendas | Cobertura da seleção de avisos, preservando recibos de clientes, cotação/previsão e validação comercial. |
+
+## Conformidade aplicável
+
+- Conforme na implementação local: estrutura antes dos recursos secundários;
+  catálogo sem novas consultas de pedidos; cache público derivado; configuração
+  privada; transações/idempotência; nenhuma confirmação financeira por cache;
+  fixtures fora do bundle; Pix manual, simulador isolado e Sicredi pendente preservados.
+- Conforme nas regressões isoladas: mesma imagem, recarga, proteção por perfil,
+  deduplicação, recebimento oficial, entrega, último caixa e falhas.
+- Pendente: Google real, domínios/provedor, aprovação/finalidade do template,
+  envio real aos cinco números, Safari/iPhone e performance medida. Sem declaração
+  de produção validada.
 
 Até cinco jobs por evento, mais a raiz e checkpoints; números repetidos reduzem
 o fanout. Cada chunk revalida configuração e registro oficial, aumentando leituras
@@ -127,8 +165,7 @@ Sicredi ou integração bancária pendente.
 
 ## Homologação e rollback
 
-Depois de integrar o merge: reconstruir frontend, executar lint/checks e regressões
-isoladas; verificar Google com domínio autorizado; testar os cinco destinos somente
+Antes de publicar: verificar Google com domínio autorizado; testar os cinco destinos somente
 com autorização de envio, aprovação/recusa de desconto, recibo dinheiro/Pix/fiado,
 entrega assumida/concluída, dois caixas e fechamento simultâneo, nova abertura,
 rede interrompida e reconciliação. Conferir valores com Relatórios.

@@ -1119,6 +1119,11 @@ function renderAdminHtml(storeConfig) {
     }
 
     function applyUserRoleUI() {
+      if (currentUser?.role !== 'ADMIN') {
+        document.getElementById('whatsappRecipientsFields').replaceChildren();
+        document.getElementById('whatsappRecipientsForm').querySelector('button').disabled = true;
+        document.getElementById('whatsappRecipientsStatus').textContent = '';
+      }
       document.querySelector('conflora-topbar').user = currentUser;
       const switcherWrap = document.getElementById('ownerProfileSwitcherWrap');
       const switcherSelect = document.getElementById('ownerProfileSelect');
@@ -2163,12 +2168,14 @@ function renderAdminHtml(storeConfig) {
     let whatsappRecipientsVersion = null;
     async function loadWhatsappRecipients() {
       if (currentUser?.role !== 'ADMIN') return;
+      const settingsUserId = currentUser.id;
       const form = document.getElementById('whatsappRecipientsForm');
       const status = document.getElementById('whatsappRecipientsStatus');
       form.querySelector('button').disabled = true;
       try {
         const response = await window.ConfloraSession.apiFetch('/api/admin/whatsapp/notification-settings');
         const data = await response.json();
+        if (currentUser?.role !== 'ADMIN' || currentUser.id !== settingsUserId) return;
         if (!response.ok) throw new Error(data.error || 'Falha ao consultar destinatários.');
         whatsappRecipientsVersion = data.version;
         const fields = document.getElementById('whatsappRecipientsFields');

@@ -7,7 +7,7 @@ const SETTINGS_ID = 'whatsapp_notifications';
 const SLOTS = ['horta', 'edmar', 'junior', 'telvia', 'rose'];
 const clean = value => String(value || '').replace(/[\r\n*`_]/g, ' ').trim();
 function defaults() {
-  const phones = [process.env.OWNER_WHATSAPP_NUMBER, process.env.STORE_NOTIFICATION_PHONE, process.env.JUNIOR_WHATSAPP_NUMBER || process.env.OWNER_WHATSAPP_NUMBER];
+  const phones = [process.env.OWNER_WHATSAPP_NUMBER, process.env.STORE_NOTIFICATION_PHONE, process.env.JUNIOR_WHATSAPP_NUMBER];
   return { version: 0, recipients: SLOTS.map((id, index) => ({ id, phone: normalizeWhatsAppNumber(phones[index]), operational: true, closing: id === 'junior', enabled: true })) };
 }
 async function settings(store) { return await store.read('store_settings', SETTINGS_ID) || defaults(); }
@@ -28,27 +28,23 @@ function targets(config, event) {
 function current(event, order) {
   if (!order || order.status === 'CANCELLED' || order.status === 'REJECTED') return false;
   if (event === 'approval') return order.status === 'PENDING';
-  if (event === 'new') return !order.completedAt;
   if (event === 'confirmation') return !order.completedAt && (order.status === 'AWAITING_CONFIRMATION' || order.creditApprovalStatus === 'PENDING');
-  if (event === 'confirmed') return Boolean(order.completedAt);
+  if (event === 'confirmed') return Boolean(order.completedAt && ['APPROVED', 'ON_ACCOUNT'].includes(order.paymentStatus));
   if (event === 'delivery-pending') return isDelivery(order) && !order.assignedDriver?.id && ['PENDING_DELIVERY', 'PENDING_DISPATCH'].includes(order.deliveryStatus) && order.creditApprovalStatus !== 'PENDING' && (order.paymentMethod !== 'PIX' || isDeliverySettled(order));
   if (event === 'delivered') return isDelivery(order) && order.deliveryStatus === 'DELIVERED' && isDeliverySettled(order);
   return false;
 }
 function events(kind, order) {
   if (kind === 'owner-approval') return current('approval', order) ? ['approval'] : [];
-  const selected = ['confirmation', 'confirmed', 'delivery-pending', 'delivered'].filter(event => current(event, order));
-  if (kind === 'owner-new' && !selected.length && current('new', order)) selected.push('new');
-  return selected;
+  return ['confirmation', 'confirmed', 'delivery-pending', 'delivered'].filter(event => current(event, order));
 }
 function format(event, order) {
   const number = clean(order.ticketNumber || order.id).slice(0, 36);
-  const headings = { new: 'NOVO PEDIDO', approval: 'APROVAR DESCONTO', confirmation: 'CONFIRMAR VENDA', confirmed: 'VENDA CONFIRMADA · RECIBO', 'delivery-pending': 'ENTREGA SEM ENTREGADOR', delivered: 'ENTREGA FINALIZADA' };
+  const headings = { approval: 'APROVAR DESCONTO', confirmation: 'CONFIRMAR VENDA', confirmed: 'VENDA CONFIRMADA · RECIBO', 'delivery-pending': 'ENTREGA SEM ENTREGADOR', delivered: 'ENTREGA FINALIZADA' };
   const lines = [`*CONFLORA · ${headings[event]}*`, `#${number} · ${clean(order.customerName || 'Cliente Balcão')}`];
-  if (event === 'new') lines.push('Pagamento: ainda não confirmado.');
   if (event === 'approval') lines.push(`Motivo: desconto acima de 5% solicita aprovação.`);
   if (event === 'confirmation') lines.push(`Motivo: ${order.creditApprovalStatus === 'PENDING' ? 'fiado aguarda aprovação' : 'venda aguarda conferência da equipe'}.`);
-  if (['new', 'approval', 'confirmation', 'confirmed'].includes(event)) {
+  if (['approval', 'confirmation', 'confirmed'].includes(event)) {
     lines.push(...(order.items || []).map(item => `${Number(item.quantity)} ${clean(item.unit || 'un.')} · ${clean(item.name)} · ${money(item.subtotalMinor !== undefined ? item.subtotalMinor / 100 : item.subtotal ?? Number(item.price) * Number(item.quantity))}`));
     const subtotal = order.subtotal ?? (order.items || []).reduce((sum, item) => sum + (item.subtotalMinor !== undefined ? Number(item.subtotalMinor) / 100 : Number(item.subtotal ?? Number(item.price) * Number(item.quantity))), 0);
     lines.push(`Produtos: ${money(subtotal)}`);
@@ -57,10 +53,9 @@ function format(event, order) {
     lines.push(`*Total: ${money(order.total)}*`, `Vendedor: ${clean(order.createdBy?.name || order.operatorName || 'Catálogo')}`);
   } else lines.push(`*Total: ${money(order.total)}*`, `Entregador: ${clean(order.deliveredBy?.name || 'a definir')}`);
   if (event === 'confirmed' || event === 'delivered') lines.push(`Pagamento: ${clean(order.paymentMethod)} · ${order.paymentStatus === 'ON_ACCOUNT' ? 'FIADO · a receber' : 'recebido'}`);
-  if (event === 'confirmed' && order.paymentStatus === 'APPROVED' && order.paymentMethod === 'PIX') lines.push('PAGAMENTO CONFIRMADO · PIX');
   if (event === 'confirmed' && order.paymentStatus !== 'ON_ACCOUNT') lines.push(`Recebido por: ${clean(order.receivedBy?.name || (order.verifiedVia === 'SICREDI_PIX_WEBHOOK' ? 'Sicredi · confirmação automática' : 'Equipe'))}`);
   if (event === 'delivered') lines.push(`Entregue: ${new Date(order.deliveredAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`);
-  const action = { new: 'Acompanhe o pedido em Comandas. Aguarda pagamento.', approval: 'Ação: aprove ou recuse em Admin → Descontos.', confirmation: 'Ação: confira em Comandas → Confirmação.', 'delivery-pending': 'Ação: atribua um responsável em Entregas.', confirmed: 'Sem ação pendente.', delivered: order.paymentStatus === 'ON_ACCOUNT' ? 'Entrega concluída; fiado permanece a receber.' : 'Entregue e recebido. Sem ação pendente.' };
+  const action = { approval: 'Ação: aprove ou recuse em Admin → Descontos.', confirmation: 'Ação: confira em Comandas → Confirmação.', 'delivery-pending': 'Ação: atribua um responsável em Entregas.', confirmed: 'Sem ação pendente.', delivered: order.paymentStatus === 'ON_ACCOUNT' ? 'Entrega concluída; fiado permanece a receber.' : 'Entregue e recebido. Sem ação pendente.' };
   lines.push(action[event]);
   return lines.join('\n');
 }

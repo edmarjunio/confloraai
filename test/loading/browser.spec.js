@@ -52,6 +52,34 @@ const login = (page, userId = 'usr-edmar', pin = '1234') => page.evaluate(async 
   if (!response.ok) throw new Error('login rejected');
 }, { userId, pin });
 
+test('admin edits the five WhatsApp recipients and restores them after reload without sending', async ({ page, fixture }) => {
+  await ready(page); await login(page); await page.goto('/admin?tab=status');
+  const form = page.locator('#whatsappRecipientsForm');
+  await expect(form).toBeVisible();
+  await expect(form.locator('fieldset')).toHaveCount(5);
+  const junior = form.locator('[data-recipient-id=junior]');
+  await junior.locator('[name=phone]').fill('64999990003');
+  await expect(junior.locator('[name=closing]')).toBeChecked();
+  await form.getByRole('button', { name: 'Salvar destinatários' }).click();
+  await expect(page.locator('#whatsappRecipientsStatus')).toContainText('Destinatários salvos');
+  const saved = await fixture.app.locals.pdv.store.read('store_settings', 'whatsapp_notifications');
+  expect(saved.recipients.find(row => row.id === 'junior').phone).toBe('5564999990003');
+  await page.reload();
+  await expect(junior.locator('[name=phone]')).toHaveValue('5564999990003');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+});
+
+test('Google login enables after SDK initialization and keeps configuration errors visible', async ({ page, fixture }) => {
+  await page.route('**/storefront-auth.js', route => route.fulfill({ contentType: 'application/javascript', body: "window.authenticateGoogle = async () => { throw new Error('Falha Google isolada'); }; document.querySelectorAll('[data-google-login]').forEach(button => button.disabled = false);" }));
+  await ready(page);
+  await page.locator('#accountButton').click();
+  const button = page.locator('#googleAccountButton');
+  await expect(button).toBeEnabled();
+  await button.click();
+  await expect(page.locator('[data-google-status]')).toContainText('Falha Google isolada');
+  expect(fixture.requests.some(path => path === '/api/auth/google')).toBe(false);
+});
+
 test('fresh second visit reuses the public snapshot and defers secondary modules', async ({ page, fixture }) => {
   await ready(page);
   const manifest = JSON.parse(fs.readFileSync('public/storefront/dist/manifest.json'));

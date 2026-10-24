@@ -1,0 +1,10 @@
+{
+  "date": "2026-10-24",
+  "environment": "isolated fixtures; no deployment or real messages",
+  "nodeRegression": { "passed": 510, "failed": 0, "skipped": 1, "skipReason": "Firestore emulator unavailable", "excluded": ["finops-load", "performance", "benchmark"] },
+  "browser": { "passed": 45, "failed": 0, "skipped": 1, "skipReason": "mobile-only layout in desktop project", "viewports": ["390x844", "1440x900", "320px cashier checks"] },
+  "operationalNotificationTests": { "passed": 13 },
+  "staticChecks": ["build", "check:full", "lint", "git diff --check"],
+  "realPerformanceMeasured": false,
+  "pending": ["real Google OAuth", "Meta template purpose and presentation", "five recipient numbers", "authorized real sends", "Safari/iPhone", "production deployment authorization"]
+}

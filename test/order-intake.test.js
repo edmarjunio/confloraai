@@ -130,7 +130,7 @@ test('intake notifications are attempted immediately and transport failure prese
   assert.ok((await intake.store.scanPage('pdv_outbox', 'kind', 'order-request-notice')).every(job => job.status === 'PENDING'));
 });
 
-test('notification worker notifies staff and Junior without creating financial effects', async t => {
+test('procurement remains in the staff panel without extra WhatsApp owner alerts or financial effects', async t => {
   const { repo, intake, handle } = fixture();
   const previous = { STORE_NOTIFICATION_PHONE: process.env.STORE_NOTIFICATION_PHONE, JUNIOR_WHATSAPP_NUMBER: process.env.JUNIOR_WHATSAPP_NUMBER };
   Object.assign(process.env, { STORE_NOTIFICATION_PHONE: '5564999990002', JUNIOR_WHATSAPP_NUMBER: '5564999990003' });
@@ -141,13 +141,13 @@ test('notification worker notifies staff and Junior without creating financial e
   } }, ownerPhone: '5564999990002' });
   intake.notify = id => pdv.deliver(id);
   await handle('Quero 2 galinhas'); await handle('sim');
-  assert.deepEqual(sends.map(send => send.to).sort(), ['5564999990002', '5564999990003']);
+  assert.deepEqual(sends, []);
   assert.equal(repo.inMemoryNotifications.length, 1);
   assert.equal(repo.inMemoryNotifications[0].type, 'ORDER_REQUEST');
   assert.equal(repo.inMemoryOrders.size, 1);
   assert.equal([...repo.inMemoryOrders.values()][0].total, null);
   await pdv.retryMessages();
-  assert.equal(sends.length, 2);
+  assert.equal(sends.length, 0);
 });
 
 test('same configured recipient combines Conflora and Junior into one durable job', async () => {

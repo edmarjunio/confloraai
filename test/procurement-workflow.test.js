@@ -296,17 +296,21 @@ test('expiration of the balance Pix preserves the deposit and goods, requiring v
   assert.equal(paid.paymentStatus, 'APPROVED'); assert.equal(paid.paymentParts[0].amount, 40); assert.equal(paid.procurement.deposit.amountMinor, 4000);
 });
 
-test('procurement notices reuse the approved-template adapter and checkpoint long item lists without loss', async () => {
+test('customer procurement forecasts reuse the template adapter and checkpoint long item lists without loss', async () => {
   const s = await fixture();
   const record = await s.request();
   const longItems = Array.from({ length: 20 }, (_, index) => ({ requestedName: 'Produto ' + index + ' ' + 'especial '.repeat(10), quantity: 2 }));
-  await s.intake.store.transaction(tx => tx.set('agent_handoffs', s.id, { ...record, items: longItems }));
+  const jobId = s.id + '-forecast';
+  await s.intake.store.transaction(tx => {
+    tx.set('agent_handoffs', s.id, { ...record, items: longItems, arrivalForecast: 'Previsão confirmada' });
+    tx.set('pdv_outbox', jobId, { id: jobId, requestId: s.id, kind: 'order-request-forecast', forecast: 'Previsão confirmada', status: 'PENDING', attempts: 0 });
+  });
   const sent = [];
   const pdv = new PdvService({ repository: s.intake.store, ownerPhone: '5564999990002', whatsapp: {
     sendTextMessage: async () => { throw new Error('use the existing template adapter'); },
     sendPdvText: async (_recipient, text) => { sent.push(text); return { messages: [{ id: randomUUID() }] }; },
   } });
-  const jobId = s.id + '-store'; await pdv.deliver(jobId); await pdv.deliver(jobId);
+  await pdv.deliver(jobId); await pdv.deliver(jobId);
   assert.ok(sent.length > 1); assert.ok(sent.every(text => text.length > 0 && text.length <= 900));
   for (let index = 0; index < 20; index++) assert.ok(sent.join(' ').includes('Produto ' + index + ' '));
   assert.equal((await s.intake.store.read('pdv_outbox', jobId)).status, 'SENT');

@@ -247,7 +247,7 @@ test('Fluxo Completo PIX Sicredi: 1) QR Code com valor travado no backend -> 2) 
 
   // Verifica envio de notificações WhatsApp (QR Code na criação + Comprovante de PIX aprovado após Webhook)
   assert.ok(whatsappMessages.some((m) => m.type === 'image' && m.caption.includes(createdOrder.pixData.pixCopiaECola)), 'Deve ter enviado a imagem do QR Code PIX');
-  assert.ok(whatsappMessages.some((m) => m.type === 'text' && /PIX CONFIRMADO|PAGAMENTO CONFIRMADO/i.test(m.text)), 'Deve ter enviado confirmação de pagamento PIX no WhatsApp');
+  assert.ok(whatsappMessages.some((m) => m.type === 'text' && /VENDA CONFIRMADA · RECIBO/i.test(m.text)), 'Deve ter enviado recibo da venda confirmada no WhatsApp');
 });
 
 test('Endpoint de Simulação Admin (POST /api/admin/sicredi-pix/simulate) valida as 3 etapas em sandbox isolado', async (t) => {
