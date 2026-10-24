@@ -48,6 +48,38 @@ test('actual presentation and menu use template transport; quick replies normali
   assert.equal(normalizeAction({ interactive: { button_reply: { id: 'btn_atendente' } } }), 'btn_atendente');
   assert.equal(normalizeAction({ button: { text: 'Montar minha sacola' } }), 'montar_sacola');
 });
+test('Falar com atendente queues human attention silently and never starts AI or checkout', async () => {
+  const { messages, repository, store, sends } = fixture();
+  messages.agentService = { extractSalesIntent: async () => { assert.fail('WhatsApp human selection must not call AI'); } };
+  messages.catalogRepo.refreshCatalog = async () => { assert.fail('Human selection must not query catalogue'); };
+  const inbox = new (require('../src/services/incoming-message.service').IncomingMessageService)(repository);
+  const button = { phone, message: 'Falar com atendente', interactiveId: normalizeAction({ button: { payload: 'btn_atendente', text: 'Falar com atendente' } }), messageId: 'wamid.human-button', customerName: 'Cliente' };
+  await inbox.accept(button);
+  const result = await messages.handleCustomerMessage(button);
+  assert.equal(result.intent, 'HUMAN_HANDOFF_REQUESTED'); assert.equal(result.reply, '');
+  const conversation = await conversationAutomation(repository, phone);
+  assert.equal(conversation.automation, 'paused'); assert.equal(conversation.reason, 'human_requested');
+  assert.equal(conversation.attentionStatus, 'NEEDS_HUMAN_ATTENTION'); assert.equal(conversation.customerName, 'Cliente');
+  const handoff = await store.read('agent_handoffs', conversation.handoffId);
+  assert.equal(handoff.customerPhone, phone); assert.equal(handoff.status, 'open');
+  assert.equal(messages.salesConversation, undefined); assert.equal(sends.length, 0);
+  assert.equal((await messages.handleCustomerMessage(button)).intent, 'DUPLICATE');
+  for (const [index, message] of ['4 rúculas', 'menu', 'reiniciar'].entries()) {
+    const payload = { phone, message, messageId: `wamid.after-human-${index}` };
+    await inbox.accept(payload);
+    assert.equal((await messages.handleCustomerMessage(payload)).intent, 'HUMAN_HANDOFF_ACTIVE');
+  }
+  assert.equal(repository.inMemoryOrders.size, 0); assert.equal(sends.length, 0);
+  assert.equal((await store.list('agent_handoffs', 'status', 'open')).length, 1);
+});
+test('WhatsApp text checkout does not invoke the removed conversational AI fallback', async () => {
+  const { messages, sends } = fixture();
+  messages.agentService = { extractSalesIntent: async () => { assert.fail('Removed WhatsApp AI must not be invoked'); } };
+  await evaluateDailyReset(messages.firestoreRepo, phone);
+  await require('../src/services/conversation-automation').setConversationChannel(messages.firestoreRepo, phone, 'agent');
+  const result = await messages.processCustomerMessage({ phone, message: 'Talvez pudéssemos avaliar alternativas para esse espaço.' });
+  assert.equal(result.reply, ''); assert.equal(result.intent, 'AMBIGUOUS_NEEDS_HUMAN'); assert.equal(sends.length, 0);
+});
 test('approved contract preserves logo, language, exact labels, CTA and configured variables', () => {
   const raw = { name: 'isolated_welcome', language: 'pt_BR', status: 'APPROVED', verifiedAt: '2026-10-23', header: 'IMAGE', bodyParameters: ['customer_name'],
     buttons: [{ type: 'URL', text: 'Catálogo virtual', mode: 'static', url: 'https://isolated.invalid' }, { type: 'QUICK_REPLY', text: 'Montar minha sacola' }, { type: 'QUICK_REPLY', text: 'Falar com atendente' }] };

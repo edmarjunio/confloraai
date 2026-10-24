@@ -707,7 +707,7 @@ function createApp({
           images: imageCandidates,
           imageUrl: imageCandidates[0] || '',
           imageurl: imageCandidates[0] || '',
-          imageIsIllustrative: /^https:\/\/images\.unsplash\.com\//i.test(imageCandidates[0] || ''),
+          imageIsIllustrative: product.imageIsIllustrative === true || /^https:\/\/images\.unsplash\.com\//i.test(imageCandidates[0] || ''),
           imageFallbackUrl: '/store-assets/placeholder.svg',
         };
       });
@@ -1598,7 +1598,7 @@ function createApp({
             imageUrl,
             images: imageCandidates,
             imageFileId: p.imageFileId || p.image_file_id || '',
-            imageIsIllustrative: /^https:\/\/images\.unsplash\.com\//i.test(imageUrl),
+            imageIsIllustrative: p.imageIsIllustrative === true || /^https:\/\/images\.unsplash\.com\//i.test(imageUrl),
             imagePathCache: p.imagePathCache || '',
             imageFallbackUrl: '/store-assets/placeholder.svg',
             descriptionAi: p.descriptionAi || p.descricao_ia || '',

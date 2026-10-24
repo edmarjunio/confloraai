@@ -60,3 +60,23 @@ test('ImageMigrationService performs dry-run audit without production writes', a
   assert.equal(batchResults[0].action, 'ALREADY_VALIDATED_IN_STORAGE');
   assert.equal(batchResults[1].action, 'DRY_RUN_WOULD_MIGRATE');
 });
+
+test('local migration persists photo and all image consumers without rewriting commercial fields', async () => {
+  const { FirestoreRepository } = require('../src/database/firestore.repository');
+  const repository = new FirestoreRepository({ isInMemory: true });
+  const product = { id: 'isolated-local-image', name: 'Foto local', price: 12, stockQuantity: 7,
+    imageUrl: '/store-assets/products/rolinha-diamante.jpg', images: ['/store-assets/products/rolinha-diamante.jpg'] };
+  await repository.saveProduct(product);
+  const service = new ImageMigrationService({ firestoreRepo: repository, storage: {
+    uploadProductImage: async ({ buffer }) => { assert.ok(buffer.length > 0); return { imageUrl: 'https://storage.invalid/photo.jpg', imagePath: 'products/isolated-local-image/photo.jpg' }; },
+  } });
+  const [result] = await service.processMigrationBatch([product], { dryRun: false });
+  assert.equal(result.success, true);
+  const updated = await repository.getProductById(product.id);
+  assert.deepEqual(updated.images, ['https://storage.invalid/photo.jpg']);
+  assert.equal(updated.imageUrl, updated.images[0]);
+  assert.equal(updated.price, 12);
+  assert.equal(updated.stockQuantity, 7);
+  assert.equal((await repository.getProductPhoto(product.id)).source, 'MIGRATED_LOCAL');
+  await assert.rejects(repository.saveProduct({ id: product.id, imageUrl: 'https://stale.invalid' }, { expectedImageUrl: product.imageUrl }), /imagem mudou/);
+});

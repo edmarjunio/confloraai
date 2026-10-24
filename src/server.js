@@ -19,6 +19,7 @@ async function bootstrap() {
 
   // 1. Repositórios de dados
   const firestoreRepo = new FirestoreRepository();
+  const stopCatalogWatch = require('./services/meta-catalog-watch').watchMetaCatalog(firestoreRepo);
   const catalogRepo = new CatalogRepository({
     firestoreRepo,
   });
@@ -82,6 +83,7 @@ async function bootstrap() {
     console.log(`👉 Painel Caixa PDV: http://localhost:${primaryPort}/pdv`);
     console.log(`==================================================\n`);
   });
+  server.once('close', stopCatalogWatch);
 
   server.on('error', error => { Logger.error('Erro no servidor HTTP', error); process.exitCode = 1; });
   process.on('unhandledRejection', error => {

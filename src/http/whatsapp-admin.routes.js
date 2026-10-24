@@ -254,10 +254,11 @@ function installWhatsappAdminRoutes(app, { whatsapp, store }) {
     try {
       const product = await store.repository.getProductById(req.params.id);
       if (!product) return res.sendStatus(404);
-      const { restrictedCategory, MetaCatalogSyncService } = require('../services/meta-catalog-sync.service');
+      const { restrictedCategory, MetaCatalogSyncService, policyIdentity, internalProduct } = require('../services/meta-catalog-sync.service');
+      if (req.body.approved && (internalProduct(product) || require('../shared/string.util').normalizeText(product.category || '') === 'pets')) return res.status(409).json({ error: 'Item interno ou categoria não habilitada para publicação.' });
       if (req.body.approved && (req.body.category !== 'PERMITTED_PLANT_OR_GARDEN_PRODUCT' || !String(req.body.policyVersion || '').trim() || String(req.body.policyVersion).length > 120 || restrictedCategory([product.name, product.category, product.subcategory, product.descricao].join(' ')))) return res.status(409).json({ error: 'Revise a política e a elegibilidade real da categoria antes de aprovar.' });
       await store.repository.saveProduct({ id: product.id, metaCommerceReview: { approved: req.body.approved, reviewedBy: req.user.id,
-        reviewedAt: new Date().toISOString(), policyVersion: String(req.body.policyVersion || '').trim().slice(0, 120), category: req.body.approved ? req.body.category : 'NOT_APPROVED' } });
+        reviewedAt: new Date().toISOString(), productIdentity: policyIdentity(product), policyVersion: String(req.body.policyVersion || '').trim().slice(0, 120), category: req.body.approved ? req.body.category : 'NOT_APPROVED' } });
       await new MetaCatalogSyncService(store.repository).queue(product.id, req.user);
       res.json({ reviewed: true, approved: req.body.approved, publicationPending: true });
     } catch { res.sendStatus(503); }

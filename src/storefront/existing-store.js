@@ -62,7 +62,7 @@ function toProduct(rawItem, { stockControlEnabled = true } = {}) {
       currency: "BRL",
     },
     imageUrl: imageCandidates[0] || resolveHdProductImage(name, category, subcategory),
-    imageIsIllustrative: !registeredImage,
+    imageIsIllustrative: item.imageIsIllustrative === true || !registeredImage,
     imageFallbackUrl: "/store-assets/placeholder.svg",
     images: imageCandidates,
     categories: [digest(category).slice(0, 16)],

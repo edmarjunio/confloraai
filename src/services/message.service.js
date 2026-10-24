@@ -98,6 +98,13 @@ class MessageService {
 
     if (conversation.automation === 'paused') return { reply: '', intent: 'HUMAN_HANDOFF_ACTIVE', imagesSent: 0, latencyMs: 0 };
     if (conversationVersion !== undefined && conversationVersion !== Number(conversation.version || 0)) return { reply: '', intent: 'STALE_AUTOMATION_BLOCKED', latencyMs: 0 };
+    const command = require('../shared/string.util').normalizeText(message);
+    const humanRequested = interactiveId === 'btn_atendente' || !interactiveId &&
+      (/\b(falar com (?:um |uma )?(?:atendente|humano)|atendimento humano|pessoa de verdade|transferir para humano)\b/.test(command) || command === 'atendente');
+    if (humanRequested) {
+      await conversationAutomation(this.firestoreRepo, phone, { pauseReason: 'human_requested', messageId, customerName });
+      return { reply: '', intent: 'HUMAN_HANDOFF_REQUESTED', imagesSent: 0, latencyMs: Math.round(performance.now() - startTime) };
+    }
     if (verifyOnly) return { reply: '', intent: 'AUTOMATION_DISABLED', imagesSent: 0, latencyMs: 0 };
     const whatsappConfig = require('../config/env').whatsapp;
     if (!whatsappConfig.assistantEnabled) return { reply: '', intent: 'AUTOMATION_DISABLED', imagesSent: 0, latencyMs: 0 };
@@ -106,7 +113,6 @@ class MessageService {
     whatsapp = require('./durable-conversation-transport').durableConversationTransport(this.firestoreRepo, this.whatsappClient, { phone, messageId, version: Number(conversation.version || 0) });
     const work = operation => require('./automation-send-guard').withAutomation(this.firestoreRepo, phone, Number(conversation.version || 0), operation);
     if (messageId) whatsapp?.markAsRead?.(messageId)?.catch(() => {});
-    const command = require('../shared/string.util').normalizeText(message);
     if (/^(reiniciar|recomecar conversa)$/.test(command)) {
       const reset = await require('./conversation-automation').resetConversationContext(this.firestoreRepo, phone);
       whatsapp = require('./durable-conversation-transport').durableConversationTransport(this.firestoreRepo, this.whatsappClient, { phone, messageId, version: reset.conversation.version });
@@ -117,12 +123,9 @@ class MessageService {
       await conversationAutomation(this.firestoreRepo, phone, { pauseReason: 'ambiguous_customer_needs_human', messageId });
       return { reply: '', intent: 'AMBIGUOUS_NEEDS_HUMAN', latencyMs: 0 };
     }
-    if (!interactiveId && /\b(falar com humano|atendimento humano|pessoa de verdade|transferir para humano)\b/.test(command)) {
-      await conversationAutomation(this.firestoreRepo, phone, { pauseReason: 'human_requested', messageId });
-      return { reply: '', intent: 'HUMAN_HANDOFF_ACTIVE', latencyMs: 0 };
-    }
     this.orderIntake ||= new (require('./order-intake.service').OrderIntakeService)(this.firestoreRepo, { catalog: this.catalogRepo, notify: id => this.orderService?.commerce?.pdv?.deliver(id) });
-    this.salesConversation ||= new (require('./sales-conversation.service').SalesConversationService)({ repository: this.firestoreRepo, agent: this.agentService, orders: this.orderService, catalog: this.catalogRepo, intake: this.orderIntake });
+    // WhatsApp checkout stays deterministic; the storefront's independent AI service is preserved.
+    this.salesConversation ||= new (require('./sales-conversation.service').SalesConversationService)({ repository: this.firestoreRepo, orders: this.orderService, catalog: this.catalogRepo, intake: this.orderIntake });
     if (commerceOrder) {
       await setConversationChannel(this.firestoreRepo, phone, 'agent');
       const result = await work(() => this.salesConversation.receiveMetaCart({ phone, commerceOrder, messageId }));
@@ -143,13 +146,6 @@ class MessageService {
       const reply = 'O catálogo do WhatsApp está indisponível ou aguarda habilitação pela equipe. Por enquanto, escreva os produtos e quantidades para comprar por aqui.';
       await whatsapp.sendTextMessage(phone, reply);
       return { reply, intent: 'META_CATALOG_PENDING_TEXT_SALES', latencyMs: 0 };
-    }
-    if (interactiveId === 'btn_atendente') {
-      await setConversationChannel(this.firestoreRepo, phone, 'agent');
-      const reply = 'Olá! 🌱 Sou o assistente virtual da Conflora. O que você procura?';
-      await whatsapp.sendTextMessage(phone, reply);
-      await this.firestoreRepo.appendMessage(phone, 'assistant', reply, { requirePersistence: true });
-      return { reply, intent: 'AGENT_ASSISTANCE', latencyMs: 0 };
     }
     const session = await this.salesConversation.store.read('sessions', phone) || {};
     const procurement = await work(() => this.orderIntake.procurement.reply({ phone, message, messageId, session }));

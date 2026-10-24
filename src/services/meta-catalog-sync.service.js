@@ -2,17 +2,24 @@ const { createHash } = require('node:crypto');
 const { PdvRepository } = require('../orders/pdv.repository');
 const { commercialProduct } = require('../catalog/commercial-product');
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const { normalizeText } = require('../shared/string.util');
+function internalProduct(raw) {
+  return /^(troco(?: do dia)?|recebimento)$/.test(normalizeText(raw?.name || '')) ||
+    /^(troco(?: do dia)?|recebimento)$/.test(normalizeText(raw?.category || ''));
+}
+const policyIdentity = raw => hash([raw?.name, raw?.category, raw?.subcategory].map(value => normalizeText(value || '')));
 const restrictedCategory = value => /\b(animal|animais|aves?|galinhas?|galos?|pintinhos?|peixes?|codornas?|papagaios?|caes|cachorros?|gatos?|gado|livestock|agrotoxicos?|venenos?|armas?|tabaco|medicamentos?)\b/.test(require('../shared/string.util').normalizeText(value));
 function eligibleForMeta(raw) {
   const review = raw?.metaCommerceReview;
-  return Boolean(review?.approved === true && review?.reviewedBy && review?.reviewedAt && review?.policyVersion && review?.category === 'PERMITTED_PLANT_OR_GARDEN_PRODUCT' &&
+  return Boolean(!internalProduct(raw) && normalizeText(raw?.category || '') !== 'pets' && review?.approved === true && (!review.productIdentity || review.productIdentity === policyIdentity(raw)) && review?.reviewedBy && review?.reviewedAt && review?.policyVersion && review?.category === 'PERMITTED_PLANT_OR_GARDEN_PRODUCT' &&
     !restrictedCategory([raw.name, raw.category, raw.subcategory, raw.descricao].join(' ')));
 }
 function projection(raw, id, storeUrl, inventory = { stockControlEnabled: true }) {
   if (!raw || !eligibleForMeta(raw) || !commercialProduct(raw).active) return { retailer_id: id, availability: 'discontinued' };
   const product = commercialProduct(raw);
   const image = raw.images?.[0]?.url || raw.images?.[0] || raw.imageUrl;
-  const description = String(raw.publicDescription || raw.description || product.name).trim();
+  const baseDescription = String(raw.publicDescription || raw.description || product.name).trim();
+  const description = raw.imageIsIllustrative === true ? `${baseDescription}\nImagem ilustrativa. ${raw.imageAttribution || ''}`.trim() : baseDescription;
   if (!/^[a-zA-Z0-9_-]{1,180}$/.test(id) || !Number.isSafeInteger(product.priceMinor) || product.priceMinor <= 0 || !/^https:\/\//.test(image || '') || !/^https:\/\//.test(storeUrl || '') || !description) throw new Error('Produto sem campos públicos válidos para sincronização Meta.');
   return { retailer_id: id, name: product.name.slice(0, 200), description: description.slice(0, 5000),
     price: product.priceMinor, currency: 'BRL', image_url: image, url: storeUrl,
@@ -38,7 +45,12 @@ class MetaCatalogSyncService {
       headers: { Authorization: `Bearer ${config.token}`, 'Content-Type': 'application/json' },
       ...(data ? { body: JSON.stringify(data) } : {}), signal: AbortSignal.timeout(15000) });
     const result = await response.json();
-    if (!response.ok || result.error) throw new Error(`Sincronização Meta recusada (HTTP ${response.status}).`);
+    if (!response.ok || result.error) {
+      const code = Number(result.error?.code) || 0;
+      const subcode = Number(result.error?.error_subcode) || 0;
+      // Never persist Graph bodies, URLs with access tokens, or credentials in the outbox.
+      throw Object.assign(new Error(`Sincronização Meta recusada (HTTP ${response.status}; código ${code}; subcódigo ${subcode}).`), { providerCode: code, providerSubcode: subcode });
+    }
     return result;
   }
   async deliver(job) {
@@ -75,4 +87,4 @@ class MetaCatalogSyncService {
     });
   }
 }
-module.exports = { MetaCatalogSyncService, eligibleForMeta, projection, restrictedCategory };
+module.exports = { MetaCatalogSyncService, eligibleForMeta, projection, restrictedCategory, internalProduct, policyIdentity };

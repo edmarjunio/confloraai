@@ -182,19 +182,23 @@ class ImageMigrationService {
           const uploadResult = await this.storage.uploadProductImage({
             productId: id,
             fileName: photoDoc.fileName,
-            buffer,
-            contentType: 'image/jpeg',
+            buffer: Buffer.from(photoDoc.data, 'base64'),
+            contentType: photoDoc.contentType,
           });
 
           const updatedUrl = uploadResult.imageUrl;
           if (this.firestoreRepo?.saveProduct) {
+            await this.firestoreRepo.saveProductPhoto({ ...photoDoc, ...uploadResult });
             await this.firestoreRepo.saveProduct({
-              ...prod,
+              id,
               imageUrl: updatedUrl,
               imagePath: uploadResult.imagePath,
+              images: [updatedUrl, ...(prod.images || []).slice(1)],
+              imagePaths: [uploadResult.imagePath, ...(prod.imagePaths || []).slice(1)],
+              imageFileId: photoDoc.id,
               imagePathCache: updatedUrl,
               updatedAt: new Date().toISOString(),
-            });
+            }, { expectedImageUrl: primaryUrl });
           }
 
           results.push({

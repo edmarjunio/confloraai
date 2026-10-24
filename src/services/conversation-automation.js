@@ -2,7 +2,7 @@ const { randomUUID } = require('node:crypto');
 const { runTransaction } = require('../database/transactions');
 const { customerKeyFor, scopedId } = require('../agent/agent-store');
 
-async function conversationAutomation(repo, phone, { pauseReason, messageId = '', echoEventId = '' } = {}) {
+async function conversationAutomation(repo, phone, { pauseReason, messageId = '', echoEventId = '', customerName = '' } = {}) {
   const tenantId = 'conflora';
   const customerKey = customerKeyFor(tenantId, phone);
   const id = scopedId(tenantId, customerKey);
@@ -17,8 +17,9 @@ async function conversationAutomation(repo, phone, { pauseReason, messageId = ''
     if (!pauseReason || current.automation === 'paused') return current;
     const now = new Date().toISOString();
     const handoffId = `hf_${messageId ? customerKeyFor(tenantId, messageId) : randomUUID()}`;
-    const paused = { ...current, automation: 'paused', attentionStatus: 'NEEDS_HUMAN_ATTENTION', version: Number(current.version || 0) + 1, handoffId, reason: pauseReason, pausedAt: now, updatedAt: now, customerPhone: phone };
-    tx.set('agent_handoffs', handoffId, { id: handoffId, tenantId, customerKey, reason: pauseReason, status: 'open', createdAt: now, cartPreserved: true });
+    const displayName = String(customerName || current.customerName || '').trim().slice(0, 100);
+    const paused = { ...current, automation: 'paused', attentionStatus: 'NEEDS_HUMAN_ATTENTION', version: Number(current.version || 0) + 1, handoffId, reason: pauseReason, pausedAt: now, updatedAt: now, customerPhone: phone, customerName: displayName };
+    tx.set('agent_handoffs', handoffId, { id: handoffId, tenantId, customerKey, customerPhone: phone, customerName: displayName, reason: pauseReason, status: 'open', createdAt: now, cartPreserved: true });
     tx.set('agent_conversations', id, paused);
     return paused;
   });

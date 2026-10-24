@@ -319,7 +319,7 @@ class FirestoreRepository {
     });
   }
 
-  async saveProduct(product) {
+  async saveProduct(product, { expectedImageUrl } = {}) {
     const invalid = message => Object.assign(new Error(message), { status: 400 });
     if (!product || typeof product.id !== 'string' || !/^[a-zA-Z0-9_-]{1,180}$/.test(product.id)) throw invalid('Identificador do produto inválido.');
     if (product.name !== undefined && (typeof product.name !== 'string' || product.name.trim().length < 2 || product.name.trim().length > 180)) {
@@ -327,6 +327,7 @@ class FirestoreRepository {
     }
 
     const previousProduct = await this.getProductById(product.id);
+    if (expectedImageUrl !== undefined && previousProduct?.imageUrl !== expectedImageUrl) throw invalid('A imagem mudou durante a operação. Recarregue o produto.');
     const dataWithTs = { ...product, updatedAt: new Date().toISOString() };
     if (!previousProduct && !product.name?.trim()) throw invalid('Nome do produto obrigatório.');
     if (product.name !== undefined) dataWithTs.name = product.name.trim();
@@ -511,10 +512,13 @@ class FirestoreRepository {
 
     if (this.firestore && !this._firestoreClientDisabled) {
       try {
-        await this.firestore
-          .collection('products')
-          .doc(String(product.id))
-          .set(dataWithTs, { merge: true });
+        const ref = this.firestore.collection('products').doc(String(product.id));
+        if (expectedImageUrl === undefined) await ref.set(dataWithTs, { merge: true });
+        else await this.firestore.runTransaction(async tx => {
+          const current = await tx.get(ref);
+          if (!current.exists || current.data().imageUrl !== expectedImageUrl) throw invalid('A imagem mudou durante a operação. Recarregue o produto.');
+          tx.set(ref, dataWithTs, { merge: true });
+        });
       } catch (err) {
         if (this.firestore || !this.isInMemory) throw err;
         if (

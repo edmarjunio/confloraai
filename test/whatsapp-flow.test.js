@@ -158,8 +158,11 @@ test('button consumers use template and native catalog; old checkout callbacks c
   assert.equal(first.intent, 'MAIN_MENU_SENT'); assert.equal(sent[0], 'template');
   const legacy = await service.processCustomerMessage({ phone: '5564999990002', message: '', interactiveId: 'catalogo_virtual' });
   assert.equal(legacy.intent, 'MAIN_MENU_SENT'); assert.equal(sent[1], 'template');
-  const agent = await service.processCustomerMessage({ phone: '5564999990002', message: '', interactiveId: 'btn_atendente' });
-  assert.equal(agent.reply, 'Olá! 🌱 Sou o assistente virtual da Conflora. O que você procura?');
+  const beforeHuman = sent.length;
+  const human = await service.processCustomerMessage({ phone: '5564999990003', message: '', interactiveId: 'btn_atendente' });
+  assert.equal(human.reply, ''); assert.equal(human.intent, 'HUMAN_HANDOFF_REQUESTED');
+  assert.equal(sent.length, beforeHuman);
+  assert.equal((await conversationAutomation(firestoreRepo, '5564999990003')).automation, 'paused');
   const cart = await service.processCustomerMessage({ phone: '5564999990002', message: '', interactiveId: 'montar_sacola' });
   assert.ok(['META_CATALOG_SENT', 'META_CATALOG_PENDING_TEXT_SALES'].includes(cart.intent));
   for (const interactiveId of ['cat_Horta', 'sub_Folhosas', 'add_alface']) {

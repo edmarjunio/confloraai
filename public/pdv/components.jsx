@@ -1650,7 +1650,7 @@ window.PdvComponents = (() => {
           <div className="p-3 bg-emerald-50/60 border-b border-emerald-100 flex flex-wrap gap-2 shrink-0">
             {conversation.automation === 'paused' ? (
               <button type="button" onClick={() => { compositionClaim.current = null; setCompositionReady(false); onRelease(conversation); }} className="cf-btn-3d cf-btn-3d--secondary cf-btn-3d--sm">
-                🤖 Devolver ao Agente
+                Retomar automação
               </button>
             ) : (
               <button type="button" onClick={() => onTakeover(conversation)} className="cf-btn-3d cf-btn-3d--primary cf-btn-3d--sm">
