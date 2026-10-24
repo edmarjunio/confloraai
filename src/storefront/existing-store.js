@@ -10,7 +10,7 @@ const {
 
 // Compatibility boundary for the existing store. SaaS tenants never use these collections.
 function toProduct(rawItem, { stockControlEnabled = true } = {}) {
-  const item = { ...rawItem, ...require('../catalog/registered-product-content').registeredProductContent(rawItem) };
+  const item = require('../catalog/normalize-catalog-item').normalizeCatalogItem(rawItem);
   const commercial = require('../catalog/commercial-product').commercialProduct(item);
   const category = String(item.category || item.categoria || item.CATEGORIA || "Geral");
   const name = commercial.name || "Produto";
@@ -28,6 +28,10 @@ function toProduct(rawItem, { stockControlEnabled = true } = {}) {
   ].filter(Boolean))];
   const res = {
     id: String(item.id),
+    sku: item.sku,
+    productInfo: item.productInfo,
+    media: item.media,
+    inventory: item.inventory,
     name,
     nameTranslations: Object.fromEntries(['en', 'es', 'fr'].filter(language =>
       typeof item.nameTranslations?.[language] === 'string' && item.nameTranslations[language].trim().length <= 180)
@@ -78,59 +82,13 @@ function toProduct(rawItem, { stockControlEnabled = true } = {}) {
 
   if (imageFileId) res.imageFileId = imageFileId;
 
-  const specs = Object.fromEntries(
-    Object.entries(item.specifications || {}).filter(
-      ([, value]) =>
-        value &&
-        typeof value.label === "string" &&
-        typeof value.value === "string",
-    ),
-  );
-  if (Object.keys(specs).length > 0) res.specifications = specs;
-
-  const sections = (Array.isArray(item.contentSections)
-    ? item.contentSections
-    : []
-  ).filter(
-    (section) =>
-      section &&
-      typeof section.title === "string" &&
-      typeof section.body === "string",
-  );
-  if (sections.length > 0) res.contentSections = sections;
-
-  const details = [
-    ['descriptionAi', item.descriptionAi || item.descricao_ia],
-    ['careInstructions', item.careInstructions || item.care || item.cuidados_basicos || item.cuidadosBasicos],
-    ['cuidados_basicos', item.cuidados_basicos || item.cuidadosBasicos],
-    ['iluminacao', item.iluminacao || item.iluminação || item.illumination || item.lighting],
-    ['illumination', item.illumination || item.iluminacao || item.iluminação || item.lighting || item.dicas_iluminacao],
-    ['watering', item.watering || item.wateringInstructions || item.rega || item.irrigacao || item.frequencia_rega],
-    ['ambiente_ideal', item.ambiente_ideal || item.ambienteIdeal],
-    ['environment', item.environment || item.ambiente_ideal || item.ambienteIdeal || item.habitat],
-    ['dicas_armazenamento', item.dicas_armazenamento || item.dicasArmazenamento],
-    ['storageTips', item.storageTips || item.storage || item.dicas_armazenamento || item.dicasArmazenamento],
-    ['durabilidade', item.durabilidade],
-    ['durability', item.durability || item.durabilidade || item.validade],
-    ['preferences', item.preferences || item.o_que_gosta || item.oQueGosta || item.gosta_de],
-    ['dislikes', item.dislikes || item.o_que_evitar || item.oQueEvitar || item.nao_gosta],
-    ['usage', item.usage || item.uso || item.modo_de_uso || item.modoDeUso],
-    ['selectionTips', item.selectionTips || item.dica_escolha || item.dicaEscolha],
-    ['suitability', item.suitability || item.indicacao || item.indicação || item.especie_indicada],
-    ['matureSize', item.matureSize || item.porte_adulto || item.porteAdulto || item.tamanho_adulto || item.tamanhoAdulto],
-    ['precautions', item.precautions || item.precaucoes || item.precauções || item.cuidados_de_uso],
-    ['alimentacao', item.alimentacao || item.alimentação || item.feeding || item.dieta],
-    ['feeding', item.feeding || item.alimentacao || item.alimentação || item.dieta],
-    ['housing', item.housing || item.moradia || item.abrigo || item.habitat_ideal || item.habitatIdeal],
-    ['handling', item.handling || item.manejo || item.comportamento || item.dicas_manejo || item.dicasManejo],
-    ['prohibitedFoods', item.prohibitedFoods || item.alimentos_proibidos || item.alimentosProibidos || item.o_que_nao_oferecer || item.oQueNaoOferecer],
-  ];
-
-  for (const [key, value] of details) {
-    if (typeof value === "string" && value.trim()) {
-      res[key] = value.trim();
-    }
-  }
+  if (Object.keys(item.specifications).length) res.specifications = item.specifications;
+  if (item.productInfo.sections.length) res.contentSections = item.productInfo.sections;
+  for (const attribute of item.productInfo.attributes) res[attribute.key] = attribute.value;
+  // Transitional API aliases derive from canonical values, never from a second source.
+  const aliases = { careInstructions: 'care', cuidados_basicos: 'care', illumination: 'light', iluminacao: 'light',
+    ambiente_ideal: 'environment', housing: 'environment', dicas_armazenamento: 'storageTips', durabilidade: 'durability', alimentacao: 'feeding' };
+  for (const [alias, key] of Object.entries(aliases)) if (res[key]) res[alias] = res[key];
 
   return res;
 }
@@ -565,7 +523,7 @@ function installExistingStore(app, { repository, assistant, catalog, getOrderInt
       ensure(existing, "Produto não encontrado.", 404);
       existing.status = targetStatus;
       if (repository.saveProduct) {
-        await repository.saveProduct(existing);
+        await repository.saveProduct({ id: existing.id, status: targetStatus });
       }
       res.json({ success: true, product: existing });
     } catch (error) {

@@ -3,6 +3,7 @@ const fs = require('node:fs/promises');
 const Logger = require('../shared/logger');
 const { buildOptimizedFirestorePhotoDocument } = require('./product-photo.service');
 const { uploadProductImage } = require('./product-image-storage');
+const { normalizeProductMedia } = require('./product-media');
 
 class ImageMigrationService {
   constructor({ firestoreRepo = null, storage = null, localPhotoRoot = path.resolve(__dirname, '../../public') } = {}) {
@@ -21,17 +22,18 @@ class ImageMigrationService {
 
     const url = String(imageUrl).trim();
 
-    if (/^https:\/\/(?:firebasestorage|storage)\.googleapis\.com\//i.test(url) || /^gs:\/\//i.test(url)) {
-      return 'STORAGE_VALIDATED';
-    }
+    const reviewed = normalizeProductMedia(product).entries.find(entry => entry.url === url);
+    if (reviewed) return reviewed.source === 'FIREBASE_STORAGE' ? 'STORAGE_VALIDATED' : 'EXTERNAL_APPROVED';
 
     if (/^\/store-assets\/products\//i.test(url) || /^\/api\/images\//i.test(url)) {
-      return 'LOCAL_APPROVED';
+      const proof = product.imageProvenance;
+      return proof?.kind === 'CONFLORA_ACTUAL_PRODUCT' && proof.confirmedBy && proof.confirmedAt &&
+        proof.sourcePath === url ? 'LOCAL_APPROVED' : 'LICENSE_REVIEW_REQUIRED';
     }
 
     if (/^https:\/\/(?:inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org)\//i.test(url) ||
         /^https:\/\/images\.unsplash\.com\//i.test(url)) {
-      return 'EXTERNAL_APPROVED';
+      return 'LICENSE_REVIEW_REQUIRED';
     }
 
     if (/^https?:\/\//i.test(url)) {
@@ -157,6 +159,12 @@ class ImageMigrationService {
         continue;
       }
 
+      if (status !== 'LOCAL_APPROVED') {
+        results.push({ sku: id, productName: name, action: status === 'EXTERNAL_APPROVED'
+          ? 'KEEP_AUTHORIZED_EXTERNAL_REFERENCE' : 'REVIEW_REQUIRED', currentUrl: primaryUrl, success: status === 'EXTERNAL_APPROVED' });
+        continue;
+      }
+
       if (dryRun) {
         results.push({
           sku: id,
@@ -199,6 +207,9 @@ class ImageMigrationService {
               imagePaths: [uploadResult.imagePath, ...(prod.imagePaths || []).slice(1)],
               imageFileId: photoDoc.id,
               imagePathCache: updatedUrl,
+              productMedia: { version: 1, entries: [{ url: updatedUrl, source: 'FIREBASE_STORAGE', storagePath: uploadResult.imagePath,
+                provenance: { kind: 'OWN_PHOTO', productId: id, productMatchConfirmed: true,
+                  confirmedBy: prod.imageProvenance.confirmedBy, confirmedAt: prod.imageProvenance.confirmedAt } }] },
               updatedAt: new Date().toISOString(),
             }, { expectedImageUrl: primaryUrl });
           }

@@ -744,8 +744,12 @@ function renderAdminHtml(storeConfig) {
         </div>
         <div>
           <label style="font-size:12px; font-weight:bold;">Ou URLs Externas de Fotos (separadas por vírgula):</label>
-          <input type="text" id="formProdImages" hidden disabled aria-hidden="true" />
-          <small>Envie fotos dos produtos reais pelo campo de upload. URLs externas não são utilizadas.</small>
+          <input type="text" id="formProdImages" placeholder="URLs HTTPS separadas por vírgula" />
+          <label>Licença <select id="formProdMediaLicense"><option value="">Selecione</option><option value="CC0">CC0</option><option value="PUBLIC_DOMAIN">Domínio público</option><option value="CC_BY">CC BY</option><option value="PERMISSION">Permissão expressa</option></select></label>
+          <label>Evidência / URL da licença <input type="url" id="formProdMediaLicenseUrl" /></label>
+          <label>Crédito / atribuição <input type="text" id="formProdMediaAttribution" /></label>
+          <label><input type="checkbox" id="formProdMediaConfirmed" /> Conferi a autorização de uso e que a imagem representa este produto e variedade.</label>
+          <small>As imagens externas permanecem na origem; não são copiadas para o Storage. Referências antigas não são aprovadas automaticamente.</small>
         </div>
         <div style="grid-column: 1/-1;">
           <label style="font-size:12px; font-weight:bold;">🏷️ Tags Padronizadas (Conflora &amp; IA):</label>
@@ -1926,6 +1930,7 @@ function renderAdminHtml(storeConfig) {
     }
 
     function getProductImageUrl(product) {
+      if (product.media?.version === 1) return product.media.primaryUrl || product.media.placeholderUrl;
       const sharedCandidates = window.ConfloraProductCard?.getImageCandidates(product) || [];
       if (sharedCandidates.length) return sharedCandidates[0];
       const candidates = [
@@ -2826,6 +2831,10 @@ function renderAdminHtml(storeConfig) {
 
     function editProduct(id) {
       document.getElementById('formProdRealPhotoConfirmed').checked = false;
+      document.getElementById('formProdMediaConfirmed').checked = false;
+      document.getElementById('formProdMediaLicense').value = '';
+      document.getElementById('formProdMediaLicenseUrl').value = '';
+      document.getElementById('formProdMediaAttribution').value = '';
       const p = allProducts.find(x => String(x.id) === String(id));
       if (!p) return;
       showTab('products');
@@ -2931,6 +2940,7 @@ function renderAdminHtml(storeConfig) {
 
       const payload = {
         id,
+        expectedUpdatedAt: savedProduct?.updatedAt,
         name,
         category: cat,
         subcategory: sub,
@@ -2943,12 +2953,15 @@ function renderAdminHtml(storeConfig) {
         tagsAi: tags,
         tags_ia: tags,
         descriptionAi: desc,
+        externalMedia: externalImgs.map(url => ({ url, licenseCode: document.getElementById('formProdMediaLicense').value,
+          licenseUrl: document.getElementById('formProdMediaLicenseUrl').value.trim(), attribution: document.getElementById('formProdMediaAttribution').value.trim(),
+          productMatchConfirmed: document.getElementById('formProdMediaConfirmed').checked, rightsConfirmed: document.getElementById('formProdMediaConfirmed').checked })),
       };
 
       if (newUploads.length && !document.getElementById('formProdRealPhotoConfirmed')?.checked) throw new Error('Confirme a origem das fotos reais do produto antes de enviar.');
       const res = await window.ConfloraSession.apiFetch('/api/admin/products', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Product-Content-Confirmed': desc.trim() ? 'true' : 'false' },
+        headers: { 'Content-Type': 'application/json', 'X-Product-Content-Confirmed': 'true' },
         body: JSON.stringify(payload)
       });
       const data = await res.json();

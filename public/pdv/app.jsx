@@ -410,7 +410,9 @@ const { useState, useEffect, useRef, useMemo } = React;
             const images = (Array.isArray(item.images) ? item.images : [])
               .map((entry) => (typeof entry === 'string' ? entry : entry?.url || entry?.imageUrl || entry?.src || entry?.downloadURL || ''))
               .filter(Boolean);
-            const imageCandidates = window.ConfloraProductCard?.getImageCandidates({
+            const imageCandidates = item.media?.version === 1
+              ? [...new Set([item.media.primaryUrl, ...item.media.gallery.map(image => image.url)].filter(Boolean))]
+              : window.ConfloraProductCard?.getImageCandidates({
               ...item,
               images,
             }) || [...new Set([...images, item.imageUrl, item.imagePathCache]

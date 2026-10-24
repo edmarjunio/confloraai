@@ -3,7 +3,8 @@ const { createHash, randomUUID } = require('node:crypto');
 const { createWebSessions, safeUser } = require('../security/web-session');
 const { StorefrontAnalyticsService, campaignLabel } = require('../services/storefront-analytics.service');
 const { actualProductImages, actualProductPhotoFields, actualPhotoProvenance } = require('../catalog/actual-product-photo');
-const { getCashierProductDetails } = require('../catalog/cashier-product-details');
+const { normalizeProductMedia, reviewExternalMedia, storageObjectPath } = require('../catalog/product-media');
+const { toCashierProduct } = require('../catalog/cashier-product-details');
 const { normalizeDeliveryLocation } = require('../orders/pdv.service');
 let expressModule = null;
 function getExpress() {
@@ -431,7 +432,7 @@ function createApp({
     }
     res.setHeader('Cache-Control', 'no_store'.tr);
     const shellPath = require('node:path').resolve(__dirname, '../../public/storefront/shell.html');
-    return res.sendFile(require('node:fs').existsSync(shellPath) ? shellPath : require('node:path').resolve(__dirname, '../../public/storefront/index.html'));
+    return res.sendFile(require('node:fs').existsSync(shellPath) ? 'shell.html' : 'index.html', { root: require('node:path').dirname(shellPath) });
   });
   app.get('/catalogo-classico', (_req, res) => res.redirect(308, '/'));
 
@@ -1525,45 +1526,8 @@ function createApp({
     try {
       const products = await messageService.firestoreRepo.getAllProducts();
       const active = products
-        .filter(p => !require('../catalog/commercial-product').isInternalFinancialProduct(p))
-        .filter((p) => String(p.status || p.STATUS || '').trim().toUpperCase() === 'ATIVO')
-        .map((p) => {
-          const commercial = require('../catalog/commercial-product').commercialProduct(p);
-          const imageCandidates = getCashierProductImageCandidates(p);
-          const imageUrl = imageCandidates[0] || '';
-          const name = p.name || p.descricao || 'product'.tr;
-          const savedUnit = String(p.saleUnit?.code || p.unit || p.unidade || '').trim().toUpperCase();
-          const unit = savedUnit || (/(^|[^A-Z])KG([^A-Z]|$)/i.test(name) ? 'kg_88ed32099f'.tr : 'UN');
-
-          return {
-            id: p.id,
-            status: String(p.status || p.STATUS || '').trim().toUpperCase(),
-            name,
-            price: commercial.price,
-            stock: Number(p.stockQuantity ?? p.estoque ?? 0),
-            unit,
-            saleUnit: {
-              code: unit,
-              label: p.saleUnit?.label || (unit === 'UN' ? 'unit_a9959d28d9'.tr : unit),
-              minimum: Number(p.saleUnit?.minimum) || (unit === 'KG' ? 0.1 : 1),
-              increment: Number(p.saleUnit?.increment) || (unit === 'KG' ? 0.1 : 1),
-            },
-            category: p.category || p.categoria || '',
-            subcategory: p.subcategory || p.subcategoria || '',
-            canonicalName: p.canonicalName || p.canonical_name || '',
-            variation: p.variation || p.variacao || '',
-            imageUrl,
-            images: imageCandidates,
-            imageFileId: imageUrl ? p.imageFileId || p.image_file_id || '' : '',
-            imageIsIllustrative: false,
-            actualPhotoPending: !imageUrl,
-            imagePathCache: imageUrl,
-            imageFallbackUrl: '/store-assets/placeholder.svg',
-            descriptionAi: require('../catalog/registered-product-content').registeredProductContent(p).description,
-            tagsAi: p.tagsAi || p.tags_ia || '',
-            details: getCashierProductDetails(p),
-          };
-        });
+        .filter(p => require('../catalog/commercial-product').commercialProduct(p).active && require('../catalog/commercial-product').hasValidCommercialPrice(p))
+        .map(toCashierProduct);
       res.status(200).json(active);
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -1677,6 +1641,9 @@ function createApp({
   app.post('/api/admin/products', async (req, res) => {
     try {
       const product = req.body;
+      const previousProduct = product.id ? await messageService.firestoreRepo.getProductById(product.id) : null;
+      const externalMedia = product.externalMedia;
+      for (const field of ['externalMedia', 'productMedia', 'media', 'productInfo', 'reservedQuantity']) delete product[field];
       let photoUpdate;
       if (req.get('X-Product-Photos-Update') === 'true') {
         const previous = await messageService.firestoreRepo.getProductById(product.id);
@@ -1686,9 +1653,11 @@ function createApp({
         // Only explicit reordering/removal of existing attested photos. Price
         // edits cannot erase unreviewed historical references by accident.
         if (allowed.length) {
-          const paths = selected.map(url => decodeURIComponent(new URL(url).pathname.split('/o/')[1]));
+          const approved = normalizeProductMedia(previous).entries;
+          const entries = [...new Set(selected)].map(url => approved.find(entry => entry.url === url));
+          const paths = selected.map(url => storageObjectPath(url, product.id));
           photoUpdate = { images: selected, imageUrl: selected[0] || '', imagePath: paths[0] || '', imagePaths: paths,
-            imageProvenance: { ...previous.imageProvenance, storagePaths: paths } };
+            productMedia: { version: 1, entries }, imageProvenance: { ...previous.imageProvenance, storagePaths: paths.filter(Boolean) } };
         }
       }
       delete product.imageProvenance;
@@ -1697,10 +1666,22 @@ function createApp({
       // listing submitted while editing price must never erase stored references.
       for (const field of ['imageUrl', 'images', 'imagePath', 'imagePaths', 'imagePathCache', 'imageFileId', 'imageIsIllustrative']) delete product[field];
       if (photoUpdate) Object.assign(product, photoUpdate);
+      if (externalMedia?.length) {
+        const merged = { ...previousProduct, ...product };
+        const entries = [...new Map([...normalizeProductMedia(merged).entries, ...reviewExternalMedia(externalMedia, merged, req.user)].map(entry => [entry.url, entry])).values()];
+        product.productMedia = { version: 1, entries };
+        const media = normalizeProductMedia({ ...merged, productMedia: product.productMedia });
+        product.images = media.entries.map(entry => entry.url);
+        product.imagePaths = media.entries.map(entry => entry.storagePath);
+        product.imageUrl = media.primaryUrl;
+        product.imagePath = product.imagePaths[0] || '';
+        product.imagePathCache = media.primaryUrl;
+      }
       if (req.get('X-Product-Content-Confirmed') === 'true') {
         const allowedContentFields = [...require('../catalog/registered-product-content').detailFields, 'description', 'specifications', 'especificacoes', 'contentSections'];
-        product.contentProvenance = { kind: 'STAFF_CONFIRMED', confirmedBy: req.user.id, confirmedAt: new Date().toISOString(), fields: Object.keys(product).filter(key => allowedContentFields.includes(key)) };
-        if (typeof product.descriptionAi === 'string') product.publicDescription = product.descriptionAi.trim();
+        const previousFields = previousProduct?.contentProvenance?.kind === 'STAFF_CONFIRMED' ? previousProduct.contentProvenance.fields || [] : [];
+        product.contentProvenance = { kind: 'STAFF_CONFIRMED', confirmedBy: req.user.id, confirmedAt: new Date().toISOString(), fields: [...new Set([...previousFields, ...Object.keys(product).filter(key => allowedContentFields.includes(key))])] };
+        if (typeof product.description === 'string' || typeof product.descriptionAi === 'string') product.publicDescription = String(product.description ?? product.descriptionAi).trim();
       }
       const containsPhotoUpload = Boolean(product.photoBase64 || product.photoData || product.photoDoc || product.photosBase64?.length || product.photos?.length);
       if (containsPhotoUpload) return res.status(400).json({ error: 'Envie fotos reais pelo serviço de upload do produto, com confirmação de origem.' });
@@ -1742,13 +1723,8 @@ function createApp({
 
       const { buildOptimizedFirestorePhotoDocument } = require('../catalog/product-photo.service');
       const savedPhotos = [];
-      const existingImages = shouldAppend
-        ? actualProductImages(prod)
-        : [];
-      const existingImagePaths = shouldAppend
-        ? existingImages.map(url => decodeURIComponent(new URL(url).pathname.split('/o/')[1]))
-        : [];
-      const startIndex = existingImages.length;
+      const existingEntries = shouldAppend ? normalizeProductMedia(prod).entries : [];
+      const startIndex = existingEntries.length;
 
       for (let i = 0; i < incomingList.length; i++) {
         const item = incomingList[i];
@@ -1777,29 +1753,25 @@ function createApp({
       }
 
       const imageEntries = new Map();
-      existingImages.forEach((url, index) => {
-        imageEntries.set(url, { url, path: existingImagePaths[index] || '' });
-      });
+      existingEntries.forEach(entry => imageEntries.set(entry.url, entry));
       savedPhotos.forEach((photo) => {
-        imageEntries.set(photo.imageUrl, { url: photo.imageUrl, path: photo.imagePath });
+        imageEntries.set(photo.imageUrl, { url: photo.imageUrl, storagePath: photo.imagePath, source: 'FIREBASE_STORAGE', manual: true,
+          provenance: { kind: 'OWN_PHOTO', productId: prod.id, confirmedBy: req.user.id, confirmedAt: new Date().toISOString(), productMatchConfirmed: true } });
       });
-      const allImages = Array.from(imageEntries.values());
+      const allImages = Array.from(imageEntries.values()).sort((a, b) => Number(b.manual) - Number(a.manual));
       const primaryPhoto = savedPhotos[0];
 
       const updatedProduct = {
-        ...prod,
+        id: prod.id,
         imageUrl: allImages[0]?.url || primaryPhoto.imageUrl,
-        imagePath: allImages[0]?.path || primaryPhoto.imagePath,
-        imagePaths: allImages.map((image) => image.path),
+        imagePath: allImages[0]?.storagePath || primaryPhoto.imagePath,
+        imagePaths: allImages.map((image) => image.storagePath),
         images: allImages.map((image) => image.url),
+        productMedia: { version: 1, entries: allImages },
         imageFileId: primaryPhoto.id,
         imageIsIllustrative: false,
-        imageProvenance: actualPhotoProvenance(req.user, allImages.map(image => image.path)),
+        imageProvenance: actualPhotoProvenance(req.user, allImages.map(image => image.storagePath).filter(Boolean)),
         imagePathCache: allImages[0]?.url || primaryPhoto.imageUrl,
-        tagsAi: primaryPhoto.tagsAi,
-        tags_ia: primaryPhoto.tagsAi,
-        descriptionAi: primaryPhoto.descriptionAi,
-        descricao_ia: primaryPhoto.descriptionAi,
         updatedAt: new Date().toISOString(),
       };
 

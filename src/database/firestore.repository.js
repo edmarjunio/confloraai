@@ -319,7 +319,7 @@ class FirestoreRepository {
     });
   }
 
-  async saveProduct(product, { expectedImageUrl } = {}) {
+  async saveProduct(product, { expectedImageUrl, expectedUpdatedAt = product?.expectedUpdatedAt } = {}) {
     const invalid = message => Object.assign(new Error(message), { status: 400 });
     if (!product || typeof product.id !== 'string' || !/^[a-zA-Z0-9_-]{1,180}$/.test(product.id)) throw invalid('Identificador do produto inválido.');
     if (product.name !== undefined && (typeof product.name !== 'string' || product.name.trim().length < 2 || product.name.trim().length > 180)) {
@@ -327,8 +327,16 @@ class FirestoreRepository {
     }
 
     const previousProduct = await this.getProductById(product.id);
-    if (expectedImageUrl !== undefined && previousProduct?.imageUrl !== expectedImageUrl) throw invalid('A imagem mudou durante a operação. Recarregue o produto.');
+    const conflict = message => Object.assign(new Error(message), { status: 409 });
+    const checkVersion = current => {
+      if (expectedUpdatedAt !== undefined && current?.updatedAt !== expectedUpdatedAt) throw conflict('O produto mudou durante a edição. Recarregue antes de salvar.');
+      if (expectedImageUrl !== undefined && current?.imageUrl !== expectedImageUrl) throw conflict('A imagem mudou durante a operação. Recarregue o produto.');
+    };
+    checkVersion(previousProduct);
     const dataWithTs = { ...product, updatedAt: new Date().toISOString() };
+    delete dataWithTs.expectedUpdatedAt;
+    // Reservations belong exclusively to transactional commercial services.
+    if (previousProduct) delete dataWithTs.reservedQuantity;
     if (!previousProduct && !product.name?.trim()) throw invalid('Nome do produto obrigatório.');
     if (product.name !== undefined) dataWithTs.name = product.name.trim();
     if (product.price !== undefined && (typeof product.price !== 'number' ||
@@ -365,6 +373,11 @@ class FirestoreRepository {
         throw new Error(unit === 'KG' ? 'O estoque por KG aceita até três casas decimais.' : 'O estoque por unidade deve ser um número inteiro igual ou maior que zero.');
       }
       Object.assign(dataWithTs, { stockQuantity: stock, estoque: stock });
+      if (stock < Number(previousProduct?.reservedQuantity || 0)) throw conflict('O estoque não pode ficar abaixo das unidades reservadas.');
+      if (previousProduct && stock === Number(previousProduct.stockQuantity ?? previousProduct.estoque ?? 0)) {
+        delete dataWithTs.stockQuantity;
+        delete dataWithTs.estoque;
+      }
     }
     if (product.status !== undefined || product.STATUS !== undefined) {
       const status = productStatus(product);
@@ -493,10 +506,6 @@ class FirestoreRepository {
         Object.prototype.hasOwnProperty.call(product, key),
       ) ||
       Boolean(rawPhotosList || product.photoBase64 || product.photoData || product.photoDoc);
-    const previousImagePaths = getProductImageEntries(previousProduct)
-      .map((image) => image.path)
-      .filter(Boolean);
-    let nextImagePaths = previousImagePaths;
 
     if (updatesImageReferences) {
       const imageEntries = getUpdatedProductImageEntries(dataWithTs, previousProduct);
@@ -508,16 +517,19 @@ class FirestoreRepository {
       if (!dataWithTs.imageUrl) {
         dataWithTs.imageFileId = '';
       }
-      nextImagePaths = imageEntries.map((image) => image.path).filter(Boolean);
     }
 
     if (this.firestore && !this._firestoreClientDisabled) {
       try {
         const ref = this.firestore.collection('products').doc(String(product.id));
-        if (expectedImageUrl === undefined) await ref.set(dataWithTs, { merge: true });
-        else await this.firestore.runTransaction(async tx => {
+        await this.firestore.runTransaction(async tx => {
           const current = await tx.get(ref);
-          if (!current.exists || current.data().imageUrl !== expectedImageUrl) throw invalid('A imagem mudou durante a operação. Recarregue o produto.');
+          const latest = current.exists ? current.data() : null;
+          checkVersion(latest);
+          if (Object.hasOwn(dataWithTs, 'stockQuantity') && previousProduct &&
+            (Number(latest?.stockQuantity ?? latest?.estoque ?? 0) !== Number(previousProduct.stockQuantity ?? previousProduct.estoque ?? 0) ||
+             Number(latest?.reservedQuantity || 0) !== Number(previousProduct.reservedQuantity || 0))) throw conflict('O estoque mudou durante a edição. Recarregue antes de salvar.');
+          if (Object.hasOwn(dataWithTs, 'stockQuantity') && dataWithTs.stockQuantity < Number(latest?.reservedQuantity || 0)) throw conflict('O estoque não pode ficar abaixo das unidades reservadas.');
           tx.set(ref, dataWithTs, { merge: true });
         });
       } catch (err) {
@@ -536,12 +548,9 @@ class FirestoreRepository {
     }
 
     if (!this.firestore) this.inMemoryProducts.set(String(product.id), { ...this.inMemoryProducts.get(String(product.id)), ...dataWithTs });
-    const nextImagePathSet = new Set(nextImagePaths);
-    for (const imagePath of new Set(previousImagePaths)) {
-      if (!nextImagePathSet.has(imagePath)) {
-        await this.productImageStorage.deleteProductImage(imagePath);
-      }
-    }
+    // Repointing a product must not delete a photograph still referenced by
+    // history or another authorized consumer. Orphan cleanup is a separate,
+    // reviewed maintenance operation, never a side effect of a metadata edit.
   }
 
   async deleteProduct(productId) {

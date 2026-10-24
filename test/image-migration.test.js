@@ -7,17 +7,17 @@ test('ImageMigrationService classifies image status correctly', () => {
 
   assert.equal(
     service.classifyImageStatus({}, 'https://firebasestorage.googleapis.com/v0/b/confloraai.appspot.com/o/products/1.jpg'),
-    'STORAGE_VALIDATED'
+    'LICENSE_REVIEW_REQUIRED'
   );
 
   assert.equal(
     service.classifyImageStatus({}, '/store-assets/products/alface.jpg'),
-    'LOCAL_APPROVED'
+    'LICENSE_REVIEW_REQUIRED'
   );
 
   assert.equal(
     service.classifyImageStatus({}, 'https://images.unsplash.com/photo-12345'),
-    'EXTERNAL_APPROVED'
+    'LICENSE_REVIEW_REQUIRED'
   );
 
   assert.equal(
@@ -51,14 +51,14 @@ test('ImageMigrationService performs dry-run audit without production writes', a
 
   const audit = await service.auditCatalog(sampleProducts);
   assert.equal(audit.stats.totalProducts, 3);
-  assert.equal(audit.stats.STORAGE_VALIDATED, 1);
-  assert.equal(audit.stats.LOCAL_APPROVED, 1);
+  assert.equal(audit.stats.STORAGE_VALIDATED, 0);
+  assert.equal(audit.stats.LICENSE_REVIEW_REQUIRED, 2);
   assert.equal(audit.stats.IMAGE_MISSING, 1);
 
   const batchResults = await service.processMigrationBatch(sampleProducts, { dryRun: true });
   assert.equal(batchResults.length, 3);
-  assert.equal(batchResults[0].action, 'ALREADY_VALIDATED_IN_STORAGE');
-  assert.equal(batchResults[1].action, 'DRY_RUN_WOULD_MIGRATE');
+  assert.equal(batchResults[0].action, 'REVIEW_REQUIRED');
+  assert.equal(batchResults[1].action, 'REVIEW_REQUIRED');
 });
 
 test('local migration persists photo and all image consumers without rewriting commercial fields', async () => {
@@ -66,6 +66,7 @@ test('local migration persists photo and all image consumers without rewriting c
   const repository = new FirestoreRepository({ isInMemory: true });
   const product = { id: 'isolated-local-image', name: 'Foto local', price: 12, stockQuantity: 7,
     tagsAi: 'foto local, preservada', descriptionAi: 'Descrição original preservada.',
+    imageProvenance: { kind: 'CONFLORA_ACTUAL_PRODUCT', confirmedBy: 'isolated-staff', confirmedAt: '2026-10-24', sourcePath: '/store-assets/products/rolinha-diamante.jpg' },
     imageUrl: '/store-assets/products/rolinha-diamante.jpg', images: ['/store-assets/products/rolinha-diamante.jpg'] };
   await repository.saveProduct(product);
   const service = new ImageMigrationService({ firestoreRepo: repository, localPhotoRoot: require('node:path').resolve(__dirname, 'fixtures/images'), storage: {

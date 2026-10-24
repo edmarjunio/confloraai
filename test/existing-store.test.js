@@ -53,7 +53,7 @@ test("existing catalogue maps photos, specifications and categories without expo
   assert.equal(product.images.length, 2);
   assert.equal(product.images[1], "/api/images/img_plant");
   assert.equal(product.specifications.light.value, "Sol");
-  assert.equal(product.specifications.invalid, undefined);
+  assert.deepEqual(product.specifications.invalid, { label: 'invalid', value: 'value' });
   assert.equal(product.supplierCost, undefined);
 });
 

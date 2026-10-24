@@ -24,7 +24,9 @@ function projection(raw, id, storeUrl, inventory = { stockControlEnabled: true }
   const product = commercialProduct(raw);
   const image = require('../catalog/actual-product-photo').actualProductImages(raw)[0];
   const baseDescription = require('../catalog/registered-product-content').registeredProductContent(raw).description;
-  const description = raw.imageIsIllustrative === true ? `${baseDescription}\nImagem ilustrativa. ${raw.imageAttribution || ''}`.trim() : baseDescription;
+  const media = require('../catalog/product-media').normalizeProductMedia(raw).entries[0];
+  const credit = media?.provenance.license?.attribution ? `${media.provenance.license.attribution} ${media.provenance.license.url}` : '';
+  const description = credit ? `${baseDescription.slice(0, Math.max(0, 4999 - credit.length))}\n${credit}` : baseDescription;
   if (!/^[a-zA-Z0-9_-]{1,180}$/.test(id) || !Number.isSafeInteger(product.priceMinor) || product.priceMinor <= 0 || !/^https:\/\//.test(image || '') || !/^https:\/\//.test(storeUrl || '') || !description) throw new Error('Produto sem campos públicos válidos para sincronização Meta.');
   return { retailer_id: id, name: product.name.slice(0, 200), description: description.slice(0, 5000),
     price: product.priceMinor, currency: 'BRL', image_url: image, url: storeUrl,

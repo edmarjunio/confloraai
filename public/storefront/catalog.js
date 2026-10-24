@@ -751,6 +751,8 @@ export function createCatalog(state, add, navigate) {
     view.append(
       element("div", { class: "detail-grid" }, [
         element("div", { class: "detail-gallery" }, [
+          ...(product.media?.gallery || []).filter(image => image.attribution).map(image => element('small', { class: 'product-media-attribution', text: image.attribution },
+            image.licenseUrl ? [element('a', { href: image.licenseUrl, text: ' · Licença', target: '_blank', rel: 'noopener noreferrer' })] : [])),
           element("div", { class: "detail-hero" }, [
             mainPhoto,
           ]),
