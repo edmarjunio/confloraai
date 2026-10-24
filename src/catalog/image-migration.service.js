@@ -211,7 +211,7 @@ class ImageMigrationService {
                 provenance: { kind: 'OWN_PHOTO', productId: id, productMatchConfirmed: true,
                   confirmedBy: prod.imageProvenance.confirmedBy, confirmedAt: prod.imageProvenance.confirmedAt } }] },
               updatedAt: new Date().toISOString(),
-            }, { expectedImageUrl: primaryUrl });
+            }, { expectedImageUrl: primaryUrl, expectedUpdatedAt: prod.updatedAt });
           }
 
           results.push({

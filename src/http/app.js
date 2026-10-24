@@ -1780,7 +1780,7 @@ function createApp({
         updatedAt: new Date().toISOString(),
       };
 
-      await messageService.firestoreRepo.saveProduct(updatedProduct, { expectedImageUrl: prod.imageUrl });
+      await messageService.firestoreRepo.saveProduct(updatedProduct, { expectedImageUrl: prod.imageUrl, expectedUpdatedAt: prod.updatedAt });
 
       if (messageService.catalogRepo) {
         messageService.catalogRepo.invalidateCache?.();
