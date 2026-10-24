@@ -627,6 +627,16 @@ function createApp({
     for (const entry of body.entry) {
       for (const change of entry.changes || []) {
         const value = change.value;
+        if (!process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || entry.id !== process.env.WHATSAPP_BUSINESS_ACCOUNT_ID ||
+            !config.whatsapp.phoneNumberId || value?.metadata?.phone_number_id !== config.whatsapp.phoneNumberId) {
+          Logger.warn('Evento WhatsApp recusado: conta/número não conferem com a configuração.');
+          continue;
+        }
+        if (change.field === 'smb_message_echoes') {
+          await require('../services/whatsapp-echo.service').processHumanEcho(messageService.firestoreRepo, value);
+          continue;
+        }
+        if (change.field !== 'messages') continue;
         for (const status of Array.isArray(value?.statuses) ? value.statuses : []) {
           if (!status.id || !['sent', 'delivered', 'read', 'failed'].includes(status.status)) continue;
           if (typeof app.locals.pdv?.store?.recordWhatsAppStatus === 'function') { await app.locals.pdv.store.recordWhatsAppStatus(status); }
@@ -640,9 +650,18 @@ function createApp({
           const messageId = msg.id;
           const isMedia = Boolean(msg.image || msg.document);
           const mediaCaption = msg.image?.caption || msg.document?.caption || '';
-          const interactiveId = msg.interactive?.button_reply?.id || msg.interactive?.list_reply?.id || '';
+          if (!/^\d{10,15}$/.test(phone || '') || typeof messageId !== 'string' || !messageId.startsWith('wamid.') || messageId.length > 512) continue;
+          const interactiveId = require('../integrations/whatsapp-inbound').normalizeAction(msg);
           const buttonText = msg.button?.text || msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || '';
-          const text = msg.text?.body || buttonText || mediaCaption || (isMedia ? '[COMPROVANTE_ENVIADO]' : '');
+          let commerceOrder = null;
+          if (msg.type === 'order') {
+            try { commerceOrder = require('../integrations/whatsapp-inbound').normalizeOrder(msg.order); }
+            catch {
+              await require('../services/conversation-automation').conversationAutomation(messageService.firestoreRepo, phone, { pauseReason: 'invalid_meta_cart', messageId });
+              continue;
+            }
+          }
+          const text = msg.text?.body || buttonText || mediaCaption || (commerceOrder ? '[CARRINHO_META]' : isMedia ? '[COMPROVANTE_ENVIADO]' : '');
           const customerName = value.contacts?.[0]?.profile?.name || '';
 
           if (!text && !isMedia) {
@@ -651,7 +670,9 @@ function createApp({
 
           systemStatusService.recordWebhookHit(phone);
 
-          const taskPayload = { phone, message: text, ...(interactiveId ? { interactiveId } : {}), customerName, messageId };
+          if (text.length > 4096 || interactiveId.length > 256) continue;
+          const taskPayload = { phone, message: text, ...(interactiveId ? { interactiveId } : {}), ...(commerceOrder ? { commerceOrder } : {}), customerName, messageId,
+            receivedByRevision: process.env.K_REVISION || process.env.APP_REVISION || 'local' };
 
           await incoming.accept(taskPayload);
           if (process.env.NODE_ENV === 'production' && config.whatsapp.assistantEnabled && taskQueueClient) {

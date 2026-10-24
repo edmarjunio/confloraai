@@ -118,7 +118,7 @@ class HandoffStore {
       tx.set(this.db.collection(this.handoffs).doc(id), handoff);
       tx.set(conversationRef, {
         ...state, tenantId: record.tenantId, customerKey: record.customerKey, automation: 'paused',
-        pausedAt: iso, reason: record.reason, handoffId: id, updatedAt: iso,
+        pausedAt: iso, reason: record.reason, handoffId: id, updatedAt: iso, version: Number(state.version || 0) + 1, customerPhone: record.customerPhone || state.customerPhone || '',
       });
       return handoff;
     });

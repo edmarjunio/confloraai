@@ -2,6 +2,13 @@ const { customerKeyFor } = require('../agent/agent-store');
 const { randomUUID } = require('node:crypto');
 
 function installWhatsappAdminRoutes(app, { whatsapp, store }) {
+  app.use('/api/admin/whatsapp', (req, res, next) => {
+    res.set('Cache-Control', 'private, no-store');
+    if (!req.user || !['ADMIN', 'CAIXA', 'VENDEDOR'].includes(req.user.role)) return res.sendStatus(403);
+    const phone = req.path.match(/^\/conversations\/([^/]+)/)?.[1];
+    if (phone && !/^\d{10,15}$/.test(phone)) return res.status(400).json({ error: 'Telefone inválido.' });
+    next();
+  });
   app.post('/api/admin/whatsapp/verify', async (_req, res) => {
     if (process.env.NODE_ENV === 'test') return res.status(409).json({ error: 'Conexões reais desativadas nos testes.' });
     try {
@@ -116,6 +123,7 @@ function installWhatsappAdminRoutes(app, { whatsapp, store }) {
           ...current,
           tenantId: 'conflora',
           customerKey,
+          customerPhone: rawPhone,
           automation: 'paused',
           pausedAt: current.pausedAt || now,
           reason: 'human_takeover',
@@ -145,7 +153,7 @@ function installWhatsappAdminRoutes(app, { whatsapp, store }) {
     try {
       const rawPhone = String(req.params.phone || '').replace(/\D/g, '');
       const { resumeAgentRequestedConversation } = require('../services/conversation-automation');
-      const updated = await resumeAgentRequestedConversation(store.repository, rawPhone);
+      const updated = await resumeAgentRequestedConversation(store.repository, rawPhone, req.user);
       res.json({ success: true, conversation: updated });
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -183,15 +191,44 @@ function installWhatsappAdminRoutes(app, { whatsapp, store }) {
       if (!text) return res.status(400).json({ error: 'Texto da mensagem não pode ser vazio.' });
       if (!whatsapp?.sendTextMessage) return res.status(503).json({ error: 'WhatsApp oficial não configurado.' });
 
-      const result = await whatsapp.sendTextMessage(rawPhone, text);
-      const msgId = result?.messages?.[0]?.id || `out_${randomUUID()}`;
+      // Pause before transport; sending without client-side composition protection still claims ownership.
+      await store.transaction(async tx => {
+        const id = `conflora__${customerKeyFor('conflora', rawPhone)}`;
+        const current = await tx.get('agent_conversations', id) || { tenantId: 'conflora', customerKey: customerKeyFor('conflora', rawPhone) };
+        if (current.assignedTo && current.assignedTo.id !== req.user.id) throw Object.assign(new Error('Atendimento atribuído a outro operador.'), { status: 409 });
+        tx.set('agent_conversations', id, { ...current, customerPhone: rawPhone, automation: 'paused', reason: 'human_takeover',
+          assignedTo: { id: req.user.id, name: req.user.name || req.user.id, role: req.user.role }, version: Number(current.version || 0) + 1, updatedAt: new Date().toISOString() });
+      });
+      const requestId = String(req.body?.requestId || '');
+      if (!/^[a-zA-Z0-9-]{16,80}$/.test(requestId)) return res.status(400).json({ error: 'Identificador único do envio obrigatório.' });
+      const deliveryId = store.id(`manual_${rawPhone}_${requestId}`);
+      const claim = await store.transaction(async tx => {
+        const previous = await tx.get('whatsapp_delivery', deliveryId);
+        if (previous) return previous;
+        tx.set('whatsapp_delivery', deliveryId, { id: deliveryId, phone: rawPhone, text, status: 'SENDING', createdAt: new Date().toISOString(), sentBy: { id: req.user.id, name: req.user.name || req.user.id } });
+        return null;
+      });
+      if (claim?.text !== undefined && (claim.text !== text || claim.sentBy.id !== req.user.id)) return res.sendStatus(409);
+      if (claim) return res.status(claim.status === 'SENT' ? 200 : 409).json({ success: claim.status === 'SENT', messageId: claim.providerMessageId, status: claim.status });
+      let result;
+      try { result = await whatsapp.sendTextMessage(rawPhone, text); }
+      catch (error) {
+        await store.transaction(async tx => {
+          const current = await tx.get('whatsapp_delivery', deliveryId);
+          tx.set('whatsapp_delivery', deliveryId, { ...current, status: 'NEEDS_RECONCILIATION', lastError: error.definitelyNotSent ? 'NOT_SUBMITTED' : 'UNKNOWN_PROVIDER_OUTCOME' });
+        });
+        throw error;
+      }
+      const msgId = result?.messages?.[0]?.id;
+      if (!msgId || result.mock) throw new Error('A Meta não confirmou o envio; conciliação necessária.');
 
       // Gravar outbox / histórico de envios
       await store.transaction(async tx => {
-        const id = store.id(`outbox_${msgId}`);
+        const id = deliveryId;
         tx.set('whatsapp_delivery', id, {
           id,
           phone: rawPhone,
+          providerMessageId: msgId,
           text,
           status: 'SENT',
           sentBy: { id: req.user.id, name: req.user.name },
@@ -203,6 +240,35 @@ function installWhatsappAdminRoutes(app, { whatsapp, store }) {
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
+  });
+
+  app.post('/api/admin/whatsapp/conversations/:phone/reset-test-context', async (req, res) => {
+    if (req.user.role !== 'ADMIN') return res.sendStatus(403);
+    const phone = req.params.phone;
+    if (!process.env.WHATSAPP_TEST_PHONE || phone !== process.env.WHATSAPP_TEST_PHONE || req.body?.confirm !== 'RESET_CONVERSATION_CONTEXT') return res.sendStatus(409);
+    try {
+      const result = await require('../services/conversation-automation').resetConversationContext(store.repository, phone, req.user);
+      res.status(result.blocked ? 409 : 200).json(result);
+    } catch { res.sendStatus(503); }
+  });
+
+  app.post('/api/admin/whatsapp/catalog/authorize-sync', async (req, res) => {
+    if (req.user.role !== 'ADMIN' || req.body?.authorizeInitialSync !== true || !/^\d+$/.test(req.body?.catalogId || '') || req.body.catalogId !== process.env.WHATSAPP_META_CATALOG_ID) return res.sendStatus(403);
+    await store.transaction(async tx => {
+      const current = await tx.get('store_settings', 'whatsapp_commerce') || {};
+      tx.set('store_settings', 'whatsapp_commerce', { ...current, catalogId: req.body.catalogId, enabled: true,
+        initialSyncAuthorizedAt: current.initialSyncAuthorizedAt || new Date().toISOString(), authorizedBy: req.user.id });
+    });
+    res.json({ authorized: true, queued: 0 });
+  });
+  app.post('/api/admin/whatsapp/catalog/sync', async (req, res) => {
+    if (req.user.role !== 'ADMIN' || !Array.isArray(req.body?.productIds) || !req.body.productIds.length || req.body.productIds.length > 50) return res.sendStatus(403);
+    try {
+      const sync = new (require('../services/meta-catalog-sync.service').MetaCatalogSyncService)(store.repository);
+      const ids = [];
+      for (const id of new Set(req.body.productIds)) ids.push(await sync.queue(id, req.user));
+      res.json({ queued: ids });
+    } catch { res.sendStatus(400); }
   });
 }
 module.exports = { installWhatsappAdminRoutes };

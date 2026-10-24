@@ -20,43 +20,14 @@ class IncomingMessageService {
       if (current?.nextAttemptAt > this.now()) throw Object.assign(new Error('Mensagem em backoff.'), { status: 503 });
       if (current?.leaseUntil > this.now()) throw Object.assign(new Error('Mensagem em processamento. Tente novamente.'), { status: 503 });
 
-      // Agregação e concatenação durável de mensagens do mesmo remetente na janela curta de 3.5s
-      const phone = current?.payload?.phone;
-      if (phone) {
-        const senderKey = this.id(`aggregation_${phone}`);
-        const aggState = await tx.get('incoming_aggregations', senderKey);
-        const windowMs = Number(process.env.MESSAGE_AGGREGATION_WINDOW_MS) || 3500;
-        const now = this.now();
-
-        let aggregatedMessage = current?.payload?.message || '';
-        let messageIds = [messageId];
-
-        if (aggState && aggState.lastMessageAt && (now - aggState.lastMessageAt) < windowMs) {
-          if (aggState.aggregatedMessage) {
-            aggregatedMessage = `${aggState.aggregatedMessage}\n${aggregatedMessage}`;
-          }
-          if (Array.isArray(aggState.messageIds)) {
-            messageIds = [...new Set([...aggState.messageIds, messageId])];
-          }
-        }
-
-        tx.set('incoming_aggregations', senderKey, {
-          id: senderKey,
-          phone,
-          lastMessageAt: now,
-          processingMessageId: messageId,
-          aggregatedMessage,
-          messageIds,
-          updatedAt: new Date(now).toISOString(),
-        });
-
-        if (current?.payload) {
-          current.payload.message = aggregatedMessage;
-        }
-      }
-
+      if (!current?.payload) throw Object.assign(new Error('Evento de entrada não persistido.'), { status: 409 });
+      const phone = current.payload.phone;
+      const senderKey = this.id('processing:' + phone);
+      const sender = await tx.get('incoming_aggregations', senderKey);
+      if (sender?.leaseUntil > this.now() && sender.messageId !== messageId) throw Object.assign(new Error('Conversa em processamento.'), { status: 503 });
+      tx.set('incoming_aggregations', senderKey, { id: senderKey, phone, messageId, owner, leaseUntil: this.now() + 120000 });
       tx.set('incoming_messages', id, { ...current, id, status: 'PROCESSING', owner, attempts: Number(current?.attempts || 0) + 1, leaseUntil: this.now() + 120000, expiresAt: null });
-      return { id, owner };
+      return { id, owner, senderKey, payload: current.payload };
     });
   }
   async finish(claim, error = null) {
@@ -65,6 +36,8 @@ class IncomingMessageService {
       if (current?.status === 'COMPLETED') return;
       if (current?.owner !== claim.owner) throw new Error('A posse do processamento mudou.');
       const maximum = Math.max(1, Number(process.env.INCOMING_MAX_ATTEMPTS) || 12);
+      const sender = claim.senderKey ? await tx.get('incoming_aggregations', claim.senderKey) : null;
+      if (sender?.owner === claim.owner) tx.set('incoming_aggregations', claim.senderKey, { ...sender, leaseUntil: 0 });
       tx.set('incoming_messages', claim.id, { ...current,
         status: error ? (error.requiresReconciliation === true || current.attempts >= maximum ? 'NEEDS_RECONCILIATION' : 'PENDING') : 'COMPLETED',
         leaseUntil: 0, lastError: error ? 'PROCESSING_FAILED' : '',

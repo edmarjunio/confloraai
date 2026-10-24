@@ -12,21 +12,23 @@ async function conversationAutomation(repo, phone, { pauseReason, messageId = ''
     if (!pauseReason || current.automation === 'paused') return current;
     const now = new Date().toISOString();
     const handoffId = `hf_${messageId ? customerKeyFor(tenantId, messageId) : randomUUID()}`;
-    const paused = { ...current, automation: 'paused', handoffId, reason: pauseReason, pausedAt: now, updatedAt: now };
+    const paused = { ...current, automation: 'paused', version: Number(current.version || 0) + 1, handoffId, reason: pauseReason, pausedAt: now, updatedAt: now, customerPhone: phone };
     tx.set('agent_handoffs', handoffId, { id: handoffId, tenantId, customerKey, reason: pauseReason, status: 'open', createdAt: now, cartPreserved: true });
     tx.set('agent_conversations', id, paused);
     return paused;
   });
 }
 
-async function resumeAgentRequestedConversation(repo, phone) {
+async function resumeAgentRequestedConversation(repo, phone, actor) {
+  if (!actor?.id || !['ADMIN', 'CAIXA', 'VENDEDOR'].includes(actor.role)) throw Object.assign(new Error('Operador autorizado obrigatório.'), { status: 403 });
   const tenantId = 'conflora';
   const customerKey = customerKeyFor(tenantId, phone);
   const conversationId = scopedId(tenantId, customerKey);
 
   return runTransaction(repo, async tx => {
     const current = await tx.get('agent_conversations', conversationId);
-    if (!current || current.automation !== 'paused' || current.reason !== 'human_requested') return current;
+    if (!current || current.automation !== 'paused') return current;
+    if (current.assignedTo && current.assignedTo.id !== actor.id && actor.role !== 'ADMIN') throw Object.assign(new Error('Conversa atribuída a outro operador.'), { status: 409 });
 
     const now = new Date().toISOString();
     if (current.handoffId) {
@@ -36,7 +38,7 @@ async function resumeAgentRequestedConversation(repo, phone) {
           ...handoff,
           status: 'resumed',
           resumedAt: now,
-          resumedBy: { id: 'whatsapp_agent', role: 'AGENT' },
+          resumedBy: { id: actor.id, role: actor.role },
         });
       }
     }
@@ -45,7 +47,7 @@ async function resumeAgentRequestedConversation(repo, phone) {
       ...current,
       automation: 'active',
       resumedAt: now,
-      resumedBy: 'whatsapp_agent',
+      resumedBy: actor.id, assignedTo: null, version: Number(current.version || 0) + 1,
       updatedAt: now,
     };
     tx.set('agent_conversations', conversationId, resumed);
@@ -107,4 +109,19 @@ async function evaluateDailyReset(repo, phone, { now = new Date() } = {}) {
   });
 }
 
-module.exports = { conversationAutomation, resumeAgentRequestedConversation, setConversationChannel, evaluateDailyReset };
+async function resetConversationContext(repo, phone, actor = null) {
+  const id = scopedId('conflora', customerKeyFor('conflora', phone));
+  return runTransaction(repo, async tx => {
+    const current = await tx.get('agent_conversations', id) || { tenantId: 'conflora', customerKey: customerKeyFor('conflora', phone), automation: 'active' };
+    const session = await tx.get('sessions', phone) || {};
+    // Preserve every commercial draft and pending operation. Archive only conversational working context.
+    const sales = session.salesConversation;
+    if (sales && sales.items?.length && sales.stage !== 'ORDER_CREATED') return { blocked: true, reason: 'PENDING_CONVERSATIONAL_ORDER' };
+    const now = new Date().toISOString();
+    tx.set('sessions', phone, { ...session, salesConversation: null, previousSalesConversation: sales || session.previousSalesConversation || null });
+    const updated = { ...current, channel: 'menu', version: Number(current.version || 0) + 1, contextResetAt: now, contextResetBy: actor?.id || 'customer', updatedAt: now };
+    tx.set('agent_conversations', id, updated);
+    return { blocked: false, conversation: updated };
+  });
+}
+module.exports = { conversationAutomation, resumeAgentRequestedConversation, setConversationChannel, evaluateDailyReset, resetConversationContext };

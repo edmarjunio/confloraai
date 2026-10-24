@@ -61,6 +61,7 @@ class CatalogRepository {
   }
 
   async refreshCatalog() {
+    if (this.isCacheValid()) return;
     if (this.refreshPromise) {
       await this.refreshPromise;
       return;
@@ -83,7 +84,7 @@ class CatalogRepository {
 
 
     this.rawItems = rawItems;
-    this.expiresAt = 0;
+    this.expiresAt = this.now() + 15000;
     this.items = rawItems
       .filter((item) => (item.status || 'ATIVO').toUpperCase() === 'ATIVO')
       .filter(require('./commercial-product').hasValidCommercialPrice)
