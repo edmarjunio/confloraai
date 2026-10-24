@@ -35,6 +35,8 @@ export function createCatalog(state, add, navigate) {
   let purchaseError = '';
   let purchaseRevision = 0;
   let searchEventTimer;
+  let informationRevision = 0;
+  let detailsRevision = 0;
   const cardCache = new Map();
   const loadMoreButton = $("#loadMore");
 
@@ -156,6 +158,13 @@ export function createCatalog(state, add, navigate) {
   }
 
   async function openProductInformation(product) {
+    const revision = ++informationRevision;
+    const contextPath = location.pathname;
+    if (state.existingStore && product.detailsLoaded === false) {
+      try { product = await state.api('/products/' + encodeURIComponent(product.id)); }
+      catch (error) { notify(error.message); return; }
+      if (revision !== informationRevision || location.pathname !== contextPath) return;
+    }
     let buildProductInfoContent;
     try { ({ buildProductInfoContent } = await prepareProductInfo()); }
     catch { notify('could_not_load_details_reopen_the_store_to_update_the_version'.tr); return; }
@@ -646,9 +655,23 @@ export function createCatalog(state, add, navigate) {
     render();
   }
 
-  function details(id) {
-    const product = state.products.find((p) => p.id === id);
+  async function details(id) {
+    const revision = ++detailsRevision;
+    let product = state.products.find((p) => p.id === id);
     const view = $("#productView");
+    if (state.existingStore && (!product || product.detailsLoaded === false)) {
+      if (view.dataset.productId !== id) {
+        view.dataset.productId = id;
+        view.replaceChildren(element('h1', { text: product?.name || 'Produto' }), element('p', { role: 'status', text: 'Carregando informações do produto…' }));
+      }
+      try { product = await state.api('/products/' + encodeURIComponent(id)); }
+      catch (error) {
+        if (revision === detailsRevision && view.dataset.productId === id) view.replaceChildren(element('p', { role: 'alert', text: error.message }),
+          element('button', { type: 'button', text: 'Tentar novamente', onclick: () => { view.dataset.productId = ''; details(id); } }));
+        return;
+      }
+      if (revision !== detailsRevision || !location.pathname.endsWith('/products/' + encodeURIComponent(id))) return;
+    }
     view.replaceChildren(
       element("button", {
         class: "quiet",
@@ -691,7 +714,7 @@ export function createCatalog(state, add, navigate) {
         url: product.imageUrl || "/store-assets/placeholder.svg",
         alt: product.name,
       },
-      ...(product.images || []),
+      ...(product.images || []).map(image => typeof image === 'string' ? { url: image, alt: product.name } : image),
     ].filter(
       (image, index, all) =>
         all.findIndex((i) => i.url === image.url) === index,
@@ -751,6 +774,8 @@ export function createCatalog(state, add, navigate) {
     view.append(
       element("div", { class: "detail-grid" }, [
         element("div", { class: "detail-gallery" }, [
+          ...(product.media?.gallery || []).filter(image => image.attribution).map(image => element('small', { class: 'product-media-attribution', text: image.attribution },
+            image.licenseUrl ? [element('a', { href: image.licenseUrl, text: ' · Licença', target: '_blank', rel: 'noopener noreferrer' })] : [])),
           element("div", { class: "detail-hero" }, [
             mainPhoto,
           ]),

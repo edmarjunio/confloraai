@@ -9,7 +9,7 @@ test('legacy catalogue is discarded while the new public cache renders during re
     return Boolean(await createPublicCatalog('main:conflora').read());
   })).toBe(true);
   await page.evaluate(() => new Promise((resolve, reject) => {
-    const request = window.indexedDB.open('cf-public-20261023-reset1', 1);
+    const request = window.indexedDB.open('cf-public-20261023-real-products1', 1);
     request.onerror = () => reject(request.error);
     request.onsuccess = () => {
       const db = request.result;
@@ -23,7 +23,7 @@ test('legacy catalogue is discarded while the new public cache renders during re
   }));
   let release;
   const gate = new Promise(resolve => { release = resolve; });
-  await page.route('**/api/storefront/catalog', async route => {
+  await page.route(/\/api\/storefront\/catalog(?:\?.*)?$/, async route => {
     await gate;
     const response = await route.fetch();
     const data = await response.json();

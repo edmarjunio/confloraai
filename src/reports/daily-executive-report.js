@@ -101,4 +101,23 @@ function normalizeWhatsAppNumber(value) {
   return /^55\d{10,11}$/.test(normalized) ? normalized : '';
 }
 
-module.exports = { formatDailyExecutiveReport, normalizeWhatsAppNumber };
+function formatCompactClosing(metrics, counted = {}, sessions = []) {
+  const top = (rows, byValue) => rows?.length ? rows.slice(0, 3).map(row => `${safeText(row.name)}: ${byValue ? currency(row.revenue) : row.quantity + ' un.'}`).join(' · ') : 'Sem vendas';
+  return [
+    `*CONFLORA · FECHAMENTO GERAL DE TODOS OS CAIXAS*`,
+    `Data: ${formatDate(metrics.date)}`,
+    `*Vendas: ${currency(metrics.totalRevenue)} · ${metrics.orderCount} vendas*`,
+    `Recebido em vendas: *${currency(metrics.totalReceivedSales)}*`,
+    `Ticket médio: ${currency(metrics.ticketMedio)}`,
+    `Fiado: ${currency(metrics.onAccountSales)} · Dívidas recebidas: ${currency(metrics.debtReceived)}`,
+    ...sessions.map(row => `${safeText(row.name)} · Caixa ${safeText(row.id).slice(0, 8)}\nTroco do dia: ${currency(row.openingFloat)}\nRecebimentos em dinheiro: ${currency(row.expected.cashReceipts)}\nTotal em dinheiro esperado (troco + recebimentos): ${currency(row.expected.cash)}\nDinheiro contado: ${currency(row.counted.cash)}\nDiferença em dinheiro: ${currency(row.differences.cash)}`),
+    `*Total Conferido em Caixa*`,
+    `Dinheiro: ${currency(counted.cash)} · Pix: ${currency(counted.pix)}`,
+    `Débito: ${currency(counted.debit)} · Crédito: ${currency(counted.credit)}`,
+    `Fundo de caixa: ${currency(counted.openingFloat)} · Diferença: *${currency(counted.difference)}*`,
+    `*TOP 3 · QUANTIDADE*`, top(metrics.topProductsByQuantity, false),
+    `*TOP 3 · VALOR*`, top(metrics.topProductsByValue, true),
+    `Todos os caixas fechados. Fundo de caixa não é venda.`,
+  ].join('\n');
+}
+module.exports = { formatDailyExecutiveReport, formatCompactClosing, normalizeWhatsAppNumber };

@@ -23,7 +23,7 @@ function installStorefront(app, { express, firestore, repository, assistant }) {
   const brandImages = new Map();
   app.get('/storefront/sw.js', (_req, res) => {
     res.set('Service-Worker-Allowed', '/').set('Cache-Control', 'no-cache')
-      .sendFile(path.join(assets, exists(path.join(assets, 'sw-built.js')) ? 'sw-built.js' : 'sw.js'));
+      .sendFile(exists(path.join(assets, 'sw-built.js')) ? 'sw-built.js' : 'sw.js', { root: assets });
   });
   app.get("/store-assets/brands/:file", async (req, res, next) => {
     if (!/^[a-zA-Z0-9_-]+\.(png|jpg|jpeg|webp)$/.test(req.params.file)) {
@@ -81,7 +81,7 @@ function installStorefront(app, { express, firestore, repository, assistant }) {
         );
         res
           .set("Cache-Control", "no-store")
-          .sendFile(shell());
+          .sendFile(path.basename(shell()), { root: assets });
       } catch (error) {
         next(error);
       }

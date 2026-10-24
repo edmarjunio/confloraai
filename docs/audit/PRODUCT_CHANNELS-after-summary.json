@@ -1,0 +1,53 @@
+{
+  "at": "2026-10-24T14:07:06.349Z",
+  "sourceAt": "2026-10-24T11:18:15.312Z",
+  "mode": "READ_ONLY_SOURCE_AND_ISOLATED_HTTP",
+  "count": 759,
+  "counts": {
+    "active": 754,
+    "storefront": 757,
+    "visible": 754,
+    "cashier": 754,
+    "inventory": 759
+  },
+  "routeMetrics": [
+    {
+      "url": "/api/storefront/catalog",
+      "bytes": 1109560,
+      "elapsedMs": 137.22,
+      "environment": "ISOLATED_IN_PROCESS_HTTP_NOT_NETWORK_OR_FIRESTORE_LATENCY"
+    },
+    {
+      "url": "/api/caixa/products",
+      "bytes": 739976,
+      "elapsedMs": 77.79,
+      "environment": "ISOLATED_IN_PROCESS_HTTP_NOT_NETWORK_OR_FIRESTORE_LATENCY"
+    },
+    {
+      "url": "/api/inventory",
+      "bytes": 3134562,
+      "elapsedMs": 57.23,
+      "environment": "ISOLATED_IN_PROCESS_HTTP_NOT_NETWORK_OR_FIRESTORE_LATENCY"
+    },
+    {
+      "url": "/api/storefront/catalog?projection=list",
+      "bytes": 902012,
+      "elapsedMs": 10.24,
+      "environment": "ISOLATED_IN_PROCESS_HTTP_NOT_NETWORK_OR_FIRESTORE_LATENCY"
+    },
+    {
+      "url": "/api/caixa/products?projection=list",
+      "bytes": 606168,
+      "elapsedMs": 80.38,
+      "environment": "ISOLATED_IN_PROCESS_HTTP_NOT_NETWORK_OR_FIRESTORE_LATENCY"
+    },
+    {
+      "url": "/api/storefront/products/prd-003c5efff4c0cc18af4895ee738ff9df",
+      "bytes": 1324,
+      "elapsedMs": 1.37,
+      "environment": "ISOLATED_IN_PROCESS_HTTP_NOT_NETWORK_OR_FIRESTORE_LATENCY"
+    }
+  ],
+  "divergentFieldCount": 0,
+  "fingerprintNote": "SHA256 of field values. Missing channel and empty field differ; intentional projections are explained in the audit report."
+}

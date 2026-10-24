@@ -4,6 +4,7 @@ const { getCashierProductDetails } = require('../src/catalog/cashier-product-det
 
 test('cashier product details expose registered care, habitat and feeding notes', () => {
   const details = getCashierProductDetails({
+    contentProvenance: { kind: 'STAFF_CONFIRMED', confirmedBy: 'isolated-staff', confirmedAt: '2026-10-23', fields: ['descriptionAi', 'cuidados_basicos', 'iluminacao', 'habitat', 'alimentacao'] },
     descriptionAi: 'Planta ornamental para jardim.',
     cuidados_basicos: 'Regar quando o substrato estiver seco.',
     iluminacao: 'Luz indireta.',

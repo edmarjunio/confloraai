@@ -1,0 +1,19 @@
+{
+  "at": "2026-10-24T14:07:05.006Z",
+  "mode": "READ_ONLY",
+  "project": "confloraai",
+  "database": "(default)",
+  "edition": "STANDARD",
+  "location": "southamerica-east1",
+  "returned": 2,
+  "pagination": {
+    "limit": 2,
+    "hasMore": true,
+    "nextCursor": "prd-007c7a1e1ab80b462e268b06cd5ee0c9",
+    "scannedCount": 2,
+    "order": "DOCUMENT_ID",
+    "totalItems": null
+  },
+  "elapsedMs": 986.39,
+  "note": "Uma consulta real limitada a 3 documentos. Tempo isolado inclui conexão/ADC; não representa LCP ou p75."
+}

@@ -1,5 +1,7 @@
 # Preparação para dados reais — 23/10/2026
 
+> Relatório histórico: os resultados abaixo não homologam a revisão atual do atendimento WhatsApp. Ver [WHATSAPP_IMPLEMENTATION.md](WHATSAPP_IMPLEMENTATION.md): configuração Meta e sessão explícita de testes ainda pendentes, sem deploy ou mensagens reais.
+
 ## Fluxo e autoridade dos dados
 
 Loja, caixa e WhatsApp enviam IDs e quantidades ao backend. O backend lê os registros atuais do Firestore e valida produto, preço, unidade, estoque, identidade, permissão e pagamento. Uma falha de leitura não autoriza usar dados comerciais antigos ou registrar uma venda em memória. O armazenamento em memória dos testes fica restrito ao ambiente isolado; o simulador Sicredi possui armazenamento descartável próprio.

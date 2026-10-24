@@ -2,8 +2,9 @@ require('../i18n/default');
 const { createHash, randomUUID } = require('node:crypto');
 const { createWebSessions, safeUser } = require('../security/web-session');
 const { StorefrontAnalyticsService, campaignLabel } = require('../services/storefront-analytics.service');
-const { resolveHdProductImage } = require('../catalog/image-resolver');
-const { getCashierProductDetails } = require('../catalog/cashier-product-details');
+const { actualProductImages, actualProductPhotoFields, actualPhotoProvenance } = require('../catalog/actual-product-photo');
+const { normalizeProductMedia, reviewExternalMedia } = require('../catalog/product-media');
+const { toCashierProduct } = require('../catalog/cashier-product-details');
 const { normalizeDeliveryLocation } = require('../orders/pdv.service');
 let expressModule = null;
 function getExpress() {
@@ -38,63 +39,10 @@ function withoutIdempotencyFingerprint(order) {
 }
 
 function getProductImageCandidates(product = {}) {
-  const images = [
-    ...(Array.isArray(product.images) ? product.images : []),
-    ...(Array.isArray(product.imagePaths) ? product.imagePaths : []),
-    product.imageUrl,
-    product.imageurl,
-    product.imageURL,
-    product.image_url,
-    product.imagePathCache,
-    product.imagePath,
-    product.storagePath,
-    product.photoUrl,
-    product.fotoUrl,
-  ]
-    .map((image) => (typeof image === 'string' ? image : image?.url || image?.imageUrl || image?.src || image?.downloadURL || image?.storagePath || image?.fullPath || image?.path || ''))
-    .filter(Boolean);
-  const registeredImages = [...new Set([
-    ...images,
-  ].filter(isRenderableProductImageUrl))];
-  const imageFileId = String(product.imageFileId || product.image_file_id || '').trim();
-  const storageImageProxy = imageFileId
-    ? `/api/images/${encodeURIComponent(imageFileId)}`
-    : '';
-  if (registeredImages.length) {
-    return [...new Set([...registeredImages, storageImageProxy].filter(Boolean))];
-  }
-  if (storageImageProxy) {
-    return [storageImageProxy];
-  }
-
-  const illustrativeImage = resolveHdProductImage(
-    product.name || product.descricao || '',
-    product.category || product.categoria || '',
-    product.subcategory || product.subcategoria || '',
-  );
-  return illustrativeImage ? [illustrativeImage] : [];
+  return actualProductImages(product);
 }
 
-function isRenderableProductImageUrl(value) {
-  if (typeof value !== 'string') return false;
-  const source = value.trim();
-  return Boolean(source) && (
-    /^https:\/\/(?:firebasestorage|storage)\.googleapis\.com\//i.test(value.trim()) ||
-    /^https:\/\/images\.unsplash\.com\//i.test(source) ||
-    /^\/api\/images\//i.test(value.trim()) ||
-    /^\/store-assets\//i.test(value.trim()) ||
-    /^gs:\/\/[a-z0-9._-]+\/products\/[a-z0-9_-]+\/[a-z0-9._-]+$/i.test(source) ||
-    /^products\/[a-z0-9_-]+\/[a-z0-9._-]+$/i.test(source)
-  );
-}
-
-function getCashierProductImageCandidates(product = {}) {
-  return [...new Set(
-    getProductImageCandidates(product)
-      .map((image) => String(image || '').trim())
-      .filter((image) => isRenderableProductImageUrl(image) || /^https:\/\/images\.unsplash\.com\//i.test(image)),
-  )];
-}
+const getCashierProductImageCandidates = getProductImageCandidates;
 
 const config = require('../config/env');
 const { verifyFirebaseToken } = require('../security/firebase-auth');
@@ -267,55 +215,19 @@ function renderTermsOfServiceHtml() {
 </html>`;
 }
 
-function whatsappCustomerPhone(phone) {
-  const digits = String(phone || '').replace(/\D/g, '');
-  return digits && !digits.startsWith('55') && digits.length <= 11
-    ? `55${digits}`
-    : digits;
-}
-
-async function sendCustomerOrderReceipt(whatsappClient, phone, receiptText) {
-  const targetPhone = whatsappCustomerPhone(phone);
-  if (!/^\d{12,15}$/.test(targetPhone)) {
-    return { sent: false, reason: 'invalid_or_missing_customer_phone_number'.tr };
-  }
-  const template = config.whatsapp.templates.customerOrder;
-  if (!template) {
-    return { sent: false, reason: 'configure_an_approved_whatsapp_receipt_template'.tr };
-  }
-  try {
-    const result = await whatsappClient.sendTemplate(
-      targetPhone,
-      template,
-      config.whatsapp.templates.language,
-      [
-        {
-          type: 'body',
-          parameters: [{ type: 'text', text: receiptText }],
-        },
-      ],
-    );
-    if (result?.mock || result?.success === false) {
-      return { sent: false, reason: 'whatsapp_without_valid_credentials_or_unconfirmed_sending'.tr };
-    }
-    return { sent: true };
-  } catch (error) {
-    Logger.error('failed_to_send_order_receipt_via_whatsapp'.tr, error);
-    return { sent: false, reason: 'could_not_send_receipt_via_whatsapp'.tr };
-  }
+async function sendCustomerOrderReceipt(app, order) {
+  const id = order.id + '-receipt';
+  await app.locals.pdv.store.transaction(async tx => {
+    if (await tx.get('pdv_outbox', id)) return;
+    tx.set('pdv_outbox', id, { id, orderId: order.id, kind: 'receipt', status: 'PENDING', attempts: 0 });
+  });
+  await app.locals.pdv.service.deliver(id);
+  const job = await app.locals.pdv.store.read('pdv_outbox', id);
+  return { sent: job?.status === 'SENT' && !job.skipped, reason: job?.lastError || '' };
 }
 
 async function prepareSicrediCheckoutOrder({ app, sicrediClient, taskQueueClient, order }) {
-  if (order.paymentMethod !== 'PIX' || order.pixMode === 'MANUAL') {
-    const id = `${order.id}-receipt`;
-    await app.locals.pdv.store.transaction(async (tx) => {
-      if (await tx.get('pdv_outbox', id)) return;
-      tx.set('pdv_outbox', id, { id, orderId: order.id, kind: 'receipt', status: 'PENDING', attempts: 0 });
-    });
-    await app.locals.pdv.service.deliver(id);
-    const job = await app.locals.pdv.store.read('pdv_outbox', id);
-    return { order, receiptDelivery: { sent: job?.status === 'SENT' && !job.skipped, reason: job?.lastError || '' } };
-  }
+  if (order.paymentMethod !== 'PIX' || order.pixMode === 'MANUAL') return { order, receiptDelivery: await sendCustomerOrderReceipt(app, order) };
   if (order.pixProvider !== 'SICREDI' || !order.pixData?.txid) {
     return { order, receiptDelivery: { sent: false, reason: 'pix_order_prior_to_sicredi_integration_do_not_generate_a_new_charge'.tr } };
   }
@@ -498,7 +410,7 @@ function createApp({
   app.use('/api/admin', (req, res, next) => {
     if (req.path === '/auth/login' || (req.path === '/auth/users' && req.method === 'GET')) {return next();}
     if (!req.user) {return res.status(401).json({ error: 'sign_in_to_your_account_249741'.tr });}
-    const cashierRoute = /^(?:\/orders(?:\/manual)?|\/daily-metrics|\/stock\/quick-entry|\/alterations|\/notifications(?:\/[^/]+\/read)?)$/.test(req.path);
+    const cashierRoute = /^(?:\/orders(?:\/manual)?|\/daily-metrics|\/stock\/quick-entry|\/alterations|\/notifications(?:\/[^/]+\/read)?)$/.test(req.path) || /^\/whatsapp\/conversations(?:\/|$)/.test(req.path);
     if (req.user.role !== 'ADMIN' && !(["CAIXA", 'VENDEDOR'].includes(req.user.role) && cashierRoute)) {
       return res.status(403).json({ error: 'unauthorized_access_for_this_profile'.tr });
     }
@@ -518,7 +430,7 @@ function createApp({
     }
     res.setHeader('Cache-Control', 'no_store'.tr);
     const shellPath = require('node:path').resolve(__dirname, '../../public/storefront/shell.html');
-    return res.sendFile(require('node:fs').existsSync(shellPath) ? shellPath : require('node:path').resolve(__dirname, '../../public/storefront/index.html'));
+    return res.sendFile(require('node:fs').existsSync(shellPath) ? 'shell.html' : 'index.html', { root: require('node:path').dirname(shellPath) });
   });
   app.get('/catalogo-classico', (_req, res) => res.redirect(308, '/'));
 
@@ -622,11 +534,30 @@ function createApp({
     if (body.object !== 'whatsapp_business_account' || !Array.isArray(body.entry)) {
       return res.sendStatus(200);
     }
+    if (!process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || !config.whatsapp.phoneNumberId) {
+      Logger.error('Recebimento WhatsApp bloqueado: configure a conta e o número oficiais antes de aceitar eventos.');
+      return res.sendStatus(503);
+    }
 
     try {
     for (const entry of body.entry) {
       for (const change of entry.changes || []) {
         const value = change.value;
+        if (!['messages', 'smb_message_echoes'].includes(change.field)) {
+          Logger.debug('Evento WhatsApp ignorado: campo sem consumidor neste webhook.', { field: change.field || 'missing' });
+          continue;
+        }
+        if (!process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || entry.id !== process.env.WHATSAPP_BUSINESS_ACCOUNT_ID ||
+            !config.whatsapp.phoneNumberId || value?.metadata?.phone_number_id !== config.whatsapp.phoneNumberId) {
+          Logger.warn('Evento WhatsApp recusado: conta/número não conferem com a configuração.',
+            require('../integrations/whatsapp-diagnostics').eventDiagnostic(entry, change, config));
+          continue;
+        }
+        if (change.field === 'smb_message_echoes') {
+          await require('../services/whatsapp-echo.service').processHumanEcho(messageService.firestoreRepo, value);
+          continue;
+        }
+        if (change.field !== 'messages') continue;
         for (const status of Array.isArray(value?.statuses) ? value.statuses : []) {
           if (!status.id || !['sent', 'delivered', 'read', 'failed'].includes(status.status)) continue;
           if (typeof app.locals.pdv?.store?.recordWhatsAppStatus === 'function') { await app.locals.pdv.store.recordWhatsAppStatus(status); }
@@ -640,9 +571,25 @@ function createApp({
           const messageId = msg.id;
           const isMedia = Boolean(msg.image || msg.document);
           const mediaCaption = msg.image?.caption || msg.document?.caption || '';
-          const interactiveId = msg.interactive?.button_reply?.id || msg.interactive?.list_reply?.id || '';
+          if (!/^\d{10,15}$/.test(phone || '') || typeof messageId !== 'string' || !messageId.startsWith('wamid.') || messageId.length > 512) continue;
+          const interactiveId = require('../integrations/whatsapp-inbound').normalizeAction(msg);
           const buttonText = msg.button?.text || msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || '';
-          const text = msg.text?.body || buttonText || mediaCaption || (isMedia ? '[COMPROVANTE_ENVIADO]' : '');
+          let commerceOrder = null;
+          if (msg.type === 'order') {
+            try { commerceOrder = require('../integrations/whatsapp-inbound').normalizeOrder(msg.order); }
+            catch {
+              const rejectedId = incoming.id(messageId);
+              const newRejectedEvent = await incoming.store.transaction(async tx => {
+                if (await tx.get('incoming_messages', rejectedId)) return false;
+                tx.set('incoming_messages', rejectedId, { id: rejectedId, payload: { phone, message: '[CARRINHO_META_INVALIDO]', messageId },
+                  status: 'NEEDS_RECONCILIATION', attempts: 0, lastError: 'INVALID_META_CART', createdAt: new Date().toISOString(), expiresAt: null });
+                return true;
+              });
+              if (newRejectedEvent) await require('../services/conversation-automation').conversationAutomation(messageService.firestoreRepo, phone, { pauseReason: 'invalid_meta_cart', messageId });
+              continue;
+            }
+          }
+          const text = msg.text?.body || buttonText || mediaCaption || (commerceOrder ? '[CARRINHO_META]' : isMedia ? '[COMPROVANTE_ENVIADO]' : '');
           const customerName = value.contacts?.[0]?.profile?.name || '';
 
           if (!text && !isMedia) {
@@ -651,14 +598,22 @@ function createApp({
 
           systemStatusService.recordWebhookHit(phone);
 
-          const taskPayload = { phone, message: text, ...(interactiveId ? { interactiveId } : {}), customerName, messageId };
+          if (text.length > 4096 || interactiveId.length > 256) continue;
+          const taskPayload = { phone, message: text, ...(interactiveId ? { interactiveId } : {}), ...(commerceOrder ? { commerceOrder } : {}), customerName, messageId,
+            receivedByRevision: process.env.K_REVISION || process.env.APP_REVISION || 'local' };
 
           await incoming.accept(taskPayload);
+          Logger.debug('Evento WhatsApp persistido na inbox.', { eventFingerprint: incoming.id(messageId).slice(0, 12),
+            assistantEnabled: config.whatsapp.assistantEnabled, field: change.field, inputType: msg.type || 'text',
+            revision: process.env.K_REVISION || process.env.APP_REVISION || 'local' });
           if (process.env.NODE_ENV === 'production' && config.whatsapp.assistantEnabled && taskQueueClient) {
             await taskQueueClient.enqueueProcessMessage(taskPayload).catch(error => Logger.warn('message_persisted_queue_will_be_resumed_by_the_worker'.tr, { messageId, error: error.message }));
           }
           // The durable inbox is authoritative even when Cloud Tasks is unavailable.
-          if (process.env.NODE_ENV !== 'production') setImmediate(() => messageService.handleCustomerMessage({ ...taskPayload, ...(!config.whatsapp.assistantEnabled ? { verifyOnly: true } : {}) }).catch(() => {}));
+          if (process.env.NODE_ENV !== 'production') setImmediate(() => messageService.handleCustomerMessage({ ...taskPayload, ...(!config.whatsapp.assistantEnabled ? { verifyOnly: true } : {}) }).catch(error => {
+            Logger.error('Falha ao processar evento WhatsApp persistido; conferir inbox e reconciliação.', error,
+              { code: 'WHATSAPP_MESSAGE_PROCESSING_FAILED', eventFingerprint: incoming.id(messageId).slice(0, 12), diagnosticCode: error.diagnosticCode || null });
+          }));
         }
       }
     }
@@ -691,22 +646,26 @@ function createApp({
     res.setHeader('Pragma', 'no_cache'.tr);
     res.setHeader('Expires', '0');
     try {
-      let products = await messageService.firestoreRepo.getAllProducts();
+      const limit = req.query.limit === undefined ? null : Number(req.query.limit);
+      if (req.query.page && Number(req.query.page) !== 1) return res.status(400).json({ error: 'Use o cursor after retornado pela página anterior.' });
+      const page = limit === null ? null : await messageService.firestoreRepo.getProductsPage({ limit, after: req.query.after || '' });
+      let products = page ? page.products : await (messageService.catalogRepo?.readProducts
+        ? messageService.catalogRepo.readProducts() : messageService.firestoreRepo.getAllProducts());
       // Inventory is independent of historical sales; reports own that workload.
       products = products.map((product) => {
         const imageCandidates = getProductImageCandidates(product);
         return {
           ...product,
+          ...actualProductPhotoFields(product),
+          ...require('../catalog/registered-product-content').registeredProductContent(product),
           images: imageCandidates,
           imageUrl: imageCandidates[0] || '',
           imageurl: imageCandidates[0] || '',
-          imageIsIllustrative: /^https:\/\/images\.unsplash\.com\//i.test(imageCandidates[0] || ''),
+          imageIsIllustrative: false,
           imageFallbackUrl: '/store-assets/placeholder.svg',
         };
       });
 
-      const limit = Number.parseInt(req?.query?.limit, 10);
-      const page = Number.parseInt(req?.query?.page, 10) || 1;
       const category = req?.query?.category ? String(req.query.category).trim().toLowerCase() : '';
       const search = req?.query?.search ? String(req.query.search).trim().toLowerCase() : '';
 
@@ -731,26 +690,19 @@ function createApp({
         movements = [];
       }
 
-      if (limit && limit > 0) {
-        const startIndex = (page - 1) * limit;
-        const endIndex = startIndex + limit;
-        const paginatedProducts = filteredProducts.slice(startIndex, endIndex);
+      if (page) {
         return res.status(200).json({
-          products: paginatedProducts,
+          products: filteredProducts,
           movements: movements || [],
           pagination: {
-            page,
-            limit,
-            totalItems: filteredProducts.length,
-            totalPages: Math.ceil(filteredProducts.length / limit),
-            hasMore: endIndex < filteredProducts.length,
+            ...page.pagination, filterScope: 'SCANNED_PAGE',
           },
         });
       }
 
       res.status(200).json({ products: filteredProducts, movements: movements || [] });
-    } catch {
-      res.status(503).json({ error: 'catalog_unavailable_please_try_again'.tr });
+    } catch (error) {
+      res.status(error.status === 400 ? 400 : 503).json({ error: error.status === 400 ? error.message : 'catalog_unavailable_please_try_again'.tr });
     }
   };
 
@@ -780,6 +732,9 @@ function createApp({
 
   // Mantém compatibilidade de URL redirecionando IDs de imagem para o Firebase Storage.
   app.get('/api/images/:id', async (req, res) => {
+    // Stable metadata IDs can change or lose approval. Cache immutable Storage
+    // bytes, never a redirect that could restore a removed/reference photograph.
+    res.setHeader('Cache-Control', 'no-store');
     try {
       const { id } = req.params;
       const photo = await messageService.firestoreRepo.getProductPhoto(id);
@@ -791,15 +746,16 @@ function createApp({
         res.setHeader('Content-Type', contentType);
         return res.status(200).send(Buffer.from(photo.data, 'base64'));
       }
-      if (photo?.imageUrl && photo.imageUrl !== `/api/images/${id}`) {
-        // The photo ID can be repointed; only content-hashed URLs are immutable.
-        res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
-        return res.redirect(302, photo.imageUrl);
-      }
       const cleanProdId = String(photo?.productId || id.replace(/^img_/, ''));
       const prod = await messageService.firestoreRepo.getProductById(cleanProdId);
-      if (prod && isRenderableProductImageUrl(prod.imageUrl) && prod.imageUrl.startsWith('https://')) {
-        return res.redirect(prod.imageUrl);
+      const approvedImages = actualProductImages(prod || {});
+      if (photo?.imageUrl && approvedImages.includes(photo.imageUrl)) {
+        // The photo ID can be repointed; only content-hashed URLs are immutable.
+        res.setHeader('Cache-Control', 'no-store');
+        return res.redirect(302, photo.imageUrl);
+      }
+      if (approvedImages[0]) {
+        return res.redirect(approvedImages[0]);
       }
       return res.redirect(302, '/store-assets/placeholder.svg');
     } catch (err) {
@@ -1384,10 +1340,10 @@ function createApp({
   app.post('/api/admin/orders/manual', async (req, res) => {
     try {
       const { customerName, customerPhone, items, paymentMethod, notes } = req.body;
-      if (!Array.isArray(items) || items.length === 0) {
+      if (!Array.isArray(items) || items.length === 0 || items.length > 150) {
         return res.status(400).json({ error: 'no_products_added_to_the_sale'.tr });
       }
-      const products = await messageService.firestoreRepo.getAllProducts();
+      const products = await messageService.firestoreRepo.getProductsByIds(items.map(item => item.productId));
       const productsById = new Map(products.map((product) => [String(product.id), product]));
       const normalizedItems = [];
       for (const item of items) {
@@ -1439,11 +1395,7 @@ function createApp({
       });
       let receiptDelivery = { sent: false, reason: 'shipping_not_requested'.tr };
       if (resolvedPaymentMethod === 'PIX') {
-        receiptDelivery = await sendCustomerOrderReceipt(
-          messageService.whatsappClient,
-          customerPhone,
-          receiptText,
-        );
+        receiptDelivery = await sendCustomerOrderReceipt(app, order);
         if (!receiptDelivery.sent) {
           Logger.warn('manual_pix_sale_created_unable_to_send_receipt_to_customer'.tr, {
             orderId: order.id,
@@ -1551,62 +1503,37 @@ function createApp({
       const existing = await messageService.firestoreRepo.getProductById(product.id);
       if (existing) {
         if (existing.createdBy?.id !== req.user.id || existing.name !== name) return res.status(409).json({ error: 'Este cadastro já foi utilizado. Reabra o formulário.' });
-        return res.status(200).json({ success: true, product: existing });
+        return res.status(200).json({ success: true, product: toCashierProduct(existing) });
       }
       await messageService.firestoreRepo.saveProduct(product);
       messageService.catalogRepo?.invalidateCache?.();
       messageService.metaAgentService?.productIndex?.invalidate?.();
-      return res.status(201).json({ success: true, product: { ...product, imageUrl: '', images: [], imageFileId: '', descriptionAi: '', tagsAi: '' } });
+      return res.status(201).json({ success: true, product: toCashierProduct(await messageService.firestoreRepo.getProductById(product.id)) });
     } catch (error) {
       Logger.error('error_saving_quick_cashier_product'.tr, error);
       return res.status(error.status || 500).json({ error: error.message || 'unable_to_save_product'.tr });
     }
   });
 
-  app.get('/api/caixa/products', async (_req, res) => {
+  app.get('/api/caixa/products', async (req, res) => {
     try {
-      const products = await messageService.firestoreRepo.getAllProducts();
+      const products = await (messageService.catalogRepo?.readProducts
+        ? messageService.catalogRepo.readProducts() : messageService.firestoreRepo.getAllProducts());
       const active = products
-        .filter((p) => String(p.status || p.STATUS || '').trim().toUpperCase() === 'ATIVO')
-        .map((p) => {
-          const imageCandidates = getCashierProductImageCandidates(p);
-          const imageUrl = imageCandidates[0] || '';
-          const name = p.name || p.descricao || 'product'.tr;
-          const savedUnit = String(p.saleUnit?.code || p.unit || p.unidade || '').trim().toUpperCase();
-          const unit = savedUnit || (/(^|[^A-Z])KG([^A-Z]|$)/i.test(name) ? 'kg_88ed32099f'.tr : 'UN');
-
-          return {
-            id: p.id,
-            status: String(p.status || p.STATUS || '').trim().toUpperCase(),
-            name,
-            price: Number(p.price || p.valor_num || 0),
-            stock: Number(p.stockQuantity ?? p.estoque ?? 0),
-            unit,
-            saleUnit: {
-              code: unit,
-              label: p.saleUnit?.label || (unit === 'UN' ? 'unit_a9959d28d9'.tr : unit),
-              minimum: Number(p.saleUnit?.minimum) || (unit === 'KG' ? 0.1 : 1),
-              increment: Number(p.saleUnit?.increment) || (unit === 'KG' ? 0.1 : 1),
-            },
-            category: p.category || p.categoria || '',
-            subcategory: p.subcategory || p.subcategoria || '',
-            canonicalName: p.canonicalName || p.canonical_name || '',
-            variation: p.variation || p.variacao || '',
-            imageUrl,
-            images: imageCandidates,
-            imageFileId: p.imageFileId || p.image_file_id || '',
-            imageIsIllustrative: /^https:\/\/images\.unsplash\.com\//i.test(imageUrl),
-            imagePathCache: p.imagePathCache || '',
-            imageFallbackUrl: '/store-assets/placeholder.svg',
-            descriptionAi: p.descriptionAi || p.descricao_ia || '',
-            tagsAi: p.tagsAi || p.tags_ia || '',
-            details: getCashierProductDetails(p),
-          };
-        });
+        .filter(p => require('../catalog/commercial-product').commercialProduct(p).active && require('../catalog/commercial-product').hasValidCommercialPrice(p))
+        .map(product => toCashierProduct(product, { details: req.query.projection !== 'list' }));
       res.status(200).json(active);
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
+  });
+
+  app.get('/api/caixa/products/:id', async (req, res) => {
+    try {
+      const product = await messageService.firestoreRepo.getProductById(req.params.id);
+      if (!product || !require('../catalog/commercial-product').commercialProduct(product).active || !require('../catalog/commercial-product').hasValidCommercialPrice(product)) return res.status(404).json({ error: 'Produto não encontrado.' });
+      res.set('Cache-Control', 'no-store').json(toCashierProduct(product));
+    } catch { res.status(503).json({ error: 'Não foi possível consultar o produto.' }); }
   });
 
   app.get('/api/caixa/customers', async (req, res) => {
@@ -1716,10 +1643,57 @@ function createApp({
   app.post('/api/admin/products', async (req, res) => {
     try {
       const product = req.body;
+      const previousProduct = product.id ? await messageService.firestoreRepo.getProductById(product.id) : null;
+      const externalMedia = product.externalMedia;
+      for (const field of ['externalMedia', 'productMedia', 'media', 'productInfo', 'reservedQuantity']) delete product[field];
+      let photoUpdate;
+      if (req.get('X-Product-Photos-Update') === 'true') {
+        const previous = await messageService.firestoreRepo.getProductById(product.id);
+        const allowed = actualProductImages(previous);
+        const selected = product.images;
+        if (!previous || !Array.isArray(selected) || selected.some(url => !allowed.includes(url))) return res.status(400).json({ error: 'Use o upload de fotos reais antes de selecionar imagens do produto.' });
+        // Only explicit reordering/removal of existing attested photos. Price
+        // edits cannot erase unreviewed historical references by accident.
+        if (allowed.length) {
+          const approved = normalizeProductMedia(previous).entries;
+          const entries = [...new Set(selected)].map(url => approved.find(entry => entry.url === url)).sort((a, b) => Number(b.manual) - Number(a.manual));
+          const paths = entries.map(entry => entry.storagePath);
+          photoUpdate = { images: entries.map(entry => entry.url), imageUrl: entries[0]?.url || '', imagePath: paths[0] || '', imagePaths: paths,
+            productMedia: { version: 1, entries }, imageProvenance: { ...previous.imageProvenance, storagePaths: paths.filter(Boolean) } };
+        }
+      }
+      delete product.imageProvenance;
+      delete product.contentProvenance;
+      // Photo writes have their own authenticated upload contract. A masked/old
+      // listing submitted while editing price must never erase stored references.
+      for (const field of ['imageUrl', 'images', 'imagePath', 'imagePaths', 'imagePathCache', 'imageFileId', 'imageIsIllustrative']) delete product[field];
+      if (photoUpdate) Object.assign(product, photoUpdate);
+      if (externalMedia?.length) {
+        const merged = { ...previousProduct, ...product };
+        const entries = [...new Map([...normalizeProductMedia(merged).entries, ...reviewExternalMedia(externalMedia, merged, req.user)].map(entry => [entry.url, entry])).values()];
+        product.productMedia = { version: 1, entries };
+        const media = normalizeProductMedia({ ...merged, productMedia: product.productMedia });
+        product.images = media.entries.map(entry => entry.url);
+        product.imagePaths = media.entries.map(entry => entry.storagePath);
+        product.imageUrl = media.primaryUrl;
+        product.imagePath = product.imagePaths[0] || '';
+        product.imagePathCache = media.primaryUrl;
+      }
+      if (req.get('X-Product-Content-Confirmed') === 'true') {
+        if (typeof product.description === 'string' || typeof product.descriptionAi === 'string') {
+          const description = String(product.description ?? product.descriptionAi).trim();
+          Object.assign(product, { publicDescription: description, description, descriptionAi: description, descricao_ia: description });
+        }
+        const allowedContentFields = [...require('../catalog/registered-product-content').detailFields, 'description', 'specifications', 'especificacoes', 'contentSections'];
+        const previousFields = [...require('../catalog/registered-product-content').confirmedProductContentFields(previousProduct || {})];
+        product.contentProvenance = { kind: 'STAFF_CONFIRMED', confirmedBy: req.user.id, confirmedAt: new Date().toISOString(), fields: [...new Set([...previousFields, ...Object.keys(product).filter(key => allowedContentFields.includes(key))])] };
+      }
+      const containsPhotoUpload = Boolean(product.photoBase64 || product.photoData || product.photoDoc || product.photosBase64?.length || product.photos?.length);
+      if (containsPhotoUpload) return res.status(400).json({ error: 'Envie fotos reais pelo serviço de upload do produto, com confirmação de origem.' });
       if (Object.hasOwn(product, 'botanical')) {
         product.botanical = require('../agent/plant-search').reviewedBotanical(product.botanical, req.user);
       }
-      await messageService.firestoreRepo.saveProduct(product);
+      await messageService.firestoreRepo.saveProduct(product, { expectedUpdatedAt: product.expectedUpdatedAt ?? previousProduct?.updatedAt });
       if (messageService.catalogRepo) {
         messageService.catalogRepo.invalidateCache?.();
       }
@@ -1736,7 +1710,9 @@ function createApp({
       const { id } = req.params;
       const rawPhoto = Buffer.isBuffer(req.body) ? req.body : null;
       const body = rawPhoto ? {} : (req.body || {});
-      const prod = (await messageService.firestoreRepo.getProductById(id)) || { id, name: req.headers['x-product-name'] || 'product'.tr };
+      const prod = await messageService.firestoreRepo.getProductById(id);
+      if (!prod) return res.status(404).json({ error: 'Produto não encontrado. Cadastre o produto antes de enviar a foto real.' });
+      if (req.get('X-Photo-Actual-Product') !== 'true' && req.body?.actualProductPhoto !== true) return res.status(400).json({ error: 'Confirme que a foto é do produto real da Conflora. Imagens de referência e geradas não são aceitas.' });
 
       const { photoBase64, photosBase64, photos, contentType, maxWidth, maxHeight, quality, format, append } = body;
       const incomingList = rawPhoto
@@ -1752,17 +1728,8 @@ function createApp({
 
       const { buildOptimizedFirestorePhotoDocument } = require('../catalog/product-photo.service');
       const savedPhotos = [];
-      const existingImages = shouldAppend
-        ? (Array.isArray(prod.images) ? [...prod.images] : (prod.imageUrl ? [prod.imageUrl] : []))
-        : [];
-      const existingImagePaths = shouldAppend
-        ? existingImages.map((_, index) => (
-          Array.isArray(prod.imagePaths)
-            ? prod.imagePaths[index] || ''
-            : (index === 0 ? prod.imagePath || '' : '')
-        ))
-        : [];
-      const startIndex = existingImages.length;
+      const existingEntries = shouldAppend ? normalizeProductMedia(prod).entries : [];
+      const startIndex = existingEntries.length;
 
       for (let i = 0; i < incomingList.length; i++) {
         const item = incomingList[i];
@@ -1785,36 +1752,35 @@ function createApp({
 
         const storedImage = await messageService.firestoreRepo.uploadProductImage(photoDoc);
         const storedPhoto = { ...photoDoc, ...storedImage };
+        storedPhoto.provenance = actualPhotoProvenance(req.user, [storedImage.imagePath]);
         await messageService.firestoreRepo.saveProductPhoto(storedPhoto);
         savedPhotos.push(storedPhoto);
       }
 
       const imageEntries = new Map();
-      existingImages.forEach((url, index) => {
-        imageEntries.set(url, { url, path: existingImagePaths[index] || '' });
-      });
+      existingEntries.forEach(entry => imageEntries.set(entry.url, entry));
       savedPhotos.forEach((photo) => {
-        imageEntries.set(photo.imageUrl, { url: photo.imageUrl, path: photo.imagePath });
+        imageEntries.set(photo.imageUrl, { url: photo.imageUrl, storagePath: photo.imagePath, source: 'FIREBASE_STORAGE', manual: true,
+          provenance: { kind: 'OWN_PHOTO', productId: prod.id, confirmedBy: req.user.id, confirmedAt: new Date().toISOString(), productMatchConfirmed: true } });
       });
-      const allImages = Array.from(imageEntries.values());
+      const allImages = Array.from(imageEntries.values()).sort((a, b) => Number(b.manual) - Number(a.manual));
       const primaryPhoto = savedPhotos[0];
 
       const updatedProduct = {
-        ...prod,
+        id: prod.id,
         imageUrl: allImages[0]?.url || primaryPhoto.imageUrl,
-        imagePath: allImages[0]?.path || primaryPhoto.imagePath,
-        imagePaths: allImages.map((image) => image.path),
+        imagePath: allImages[0]?.storagePath || primaryPhoto.imagePath,
+        imagePaths: allImages.map((image) => image.storagePath),
         images: allImages.map((image) => image.url),
+        productMedia: { version: 1, entries: allImages },
         imageFileId: primaryPhoto.id,
+        imageIsIllustrative: false,
+        imageProvenance: actualPhotoProvenance(req.user, allImages.map(image => image.storagePath).filter(Boolean)),
         imagePathCache: allImages[0]?.url || primaryPhoto.imageUrl,
-        tagsAi: primaryPhoto.tagsAi,
-        tags_ia: primaryPhoto.tagsAi,
-        descriptionAi: primaryPhoto.descriptionAi,
-        descricao_ia: primaryPhoto.descriptionAi,
         updatedAt: new Date().toISOString(),
       };
 
-      await messageService.firestoreRepo.saveProduct(updatedProduct);
+      await messageService.firestoreRepo.saveProduct(updatedProduct, { expectedImageUrl: prod.imageUrl, expectedUpdatedAt: prod.updatedAt });
 
       if (messageService.catalogRepo) {
         messageService.catalogRepo.invalidateCache?.();
@@ -1842,7 +1808,7 @@ function createApp({
       });
     } catch (err) {
       Logger.error('error_uploading_photo_to_firebase_storage'.tr, err);
-      res.status(500).json({ error: err.message });
+      res.status(err.status || 500).json({ error: err.message });
     }
   });
 
@@ -1856,13 +1822,10 @@ function createApp({
   app.get('/api/products/:id/photos', async (req, res) => {
     try {
       const { id } = req.params;
-      const photos = await messageService.firestoreRepo.getProductPhotos(id);
-      const metadata = photos.map((photo) => {
-        const safePhoto = { ...photo };
-        delete safePhoto.data;
-        delete safePhoto.dataUrl;
-        return safePhoto;
-      });
+      const product = await messageService.firestoreRepo.getProductById(id);
+      const media = require('../catalog/product-media').publicProductMedia(product || {});
+      const metadata = media.gallery.map((image, index) => ({ id: index === 0 ? product.imageFileId || '' : '', productId: id,
+        url: image.url, imageUrl: image.url, source: image.source, attribution: image.attribution, licenseUrl: image.licenseUrl }));
       res.status(200).json({ success: true, count: metadata.length, photos: metadata });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -2197,11 +2160,7 @@ function createApp({
       let receiptDelivery = { sent: false, reason: 'shipping_not_requested'.tr };
       const orderWithReceipt = { ...order, receiptText };
       if (isPix) {
-        receiptDelivery = await sendCustomerOrderReceipt(
-          messageService.whatsappClient,
-          approval.customerPhone,
-          receiptText,
-        );
+        receiptDelivery = await sendCustomerOrderReceipt(app, order);
         if (!receiptDelivery.sent) {
           Logger.warn('discount_approved_unable_to_send_pix_receipt_to_customer'.tr, {
             orderId: order.id,

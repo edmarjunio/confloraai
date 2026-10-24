@@ -539,7 +539,7 @@ test('HTTP sale flow sends fixed Pix receipt and QR, confirms by Sicredi webhook
   assert.equal(s.base.inMemoryProducts.get('plant').stockQuantity, 18);
   assert.equal((await app.locals.pdv.store.read('stock_movements', `${pixOrder.id}-plant`)).quantityDeducted, 2);
   assert.equal((await app.locals.pdv.store.read('pdv_pix_events', `${pixOrder.pixData.txid}-${endToEndId}`)).status, 'DONE');
-  assert.equal(s.sent.filter((message) => message.text?.includes('PIX CONFIRMADO')).length, 1);
+  assert.equal(s.sent.filter((message) => message.text?.includes('VENDA CONFIRMADA · RECIBO')).length, 1);
   const finalCustomerReceipt = s.sent.find((message) => message.phone === pixOrder.customerPhone && message.text?.includes('Pago e finalizado'));
   assert.ok(finalCustomerReceipt, 'cliente recebe o comprovante completo após a confirmação do Pix');
   assert.match(finalCustomerReceipt.text, /Muda/);

@@ -1,0 +1,15 @@
+{
+  "at": "2026-10-24T11:21:20.816Z",
+  "sourceAt": "2026-10-24T11:18:15.312Z",
+  "mode": "READ_ONLY_SOURCE_AND_ISOLATED_HTTP",
+  "count": 759,
+  "counts": {
+    "active": 754,
+    "storefront": 757,
+    "visible": 754,
+    "cashier": 754,
+    "inventory": 759
+  },
+  "divergentFieldCount": 1511,
+  "fingerprintNote": "SHA256 of field values. Missing channel and empty field differ; intentional projections are explained in the audit report."
+}

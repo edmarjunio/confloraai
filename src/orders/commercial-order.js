@@ -19,6 +19,7 @@ async function createCommercialOrder(repo, order, { reserveInventory = true, rec
     })).digest('hex') };
   }
   return runTransaction(repo, async tx => {
+    await require('../services/automation-send-guard').assertTransactionAutomation(tx);
     const previous = await tx.get('orders', order.id);
     if (previous) {
       const key = order.requestHash ? 'requestHash' : 'idempotencyFingerprint';
@@ -48,10 +49,14 @@ async function createCommercialOrder(repo, order, { reserveInventory = true, rec
       }
     }
     const customerProfile = order.source === 'WHATSAPP_BOT' ? await tx.get('customers', order.customerPhone) : null;
+    const { customerKeyFor, scopedId } = require('../agent/agent-store');
+    const conversationId = order.source === 'WHATSAPP_BOT' ? scopedId('conflora', customerKeyFor('conflora', order.customerPhone)) : null;
+    const conversation = conversationId ? await tx.get('agent_conversations', conversationId) : null;
+    if (conversation?.automation === 'paused' || conversation?.assignedTo) throw require('../services/automation-send-guard').blocked();
     const reservation = reserveInventory ? await prepareStockReservation(tx, order.items, records) : null;
     const cashier = order.source === 'PDV' ? await activeSession(tx, order.createdBy) : null;
     const bindPix = cashier && order.pixData?.txid;
-    const saved = { ...order, ...(bindPix ? { cashierSessionId: cashier.id } : {}), ...(reservation ? { inventoryReserved: !reservation.trackingDisabled, reservedItems: reservation.reservedItems } : {}) };
+    const saved = { ...order, ...(conversationId ? { conversationId } : {}), ...(bindPix ? { cashierSessionId: cashier.id } : {}), ...(reservation ? { inventoryReserved: !reservation.trackingDisabled, reservedItems: reservation.reservedItems } : {}) };
     if (bindPix) tx.set('cashier_sessions', cashier.id, { ...cashier, pendingOrders: [...cashier.pendingOrders, order.id] });
     // All reads precede all writes, including the notification intent.
     if (reservation) applyStockReservation(tx, reservation, order.updatedAt || order.createdAt || new Date().toISOString());
@@ -61,6 +66,8 @@ async function createCommercialOrder(repo, order, { reserveInventory = true, rec
       version: session.orderDraft.version + 1, updatedAt: order.updatedAt,
     } });
     if (order.source === 'WHATSAPP_BOT') {
+      tx.set('agent_conversations', conversationId, { ...(conversation || { tenantId: 'conflora', customerKey: customerKeyFor('conflora', order.customerPhone), automation: 'active' }),
+        customerPhone: order.customerPhone, orderId: saved.id, updatedAt: order.updatedAt || new Date().toISOString() });
       const preferredItems = { ...(customerProfile?.preferredItems || {}) };
       for (const item of order.items) preferredItems[normalizeText(item.name)] = item.price;
       tx.set('customers', order.customerPhone, { ...customerProfile, id: order.customerPhone, phone: order.customerPhone,

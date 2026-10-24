@@ -65,7 +65,7 @@ test('cashier shows one arrival notice with a working details button and no auto
   expect(await page.evaluate(() => window.notificationCalls)).toEqual([]);
   await page.getByRole('button', { name: 'VER DETALHES DO PEDIDO' }).click();
   await expect(page.locator('#details')).toHaveText('new-order');
-  await page.getByRole('button', { name: 'Ativar notificações do caixa' }).click();
+  await page.getByRole('button', { name: 'Permitir no navegador' }).click();
   expect(await page.evaluate(() => window.notificationCalls)).toEqual(['permission']);
   await page.evaluate(() => window.stopNotices());
 });

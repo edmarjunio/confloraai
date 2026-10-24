@@ -93,28 +93,6 @@ function generateStandardDescription(product = {}) {
 }
 
 /**
- * Imagem fallback SVG codificada em base64 com identidade visual oficial da Conflora
- */
-function createConfloraSvgFallback(name = 'Conflora', category = 'Viveiro') {
-  const safeName = String(name).replace(/[<>&"]/g, '');
-  const safeCat = String(category).replace(/[<>&"]/g, '');
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="600" height="600">
-    <defs>
-      <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stop-color="#14532d"/>
-        <stop offset="100%" stop-color="#15803d"/>
-      </linearGradient>
-    </defs>
-    <rect width="100%" height="100%" fill="url(#g)"/>
-    <circle cx="300" cy="240" r="120" fill="#22c55e" opacity="0.25"/>
-    <text x="300" y="270" font-family="-apple-system, sans-serif" font-size="90" text-anchor="middle" fill="#dcfce7">🌱</text>
-    <text x="300" y="400" font-family="-apple-system, sans-serif" font-size="28" font-weight="bold" text-anchor="middle" fill="#ffffff">${safeName.slice(0, 30)}</text>
-    <text x="300" y="440" font-family="-apple-system, sans-serif" font-size="18" text-anchor="middle" fill="#bbf7d0">${safeCat} • Conflora Horta &amp; Viveiro</text>
-  </svg>`;
-  return Buffer.from(svg).toString('base64');
-}
-
-/**
  * Monta o documento completo da foto para gravação no Firestore
  */
 function buildFirestorePhotoDocument(product, {
@@ -244,7 +222,6 @@ module.exports = {
   generateStandardPhotoName,
   generateStandardTags,
   generateStandardDescription,
-  createConfloraSvgFallback,
   buildFirestorePhotoDocument,
   buildOptimizedFirestorePhotoDocument,
   buildMultipleOptimizedFirestorePhotoDocuments,

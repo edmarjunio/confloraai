@@ -132,7 +132,7 @@ test('2. Preservação de nitidez para zoom sem estourar o limite de 1MB do Fire
 });
 
 test('3. API HTTP POST /api/admin/products/:id/photos salva múltiplas fotos com qualidade para zoom', async () => {
-  const repo = new FirestoreRepository({ isInMemory: true });
+  const repo = new FirestoreRepository({ isInMemory: true, productImageStorage: require('./helpers/actual-photo-fixture').isolatedPhotoStorage() });
   await repo.saveProduct({
     id: 'prod-http-multi-01',
     name: 'Rosa do Deserto Adenium Flor Dobrada',
@@ -164,7 +164,7 @@ test('3. API HTTP POST /api/admin/products/:id/photos salva múltiplas fotos com
 
     const uploadRes = await fetch(`http://127.0.0.1:${port}/api/admin/products/prod-http-multi-01/photos`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', cookie },
+      headers: { 'Content-Type': 'application/json', cookie, 'X-Photo-Actual-Product': 'true' },
       body: JSON.stringify({
         photosBase64: [imgA.toString('base64'), imgB.toString('base64')],
         contentType: 'image/jpeg',
@@ -179,11 +179,11 @@ test('3. API HTTP POST /api/admin/products/:id/photos salva múltiplas fotos com
     assert.equal(uploadData.photos[1].fileName, 'rosa-do-deserto-adenium-flor-dobrada_prod-http-multi-01_1.jpg');
 
     // 3. Verifica entrega pública via GET /api/images/:id
-    const imgRes1 = await fetch(`http://127.0.0.1:${port}${uploadData.photos[0].url}`);
+    const imgRes1 = await fetch(`http://127.0.0.1:${port}/api/images/${uploadData.photos[0].id}`);
     assert.equal(imgRes1.status, 200);
     assert.equal(imgRes1.headers.get('content-type'), 'image/jpeg');
 
-    const imgRes2 = await fetch(`http://127.0.0.1:${port}${uploadData.photos[1].url}`);
+    const imgRes2 = await fetch(`http://127.0.0.1:${port}/api/images/${uploadData.photos[1].id}`);
     assert.equal(imgRes2.status, 200);
     assert.equal(imgRes2.headers.get('content-type'), 'image/jpeg');
 

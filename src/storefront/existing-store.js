@@ -1,7 +1,5 @@
 const profile = require("../../config/stores/conflora.json");
 const { productStatus } = require("../catalog/product-status");
-const { resolveHdProductImage } = require("../catalog/image-resolver");
-const { enrichWithValidatedProfile } = require("../catalog/validated-catalog-profiles");
 const {
   ensure,
   digest,
@@ -12,34 +10,15 @@ const {
 
 // Compatibility boundary for the existing store. SaaS tenants never use these collections.
 function toProduct(rawItem, { stockControlEnabled = true } = {}) {
-  const item = enrichWithValidatedProfile(rawItem);
+  const item = require('../catalog/normalize-catalog-item').normalizeCatalogItem(rawItem);
   const commercial = require('../catalog/commercial-product').commercialProduct(item);
   const category = String(item.category || item.categoria || item.CATEGORIA || "Geral");
   const name = commercial.name || "Produto";
   const subcategory = String(item.subcategory || item.subcategoria || item.SUBCATEGORIA || "");
   const unit = commercial.unit;
-  const photo = (value) =>
-    typeof value === "string" &&
-    (/^https:\/\/(?:firebasestorage|storage)\.googleapis\.com\//.test(value) ||
-      /^https:\/\/(?:inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org)\//i.test(value) ||
-      /^https:\/\/images\.unsplash\.com\//i.test(value) ||
-      /^\/store-assets\/products\//.test(value) ||
-      /^\/api\/images\//.test(value) ||
-      /^gs:\/\/[a-z0-9._-]+\/products\/[a-z0-9_-]+\/[a-z0-9._-]+$/i.test(value) ||
-      /^products\/[a-z0-9_-]+\/[a-z0-9._-]+$/i.test(value))
-      ? value
-      : "";
-  const images = (Array.isArray(item.images) ? item.images : [])
-    .map((image) => ({
-      url: photo(typeof image === "string" ? image : image.url || image.imageUrl || image.src || image.downloadURL || image.storagePath || image.fullPath || image.path),
-      alt: name,
-    }))
-    .filter((image, index, all) => image.url && all.findIndex((candidate) => candidate.url === image.url) === index);
-  const primaryImage = photo(item.imageUrl || item.imageurl || item.imagePathCache || item.imageURL || item.imagePath || item.storagePath);
-  const imagePaths = Array.isArray(item.imagePaths) ? item.imagePaths.map((imagePath) => photo(imagePath)).filter(Boolean) : [];
-  const registeredImages = [...new Set([primaryImage, ...images.map((image) => image.url), ...imagePaths].filter(Boolean))];
+  const registeredImages = require('../catalog/actual-product-photo').actualProductImages(item);
   const registeredImage = registeredImages[0] || "";
-  const imageFileId = String(item.imageFileId || item.image_file_id || "").trim();
+  const imageFileId = registeredImage ? String(item.imageFileId || item.image_file_id || "").trim() : '';
   const storageImageProxy = imageFileId
     ? `/api/images/${encodeURIComponent(imageFileId)}`
     : "";
@@ -49,6 +28,11 @@ function toProduct(rawItem, { stockControlEnabled = true } = {}) {
   ].filter(Boolean))];
   const res = {
     id: String(item.id),
+    sku: item.sku,
+    updatedAt: item.updatedAt || null,
+    productInfo: item.productInfo,
+    media: item.media,
+    inventory: item.inventory,
     name,
     nameTranslations: Object.fromEntries(['en', 'es', 'fr'].filter(language =>
       typeof item.nameTranslations?.[language] === 'string' && item.nameTranslations[language].trim().length <= 180)
@@ -61,8 +45,9 @@ function toProduct(rawItem, { stockControlEnabled = true } = {}) {
       amountMinor: commercial.priceMinor,
       currency: "BRL",
     },
-    imageUrl: imageCandidates[0] || resolveHdProductImage(name, category, subcategory),
-    imageIsIllustrative: !registeredImage,
+    imageUrl: imageCandidates[0] || '',
+    imageIsIllustrative: false,
+    actualPhotoPending: !registeredImage,
     imageFallbackUrl: "/store-assets/placeholder.svg",
     images: imageCandidates,
     categories: [digest(category).slice(0, 16)],
@@ -98,61 +83,22 @@ function toProduct(rawItem, { stockControlEnabled = true } = {}) {
 
   if (imageFileId) res.imageFileId = imageFileId;
 
-  const specs = Object.fromEntries(
-    Object.entries(item.specifications || {}).filter(
-      ([, value]) =>
-        value &&
-        typeof value.label === "string" &&
-        typeof value.value === "string",
-    ),
-  );
-  if (Object.keys(specs).length > 0) res.specifications = specs;
-
-  const sections = (Array.isArray(item.contentSections)
-    ? item.contentSections
-    : []
-  ).filter(
-    (section) =>
-      section &&
-      typeof section.title === "string" &&
-      typeof section.body === "string",
-  );
-  if (sections.length > 0) res.contentSections = sections;
-
-  const details = [
-    ['descriptionAi', item.descriptionAi || item.descricao_ia],
-    ['careInstructions', item.careInstructions || item.care || item.cuidados_basicos || item.cuidadosBasicos],
-    ['cuidados_basicos', item.cuidados_basicos || item.cuidadosBasicos],
-    ['iluminacao', item.iluminacao || item.iluminação || item.illumination || item.lighting],
-    ['illumination', item.illumination || item.iluminacao || item.iluminação || item.lighting || item.dicas_iluminacao],
-    ['watering', item.watering || item.wateringInstructions || item.rega || item.irrigacao || item.frequencia_rega],
-    ['ambiente_ideal', item.ambiente_ideal || item.ambienteIdeal],
-    ['environment', item.environment || item.ambiente_ideal || item.ambienteIdeal || item.habitat],
-    ['dicas_armazenamento', item.dicas_armazenamento || item.dicasArmazenamento],
-    ['storageTips', item.storageTips || item.storage || item.dicas_armazenamento || item.dicasArmazenamento],
-    ['durabilidade', item.durabilidade],
-    ['durability', item.durability || item.durabilidade || item.validade],
-    ['preferences', item.preferences || item.o_que_gosta || item.oQueGosta || item.gosta_de],
-    ['dislikes', item.dislikes || item.o_que_evitar || item.oQueEvitar || item.nao_gosta],
-    ['usage', item.usage || item.uso || item.modo_de_uso || item.modoDeUso],
-    ['selectionTips', item.selectionTips || item.dica_escolha || item.dicaEscolha],
-    ['suitability', item.suitability || item.indicacao || item.indicação || item.especie_indicada],
-    ['matureSize', item.matureSize || item.porte_adulto || item.porteAdulto || item.tamanho_adulto || item.tamanhoAdulto],
-    ['precautions', item.precautions || item.precaucoes || item.precauções || item.cuidados_de_uso],
-    ['alimentacao', item.alimentacao || item.alimentação || item.feeding || item.dieta],
-    ['feeding', item.feeding || item.alimentacao || item.alimentação || item.dieta],
-    ['housing', item.housing || item.moradia || item.abrigo || item.habitat_ideal || item.habitatIdeal],
-    ['handling', item.handling || item.manejo || item.comportamento || item.dicas_manejo || item.dicasManejo],
-    ['prohibitedFoods', item.prohibitedFoods || item.alimentos_proibidos || item.alimentosProibidos || item.o_que_nao_oferecer || item.oQueNaoOferecer],
-  ];
-
-  for (const [key, value] of details) {
-    if (typeof value === "string" && value.trim()) {
-      res[key] = value.trim();
-    }
-  }
+  if (Object.keys(item.specifications).length) res.specifications = item.specifications;
+  if (item.productInfo.sections.length) res.contentSections = item.productInfo.sections;
+  for (const attribute of item.productInfo.attributes) res[attribute.key] = attribute.value;
+  // Transitional API aliases derive from canonical values, never from a second source.
+  const aliases = { careInstructions: 'care', cuidados_basicos: 'care', illumination: 'light', iluminacao: 'light',
+    ambiente_ideal: 'environment', housing: 'environment', dicas_armazenamento: 'storageTips', durabilidade: 'durability', alimentacao: 'feeding' };
+  for (const [alias, key] of Object.entries(aliases)) if (res[key]) res[alias] = res[key];
 
   return res;
+}
+function toProductList(product) {
+  const fields = ['id', 'sku', 'name', 'nameTranslations', 'canonicalName', 'productType', 'variation', 'price',
+    'imageUrl', 'imageFallbackUrl', 'actualPhotoPending', 'categories', 'categoryName', 'subcategoryName', 'navigationPath',
+    'searchAliases', 'tags', 'searchAttributes', 'isAvailable', 'status', 'stock', 'saleUnit', 'salesCount'];
+  return { ...Object.fromEntries(fields.filter(key => product[key] !== undefined).map(key => [key, product[key]])),
+    media: { ...product.media, gallery: product.media.gallery.filter(image => image.url === product.media.primaryUrl) }, detailsLoaded: false };
 }
 function existingConfig(products, saved, settings = { stockControlEnabled: true }) {
   const activeProducts = products.filter(
@@ -233,21 +179,22 @@ function installExistingStore(app, { repository, assistant, catalog, getOrderInt
     const [settings, saved, records] = await Promise.all([
       repository.getInventorySettings ? repository.getInventorySettings() : { stockControlEnabled: true },
       readSettings(),
-      repository.getAllProducts(),
+      catalog?.readProducts ? catalog.readProducts() : repository.getAllProducts(),
     ]);
     const items = await products({ settings, saved, records });
     const config = existingConfig(items, saved, settings);
     const visibleCategories = new Set(items.flatMap(item => item.categories));
     config.categories = config.categories.filter(category => category.isActive && visibleCategories.has(category.id));
     return { config, products: items };
-  });
+  }, { sourceExpiresAt: () => catalog?.readProducts ? catalog.expiresAt : Infinity });
   if (app.locals) app.locals.publicCatalogCache = publicSnapshot;
   app.use((req, res, next) => {
     if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) &&
         /(?:product|stock|inventory|order|config|sale|reservation|webhook|tasks)/i.test(req.path)) {
       // Invalidating before AND after commit also covers a read racing the write.
       publicSnapshot.invalidate();
-      res.once('finish', () => publicSnapshot.invalidate());
+      catalog?.invalidateCache?.();
+      res.once('finish', () => { publicSnapshot.invalidate(); catalog?.invalidateCache?.(); });
     }
     next();
   });
@@ -340,6 +287,7 @@ function installExistingStore(app, { repository, assistant, catalog, getOrderInt
     settings ||= { stockControlEnabled: true };
     if (saved === undefined) saved = await readSettings();
     return records
+      .filter(item => !require('../catalog/commercial-product').isInternalFinancialProduct(item))
       .filter(require('../catalog/commercial-product').hasValidCommercialPrice)
       .map((item) => {
         const product = toProduct(item, settings);
@@ -363,13 +311,20 @@ function installExistingStore(app, { repository, assistant, catalog, getOrderInt
   }
   app.get("/api/storefront/catalog", async (req, res, next) => {
     try {
-      const full = await publicSnapshot.read();
-      const limit = Number.parseInt(req.query.limit, 10);
-      const page = Number.parseInt(req.query.page, 10) || 1;
+      if (req.query.limit !== undefined) {
+        ensure(!req.query.page || Number(req.query.page) === 1, 'Use o cursor after retornado pela página anterior.');
+        ensure(!req.query.category && !req.query.search, 'Busca e categorias globais usam o índice público; a página por cursor não representa um resultado global de busca.');
+        const page = await repository.getProductsPage({ limit: Number(req.query.limit), after: req.query.after || '' });
+        const [settings, saved] = await Promise.all([repository.getInventorySettings(), readSettings()]);
+        const items = await products({ records: page.products, settings, saved });
+        return res.set('Cache-Control', 'no-store').json({ products: items.map(toProductList), pagination: page.pagination });
+      }
+      const snapshot = await publicSnapshot.read();
+      const full = req.query.projection === 'list' ? { config: snapshot.config, products: snapshot.products.map(toProductList) } : snapshot;
       const category = req.query.category ? String(req.query.category).trim().toLowerCase() : '';
       const search = req.query.search ? String(req.query.search).trim().toLowerCase() : '';
 
-      if (!limit && !category && !search && !req.query.page) {
+      if (!category && !search) {
         return res.set("Cache-Control", "no-store").json(full);
       }
 
@@ -390,23 +345,6 @@ function installExistingStore(app, { repository, assistant, catalog, getOrderInt
       }
 
       const totalItems = filteredProducts.length;
-      if (limit && limit > 0) {
-        const startIndex = (page - 1) * limit;
-        const endIndex = startIndex + limit;
-        const paginatedProducts = filteredProducts.slice(startIndex, endIndex);
-        return res.set("Cache-Control", "no-store").json({
-          config: full.config,
-          products: paginatedProducts,
-          pagination: {
-            page,
-            limit,
-            totalItems,
-            totalPages: Math.ceil(totalItems / limit),
-            hasMore: endIndex < totalItems,
-          },
-        });
-      }
-
       return res.set("Cache-Control", "no-store").json({
         config: full.config,
         products: filteredProducts,
@@ -415,6 +353,16 @@ function installExistingStore(app, { repository, assistant, catalog, getOrderInt
     } catch (error) {
       next(error);
     }
+  });
+  app.get('/api/storefront/products/:id', async (req, res, next) => {
+    try {
+      const raw = await repository.getProductById(req.params.id);
+      ensure(raw && !require('../catalog/commercial-product').isInternalFinancialProduct(raw) && require('../catalog/commercial-product').hasValidCommercialPrice(raw), 'Produto não encontrado.', 404);
+      const [settings, saved] = await Promise.all([repository.getInventorySettings(), readSettings()]);
+      const [product] = await products({ records: [raw], settings, saved });
+      ensure(product, 'Produto não encontrado.', 404);
+      res.set('Cache-Control', 'no-store').json({ product: { ...product, detailsLoaded: true } });
+    } catch (error) { next(error); }
   });
   app.post(["/api/storefront/assistant", "/api/chat"], async (req, res, next) => {
     try {
@@ -514,8 +462,6 @@ function installExistingStore(app, { repository, assistant, catalog, getOrderInt
         unit: String(data.unit || "UN").trim().toUpperCase(),
         category: String(data.category || "Geral").trim(),
         subcategory: String(data.subcategory || "").trim(),
-        imageUrl: String(data.imageUrl || "").trim(),
-        ...(Array.isArray(data.images) ? { images: data.images } : {}),
         description: String(data.description || "").trim(),
         ...(data.descriptionAi ? { descriptionAi: String(data.descriptionAi).trim(), descricao_ia: String(data.descriptionAi).trim() } : {}),
         ...(data.productType ? { productType: String(data.productType).trim() } : {}),
@@ -549,9 +495,13 @@ function installExistingStore(app, { repository, assistant, catalog, getOrderInt
             : [],
         updatedAt: new Date().toISOString(),
       };
-      if (repository.saveProduct) {
-        await repository.saveProduct(product);
-      }
+      product.publicDescription = product.description;
+      const previous = data.id ? await repository.getProductById(String(data.id)) : null;
+      product.contentProvenance = { kind: 'STAFF_CONFIRMED', confirmedBy: req.user.id, confirmedAt: new Date().toISOString(),
+        fields: [...new Set([...require('../catalog/registered-product-content').confirmedProductContentFields(previous || {}),
+          ...Object.keys(product).filter(field => [...require('../catalog/registered-product-content').detailFields, 'description', 'specifications', 'especificacoes'].includes(field))])] };
+      ensure(typeof repository.saveProduct === 'function', 'Cadastro de produtos indisponível.', 503);
+      await repository.saveProduct(product, { expectedUpdatedAt: data.expectedUpdatedAt ?? previous?.updatedAt });
       res.status(200).json({ success: true, product });
     } catch (error) {
       next(error);
@@ -563,10 +513,8 @@ function installExistingStore(app, { repository, assistant, catalog, getOrderInt
       ensure(productId, "ID do produto é obrigatório.");
       const qty = Number(quantityAdded || 0);
       ensure(qty > 0, "Quantidade deve ser maior que zero.");
-      let result = { success: true };
-      if (repository.quickAddStock) {
-        result = await repository.quickAddStock(productId, qty);
-      }
+      ensure(typeof repository.quickAddStock === 'function', 'Entrada de estoque indisponível.', 503);
+      const result = await repository.quickAddStock(productId, qty);
       res.status(200).json(result);
     } catch (error) {
       next(error);
@@ -586,7 +534,7 @@ function installExistingStore(app, { repository, assistant, catalog, getOrderInt
       ensure(existing, "Produto não encontrado.", 404);
       existing.status = targetStatus;
       if (repository.saveProduct) {
-        await repository.saveProduct(existing);
+        await repository.saveProduct({ id: existing.id, status: targetStatus });
       }
       res.json({ success: true, product: existing });
     } catch (error) {
@@ -594,7 +542,7 @@ function installExistingStore(app, { repository, assistant, catalog, getOrderInt
     }
   });
   app.use("/api/storefront", (error, _req, res, _next) => {
-    const known = error instanceof StoreError;
+    const known = error instanceof StoreError || [400, 403, 404, 409].includes(error.status);
     res.status(known ? error.status : 503).json({
       error: known
         ? error.message

@@ -35,3 +35,12 @@ docs/
 .final-*.json
 .aistudio/
 .gmp_cache/
+config/stores/conflora-validated-catalog.json
+scripts/generate-validated-catalog.js
+scripts/resolve-botanical-inat-photos.js
+scripts/catalog-breed-taxon-map.js
+scripts/reset-product-catalog.js
+scripts/plan-product-metadata-migration.js
+scripts/audit-product-snapshot.js
+scripts/report-meta-catalog.js
+public/store-assets/products/

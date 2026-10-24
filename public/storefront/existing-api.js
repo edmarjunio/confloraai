@@ -3,6 +3,7 @@
 import { readJsonResponse } from "./ui.js";
 export function createExistingApi() {
   let catalogPromise;
+  const detailsPending = new Map();
   async function request(path, options = {}) {
     const isGet = !options.method || options.method === "GET";
     const maxRetries = isGet ? 1 : 0;
@@ -65,7 +66,7 @@ export function createExistingApi() {
       return result;
     }
     if ((route === "/config" || route === "/products") && (!options.method || options.method === "GET")) {
-      catalogPromise ||= request("/api/storefront/catalog");
+      catalogPromise ||= request("/api/storefront/catalog?projection=list");
       const pending = catalogPromise;
       try {
         const result = await pending;
@@ -76,6 +77,10 @@ export function createExistingApi() {
     }
     if (route === "/me") {
       return request("/api/auth/me");
+    }
+    if (/^\/products\/[^/]+$/.test(route) && (!options.method || options.method === 'GET')) {
+      if (!detailsPending.has(route)) detailsPending.set(route, request('/api/storefront' + route).then(result => result.product).finally(() => detailsPending.delete(route)));
+      return detailsPending.get(route);
     }
     if (route === "/favorites") {
       return request("/api/customer/favorites", options);

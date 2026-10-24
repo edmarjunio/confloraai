@@ -4,7 +4,7 @@ const { test, expect } = require('@playwright/test');
 test('PDV opens without test banner, uses real login and sends an empty cart until selected', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  await page.route('**/api/caixa/products', async (route) => {
+  await page.route(/\/api\/caixa\/products(?:\?.*)?$/, async (route) => {
     const response = await route.fetch();
     const existing = await response.json();
     const additions = Array.from({ length: 130 }, (_, index) => ({
@@ -21,7 +21,11 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
       descriptionAi: index === 129 ? 'Plantas de sombra para jardim.' : '',
       details: index === 129 ? [{ label: 'Cuidados', value: 'Manter em local protegido.' }] : [],
     }));
-    await route.fulfill({ response, json: [...additions, ...existing] });
+    await page.route(/\/api\/caixa\/products\/lazy-product-\d+$/, route => {
+      const id = route.request().url().split('/').pop();
+      return route.fulfill({ json: additions.find(product => product.id === id) });
+    });
+    await route.fulfill({ response, json: [...additions.map(product => ({ ...product, details: [], detailsLoaded: false })), ...existing] });
   });
   await page.goto('/pdv');
   await expect(page.getByRole('heading', { name: 'Frente de caixa' })).toBeVisible();
@@ -29,7 +33,9 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
   await page.getByLabel('Usuário').selectOption('usr-caixa1');
   await page.getByLabel('PIN', { exact: true }).fill('0000');
   await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+  await expect(page.locator('.cf-topbar-identity').getByText('Atendente do Caixa', { exact: true })).toBeVisible();
   await ensureCashierSession(page);
+  await page.reload();
   await expect(page.getByRole('link', { name: 'Conflora - página inicial' }).first()).toHaveAttribute('href', '/');
   await expect(page.locator('.cf-topbar-identity').getByText('Atendente do Caixa', { exact: true })).toBeVisible();
   await expect(page.locator('.cf-topbar-identity small')).toHaveText('CAIXA');
@@ -71,7 +77,8 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
   await page.getByRole('button', { name: 'Nova venda', exact: true }).click();
   await search.fill('');
   await page.keyboard.press('F2');
-  await expect(page.getByRole('heading', { name: 'Comandas', exact: true })).toBeVisible();
+  await expect(page.getByRole('complementary', { name: 'Ações das comandas' })).toBeVisible();
+  await page.getByRole('combobox', { name: 'Etapa das comandas' }).selectOption('all');
   for (const column of ['ESPERANDO CONFIRMAÇÃO', 'ESPERANDO PAGAMENTO', 'PAGOS / FINALIZADOS', 'FIADOS']) {
     await expect(page.getByRole('region', { name: column })).toBeVisible();
   }
@@ -93,17 +100,23 @@ test('PDV opens without test banner, uses real login and sends an empty cart unt
   await page.screenshot({ path: 'test-results/pdv-desktop.png', fullPage: false });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.evaluate(() => window.scrollTo(0, 0));
-  await expect(page.getByRole('link', { name: 'Conflora - página inicial' }).first()).toBeInViewport();
-  await expect(page.getByRole('button', { name: 'Sair', exact: true })).toBeInViewport();
+  await expect(page.locator('.cf-mobile-sale-heading')).toBeInViewport();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
-  await expect(page.getByRole('button', { name: 'Voltar ao início da página' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Ir para pagamento' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Selecionar cliente' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ver carrinho →' })).toBeVisible();
+  await page.getByRole('button', { name: 'Mais opções', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Cliente', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Loja', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sair', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Mais opções', exact: true }).click();
   const cashierPlaceholder = await page.request.get('/store-assets/placeholder.svg');
   expect(cashierPlaceholder.status()).toBe(200);
   await page.screenshot({ path: 'test-results/pdv-mobile.png', fullPage: false });
   await page.setViewportSize({ width: 800, height: 900 });
-  await expect(page.getByText('Recibo em Tempo Real', { exact: true })).toBeVisible();
+  await expect(page.locator('.cf-mobile-sale-heading')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ver carrinho →' })).toBeVisible();
   await page.screenshot({ path: 'test-results/pdv-tablet.png', fullPage: false });
+  await page.getByRole('button', { name: 'Mais opções', exact: true }).click();
+  await page.getByRole('button', { name: 'Sair', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Frente de caixa' })).toBeVisible();
   expect(errors).toEqual([]);
 });

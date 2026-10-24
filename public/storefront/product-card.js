@@ -180,6 +180,8 @@
 
   const getImageCandidates = (product) => {
     const p = product && typeof product === "object" ? product : {};
+    if (p.media?.version === 1) return [...new Set([p.media.primaryUrl, ...(p.media.gallery || []).map(image => image.url)]
+      .filter(value => typeof value === 'string' && /^https:\/\//i.test(value)))];
 
     const arraySources = [
       ...(Array.isArray(p.images) ? p.images : []),
@@ -672,17 +674,22 @@
 
       if (variant === "chat-mini" || variant === "chat") {
         this.renderChatMini(vm);
-        return;
-      }
-      if (variant === "cashier") {
+      } else if (variant === "cashier") {
         this.renderCashier(vm);
-        return;
-      }
-      if (variant === "legacy-catalog") {
+      } else if (variant === "legacy-catalog") {
         this.renderLegacyCatalog(vm);
-        return;
+      } else this.renderStorefront(vm, variant === "recommendation", ["admin", "stock"].includes(variant));
+      const credit = rawProduct.media?.gallery?.find(image => image.url === rawProduct.media.primaryUrl);
+      if (credit?.attribution) {
+        const attribution = document.createElement('small');
+        attribution.className = 'product-media-attribution';
+        attribution.textContent = credit.attribution;
+        if (/^https:\/\//i.test(credit.licenseUrl || '')) {
+          const link = document.createElement('a'); link.href = credit.licenseUrl; link.textContent = 'Licença';
+          link.target = '_blank'; link.rel = 'noopener noreferrer'; attribution.append(' · ', link);
+        }
+        this.append(attribution);
       }
-      this.renderStorefront(vm, variant === "recommendation", ["admin", "stock"].includes(variant));
     }
   }
 

@@ -1,6 +1,6 @@
 // Bump only for an intentional full reset, not for every deployment.
-export const PUBLIC_CACHE_DATABASE = 'cf-public-20261023-reset1';
-export const RETIRED_PUBLIC_DATABASES = ['cf-public-20261023'];
+export const PUBLIC_CACHE_DATABASE = 'cf-public-20261023-real-products1';
+export const RETIRED_PUBLIC_DATABASES = ['cf-public-20261023', 'cf-public-20261023-reset1'];
 
 // Never enumerate/delete unrelated databases, authentication or pending operations.
 // A blocked deletion stays pending and is retried on the next visit.

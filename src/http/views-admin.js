@@ -733,6 +733,7 @@ function renderAdminHtml(storeConfig) {
               <div style="font-size:12px; font-weight:bold; color:#14532d;">📸 Galeria de Fotos (<span id="formProdPhotoCount">0</span> foto(s)):</div>
               <button type="button" onclick="clearAllPendingPhotos()" style="font-size:11px; background:none; border:none; color:#ef4444; cursor:pointer; text-decoration:underline;">Limpar todas as fotos</button>
             </div>
+            <label style="display:block; margin:8px 0; font-size:12px;"><input type="checkbox" id="formProdRealPhotoConfirmed" /> Confirmo que as fotos enviadas mostram os produtos reais da Conflora, sem imagens de banco, referência ou geradas.</label>
             <div id="formProdPhotosGrid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(130px, 1fr)); gap:10px;"></div>
             <div id="formProdPhotoTags" style="font-size:11px; color:#475569; margin-top:8px;"></div>
           </div>
@@ -743,7 +744,12 @@ function renderAdminHtml(storeConfig) {
         </div>
         <div>
           <label style="font-size:12px; font-weight:bold;">Ou URLs Externas de Fotos (separadas por vírgula):</label>
-          <input type="text" id="formProdImages" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;" placeholder="https://..., https://..." />
+          <input type="text" id="formProdImages" placeholder="URLs HTTPS separadas por vírgula" />
+          <label>Licença <select id="formProdMediaLicense"><option value="">Selecione</option><option value="CC0">CC0</option><option value="PUBLIC_DOMAIN">Domínio público</option><option value="CC_BY">CC BY</option><option value="PERMISSION">Permissão expressa</option></select></label>
+          <label>Evidência / URL da licença <input type="url" id="formProdMediaLicenseUrl" /></label>
+          <label>Crédito / atribuição <input type="text" id="formProdMediaAttribution" /></label>
+          <label><input type="checkbox" id="formProdMediaConfirmed" /> Conferi a autorização de uso e que a imagem representa este produto e variedade.</label>
+          <small>As imagens externas permanecem na origem; não são copiadas para o Storage. Referências antigas não são aprovadas automaticamente.</small>
         </div>
         <div style="grid-column: 1/-1;">
           <label style="font-size:12px; font-weight:bold;">🏷️ Tags Padronizadas (Conflora &amp; IA):</label>
@@ -868,6 +874,16 @@ function renderAdminHtml(storeConfig) {
       <div id="adminStatusDashboardContainer">
         <div style="padding:30px; text-align:center; color:#64748b;">Carregando diagnósticos em tempo real...</div>
       </div>
+      <section style="margin-top:24px" aria-labelledby="whatsappRecipientsTitle">
+        <h2 id="whatsappRecipientsTitle">Destinatários WhatsApp</h2>
+        <p>Preencha os números com DDD. Operacional: aprovações, recibos e entregas. Fechamento: resumo ao encerrar o último caixa.</p>
+        <p>Cadastre somente destinatários que concordaram com os avisos. O envio depende das permissões e dos modelos aprovados na Meta.</p>
+        <form id="whatsappRecipientsForm" style="display:grid;gap:12px">
+          <div id="whatsappRecipientsFields" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px"></div>
+          <button type="submit" class="action-btn btn-green" disabled>Salvar destinatários</button>
+          <p id="whatsappRecipientsStatus" role="status"></p>
+        </form>
+      </section>
       <section id="sicrediPixMonitorSection" style="margin-top:28px">
         <h2>Teste do Pix Sicredi</h2>
         <p>Valida QR Code, conferência bancária e baixa do estoque em uma simulação isolada, sem pagamento nem dados reais.</p>
@@ -1197,7 +1213,7 @@ function renderAdminHtml(storeConfig) {
       if (tab === 'products') loadAdminProducts();
       if (tab === 'team') loadTeam();
       if (tab === 'notifs') loadNotifications();
-      if (tab === 'status') { loadAdminStatusData(); window.ConfloraErrorHistory?.load(); }
+      if (tab === 'status') { loadAdminStatusData(); loadWhatsappRecipients(); window.ConfloraErrorHistory?.load(); }
     }
 
     // 1. EVENTOS DO CATÁLOGO & INDICADORES PARA MARKETING
@@ -1924,6 +1940,7 @@ function renderAdminHtml(storeConfig) {
     }
 
     function getProductImageUrl(product) {
+      if (product.media?.version === 1) return product.media.primaryUrl || product.media.placeholderUrl;
       const sharedCandidates = window.ConfloraProductCard?.getImageCandidates(product) || [];
       if (sharedCandidates.length) return sharedCandidates[0];
       const candidates = [
@@ -2143,6 +2160,53 @@ function renderAdminHtml(storeConfig) {
       }
     }
 
+    let whatsappRecipientsVersion = null;
+    async function loadWhatsappRecipients() {
+      if (currentUser?.role !== 'ADMIN') return;
+      const form = document.getElementById('whatsappRecipientsForm');
+      const status = document.getElementById('whatsappRecipientsStatus');
+      form.querySelector('button').disabled = true;
+      try {
+        const response = await window.ConfloraSession.apiFetch('/api/admin/whatsapp/notification-settings');
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Falha ao consultar destinatários.');
+        whatsappRecipientsVersion = data.version;
+        const fields = document.getElementById('whatsappRecipientsFields');
+        fields.replaceChildren();
+        const names = { horta: 'Horta', edmar: 'Edmar Júnio', junior: 'Junior', telvia: 'Telvia', rose: 'Rose' };
+        for (const row of data.recipients) {
+          const group = document.createElement('fieldset'); group.dataset.recipientId = row.id;
+          const legend = document.createElement('legend'); legend.textContent = names[row.id]; group.append(legend);
+          const label = document.createElement('label'); label.textContent = 'WhatsApp com DDD ';
+          const phone = document.createElement('input'); phone.type = 'tel'; phone.name = 'phone'; phone.maxLength = 22; phone.value = row.phone; phone.placeholder = 'DDD + número'; phone.autocomplete = 'off';
+          phone.style.cssText = 'width:100%;min-height:44px;margin:8px 0'; label.append(phone); group.append(label);
+          for (const pair of [['enabled', 'Ativo'], ['operational', 'Vendas e entregas'], ['closing', 'Fechamento diário']]) {
+            const option = document.createElement('label'); option.style.cssText = 'display:block;margin:8px 0';
+            const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.name = pair[0]; checkbox.checked = row[pair[0]];
+            option.append(checkbox, document.createTextNode(' ' + pair[1])); group.append(option);
+          }
+          fields.append(group);
+        }
+        status.textContent = 'Campos vazios não recebem mensagens. Salvar não envia mensagens.';
+        form.querySelector('button').disabled = false;
+      } catch (error) { status.textContent = error.message; }
+    }
+    document.getElementById('whatsappRecipientsForm').addEventListener('submit', async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const button = form.querySelector('button'); button.disabled = true;
+      const status = document.getElementById('whatsappRecipientsStatus');
+      try {
+        const recipients = Array.from(form.querySelectorAll('fieldset')).map(group => ({ id: group.dataset.recipientId,
+          phone: group.querySelector('[name=phone]').value,
+          ...Object.fromEntries(['enabled', 'operational', 'closing'].map(key => [key, group.querySelector('[name=' + key + ']').checked])) }));
+        const response = await window.ConfloraSession.apiFetch('/api/admin/whatsapp/notification-settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ version: whatsappRecipientsVersion, recipients }) });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Falha ao salvar.');
+        whatsappRecipientsVersion = data.version; status.textContent = 'Destinatários salvos. Nenhuma mensagem de teste foi enviada.';
+      } catch (error) { status.textContent = error.message; }
+      finally { button.disabled = false; }
+    });
     // 11. Diagnóstico das conexões WhatsApp e Firestore
     async function loadAdminStatusData() {
       const container = document.getElementById('adminStatusDashboardContainer');
@@ -2801,6 +2865,7 @@ function renderAdminHtml(storeConfig) {
     }
 
     let productUnitTouched = false;
+    let editingProductVersion;
 
     function syncProductStockStep() {
       const unit = document.getElementById('formProdUnit')?.value || 'UN';
@@ -2823,8 +2888,14 @@ function renderAdminHtml(storeConfig) {
     }
 
     function editProduct(id) {
+      document.getElementById('formProdRealPhotoConfirmed').checked = false;
+      document.getElementById('formProdMediaConfirmed').checked = false;
+      document.getElementById('formProdMediaLicense').value = '';
+      document.getElementById('formProdMediaLicenseUrl').value = '';
+      document.getElementById('formProdMediaAttribution').value = '';
       const p = allProducts.find(x => String(x.id) === String(id));
       if (!p) return;
+      editingProductVersion = p.updatedAt;
       showTab('products');
       document.getElementById('formProdId').value = p.id;
       document.getElementById('formProdName').value = p.descricao || p.name;
@@ -2878,6 +2949,7 @@ function renderAdminHtml(storeConfig) {
     }
 
     function resetProdForm() {
+      editingProductVersion = undefined;
       previewProduct = null;
       document.getElementById('deleteEditingProduct').hidden = true;
       document.getElementById('prodForm').reset();
@@ -2928,6 +3000,7 @@ function renderAdminHtml(storeConfig) {
 
       const payload = {
         id,
+        expectedUpdatedAt: editingProductVersion,
         name,
         category: cat,
         subcategory: sub,
@@ -2940,11 +3013,15 @@ function renderAdminHtml(storeConfig) {
         tagsAi: tags,
         tags_ia: tags,
         descriptionAi: desc,
+        externalMedia: externalImgs.map(url => ({ url, licenseCode: document.getElementById('formProdMediaLicense').value,
+          licenseUrl: document.getElementById('formProdMediaLicenseUrl').value.trim(), attribution: document.getElementById('formProdMediaAttribution').value.trim(),
+          productMatchConfirmed: document.getElementById('formProdMediaConfirmed').checked, rightsConfirmed: document.getElementById('formProdMediaConfirmed').checked })),
       };
 
+      if (newUploads.length && !document.getElementById('formProdRealPhotoConfirmed')?.checked) throw new Error('Confirme a origem das fotos reais do produto antes de enviar.');
       const res = await window.ConfloraSession.apiFetch('/api/admin/products', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Product-Content-Confirmed': 'true' },
         body: JSON.stringify(payload)
       });
       const data = await res.json();
@@ -2959,7 +3036,7 @@ function renderAdminHtml(storeConfig) {
                 'Content-Type': 'application/octet-stream',
                 'X-Photo-Content-Type': upload.file.type || 'image/jpeg',
                 'X-Photo-Append': 'true',
-                'X-Product-Name': name,
+                'X-Photo-Actual-Product': 'true',
               },
               body: upload.file,
             });
@@ -2979,12 +3056,12 @@ function renderAdminHtml(storeConfig) {
             ...pendingPhotosList.filter(photo => photo.isExisting && photo.url).map(photo => photo.url),
             ...externalImgs,
           ])];
-          if (newUploads.length) {
+          if (newUploads.length || storedImages.length) {
             const finalResponse = await window.ConfloraSession.apiFetch('/api/admin/products', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', 'X-Product-Photos-Update': 'true' },
               body: JSON.stringify({
-                ...payload,
+                id,
                 images: finalImages,
                 imageUrl: finalImages[0] || '',
               }),

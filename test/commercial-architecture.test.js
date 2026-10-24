@@ -1,3 +1,5 @@
+process.env.WHATSAPP_AI_ENABLED = 'true';
+process.env.WHATSAPP_AGENT_OWNER = 'cloud_api';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
@@ -221,7 +223,7 @@ test('uncertain native send persists a marker, pauses automation and never submi
   const client = { sendTextMessage: async () => { sends++; throw new Error('TIMEOUT_AFTER_SUBMISSION'); } };
   for (let n = 0; n < 2; n++) {
     const transport = durableConversationTransport(repo, client, { phone, messageId: 'wamid.uncertain' });
-    await assert.rejects(transport.sendTextMessage(phone, 'Mensagem'), { requiresReconciliation: true });
+    await assert.rejects(transport.sendTextMessage(phone, 'Mensagem'), n === 0 ? { requiresReconciliation: true } : { automationBlocked: true });
   }
   assert.equal(sends, 1);
   assert.ok([...db.data.values()].some(row => row.kind === 'conversation-native' && row.status === 'NEEDS_RECONCILIATION'));
@@ -266,7 +268,7 @@ test('Cloud Tasks worker authenticates and processes only the signed persisted p
   const response = { statusCode: 200, status(value) { this.statusCode = value; return this; }, json(value) { this.body = value; return this; }, sendStatus(value) { this.statusCode = value; return this; } };
   await handler(request, response); assert.equal(response.statusCode, 401); assert.equal(processed, undefined);
   request.headers['x-conflora-task-secret'] = 'local-fixture-secret';
-  await handler(request, response); assert.equal(response.statusCode, 200); assert.deepEqual(processed, payload);
+  await handler(request, response); assert.equal(response.statusCode, 200); assert.deepEqual(processed, { ...payload, conversationVersion: 0 });
   request.body.messageId = 'not-persisted';
   await handler(request, response); assert.equal(response.statusCode, 409);
 });

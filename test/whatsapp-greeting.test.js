@@ -8,7 +8,7 @@ const { FirestoreRepository } = require('./helpers/repository-fixture');
 const { PdvRepository } = require('../src/orders/pdv.repository');
 const { MessageService } = require('../src/services/message.service');
 const { recognizeGreeting } = require('../src/shared/greeting');
-const { conversationAutomation, setConversationChannel } = require('../src/services/conversation-automation');
+const { conversationAutomation, setConversationChannel, evaluateDailyReset } = require('../src/services/conversation-automation');
 
 const phone = '5564999990000';
 
@@ -22,9 +22,9 @@ function fixture() {
   const unexpected = () => { throw new Error('A greeting must not enter product or order processing.'); };
   const service = new MessageService({ firestoreRepo: repository, whatsappClient: {
     sendTextMessage: (recipient, body) => send('text', recipient, body),
-    sendInteractiveButtons: (recipient, body) => send('menu', recipient, body),
+    sendWelcomeTemplate: (recipient, body) => send('template', recipient, body),
   } });
-  service.orderIntake = { handle: unexpected };
+  service.orderIntake = { handle: unexpected, procurement: { reply: async () => null } };
   service.metaAgentService = { execute: unexpected };
   return { repository, store: new PdvRepository(repository), service, sends };
 }
@@ -36,8 +36,8 @@ for (const message of ['Boa noiteeee', 'BOAAA NOITEEE!!! 🌙', 'Bom diaaaa!', '
     assert.equal(result.intent, 'MAIN_MENU_SENT');
     assert.doesNotMatch(result.reply, /encomendar|registrar/i);
     assert.equal(sends.length, 1);
-    assert.equal(sends[0].kind, 'menu');
-    assert.deepEqual(sends[0].body.buttons.map(button => button.id), ['catalogo_virtual', 'montar_sacola', 'btn_atendente']);
+    assert.equal(sends[0].kind, 'template');
+    assert.equal(sends[0].body, ''); // Template transport receives the customer name, not a generic button body.
     assert.equal((await store.read('sessions', phone))?.orderIntake, undefined);
   });
 }
@@ -45,15 +45,35 @@ for (const message of ['Boa noiteeee', 'BOAAA NOITEEE!!! 🌙', 'Bom diaaaa!', '
 for (const channel of ['cart', 'agent']) {
   test(`greeting preserves the active ${channel} channel and pending order`, async () => {
     const { repository, store, service, sends } = fixture();
+    await evaluateDailyReset(repository, phone);
     await setConversationChannel(repository, phone, channel);
     const draft = { id: 'existing-request', status: 'AWAITING_CONFIRMATION', items: [{ requestedName: 'Alface', quantity: 2 }] };
     await store.transaction(async tx => tx.set('sessions', phone, { orderIntake: draft }));
     const result = await service.handleCustomerMessage({ phone, message: 'Boa noiteeee' });
     assert.equal(result.intent, 'GREETING_SENT');
     assert.match(result.reply, /^Boa noite!/);
+    assert.match(result.reply, channel === 'cart' ? /Como posso ajudar com sua sacola\?/ : /Qual produto você procura\?/);
     assert.equal(sends[0].kind, 'text');
     assert.equal((await conversationAutomation(repository, phone)).channel, channel);
     assert.deepEqual((await store.read('sessions', phone)).orderIntake, draft);
+  });
+}
+
+for (const message of ['menu!', 'quero ver as opções', 'quero ver as opcoes?']) {
+  test(`explicit menu phrase keeps the durable welcome flow: ${message}`, async () => {
+    const { repository, service, sends } = fixture();
+    await evaluateDailyReset(repository, phone);
+    await setConversationChannel(repository, phone, 'cart');
+    const payload = { phone, message, messageId: `menu-${message}` };
+    await new (require('../src/services/incoming-message.service').IncomingMessageService)(repository).accept(payload);
+    const result = await service.handleCustomerMessage(payload);
+    assert.equal(result.intent, 'MAIN_MENU_SENT');
+    assert.equal(sends.length, 1);
+    assert.equal(sends[0].kind, 'template');
+    const jobs = await new PdvRepository(repository).list('pdv_outbox');
+    assert.equal(jobs.filter(job => job.kind === 'conversation-native' && job.status === 'SENT' && job.providerMessageId).length, 1);
+    assert.equal((await service.handleCustomerMessage(payload)).intent, 'DUPLICATE');
+    assert.equal(sends.length, 1);
   });
 }
 
@@ -65,11 +85,11 @@ test('greetings never resume a conversation paused for human review', async () =
   assert.equal(sends.length, 0);
 });
 
-test('any first message opens the three choices before processing products', async () => {
+test('unclear first message stays silent and requests human attention', async () => {
   const { service, sends } = fixture();
-  const message = 'Boa noite, tem alface?';
+  const message = 'Queria ver um negócio';
   assert.equal(recognizeGreeting(message), null);
   const result = await service.handleCustomerMessage({ phone, message });
-  assert.equal(result.intent, 'MAIN_MENU_SENT');
-  assert.equal(sends[0].kind, 'menu');
+  assert.equal(result.intent, 'AMBIGUOUS_NEEDS_HUMAN');
+  assert.equal(sends.length, 0);
 });

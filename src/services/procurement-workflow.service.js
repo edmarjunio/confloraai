@@ -45,6 +45,7 @@ class ProcurementWorkflowService {
     validateId(id); const operator = staffActor(actor);
     if (input.confirmed !== true || !Array.isArray(input.items) || !input.items.length || input.items.length > 20) throw fail('Confirme os valores e as datas dos itens.');
     const result = await this.store.transaction(async tx => {
+      await require('./automation-send-guard').assertTransactionAutomation(tx);
       const request = await tx.get('agent_handoffs', id);
       expectedVersion(request, input);
       if (!['AWAITING_QUOTE', 'FORECAST_CONFIRMED', 'AWAITING_CUSTOMER'].includes(request.requestStatus) || request.acceptedAt) throw fail('A cotação já foi aceita ou encerrada.', 409);
@@ -96,6 +97,7 @@ class ProcurementWorkflowService {
     const method = String(input.paymentMethod || '').toUpperCase();
     if (!['DINHEIRO', 'DEBITO', 'CREDITO', 'PIX'].includes(method) || input.received !== true) throw fail('Confirme o recebimento efetivo do sinal e a forma de pagamento.');
     const result = await this.store.transaction(async tx => {
+      await require('./automation-send-guard').assertTransactionAutomation(tx);
       const request = await tx.get('agent_handoffs', id);
       const order = await tx.get('orders', id);
       if (order?.procurement?.deposit) {
@@ -133,6 +135,7 @@ class ProcurementWorkflowService {
     validateId(id); const operator = staffActor(actor);
     if (input.confirmed !== true) throw fail('Confirme que todos os itens chegaram e foram conferidos.');
     const result = await this.store.transaction(async tx => {
+      await require('./automation-send-guard').assertTransactionAutomation(tx);
       const request = await tx.get('agent_handoffs', id);
       const order = await tx.get('orders', id);
       if (order?.procurement?.arrivedAt) return { request, order, jobs: [] };
@@ -213,6 +216,7 @@ class ProcurementWorkflowService {
     let profile = null;
     if (delivery) profile = await this.customerProfile(phone);
     const result = await this.store.transaction(async tx => {
+      await require('./automation-send-guard').assertTransactionAutomation(tx);
       const session = await tx.get('sessions', phone) || {};
       const current = await tx.get('agent_handoffs', request.id);
       const sale = await tx.get('orders', request.id);

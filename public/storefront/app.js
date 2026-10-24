@@ -27,6 +27,11 @@ import { createPurchaseInsights } from "./purchase-insights.mjs";
 import { createOrderFeedback } from "./order-feedback.js";
 
 const existingStore = !location.pathname.startsWith("/shop/");
+// Authentication is independent of catalogue requests and secondary resources.
+if (existingStore) import('/storefront-auth.js').catch(() => {
+  const status = document.querySelector('[data-google-status]');
+  if (status) status.textContent = 'Login Google indisponível. Recarregue ou utilize e-mail e senha.';
+});
 const performanceMonitor = startPerformanceMonitor();
 const shellLogoUrl = $('#logo').getAttribute('src') || '/store-assets/brands/conflora-logo.webp';
 const slug = existingStore
@@ -192,7 +197,7 @@ function updateHeaderActions() {
   const identity = $("#headerAccountIdentity");
 
   identity.hidden = !isLoggedIn;
-  $("#customerAccountShortcut").hidden = !isLoggedIn || !existingStore || (allowedCashierRoles.includes(role) && role !== 'ENTREGADOR');
+  $("#customerAccountShortcut").hidden = !isLoggedIn || !existingStore || allowedCashierRoles.includes(role);
   $('#customerDebtBadge').hidden = true;
   if (isLoggedIn && existingStore && ['CLIENTE', 'ENTREGADOR'].includes(role)) {
     const userId = state.user.id;
@@ -1170,7 +1175,7 @@ try {
     state.products = saved.products;
     catalogSource = 'cache';
     lastCatalogRefresh = bootRevision === catalogRevision ? saved.savedAt : 0;
-    catalogStatus('Dados salvos no dispositivo. Preços e estoque são conferidos ao enviar o pedido.');
+    catalogStatus('');
     performanceMonitor.count('publicCacheHit');
   } else {
     [state.config, state.products] = await Promise.all([state.api('/config'), state.api('/products')]);
@@ -1197,7 +1202,7 @@ try {
     async open(product = null) {
       try {
         productEntry ||= import("./product-entry.js").then(({ createProductEntry }) => createProductEntry(state, state.reloadProducts));
-        (await productEntry).open(product);
+        await (await productEntry).open(product);
       } catch (error) { productEntry = null; notify(error.message); }
     },
   };
@@ -1269,9 +1274,6 @@ try {
   window.addEventListener('pageshow', () => { refreshOnReturn(); scheduleCatalogRefresh(); });
   if ("serviceWorker" in navigator && window.isSecureContext) {
     navigator.serviceWorker.register("/storefront/sw.js", { scope: "/", updateViaCache: "none" }).catch(() => {});
-  }
-  if (existingStore) {
-    import("/storefront-auth.js").catch(() => {});
   }
 } catch (error) {
   $('#products').removeAttribute('aria-busy');

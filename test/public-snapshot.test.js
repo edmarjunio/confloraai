@@ -35,3 +35,11 @@ test('an edit during a pending read cannot republish an obsolete price', async (
   assert.deepEqual(await snapshot.read(), { price: 20 });
   assert.equal(reads, 2);
 });
+
+test('a derived snapshot never extends its upstream cache lifetime', async () => {
+  let now = 14000, reads = 0;
+  const snapshot = createPublicSnapshot(async () => ++reads, { now: () => now, sourceExpiresAt: () => 15000 });
+  assert.equal(await snapshot.read(), 1);
+  now = 15001;
+  assert.equal(await snapshot.read(), 2);
+});

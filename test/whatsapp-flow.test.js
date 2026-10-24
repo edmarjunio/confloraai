@@ -5,6 +5,7 @@ process.env.WHATSAPP_VERIFY_TOKEN = 'local-verify-token';
 process.env.WHATSAPP_TOKEN = 'local-test-token';
 process.env.WHATSAPP_PHONE_NUMBER_ID = 'local-phone-id';
 process.env.WHATSAPP_AI_ENABLED = 'true';
+process.env.WHATSAPP_BUSINESS_ACCOUNT_ID = 'isolated-account';
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -29,7 +30,7 @@ test('WhatsApp receives a signed message and rejects forged webhooks without ext
   assert.equal(challenge.status, 200);
   assert.equal(await challenge.text(), '12345');
   assert.equal((await fetch(`${url}?hub.mode=subscribe&hub.verify_token=invalid`)).status, 403);
-  const body = JSON.stringify({ object: 'whatsapp_business_account', entry: [{ changes: [{ value: {
+  const body = JSON.stringify({ object: 'whatsapp_business_account', entry: [{ id: 'isolated-account', changes: [{ field: 'messages', value: { metadata: { phone_number_id: 'local-phone-id' },
     contacts: [{ profile: { name: 'Cliente Teste' } }],
     messages: [{ from: '5564999990000', id: 'wamid.local-test', text: { body: 'Quanto custa a muda?' } }],
   } }] }] });
@@ -39,7 +40,7 @@ test('WhatsApp receives a signed message and rejects forged webhooks without ext
   assert.equal((await fetch(url, { method: 'POST', headers, body })).status, 200);
   assert.deepEqual(await processed, {
     phone: '5564999990000', message: 'Quanto custa a muda?',
-    customerName: 'Cliente Teste', messageId: 'wamid.local-test',
+    customerName: 'Cliente Teste', messageId: 'wamid.local-test', receivedByRevision: 'local',
   });
 });
 
@@ -143,137 +144,33 @@ test('WhatsApp sends interactive list and buttons correctly', async (t) => {
   assert.equal(sentPayload.interactive.action.buttons[1].reply.id, 'order_retirada');
 });
 
-test('MessageService handles WhatsApp native flow: Atendente, Montar Sacola, and Category selection', async () => {
+test('button consumers use template and native catalog; old checkout callbacks cannot complete a sale', async () => {
   const { MessageService } = require('../src/services/message.service');
-  const firestoreRepo = new FirestoreRepository({ isInMemory: true });
-  const mockCatalog = {
-    items: [
-      { id: 'prod1', name: 'Muda de Palmeira', price: 5000, category: 'Plantas', subcategory: 'Palmeiras' },
-      { id: 'prod2', name: 'Alface Crespa', price: 500, category: 'Horta', subcategory: 'Folhosas' },
-    ],
-    refreshCatalog: async () => {},
-    getCategories: () => ['Plantas', 'Horta'],
-    getSubcategories: (cat) => cat === 'Plantas' ? ['Palmeiras'] : ['Folhosas'],
-    getProductsBySubcategory: (sub) => sub === 'Palmeiras' ? [{ id: 'prod1', name: 'Muda de Palmeira', price: 5000 }] : [],
-    findProductByName: () => null,
-  };
-  for (const product of mockCatalog.items) firestoreRepo.inMemoryProducts.set(product.id, { ...product, unit: 'UN', status: 'ATIVO', stockQuantity: 10 });
-  firestoreRepo.getInventorySettings = async () => ({ stockControlEnabled: true });
-
-  let mockMessageId = 0;
-  const sendMock = async () => ({ messages: [{ id: `wamid.mock-${++mockMessageId}` }] });
-  const sentTexts = [];
-  const sentMenus = [];
-  const clientMock = {
-    markAsRead: async () => {},
-    sendTextMessage: async (...args) => { sentTexts.push(args); return sendMock(); },
-    sendInteractiveList: sendMock,
-    sendInteractiveButtons: async (...args) => { sentMenus.push(args); return sendMock(); },
-    sendWelcomeTemplate: sendMock,
-    formatRecipient: (r) => r,
-  };
-
-  const service = new MessageService({
-    router: { route: () => ({ intent: 'GENERAL_CHAT' }) },
-    directPriceService: {},
-    agentService: {},
-    catalogRepo: mockCatalog,
-    firestoreRepo,
-    orderService: {
-      addProductToDraft: async (phone, productId) => ({
-        phone,
-        items: [{ id: productId, name: 'Muda de Palmeira', price: 5000, quantity: 1 }],
-      }),
-      updateOrderDetails: async () => ({}),
-      confirmOrder: async () => ({ reply: 'Chave PIX: pix-teste' }),
-    },
-    whatsappClient: clientMock,
-  });
-
-  // 0. SaudaÃ§Ã£o isolada envia o template da loja.
-  const greetingRes = await service.handleCustomerMessage({
-    phone: '5564999990002',
-    message: 'Quero ver as opções',
-    customerName: 'Cliente Teste',
-  });
-  assert.equal(greetingRes.intent, 'MAIN_MENU_SENT');
-  assert.deepEqual(sentMenus[0][1].buttons.map(button => button.id), ['catalogo_virtual', 'montar_sacola', 'btn_atendente']);
-
-  const catalogRes = await service.handleCustomerMessage({
-    phone: '5564999990002', message: 'Catálogo virtual', interactiveId: 'catalogo_virtual',
-  });
-  assert.equal(catalogRes.intent, 'VIRTUAL_CATALOG_LINK');
-  assert.ok(catalogRes.reply.includes(require('../src/config/env').whatsapp.catalogUrl));
-
-  const repeatedMenuRes = await service.handleCustomerMessage({ phone: '5564999990005', message: 'Olaaa' });
-  assert.equal(repeatedMenuRes.intent, 'MAIN_MENU_SENT');
-
-  // 1. O botão de atendente conversa com o agente virtual, sem abrir handoff humano.
-  await service.handleCustomerMessage({ phone: '5564999990001', message: 'Oi' });
-  const atendenteRes = await service.handleCustomerMessage({
-    phone: '5564999990001',
-    message: '',
-    interactiveId: 'btn_atendente',
-  });
-  assert.equal(atendenteRes.intent, 'AGENT_ASSISTANCE');
-  assert.equal(atendenteRes.reply, 'Certo! Pode me dizer quais produtos você procura ou como posso te ajudar?');
-  assert.equal(sentTexts.at(-1)[0], '5564999990001');
-
-  // Conversas antigas pausadas por pedido de atendente voltam ao agente no próximo contato.
   const { conversationAutomation } = require('../src/services/conversation-automation');
-  await conversationAutomation(firestoreRepo, '5564999990003', { pauseReason: 'human_requested', messageId: 'old-handoff' });
-  const resumedGreeting = await service.handleCustomerMessage({ phone: '5564999990003', message: '', interactiveId: 'btn_atendente' });
-  assert.equal(resumedGreeting.intent, 'AGENT_ASSISTANCE');
-  assert.equal((await conversationAutomation(firestoreRepo, '5564999990003')).automation, 'active');
-
-  // 2. Montar Sacola
-  await service.handleCustomerMessage({ phone: '5564999990000', message: 'Oi' });
-  const sacolaRes = await service.handleCustomerMessage({
-    phone: '5564999990000',
-    message: 'Montar Sacola',
-    interactiveId: 'montar_sacola',
-  });
-  assert.equal(sacolaRes.intent, 'NATIVE_CATALOG_CATEGORIES');
-
-  // 3. Escolher Categoria Plantas
-  const catRes = await service.handleCustomerMessage({
-    phone: '5564999990000',
-    message: 'Plantas',
-    interactiveId: 'cat_Plantas',
-  });
-  assert.equal(catRes.intent, 'NATIVE_CATALOG_SUBCATEGORIES');
-
-  // 4. Escolher Subcategoria Palmeiras
-  const subRes = await service.handleCustomerMessage({
-    phone: '5564999990000',
-    message: 'Palmeiras',
-    interactiveId: 'sub_Palmeiras',
-  });
-  assert.equal(subRes.intent, 'NATIVE_PRODUCTS_LIST');
-
-  // 5. Adicionar Produto à Sacola
-  const addRes = await service.handleCustomerMessage({
-    phone: '5564999990000',
-    message: 'Muda de Palmeira',
-    interactiveId: 'add_prod1',
-  });
-  assert.equal(addRes.intent, 'NATIVE_CART_UPDATED');
-  assert.match(addRes.reply, /adicionado à sua sacola/i);
-
-  // 6. Escolher Entrega
-  const deliveryRes = await service.handleCustomerMessage({
-    phone: '5564999990000',
-    message: 'Entrega',
-    interactiveId: 'order_entrega',
-  });
-  assert.equal(deliveryRes.intent, 'NATIVE_ORDER_DELIVERY_SET');
-
-  // 7. Escolher Pagamento PIX
-  const payRes = await service.handleCustomerMessage({
-    phone: '5564999990000',
-    message: 'PIX',
-    interactiveId: 'pay_pix',
-  });
-  assert.equal(payRes.intent, 'NATIVE_ORDER_COMPLETED');
-  assert.match(payRes.reply, /Chave PIX/i);
+  const firestoreRepo = new FirestoreRepository({ isInMemory: true });
+  const sent = [];
+  const record = async kind => { sent.push(kind); return { messages: [{ id: 'wamid.button-' + sent.length }] }; };
+  const service = new MessageService({ firestoreRepo, whatsappClient: {
+    sendWelcomeTemplate: () => record('template'), sendTextMessage: () => record('text'),
+    sendCatalogMessage: () => record('catalog'), sendInteractiveButtons: () => { throw Error('Generic menu forbidden'); },
+  } });
+  const first = await service.processCustomerMessage({ phone: '5564999990002', message: 'Oi' });
+  assert.equal(first.intent, 'MAIN_MENU_SENT'); assert.equal(sent[0], 'template');
+  const legacy = await service.processCustomerMessage({ phone: '5564999990002', message: '', interactiveId: 'catalogo_virtual' });
+  assert.equal(legacy.intent, 'MAIN_MENU_SENT'); assert.equal(sent[1], 'template');
+  const beforeHuman = sent.length;
+  const human = await service.processCustomerMessage({ phone: '5564999990003', message: '', interactiveId: 'btn_atendente' });
+  assert.equal(human.reply, ''); assert.equal(human.intent, 'HUMAN_HANDOFF_REQUESTED');
+  assert.equal(sent.length, beforeHuman);
+  assert.equal((await conversationAutomation(firestoreRepo, '5564999990003')).automation, 'paused');
+  const cart = await service.processCustomerMessage({ phone: '5564999990002', message: '', interactiveId: 'montar_sacola' });
+  assert.ok(['META_CATALOG_SENT', 'META_CATALOG_PENDING_TEXT_SALES'].includes(cart.intent));
+  for (const interactiveId of ['cat_Horta', 'sub_Folhosas', 'add_alface']) {
+    const result = await service.processCustomerMessage({ phone: '5564999990002', message: '', interactiveId });
+    assert.ok(['META_CATALOG_SENT', 'META_CATALOG_PENDING_TEXT_SALES'].includes(result.intent));
+  }
+  for (const interactiveId of ['order_entrega', 'pay_pix']) assert.equal((await service.processCustomerMessage({ phone: '5564999990002', message: '', interactiveId })).intent, 'LEGACY_CALLBACK_EXPIRED');
+  assert.equal(firestoreRepo.inMemoryOrders.size, 0);
+  await conversationAutomation(firestoreRepo, '5564999990002', { pauseReason: 'human_requested' });
+  assert.equal((await service.processCustomerMessage({ phone: '5564999990002', message: 'menu' })).intent, 'HUMAN_HANDOFF_ACTIVE');
 });

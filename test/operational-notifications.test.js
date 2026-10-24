@@ -1,0 +1,157 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { randomUUID } = require('node:crypto');
+const { FirestoreRepository } = require('./helpers/repository-fixture');
+const { PdvRepository } = require('../src/orders/pdv.repository');
+const { PdvService } = require('../src/orders/pdv.service');
+const notifications = require('../src/orders/operational-notifications');
+const sessions = require('../src/orders/cashier-sessions');
+const { formatCompactClosing } = require('../src/reports/daily-executive-report');
+const phones = ['5564999990001', '5564999990002'];
+async function fixture() {
+  const repo = new FirestoreRepository({ isInMemory: true });
+  repo.inMemoryProducts.set('p', { id: 'p', name: 'Produto isolado', price: 20, stockQuantity: 100, status: 'ATIVO' });
+  const store = new PdvRepository(repo);
+  await store.transaction(tx => tx.set('store_settings', notifications.SETTINGS_ID, { version: 1, recipients: notifications.SLOTS.map((id, index) => ({ id, phone: phones[index % 2], enabled: true, operational: true, closing: id === 'junior' })) }));
+  const sent = [];
+  const service = new PdvService({ repository: store, whatsapp: { sendPdvText: async (phone, text) => { sent.push({ phone, text }); return { messages: [{ id: 'isolated-' + sent.length }] }; } } });
+  return { repo, store, service, sent };
+}
+test('settings validate five named recipients and deduplicate normalized phones', () => {
+  const config = notifications.validate({ recipients: notifications.SLOTS.map(id => ({ id, phone: '64999990001', enabled: true, operational: true, closing: id === 'junior' })) });
+  assert.deepEqual(notifications.targets(config, 'confirmed'), [phones[0]]);
+  assert.deepEqual(notifications.targets(config, 'closing'), [phones[0]]);
+  assert.throws(() => notifications.validate({ recipients: [] }));
+  assert.throws(() => notifications.validate({ recipients: config.recipients.map(row => ({ ...row, phone: 'abc' })) }));
+});
+test('discount request creates durable approval notification, no sale or payment', async () => {
+  const { store, service, sent } = await fixture();
+  const seller = { id: 'seller', name: 'Vendedor', role: 'VENDEDOR' };
+  const id = randomUUID();
+  const result = await service.create({ requestId: id, items: [{ productId: 'p', quantity: 2 }], paymentMethod: 'DINHEIRO', discountPercent: 10 }, seller);
+  assert.equal(result.approvalRequired, true);
+  assert.equal(await store.read('orders', id), null);
+  await service.deliver(`${id}-owner-approval`);
+  assert.equal(sent.length, 2);
+  assert.match(sent[0].text, /APROVAR DESCONTO/);
+  assert.match(sent[0].text, /40,00/);
+  assert.match(sent[0].text, /36,00/);
+  assert.match(sent[0].text, /10%/);
+  await service.deliver(`${id}-owner-approval`);
+  assert.equal(sent.length, 2);
+});
+test('real receive path queues compact receipt; owner-new and owner-paid do not duplicate', async () => {
+  const { store, service, sent } = await fixture();
+  const order = await service.create({ requestId: randomUUID(), items: [{ productId: 'p', quantity: 1 }], paymentMethod: 'DINHEIRO', cashReceived: 20 }, { id: 'admin', name: 'Admin', role: 'ADMIN' });
+  await service.deliver(`${order.id}-owner-new`);
+  await service.deliver(`${order.id}-owner-paid`);
+  assert.equal(sent.length, 2);
+  assert.ok(sent.every(row => /VENDA CONFIRMADA · RECIBO/.test(row.text)));
+  assert.equal((await store.read('orders', order.id)).total, 20);
+});
+test('pending payment preserves the new-order alert; claimed delivery is skipped', async () => {
+  const { store, service, sent } = await fixture();
+  const order = { id: 'stale', total: 20, status: 'AWAITING_PAYMENT', orderType: 'DELIVERY', deliveryStatus: 'PENDING_DELIVERY', createdAt: new Date().toISOString(), paymentMethod: 'PIX' };
+  await store.transaction(tx => { tx.set('orders', order.id, order); tx.set('pdv_outbox', 'parent', { id: 'parent', orderId: order.id, kind: 'owner-new', status: 'PENDING', attempts: 0 }); });
+  await service.deliver('parent');
+  assert.equal(sent.length, 2);
+  assert.ok(sent.every(row => /NOVO PEDIDO/.test(row.text) && /ainda não confirmado/.test(row.text)));
+  assert.equal((await store.read('orders', order.id)).paymentStatus, undefined);
+  sent.length = 0;
+  order.paymentMethod = 'DINHEIRO';
+  const childIds = await notifications.expand(store, { kind: 'owner-new' }, order);
+  await store.transaction(tx => tx.set('orders', order.id, { ...order, assignedDriver: { id: 'driver' } }));
+  for (const id of childIds) await service.deliver(id);
+  assert.equal(sent.length, 0);
+});
+test('provider uncertainty is reconciled separately for each recipient, never blindly resent', async () => {
+  const { store, service, sent } = await fixture();
+  const order = { id: 'paid', status: 'PAID', completedAt: new Date().toISOString(), total: 20, subtotal: 20, paymentMethod: 'DINHEIRO', paymentStatus: 'APPROVED', items: [] };
+  await store.transaction(tx => tx.set('orders', order.id, order));
+  const ids = await notifications.expand(store, { kind: 'owner-paid', orderId: order.id }, order);
+  service.whatsapp.sendPdvText = async () => { throw new Error('timeout after submission'); };
+  await service.deliver(ids[0]);
+  assert.equal((await store.read('pdv_outbox', ids[0])).status, 'NEEDS_RECONCILIATION');
+  await service.deliver(ids[0]);
+  assert.equal(sent.length, 0);
+});
+
+test('manual Pix proof keeps its review alert without confirming payment or sending twice', async () => {
+  const { store, service, sent } = await fixture();
+  const order = { id: 'proof-order', total: 20, paymentMethod: 'PIX', paymentStatus: 'PENDING', status: 'AWAITING_PIX' };
+  await store.transaction(tx => {
+    tx.set('orders', order.id, order);
+    tx.set('pdv_outbox', 'proof-alert', { id: 'proof-alert', kind: 'proof-review', orderId: order.id, recipient: phones[0], status: 'PENDING', attempts: 0 });
+  });
+  await service.deliver('proof-alert');
+  await service.deliver('proof-alert');
+  assert.equal(sent.length, 1);
+  assert.match(sent[0].text, /COMPROVANTE AGUARDANDO CONFERÊNCIA/);
+  assert.deepEqual(await store.read('orders', order.id), order);
+});
+
+test('legacy closing without a revision is quarantined without submission', async () => {
+  const { store, service, sent } = await fixture();
+  await store.transaction(tx => tx.set('pdv_outbox', 'legacy-closing', { id: 'legacy-closing', kind: 'closing', text: 'old summary', recipient: phones[0], status: 'PENDING', attempts: 0 }));
+  await service.deliver('legacy-closing');
+  assert.equal(sent.length, 0);
+  assert.equal((await store.read('pdv_outbox', 'legacy-closing')).status, 'NEEDS_RECONCILIATION');
+});
+test('last cashier creates one closing, uses official report metrics and Junior target only', async () => {
+  const { store, service, sent } = await fixture();
+  const admin = { id: 'cashier', name: 'Caixa', role: 'CAIXA' };
+  const opened = await sessions.open(store, admin, { requestId: randomUUID(), openingFloat: 10 });
+  const other = await sessions.open(store, { ...admin, id: 'second' }, { requestId: randomUUID(), openingFloat: 0 });
+  const first = await sessions.close(store, admin, { sessionId: opened.id, counted: { cash: 10, pix: 0, debit: 0, credit: 0 } });
+  assert.equal(first.jobId, null);
+  const last = await sessions.close(store, { ...admin, id: 'second' }, { sessionId: other.id, counted: { cash: 0, pix: 0, debit: 0, credit: 0 } });
+  await service.deliver(last.jobId);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].phone, phones[0]);
+  assert.match(sent[0].text, /FECHAMENTO/);
+  assert.match(sent[0].text, /TOP 3/);
+  await service.deliver(last.jobId); assert.equal(sent.length, 1);
+});
+test('compact closing retains report values and distinguishes revenue, receipts and float', () => {
+  const text = formatCompactClosing({ date: '2026-10-24', totalRevenue: 200, totalReceivedSales: 150, orderCount: 4, ticketMedio: 50, onAccountSales: 50, debtReceived: 10, topProductsByQuantity: [{ name: 'A', quantity: 5 }], topProductsByValue: [{ name: 'B', revenue: 120 }] }, { cash: 100, openingFloat: 30, difference: 0 });
+  for (const value of ['200,00', '150,00', '30,00', 'A: 5 un.', 'B: R$']) assert.ok(text.includes(value));
+  assert.ok(text.length < 900);
+});
+test('admin settings API restricts roles, persists safely and rejects stale updates', async () => {
+  const { store } = await fixture();
+  const express = require('express');
+  const { dispatch } = require('./helpers/in-process-http');
+  const app = express(); app.use(express.json());
+  app.use((req, _res, next) => { req.user = { id: 'isolated', role: req.headers['x-test-role'] }; next(); });
+  require('../src/http/whatsapp-admin.routes').installWhatsappAdminRoutes(app, { store });
+  const path = '/api/admin/whatsapp/notification-settings';
+  assert.equal((await dispatch(app, path, { headers: { 'x-test-role': 'CAIXA' } })).status, 403);
+  const response = await dispatch(app, path, { headers: { 'x-test-role': 'ADMIN' } });
+  assert.match(response.headers.get('cache-control'), /no-store/);
+  const value = await response.json();
+  const input = { version: value.version, recipients: value.recipients };
+  const put = body => dispatch(app, path, { method: 'PUT', headers: { 'x-test-role': 'ADMIN', 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  assert.equal((await put(input)).status, 200);
+  assert.equal((await put(input)).status, 409);
+  assert.equal((await put({ ...input, recipients: [] })).status, 400);
+});
+test('closing prepared before a new cashier opening cannot send a stale daily summary', async () => {
+  const { store, service, sent } = await fixture();
+  const user = { id: 'cashier', role: 'CAIXA', name: 'Caixa' };
+  const opened = await sessions.open(store, user, { requestId: randomUUID(), openingFloat: 0 });
+  const closed = await sessions.close(store, user, { sessionId: opened.id, counted: { cash: 0, pix: 0, debit: 0, credit: 0 } });
+  await sessions.open(store, user, { requestId: randomUUID(), openingFloat: 0 });
+  await service.deliver(closed.jobId);
+  assert.equal(sent.length, 0);
+  assert.equal((await store.read('pdv_outbox', closed.jobId)).lastError, 'CLOSING_SUPERSEDED');
+});
+test('hosting forwards authentication JS before the HTML catch-all and auth failures remain visible', () => {
+  const fs = require('node:fs');
+  const rewrites = JSON.parse(fs.readFileSync('firebase.json')).hosting.rewrites;
+  const authIndex = rewrites.findIndex(row => row.source === '/storefront-auth.js');
+  const catchAll = rewrites.findIndex(row => row.source === '**');
+  assert.ok(authIndex >= 0 && authIndex < catchAll);
+  assert.equal(rewrites[authIndex].run.serviceId, 'confloraai');
+  const app = fs.readFileSync('public/storefront/app.js', 'utf8');
+  assert.match(app, /import\('\/storefront-auth.js'\)\.catch/);
+});

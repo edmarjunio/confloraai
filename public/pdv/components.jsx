@@ -273,6 +273,9 @@ window.PdvComponents = (() => {
           <button type="button" onClick={onClose} aria-label={'close_details'.tr} className="rounded-full p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800">✕</button>
         </header>
         <div className="space-y-3">
+          {product.detailsLoading && <p role="status">Carregando informações do produto…</p>}
+          {product.detailsError && <p role="alert">{product.detailsError}</p>}
+          {product.media?.gallery?.filter(image => image.attribution).map(image => <p key={image.url} className="text-xs text-slate-500">{image.attribution} <a href={image.licenseUrl} target="_blank" rel="noopener noreferrer">Licença</a></p>)}
           <section className="rounded-2xl border border-emerald-100 bg-[#F4F6F5] p-3.5">
             <h3 className="text-xs font-extrabold uppercase tracking-wide text-emerald-800">{'variations_and_values'.tr}</h3>
             <ul className="mt-2 divide-y divide-slate-200">
@@ -286,7 +289,7 @@ window.PdvComponents = (() => {
             <h3 className="text-xs font-extrabold uppercase tracking-wide text-emerald-800">{detail.label}</h3>
             <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-slate-700">{detail.value}</p>
           </section>)}
-          {!details.length && <p className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">{'there_is_no_additional_information_registered_for_this_product_yet'.tr}</p>}
+          {!details.length && !product.detailsLoading && !product.detailsError && <p className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">{'there_is_no_additional_information_registered_for_this_product_yet'.tr}</p>}
         </div>
         <button type="button" onClick={onClose} className={button + ' mt-5 w-full py-3'}>{'common_close'.tr}</button>
       </section>
@@ -1570,9 +1573,22 @@ window.PdvComponents = (() => {
     const [sending, setSending] = useState(false);
     const [error, setError] = useState('');
     const rawPhone = String(conversation?.phone || conversation?.customerPhone || '').replace(/\D/g, '');
+    const compositionClaim = useRef(null);
+    const manualRequest = useRef(null);
+    const [compositionReady, setCompositionReady] = useState(false);
+    const ensureCompositionClaim = () => {
+      if (!compositionClaim.current) compositionClaim.current = api(`/api/admin/whatsapp/conversations/${rawPhone}/takeover`, {})
+        .then(() => { setCompositionReady(true); })
+        .catch(err => { compositionClaim.current = null; setCompositionReady(false); setError(err.message); throw err; });
+      return compositionClaim.current;
+    };
 
     useEffect(() => {
       if (!rawPhone) return;
+      compositionClaim.current = null;
+      manualRequest.current = null;
+      setCompositionReady(false);
+      setText('');
       let active = true;
       api(`/api/admin/whatsapp/conversations/${rawPhone}/messages`)
         .then(res => { if (active && res.messages) setMessages(res.messages); })
@@ -1590,7 +1606,10 @@ window.PdvComponents = (() => {
       setSending(true);
       setError('');
       try {
-        await api(`/api/admin/whatsapp/conversations/${rawPhone}/send`, { text: text.trim() });
+        await ensureCompositionClaim();
+        if (!manualRequest.current || manualRequest.current.text !== text.trim()) manualRequest.current = { text: text.trim(), requestId: crypto.randomUUID() };
+        await api(`/api/admin/whatsapp/conversations/${rawPhone}/send`, manualRequest.current);
+        manualRequest.current = null;
         setText('');
         const res = await api(`/api/admin/whatsapp/conversations/${rawPhone}/messages`);
         if (res.messages) setMessages(res.messages);
@@ -1633,8 +1652,8 @@ window.PdvComponents = (() => {
           {/* Bar de Ações do Operador */}
           <div className="p-3 bg-emerald-50/60 border-b border-emerald-100 flex flex-wrap gap-2 shrink-0">
             {conversation.automation === 'paused' ? (
-              <button type="button" onClick={() => onRelease(conversation)} className="cf-btn-3d cf-btn-3d--secondary cf-btn-3d--sm">
-                🤖 Devolver ao Agente
+              <button type="button" onClick={() => { compositionClaim.current = null; setCompositionReady(false); onRelease(conversation); }} className="cf-btn-3d cf-btn-3d--secondary cf-btn-3d--sm">
+                Retomar automação
               </button>
             ) : (
               <button type="button" onClick={() => onTakeover(conversation)} className="cf-btn-3d cf-btn-3d--primary cf-btn-3d--sm">
@@ -1680,6 +1699,8 @@ window.PdvComponents = (() => {
               <textarea
                 rows={1}
                 value={text}
+                readOnly={!compositionReady}
+                onFocus={() => { ensureCompositionClaim().catch(() => {}); }}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Digite sua mensagem… (Enter envia, Shift+Enter quebra linha)"
@@ -1933,7 +1954,7 @@ window.PdvComponents = (() => {
       red: 'border-red-300 bg-red-50 text-red-950',
     };
     const acceptsDrop = canMove && ((dragFrom === 'confirmation' && stage === 'payment') || (dragFrom === 'payment' && stage === 'paid'));
-    return <section data-column-stage={stage} data-column-title={title} onDragOver={(event) => { if (acceptsDrop) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; } }} onDrop={(event) => { event.preventDefault(); if (!acceptsDrop) return; try { const payload = JSON.parse(event.dataTransfer.getData('application/x-conflora-order')); onMove(payload.id, payload.from, stage); } catch { /* Ignore unrelated drag payloads. */ } onDragEnd(); }} className={`w-[340px] min-w-[340px] shrink-0 snap-start flex flex-col rounded-2xl border border-slate-200 bg-slate-100 p-3 ${acceptsDrop ? 'cf-order-column--drop' : ''} ${isTargetGlow ? 'cf-order-column--target-glow' : ''}`} aria-label={title}>
+    return <section data-empty={orders.length === 0} data-column-stage={stage} data-column-title={title} onDragOver={(event) => { if (acceptsDrop) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; } }} onDrop={(event) => { event.preventDefault(); if (!acceptsDrop) return; try { const payload = JSON.parse(event.dataTransfer.getData('application/x-conflora-order')); onMove(payload.id, payload.from, stage); } catch { /* Ignore unrelated drag payloads. */ } onDragEnd(); }} className={`w-[340px] min-w-[340px] shrink-0 snap-start flex flex-col rounded-2xl border border-slate-200 bg-slate-100 p-3 ${acceptsDrop ? 'cf-order-column--drop' : ''} ${isTargetGlow ? 'cf-order-column--target-glow' : ''}`} aria-label={title}>
       <header className={`mb-3 rounded-xl border px-3 py-2 ${themes[tone]}`}>
         <div className="flex items-center justify-between gap-2"><h3 className="text-xs font-black tracking-wide">{title}</h3><span className="rounded-full bg-white/80 px-2 py-0.5 text-xs font-extrabold">{orders.length}</span></div>
         <p className="mt-1 text-[10px] opacity-75">{hint}</p>
@@ -2487,7 +2508,7 @@ window.PdvComponents = (() => {
         setIsFlying(false);
         setFlyingToStage(null);
 
-        if (options.playSound !== false) {
+        if (options.playSound !== false && window.ConfloraNotifications.cashierAlertsEnabled(user)) {
           playOrderAlertSound(soundSettingsRef.current, nextBatch.length > 1);
         }
 
@@ -2619,6 +2640,7 @@ window.PdvComponents = (() => {
     const [whatsappFilter, setWhatsappFilter] = useState('all_open');
     const [selectedConversation, setSelectedConversation] = useState(null);
     const [mobileTab, setMobileTab] = useState('orders'); // 'orders' | 'whatsapp'
+    const [queueStage, setQueueStage] = useState('pending');
 
     const fetchWhatsappConversations = async () => {
       try {
@@ -2662,6 +2684,7 @@ window.PdvComponents = (() => {
       { title: 'paid_completed'.tr, hint: 'payments_received_and_completed_orders'.tr, orders: data.paid.filter(order => !deliveryOrderIds.has(order.id)), tone: 'green', stage: 'paid' },
       { title: 'FIADOS', hint: 'sales_registered_for_later_payment'.tr, orders: data.confirmed.filter(order => !deliveryOrderIds.has(order.id)), tone: 'red', stage: 'debt' },
     ] : [];
+    const displayedColumns = columns.filter(column => queueStage === 'all' || (queueStage === 'pending' ? column.stage !== 'paid' : column.stage === queueStage));
     const title = view === 'orders' ? 'Comandas' : view === 'history' ? 'sales_history'.tr : 'report'.tr;
     const cashierOrderIds = new Set(data?.cashierOrderIds || []);
     const reportOrders = data ? (user.role === 'CAIXA'
@@ -2765,9 +2788,16 @@ window.PdvComponents = (() => {
 
               {newOrderNotice && <div role="status" className="mb-3 rounded-xl border border-amber-300 bg-amber-100 px-4 py-3 text-sm font-extrabold text-amber-950 shadow-sm" aria-live="polite">🔔 {newOrderNotice}</div>}
 
+              <label className={`cf-orders-stage-filter ${mobileTab === 'whatsapp' ? 'cf-orders-stage-filter--whatsapp' : ''}`}>Exibir comandas
+                <select value={queueStage} onChange={event => setQueueStage(event.target.value)} aria-label="Etapa das comandas">
+                  <option value="pending">Operações pendentes</option><option value="all">Todas as etapas</option>
+                  {columns.map(column => <option key={column.stage} value={column.stage}>{column.title} ({column.orders.length})</option>)}
+                </select>
+              </label>
+
               <div className="cf-cashier-board cf-orders-board flex w-full gap-4 overflow-x-auto pb-4 pt-1 snap-x select-none">
                 {/* Coluna Desktop de WhatsApp */}
-                <section className={`w-[340px] min-w-[340px] shrink-0 snap-start flex flex-col rounded-2xl border border-slate-200 bg-slate-100 p-3 ${mobileTab === 'whatsapp' ? 'block md:block' : 'hidden md:block'}`}>
+                <section className={`cf-orders-whatsapp w-[340px] min-w-[340px] shrink-0 snap-start flex flex-col rounded-2xl border border-slate-200 bg-slate-100 p-3 ${mobileTab === 'whatsapp' ? 'block md:block' : 'hidden md:block'}`}>
                   <header className="mb-3 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-950 px-3 py-2">
                     <div className="flex items-center justify-between gap-2">
                       <h3 className="text-xs font-black tracking-wide">WHATSAPP</h3>
@@ -2803,8 +2833,9 @@ window.PdvComponents = (() => {
                 </section>
 
                 {/* Colunas de Comandas */}
-                <div className={`flex gap-4 ${mobileTab === 'orders' ? 'block md:flex' : 'hidden md:flex'}`}>
-                  {columns.map((column) => <CashierColumn key={column.title} {...column} isTargetGlow={flyingToStage === column.stage} canMove={['ADMIN', "CAIXA"].includes(user.role) && !busy} dragFrom={dragFrom} onMove={moveOrder} onDragStart={setDragFrom} onDragEnd={() => setDragFrom(null)} pulsedOrderIds={pulsedOrderIds} selectedOrderId={selectedOrder?.id} onDetails={setSelectedOrder} />)}
+                <div className={`cf-orders-stages flex gap-4 ${mobileTab === 'orders' ? 'block md:flex' : 'hidden md:flex'}`} data-pending-only={queueStage === 'pending'}>
+                  {queueStage === 'pending' && displayedColumns.every(column => !column.orders.length) && <p className="cf-orders-empty-pending" role="status">Nenhuma operação pendente nesta consulta.</p>}
+                  {displayedColumns.map((column) => <CashierColumn key={column.title} {...column} isTargetGlow={flyingToStage === column.stage} canMove={['ADMIN', "CAIXA"].includes(user.role) && !busy} dragFrom={dragFrom} onMove={moveOrder} onDragStart={setDragFrom} onDragEnd={() => setDragFrom(null)} pulsedOrderIds={pulsedOrderIds} selectedOrderId={selectedOrder?.id} onDetails={setSelectedOrder} />)}
                 </div>
               </div>
             </>}
@@ -2982,14 +3013,14 @@ window.PdvComponents = (() => {
             </>}
           </>}
       </main>
-      {view === 'orders' && data && <section className="cf-orders-metrics-sheet" aria-label="Resumo de valores das comandas">
-        <div className="cf-orders-sheet-handle" aria-hidden="true"><span /></div>
+      {view === 'orders' && data && <details className="cf-orders-metrics-sheet" aria-label="Resumo de valores das comandas">
+        <summary>Resumo do período</summary>
         <div className="cf-orders-metrics-grid">
           <MetricCard label={'sales_assigned_to_me'.tr} value={money(data.metrics.sales)} description={`${data.metrics.orderCount} comanda(s)`} />
           <MetricCard label={'received_by_me'.tr} value={money(data.metrics.receipts)} description="Vendas pagas no período" />
           <MetricCard label={'store_credits_settled_by_me'.tr} value={money(data.metrics.debtReceipts)} description="Recebimentos no período" />
         </div>
-      </section>}
+      </details>}
       {selectedConversation && (
         <WhatsappChatDrawer
           conversation={selectedConversation}

@@ -1,0 +1,9 @@
+# Agente e evidência comercial
+
+O agente verificado identifica IDs usando nomes, sinônimos aprovados e características botânicas revisadas. Depois relê documentos oficiais e verifica coerência de identidade, preço, status e unidade. Respostas de preço não usam texto livre de IA como autoridade.
+
+Na apresentação do WhatsApp, o cliente recebe o template aprovado configurado com logo, CTA URL do catálogo virtual e respostas rápidas de sacola/atendimento humano. O parser determinístico extrai os pedidos; o checkout WhatsApp não usa fallback Gemini. A assistência independente do site permanece disponível. Preços, disponibilidade e operações financeiras são decididos pelo backend com documentos atuais do Firestore. Uma identificação ambígua de variante pede esclarecimento; intenção vaga permanece silenciosa e vai à equipe. Conferir [contrato atual](WHATSAPP_IMPLEMENTATION.md), ainda sem homologação.
+
+`SalesConversationService` registra o estado da conversa no Firestore. Itens permitidos indisponíveis são oferecidos para procura por encomenda, sem garantir fornecimento, preço ou prazo. Após consentimento, somente esses itens são registrados no serviço existente. Itens disponíveis e carrinho nativo passam por retirada/entrega, endereço quando necessário, taxa e pagamento; a confirmação final explícita acontece depois desses dados e antes de gerar a comanda. Não se repetem dados já informados.
+
+Antes de criar a venda, o backend relê preços e disponibilidade, reserva estoque e gera recibo com identificador estável. Cliques antigos e repetições não geram nova venda. Pix Sicredi usa cobrança e confirmação bancária verificadas quando as credenciais reais estão configuradas. Pix manual continua pendente até conferência autorizada; texto do cliente ou comprovante isolado nunca confirma pagamento. O simulador Sicredi usa armazenamento descartável e não grava vendas nem envia WhatsApp real.

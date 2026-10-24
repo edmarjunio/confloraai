@@ -132,36 +132,22 @@ class WhatsAppClient {
    * @param {string} [customerName='']
    */
   async sendWelcomeTemplate(to, customerName = '') {
-    const templateName = process.env.WHATSAPP_WELCOME_TEMPLATE || 'boas_vindas_conflora';
-    const language = config.whatsapp.templates.language || 'pt_BR';
-    const cleanName = customerName?.trim?.() || '';
+    const { welcomeContract, welcomeComponents } = require('./whatsapp-welcome');
+    const contract = welcomeContract();
     const fs = require('node:fs/promises');
     const path = require('node:path');
-    const logoPath = path.resolve(__dirname, '../../public/storefront/brands/conflora-logo.png');
-    const logoBuffer = await fs.readFile(logoPath);
+    const logoBuffer = await fs.readFile(path.resolve(__dirname, '../../public/storefront/brands/conflora-logo.png'));
     const form = new FormData();
     form.set('messaging_product', 'whatsapp');
     form.set('file', new Blob([logoBuffer], { type: 'image/png' }), 'conflora-logo.png');
     const headerImage = await this.uploadMedia(form);
-    // Se tiver nome: "Olá" + " João, s" + "eja..." -> "Olá João, seja muito bem-vindo..."
-    // Se não tiver nome: "Olá" + "! S" + "eja..." -> "Olá! Seja muito bem-vindo..."
-    const greetingText = cleanName ? ` ${cleanName}, s` : '! S';
-    const components = [
-      {
-        type: 'header',
-        parameters: [{ type: 'image', image: { id: headerImage.id } }],
-      },
-      {
-        type: 'body',
-        parameters: [
-          {
-            type: 'text',
-            text: greetingText,
-          },
-        ],
-      },
-    ];
-    return this.sendTemplate(to, templateName, language, components);
+    return this.sendTemplate(to, contract.name, contract.language, welcomeComponents(contract, customerName, { id: headerImage.id }));
+  }
+
+  async sendCatalogMessage(to) {
+    if (process.env.WHATSAPP_META_CATALOG_ENABLED !== 'true' || !process.env.WHATSAPP_META_CATALOG_ID) throw Object.assign(new Error('Catálogo Meta ainda não habilitado e vinculado.'), { definitelyNotSent: true });
+    return this.postRequest('/messages', { messaging_product: 'whatsapp', recipient_type: 'individual', to,
+      type: 'interactive', interactive: { type: 'catalog_message', body: { text: 'Escolha os produtos e envie seu carrinho. Valores e disponibilidade serão conferidos antes da confirmação.' }, action: { name: 'catalog_message' } } });
   }
 
   /**
@@ -286,6 +272,7 @@ class WhatsAppClient {
   }
 
   async postRequest(endpoint, body) {
+    if (body?.to) await require('../services/automation-send-guard').beforeSubmission();
     if (!this.token || !config.whatsapp.phoneNumberId) {
       throw Object.assign(new Error('WhatsApp não configurado.'), { status: 503, definitelyNotSent: true });
     }

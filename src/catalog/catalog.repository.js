@@ -1,14 +1,8 @@
 const { normalizeText, toSingular } = require('../shared/string.util');
 const Logger = require('../shared/logger');
 const { normalizeCatalogItem } = require('./normalize-catalog-item');
-function isStoredProductImage(value) {
-  return typeof value === 'string' && (
-    value.startsWith('/api/images/') ||
-    value.startsWith('/store-assets/products/') ||
-    /^https:\/\/(?:firebasestorage|storage)\.googleapis\.com\//i.test(value) ||
-    /^https:\/\/(?:inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org)\//i.test(value)
-  );
-}
+// Entries reaching the index have already passed the shared media contract.
+const isStoredProductImage = value => typeof value === 'string' && /^https:\/\//i.test(value);
 
 const STOP_WORDS = new Set([
   'voce', 'voces', 'tem', 'teria', 'teriam', 'temos', 'para', 'pra', 'com', 'sem',
@@ -61,6 +55,7 @@ class CatalogRepository {
   }
 
   async refreshCatalog() {
+    if (this.isCacheValid()) return;
     if (this.refreshPromise) {
       await this.refreshPromise;
       return;
@@ -76,6 +71,13 @@ class CatalogRepository {
     if (generation !== this.cacheGeneration) await this.refreshCatalog();
   }
 
+  // Shared display/search snapshot. Never use this method to authorize checkout,
+  // reservations, stock changes or payment; those read authoritative documents.
+  async readProducts() {
+    await this.refreshCatalog();
+    return this.rawItems;
+  }
+
   loadItems(rawItems) {
     if (!Array.isArray(rawItems)) {
       return;
@@ -83,9 +85,9 @@ class CatalogRepository {
 
 
     this.rawItems = rawItems;
-    this.expiresAt = 0;
+    this.expiresAt = this.now() + 15000;
     this.items = rawItems
-      .filter((item) => (item.status || 'ATIVO').toUpperCase() === 'ATIVO')
+      .filter(item => require('./commercial-product').commercialProduct(item).active)
       .filter(require('./commercial-product').hasValidCommercialPrice)
       .map((item) => normalizeCatalogItem(item));
 

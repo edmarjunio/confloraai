@@ -1,12 +1,13 @@
 /** One transaction boundary for commercial domains. Never fail over to local money/stock. */
 async function runTransaction(repo, work) {
+  const stamped = (collection, value) => collection === 'pdv_outbox' && !value.createdAt ? { ...value, createdAt: new Date().toISOString() } : value;
   if (repo.firestore && !repo._firestoreClientDisabled) {
     return repo.firestore.runTransaction(tx => work({
       get: async (collection, id) => {
         const doc = await tx.get(repo.firestore.collection(collection).doc(String(id)));
         return doc.exists ? { ...doc.data(), id: doc.id || String(id) } : null;
       },
-      set: (collection, id, value) => tx.set(repo.firestore.collection(collection).doc(String(id)), value),
+      set: (collection, id, value) => tx.set(repo.firestore.collection(collection).doc(String(id)), stamped(collection, value)),
     }));
   }
   if (!repo.isInMemory || repo.firestore) throw new Error('Firestore indisponível. Operação não registrada.');
@@ -23,7 +24,7 @@ async function runTransaction(repo, work) {
     const result = await work({
       get: async (collection, id) => collection === 'store_settings' && id === 'inventory'
         ? repo.getInventorySettings() : structuredClone(mapFor(collection).get(id) || null),
-      set: (collection, id, value) => writes.push([collection, id, structuredClone(value)]),
+      set: (collection, id, value) => writes.push([collection, id, structuredClone(stamped(collection, value))]),
     });
     for (const [collection, id, value] of writes) {
       mapFor(collection).set(id, value);

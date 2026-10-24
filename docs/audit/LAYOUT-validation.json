@@ -1,0 +1,37 @@
+{
+  "at": "2026-10-24T14:38:01.408Z",
+  "scope": "APRESENTACAO_OPERACIONAL_IMAGENS_E_PREFERENCIA_DE_ALERTAS",
+  "base": "e0ff7ec",
+  "browser": {
+    "passed": 41,
+    "failed": 0,
+    "skipped": 1,
+    "skipReason": "Teste exclusivo mobile ignorado no projeto desktop",
+    "durationSeconds": 51
+  },
+  "notifications": {
+    "passed": 3,
+    "failed": 0
+  },
+  "node": {
+    "passed": 17,
+    "failed": 0
+  },
+  "checks": [
+    "build:frontend",
+    "check:full",
+    "lint",
+    "diff --check"
+  ],
+  "verifiedPhoneWidths": [
+    320,
+    390
+  ],
+  "imageAssertion": "Mesmo SKU, mesma URL e naturalWidth > 0 na Vitrine e Caixa, usando fixture isolada",
+  "loadingMechanismChanged": false,
+  "firestoreWrites": false,
+  "storageUploads": false,
+  "realMessagesSent": false,
+  "deploy": false,
+  "hostedValidated": false
+}

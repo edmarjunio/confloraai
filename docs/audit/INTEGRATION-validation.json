@@ -1,0 +1,30 @@
+{
+  "at": "2026-10-24T14:19:17.417Z",
+  "scope": "ISOLATED_TESTS_AFTER_INTEGRATING_MAIN",
+  "integratedMain": "73a98a28fe47977f6e189f718d71c6618e379de0",
+  "previousBranch": "d0862f23a5cece52e83e47d36db04172dc123fc1",
+  "decision": "Preservar escopo da auditoria, Meta e proveniência conforme escolha explícita do usuário",
+  "checks": [
+    "build:frontend",
+    "check:full",
+    "lint",
+    "diff --check"
+  ],
+  "node": {
+    "tests": 496,
+    "passed": 495,
+    "failed": 0,
+    "skipped": 1,
+    "durationMs": 96384.6183,
+    "skipReason": "Teste de concorrência requer emulador"
+  },
+  "browser": {
+    "passed": 32,
+    "failed": 0,
+    "durationSeconds": 57.5,
+    "config": "playwright.loading.config.js"
+  },
+  "productionValidated": false,
+  "deploy": false,
+  "remoteDataWrites": false
+}

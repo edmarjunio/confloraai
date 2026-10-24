@@ -26,7 +26,7 @@ test('empty database starts without products, users, sales or a fictitious quote
   assert.equal((await repository.getAllUsers()).length, 0);
   assert.equal((await repository.getAllOrders()).length, 0);
   const result = await say({ items: [{ name: 'Alface', quantity: 2 }] });
-  assert.match(result.reply, /não temos no momento/);
+  assert.match(result.reply, /Podemos buscar por encomenda/);
   assert.doesNotMatch(result.reply, /R\$/);
   assert.equal(repository.inMemoryOrders.size, 0);
 });
@@ -42,9 +42,9 @@ test('mixed request asks consent for procurement, then sells only available prod
   const requests = await store.scanPage('agent_handoffs', 'kind', 'ORDER_REQUEST');
   assert.equal(requests.length, 1);
   assert.deepEqual(requests[0].items.map(item => item.requestedName), ['Lavanda']);
-  const fulfillment = await choose(sale, 'yes');
-  const payment = await choose(fulfillment, 'pickup');
-  const receipt = await choose(payment, 'cash');
+  const payment = await choose(sale, 'pickup');
+  const final = await choose(payment, 'cash');
+  const receipt = await choose(final, 'yes');
   const order = await repository.getOrderById(receipt.orderId);
   assert.equal(order.total, 8);
   assert.equal(order.paymentStatus, 'PENDING');
@@ -63,23 +63,26 @@ test('declining procurement does not register an order for missing products', as
 test('price and stock changes require new consent before any sale', async () => {
   const { repository, say, choose } = fixture();
   const quote = await say({ items: [{ name: 'Alface', quantity: 2 }] });
+  const payment = await choose(quote, 'pickup');
+  const final = await choose(payment, 'cash');
   repository.inMemoryProducts.get('lettuce').price = 5;
-  const revised = await choose(quote, 'yes');
+  const revised = await choose(final, 'yes');
   assert.match(revised.reply, /10,00/);
   repository.inMemoryProducts.get('lettuce').stockQuantity = 0;
   const unavailable = await choose(revised, 'yes');
-  assert.match(unavailable.reply, /não temos no momento/);
+  assert.match(unavailable.reply, /Podemos buscar por encomenda/);
   assert.equal(repository.inMemoryOrders.size, 0);
 });
 
 test('delivery fee is disclosed and confirmed before the authoritative sale total', async () => {
   const { repository, say, choose } = fixture();
   const quote = await say({ items: [{ name: 'Alface', quantity: 2 }], fulfillment: 'DELIVERY', address: 'Rua das Flores, 123, Centro, Mineiros GO' });
-  const delivery = await choose(quote, 'yes');
+  const delivery = quote;
   assert.match(delivery.reply, /Entrega:.*5,00/);
   assert.match(delivery.reply, /Total:.*13,00/);
   const payment = await choose(delivery, 'yes');
-  const receipt = await choose(payment, 'cash');
+  const final = await choose(payment, 'cash');
+  const receipt = await choose(final, 'yes');
   const order = await repository.getOrderById(receipt.orderId);
   assert.equal(order.total, 13);
   assert.equal(order.deliveryFee, 5);
@@ -89,15 +92,15 @@ test('delivery fee is disclosed and confirmed before the authoritative sale tota
 test('stale confirmation cannot create duplicate sales and a new cart gets a new identity', async () => {
   const { repository, say, choose } = fixture();
   const quote = await say({ items: [{ name: 'Alface', quantity: 1 }] });
-  const fulfillment = await choose(quote, 'yes');
-  const stale = await choose(quote, 'yes');
+  const payment = await choose(quote, 'pickup');
+  const stale = await choose(quote, 'pickup');
   assert.match(stale.reply, /opção mudou/);
-  const payment = await choose(fulfillment, 'pickup');
-  const first = await choose(payment, 'cash');
+  const final = await choose(payment, 'cash');
+  const first = await choose(final, 'yes');
   const secondQuote = await say({ items: [{ name: 'Alface', quantity: 1 }] });
-  const nextFulfillment = await choose(secondQuote, 'yes');
-  const nextPayment = await choose(nextFulfillment, 'pickup');
-  const second = await choose(nextPayment, 'cash');
+  const nextPayment = await choose(secondQuote, 'pickup');
+  const nextFinal = await choose(nextPayment, 'cash');
+  const second = await choose(nextFinal, 'yes');
   assert.notEqual(first.orderId, second.orderId);
   assert.equal(repository.inMemoryOrders.size, 2);
 });
@@ -107,4 +110,11 @@ test('invalid quantities never reserve inventory or create money', async () => {
   for (const quantity of [-1, 0, 10001]) await assert.rejects(say({ items: [{ name: 'Alface', quantity }] }));
   assert.equal(repository.inMemoryOrders.size, 0);
   assert.equal(repository.inMemoryProducts.get('lettuce').reservedQuantity, 0);
+});
+test('AI extraction keeps explicit items even when the model mislabels them as confirmation', async () => {
+  const { repository, service } = fixture();
+  service.agent = { extractSalesIntent: async () => ({ action: 'confirm', query: false, items: [{ name: 'Alface', quantity: 4 }], fulfillment: 'PICKUP', paymentMethod: 'DINHEIRO', address: null }) };
+  const result = await service.handle({ phone, message: 'Na retirada eu precisaria de quatro alfaces e pagaria em dinheiro.' });
+  assert.match(result.reply, /4 Alface/); assert.match(result.reply, /Confirma a criação da comanda/);
+  assert.equal(repository.inMemoryOrders.size, 0);
 });

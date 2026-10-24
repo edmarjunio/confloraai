@@ -196,7 +196,7 @@ test('7. API HTTP POST /api/admin/images/compress comprime imagens sob demanda',
 });
 
 test('8. Upload de produto preserva o PNG original sem compressão destrutiva', async () => {
-  const repo = new FirestoreRepository({ isInMemory: true });
+  const repo = new FirestoreRepository({ isInMemory: true, productImageStorage: require('./helpers/actual-photo-fixture').isolatedPhotoStorage() });
   await repo.saveProduct({
     id: 'prod-photo-comp-01',
     name: 'Bouganville Trepadeira Rosa',
@@ -226,7 +226,7 @@ test('8. Upload de produto preserva o PNG original sem compressão destrutiva', 
     const originalBuffer = await createTestImage(1200, 900);
     const uploadRes = await fetch(`http://127.0.0.1:${port}/api/admin/products/prod-photo-comp-01/photo`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', cookie },
+      headers: { 'Content-Type': 'application/json', cookie, 'X-Photo-Actual-Product': 'true' },
       body: JSON.stringify({
         photoBase64: originalBuffer.toString('base64'),
         contentType: 'image/png',

@@ -161,6 +161,8 @@ class PdvService {
         }
         const pending = { id, source: 'PDV', requestHash, input: requestPayload, createdBy, requestedBy: user.id, operatorName: createdBy.name, operatorEmail: createdBy.email, customerName: input.customerName || customer?.name || 'Cliente Balcão', customerPhone: phone, items, paymentMethod, subtotal: subtotalMinor / 100, discountPercent, discountAmount: discountMinor / 100, total, status: 'PENDING', createdAt: new Date().toISOString() };
         tx.set('discount_approvals', id, pending);
+        const notificationId = `${id}-owner-approval`;
+        tx.set('pdv_outbox', notificationId, { id: notificationId, approvalId: id, kind: 'owner-approval', status: 'PENDING', attempts: 0 });
         return pending;
       });
       if (approval.status === 'REJECTED') { throw new Error('Desconto recusado: ' + approval.rejectionReason); }
@@ -469,11 +471,15 @@ class PdvService {
     if (!job) { return; }
     const update = updates => this.repository.updateMessage(id, updates, job.leaseOwner);
     let uncertainSend = false;
+    let automationRecipient = '';
     const sendOnce = async (stage, send, checkpoint) => {
+      const guard = require('../services/automation-send-guard');
+      const guardOptions = { requireAssistant: job.kind.startsWith('conversation-') };
+      if (automationRecipient) await guard.assertAutomation(this.repository.repository, automationRecipient, job.conversationVersion, guardOptions);
       await update({ status: 'SENDING', sendingStage: stage, sendingAt: new Date().toISOString() });
       uncertainSend = true;
       let result;
-      try { result = await send(); }
+      try { result = automationRecipient ? await guard.withAutomation(this.repository.repository, automationRecipient, job.conversationVersion, send, guardOptions) : await send(); }
       catch (error) {
         // Only the trusted transport can establish that no customer message was submitted.
         if (error.definitelyNotSent === true) uncertainSend = false;
@@ -487,6 +493,14 @@ class PdvService {
       return result;
     };
     try {
+      if (job.kind === 'meta-product-sync') {
+        await new (require('../services/meta-catalog-sync.service').MetaCatalogSyncService)(this.repository.repository).deliver(job);
+        return;
+      }
+      if (job.kind === 'conversation-native') {
+        await update({ status: 'NEEDS_RECONCILIATION', leaseUntil: 0, lastError: 'RECOVER_USING_ORIGINAL_INBOX_EVENT' });
+        return;
+      }
       if (['order-request-notice', 'order-request-forecast', 'order-request-event'].includes(job.kind)) {
         const request = await this.repository.read('agent_handoffs', job.requestId);
         if (!request || request.kind !== 'ORDER_REQUEST' || request.tenantId !== 'conflora') throw new Error('Comanda de atendimento não encontrada.');
@@ -514,6 +528,7 @@ class PdvService {
             : job.target === 'junior' ? process.env.JUNIOR_WHATSAPP_NUMBER || process.env.OWNER_WHATSAPP_NUMBER
               : process.env.STORE_NOTIFICATION_PHONE || this.ownerPhone;
           const phone = normalizePhone(recipient);
+          if (['order-request-forecast', 'order-request-event'].includes(job.kind)) automationRecipient = phone;
           if (!phone) throw new Error('Configure o WhatsApp do responsável pela encomenda.');
           const text = job.kind === 'order-request-event' ? job.text : job.kind === 'order-request-forecast'
             ? `Previsão da sua encomenda (${summary}): ${job.forecast}.`
@@ -547,12 +562,55 @@ class PdvService {
         await this.deliverCatalog(job);
         return;
       }
-      if (job.kind === 'conversation-text' && this.catalogAgent) {
+      if (job.kind === 'conversation-text') {
         // Old queued free-form replies are never sent after switching to the controlled agent.
         await update({ status: 'SKIPPED', leaseUntil: 0, lastError: 'SUPERSEDED_BY_VERIFIED_AGENT' });
         return;
       }
       const order = job.orderId ? await this.repository.read('orders', job.orderId) : null;
+      const notifications = require('./operational-notifications');
+      if (['owner-new', 'owner-paid', 'owner-delivered', 'owner-delivery-pending', 'owner-approval', 'closing'].includes(job.kind)) {
+        if (job.kind === 'closing' && !job.closingDate) {
+          await update({ status: 'NEEDS_RECONCILIATION', leaseUntil: 0, lastError: 'LEGACY_CLOSING_REQUIRES_REVIEW' }); return;
+        }
+        if (job.kind === 'closing' && job.closingDate) {
+          const day = await this.repository.read('cashier_days', job.closingDate);
+          if (day?.revision !== job.closingRevision || Object.values(day.sessions || {}).some(session => !session.closed)) {
+            await update({ status: 'SKIPPED', leaseUntil: 0, lastError: 'CLOSING_SUPERSEDED' }); return;
+          }
+          if (!job.summaryPrepared) {
+            const metrics = await this.repository.repository.getDailyExecutiveMetrics({ date: job.closingDate });
+            job.text = require('../reports/daily-executive-report').formatCompactClosing(metrics, job.cashierTotals, job.cashierSessions);
+            await update({ text: job.text, summaryPrepared: true });
+          }
+        }
+        const subject = job.approvalId ? await this.repository.read('discount_approvals', job.approvalId) : order;
+        const childIds = await notifications.expand(this.repository, job, subject);
+        await update({ status: childIds.length ? 'SENT' : 'SKIPPED', deliveryStatus: 'FANOUT_QUEUED', childIds, leaseUntil: 0, lastError: childIds.length ? '' : 'NO_ELIGIBLE_EVENT_OR_RECIPIENT' });
+        for (const childId of childIds) await this.deliver(childId);
+        return;
+      }
+      if (job.kind === 'staff-notification') {
+        const revalidate = async () => {
+          const config = await notifications.settings(this.repository);
+          if (!notifications.targets(config, job.event).includes(job.recipient)) return null;
+          if (job.event === 'closing') {
+            const day = await this.repository.read('cashier_days', job.closingDate);
+            return day?.revision === job.closingRevision && Object.values(day.sessions || {}).every(session => session.closed) ? job.text : null;
+          }
+          const subject = await this.repository.read(job.approvalId ? 'discount_approvals' : 'orders', job.approvalId || job.orderId);
+          return notifications.current(job.event, subject) ? notifications.format(job.event, subject) : null;
+        };
+        const text = await revalidate();
+        if (!text) { await update({ status: 'SKIPPED', leaseUntil: 0, lastError: 'STAFF_EVENT_SUPERSEDED' }); return; }
+        const chunks = messageChunks(text, this.whatsapp.sendPdvText ? 900 : 3500);
+        for (let index = job.textChunksSent || 0; index < chunks.length; index++) {
+          if (await revalidate() !== text) { await update({ status: 'NEEDS_RECONCILIATION', leaseUntil: 0, lastError: 'STAFF_EVENT_CHANGED' }); return; }
+          const send = this.whatsapp.sendPdvText || this.whatsapp.sendTextMessage;
+          await sendOnce('text', () => send.call(this.whatsapp, job.recipient, chunks[index]), { textChunksSent: index + 1, deliveryStatus: 'ACCEPTED' });
+        }
+        await update({ status: 'SENT', leaseUntil: 0, sentAt: new Date().toISOString(), lastError: '' }); return;
+      }
       const staleDeparture = job.kind === 'delivery-departure' && order?.deliveryStatus !== 'OUT_FOR_DELIVERY';
       const staleArriving = job.kind === 'delivery-arriving' && order?.deliveryStatus !== 'OUT_FOR_DELIVERY';
       const staleAvailability = job.kind === 'driver-available' && (!order || order.assignedDriver?.id || ['DELIVERED', 'OUT_FOR_DELIVERY'].includes(order.deliveryStatus));
@@ -563,15 +621,13 @@ class PdvService {
       const settlement = job.settlementId ? await this.repository.read('debt_settlements', job.settlementId) : null;
       const settlementMethods = settlement ? (settlement.paymentParts || [{ method: settlement.paymentMethod, amount: settlement.amount }])
         .map((part) => `${part.method}: ${money(part.amount)}`).join(' + ') : '';
-      const isOwner = ['owner-paid', 'owner-debt-paid', 'owner-new', 'proof-review', 'closing'].includes(job.kind);
-      const recipient = job.kind === 'closing' ? process.env.OWNER_WHATSAPP_NUMBER : ['owner-new', 'proof-review', 'owner-paid'].includes(job.kind) ? process.env.STORE_NOTIFICATION_PHONE || this.ownerPhone : this.ownerPhone;
-      const phone = normalizePhone(job.recipient || (isOwner ? recipient : (order?.customerPhone || settlement?.customerPhone)));
-      if (!phone && isOwner) { throw new Error('WhatsApp da horta não configurado.'); }
-      if (!phone) { await update({ status: 'SENT', skipped: true, leaseUntil: 0 }); return; }
+      const isOwner = ['proof-review', 'owner-debt-paid'].includes(job.kind);
+      const ownerRecipient = job.kind === 'proof-review' ? process.env.STORE_NOTIFICATION_PHONE || this.ownerPhone : this.ownerPhone;
+      const phone = normalizePhone(job.recipient || (isOwner ? ownerRecipient : order?.customerPhone || settlement?.customerPhone));
+      if (!isOwner && !['driver-available', 'driver-assigned'].includes(job.kind)) automationRecipient = phone;
+      if (!phone) { await update({ status: 'NEEDS_RECONCILIATION', skipped: true, leaseUntil: 0, lastError: 'INVALID_OR_MISSING_RECIPIENT' }); return; }
       let text;
-      if (job.kind === 'closing' || job.kind === 'conversation-text') text = job.text;
-      else if (job.kind === 'owner-new') text = `CONFLORA — NOVO PEDIDO #${order.ticketNumber || order.id}\nCliente: ${order.customerName}\nValor: ${money(order.total)}\nPagamento: ${order.completedAt ? 'confirmado' : 'ainda não confirmado'}`;
-      else if (job.kind === 'proof-review') text = `CONFLORA — COMPROVANTE AGUARDANDO CONFERÊNCIA\nPedido #${order.ticketNumber || order.id}\nValor: ${money(partAmount(order, 'PIX'))}\nConfira o recebimento na conta bancária antes de aprovar no caixa.`;
+      if (job.kind === 'proof-review') text = `CONFLORA — COMPROVANTE AGUARDANDO CONFERÊNCIA\nPedido #${order.ticketNumber || order.id}\nValor: ${money(partAmount(order, 'PIX'))}\nConfira o recebimento na conta bancária antes de aprovar no caixa.`;
       else if (job.kind === 'proof-rejected') text = `CONFLORA — COMPROVANTE RECUSADO\nPedido #${order.ticketNumber || order.id}\n${order.paymentReviewNote}\nEnvie um novo comprovante na página do seu pedido.`;
       else if (job.kind === 'driver-available') text = 'CONFLORA — ENTREGA DISPONÍVEL\nAbra a aba Entregas para consultar e assumir o pedido.';
       else if (job.kind === 'driver-assigned') text = `CONFLORA — ENTREGA ATRIBUÍDA\nPedido #${order.ticketNumber || order.id}\nConsulte os detalhes na aba Entregas.`;
@@ -587,11 +643,7 @@ class PdvService {
       }
       else if (settlement?.entryType === 'CREDITO_CLIENTE') { text = `CONFLORA — CRÉDITO DO CLIENTE\nCliente: ${settlement.customerName}\nValor recebido: ${money(settlement.amount)}\nCrédito disponível: ${money(settlement.newCreditBalance)}\nRecebido por: ${settlement.receivedBy.name}\nForma: ${settlementMethods}`; }
       else if (settlement) { text = `CONFLORA — QUITAÇÃO DE FIADO\nCliente: ${settlement.customerName}\nValor: ${money(settlement.amount)}\nSaldo devedor: ${money(settlement.newBalance)}${settlement.excessCredit ? '\nExcedente registrado como crédito: ' + money(settlement.excessCredit) : ''}\nRecebido por: ${settlement.receivedBy.name}\nForma: ${settlementMethods}`; }
-      else {
-        const author = order.createdBy?.name || order.customerName || 'Catálogo online';
-        const receiver = order.receivedBy?.name || (order.verifiedVia === 'SICREDI_PIX_WEBHOOK' ? 'Sicredi · confirmação automática' : 'Equipe Conflora');
-        text = `CONFLORA — PIX CONFIRMADO\nPedido #${order.ticketNumber}\nCliente: ${order.customerName}\nTotal da venda: ${money(order.total)}\nValor Pix: ${money(partAmount(order, 'PIX'))}\nPedido feito por: ${author}\nRecebido por: ${receiver}\nPedido finalizado. Estoque atualizado.`;
-      }
+      else { throw new Error('UNSUPPORTED_NOTIFICATION_KIND'); }
       const chunks = messageChunks(text, this.whatsapp.sendPdvText ? 900 : 3500);
       for (let index = job.textChunksSent || 0; index < chunks.length; index++) {
         const send = this.whatsapp.sendPdvText || this.whatsapp.sendTextMessage;
@@ -609,7 +661,7 @@ class PdvService {
       await update({ status: 'SENT', leaseUntil: 0, sentAt: new Date().toISOString(), lastError: '' });
     } catch (error) {
       require('../shared/logger').error('Falha no envio de notificação operacional', error, { source: 'WHATSAPP', jobId: id, kind: job.kind });
-      await update({ status: uncertainSend ? 'NEEDS_RECONCILIATION' : 'PENDING', leaseUntil: 0, nextAttemptAt: Date.now() + Math.min(3600000, 30000 * 2 ** Math.min(job.attempts, 7)), lastError: uncertainSend ? 'PROVIDER_OUTCOME_UNCERTAIN' : error.message });
+      await update({ status: error.automationBlocked ? 'SKIPPED' : uncertainSend ? 'NEEDS_RECONCILIATION' : job.kind === 'meta-product-sync' ? 'CATALOG_PENDING' : 'PENDING', leaseUntil: 0, nextAttemptAt: Date.now() + Math.min(3600000, 30000 * 2 ** Math.min(job.attempts, 7)), lastError: uncertainSend ? 'PROVIDER_OUTCOME_UNCERTAIN' : error.message });
     }
   }
 
@@ -626,6 +678,7 @@ class PdvService {
     const { verifyCustomerMessage } = require('../agent/message-guard');
     const agent = this.catalogAgent;
     const skip = reason => update({ status: 'SKIPPED', leaseUntil: 0, lastError: reason });
+    if (job.conversationVersion === undefined) return skip('LEGACY_CONTEXT_REQUIRES_REVIEW');
     if (!agent || !require('../config/env').whatsapp.assistantEnabled || require('../config/env').whatsapp.agentOwner !== 'cloud_api') return skip('AUTOMATION_DISABLED');
     const customerKey = customerKeyFor(agent.tenantId, job.recipient);
     const handoff = async reason => {
@@ -649,9 +702,13 @@ class PdvService {
       if ((await agent.handoffStore.getConversation(agent.tenantId, customerKey)).automation === 'paused') return skip('HUMAN_HANDOFF');
       // Do not retry an uncertain network outcome: Meta has no client idempotency key for sends.
       await update({ status: 'SENDING', sendingAt: new Date().toISOString(), leaseUntil: 0, lastError: '' });
-      const result = cards.length === 1 && cards[0].image_url
+      const guard = require('../services/automation-send-guard');
+      const result = await guard.withAutomation(this.repository.repository, job.recipient, job.conversationVersion, async () => {
+        await guard.assertAutomation(this.repository.repository, job.recipient, job.conversationVersion);
+        return cards.length === 1 && cards[0].image_url
         ? await this.whatsapp.sendImageMessage(job.recipient, cards[0].image_url, text)
         : await this.whatsapp.sendTextMessage(job.recipient, text);
+      });
       if (result?.mock || !result?.messages?.[0]?.id) throw new Error('PROVIDER_NOT_ACKNOWLEDGED');
       await update({ status: 'SENT', providerMessageId: result.messages[0].id, sentAt: new Date().toISOString(), leaseUntil: 0, lastError: '' });
       if (!job.photoRequested && !intake) await agent.handoffStore.rememberProducts(agent.tenantId, customerKey, cards);
@@ -697,6 +754,11 @@ class PdvService {
     const pending = await this.repository.scanPage('pdv_outbox', 'status', 'PENDING');
     const eligible = pending.filter((job) => !(job.nextAttemptAt > Date.now()) && !(job.leaseUntil > Date.now()));
     for (const job of eligible.slice(0, 100)) { await this.deliver(job.id); }
+    // Catalog work shares the official outbox but is not consumed by older/disabled notification workers.
+    if (process.env.WHATSAPP_META_SYNC_ENABLED === 'true') {
+      const catalog = await this.repository.scanPage('pdv_outbox', 'status', 'CATALOG_PENDING');
+      for (const job of catalog.filter(job => job.kind === 'meta-product-sync' && !(job.nextAttemptAt > Date.now()) && !(job.leaseUntil > Date.now())).slice(0, 100)) await this.deliver(job.id);
+    }
   }
 
   async submitFeedback(orderId, input, user) {

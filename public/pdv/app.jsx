@@ -150,6 +150,30 @@ const { useState, useEffect, useRef, useMemo } = React;
     const primaryActionButtonClass = 'cf-btn-3d cf-btn-3d--primary';
     const shortcutButtonClass = 'cf-btn-3d cf-btn-3d--secondary cf-btn-3d--sm !rounded-xl !px-3 !py-2.5 text-xs flex items-center justify-center gap-2';
 
+    function toPdvProduct(item, favoriteIds) {
+            const productId = String(item.id ?? item.productId ?? item.sku ?? '').trim();
+            const imageCandidates = window.ConfloraProductCard?.getImageCandidates(item) || [];
+            const image = imageCandidates[0] || item.imageFallbackUrl || '/store-assets/placeholder.svg';
+            return {
+              ...item,
+              id: productId,
+              sku: String(item.sku || item.id || ''),
+              canonicalName: String(item.canonicalName || item.canonical_name || '').trim(),
+              variation: String(item.variation || item.variacao || '').trim(),
+              category: String(item.category || '').trim(),
+              categoryName: String(item.category || 'Geral').trim(),
+              subcategory: String(item.subcategory || item.subcategoria || '').trim(),
+              imageFileId: String(item.imageFileId || item.image_file_id || '').trim(),
+              imageFallbackUrl: item.imageFallbackUrl || '',
+              description: item.descriptionAi || item.descricao_ia || '',
+              searchTags: item.tagsAi || item.tags_ia || '',
+              stock: item.stock + ' ' + item.unit,
+              isShortcut: favoriteIds.has(String(item.id)),
+              imageCandidates,
+              image,
+            };
+    }
+
     function App() {
       // Device Simulator: 'responsive' | 'mobile-preview'
       const deviceView = 'responsive';
@@ -284,27 +308,7 @@ const { useState, useEffect, useRef, useMemo } = React;
       const handleQuickProductCreated = (item, add = false) => {
         const productId = String(item.id ?? item.productId ?? item.sku ?? '').trim();
         const name = String(item.name || '').trim();
-        const category = String(item.category || 'Geral').trim() || 'Geral';
-        const image = item.image || item.imageUrl || item.imageFallbackUrl || '/store-assets/placeholder.svg';
-        const product = {
-          ...item,
-          id: productId,
-          sku: String(item.sku || item.id || ''),
-          name,
-          canonicalName: String(item.canonicalName || name).trim(),
-          variation: item.variation || '',
-          category,
-          categoryName: category,
-          subcategory: '',
-          imageFileId: '',
-          imageFallbackUrl: item.imageFallbackUrl || '',
-          description: '',
-          searchTags: '',
-          stock: item.stock || `${item.stockQuantity ?? 0} ${item.unit || 'UN'}`,
-          isShortcut: false,
-          imageCandidates: item.imageCandidates || [],
-          image,
-        };
+        const product = toPdvProduct(item, favoriteProductIdsRef.current);
         setProducts((previous) => [product, ...previous.filter((existing) => String(existing.id) !== productId)]
           .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')));
         setShowingFavorites(false);
@@ -355,7 +359,7 @@ const { useState, useEffect, useRef, useMemo } = React;
         return window.ConfloraNotifications.createCashierNotifications(currentUser, id => {
           setNotificationOrderId(id);
           navigateCashierPage('orders');
-        });
+        }, { onArrival: () => { if (!document.querySelector('.cf-orders-page')) PdvComponents.playOrderAlertSound(); } });
       }, [currentUser?.id, currentUser?.role]);
       const [authReady, setAuthReady] = useState(false);
       const [customerId, setCustomerId] = useState('');
@@ -402,44 +406,21 @@ const { useState, useEffect, useRef, useMemo } = React;
           return changed ? next : previous;
         });
       }, [favoriteProductIds]);
+      const productRequestRevision = useRef(0);
+      const loadProducts = async signal => {
+        const revision = ++productRequestRevision.current;
+        const response = await window.ConfloraSession.apiFetch('/api/caixa/products?projection=list', { signal });
+        if (!response.ok) throw new Error('could_not_load_products'.tr);
+        const rows = await response.json();
+        if (signal?.aborted || revision !== productRequestRevision.current) return;
+        setProducts(rows.map(item => toPdvProduct(item, favoriteProductIdsRef.current)).sort((a,b) => a.name.localeCompare(b.name, 'pt-BR')));
+      };
       useEffect(() => {
-        if (!currentUser || currentUser.role === 'ENTREGADOR') return;
-        window.ConfloraSession.apiFetch('/api/caixa/products').then((res) => { if (!res.ok) throw new Error('could_not_load_products'.tr); return res.json(); }).then((rows) => {
-          setProducts(rows.map((item) => {
-            const productId = String(item.id ?? item.productId ?? item.sku ?? '').trim();
-            const images = (Array.isArray(item.images) ? item.images : [])
-              .map((entry) => (typeof entry === 'string' ? entry : entry?.url || entry?.imageUrl || entry?.src || entry?.downloadURL || ''))
-              .filter(Boolean);
-            const imageCandidates = window.ConfloraProductCard?.getImageCandidates({
-              ...item,
-              images,
-            }) || [...new Set([...images, item.imageUrl, item.imagePathCache]
-              .map((image) => String(image || '').trim())
-              .filter((image) => /^https:\/\/(?:firebasestorage|storage)\.googleapis\.com\//i.test(image)
-                || /^\/api\/images\//i.test(image)
-                || /^\/store-assets\//i.test(image)))];
-            const image = imageCandidates[0] || item.imageFallbackUrl || '/store-assets/placeholder.svg';
-            return {
-              ...item,
-              id: productId,
-              sku: String(item.sku || item.id || ''),
-              canonicalName: String(item.canonicalName || item.canonical_name || '').trim(),
-              variation: String(item.variation || item.variacao || '').trim(),
-              category: String(item.category || '').trim(),
-              categoryName: String(item.category || 'Geral').trim(),
-              subcategory: String(item.subcategory || item.subcategoria || '').trim(),
-              imageFileId: String(item.imageFileId || item.image_file_id || '').trim(),
-              imageFallbackUrl: item.imageFallbackUrl || '',
-              description: item.descriptionAi || item.descricao_ia || '',
-              searchTags: item.tagsAi || item.tags_ia || '',
-              stock: item.stock + ' ' + item.unit,
-              isShortcut: favoriteProductIdsRef.current.has(String(item.id)),
-              imageCandidates,
-              image,
-            };
-          }).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')));
-        }).catch((error) => alert(error.message));
-      }, [currentUser]);
+        if (!currentUser || currentUser.role === 'ENTREGADOR') { setProducts([]); return; }
+        const controller = new AbortController();
+        loadProducts(controller.signal).catch(error => { if (!controller.signal.aborted) setProductNotice(error.message); });
+        return () => { controller.abort(); productRequestRevision.current++; setInfoProduct(null); };
+      }, [currentUser?.id, currentUser?.role]);
 
       const distinctItemsCount = cart.length;
       const totalUnitsCount = useMemo(
@@ -759,7 +740,7 @@ const { useState, useEffect, useRef, useMemo } = React;
         }).catch((error) => alert(error.message));
       };
 
-      const openProductInformation = (productId) => {
+      const openProductInformation = async (productId) => {
         const product = products.find((candidate) => String(candidate.id) === String(productId));
         if (!product) return;
         const normalizeName = (value) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -768,7 +749,19 @@ const { useState, useEffect, useRef, useMemo } = React;
           if (product.canonicalName && candidate.canonicalName) return normalizeName(candidate.canonicalName) === normalizeName(product.canonicalName);
           return normalizeName(candidate.name) === normalizeName(product.name) && candidate.category === product.category;
         });
-        setInfoProduct({ ...product, variants });
+        setInfoProduct({ ...product, variants, detailsLoading: product.detailsLoaded === false });
+        if (product.detailsLoaded === false) {
+          const revision = productRequestRevision.current;
+          try {
+            const response = await window.ConfloraSession.apiFetch('/api/caixa/products/' + encodeURIComponent(product.id));
+            const detail = await response.json();
+            if (!response.ok) throw new Error(detail.error || 'Não foi possível consultar os detalhes.');
+            if (revision !== productRequestRevision.current) return;
+            setInfoProduct(current => current?.id === product.id ? { ...toPdvProduct(detail, favoriteProductIdsRef.current), variants, detailsLoading: false } : current);
+          } catch (error) {
+            if (revision === productRequestRevision.current) setInfoProduct(current => current?.id === product.id ? { ...current, detailsLoading: false, detailsError: error.message } : current);
+          }
+        }
       };
 
       const productCardActionRef = useRef(() => {});
@@ -1294,9 +1287,9 @@ const { useState, useEffect, useRef, useMemo } = React;
             {/* Com Flora Standard Website Header adapted for POS */}
             <div className="cf-pos-header sticky top-0 z-20 bg-white">
               <div className="cf-mobile-sale-header">
-                <div className="cf-mobile-sale-heading"><button aria-label="Voltar" type="button" onClick={() => window.ConfloraNavigation.back()}>‹</button><div><strong>Caixa</strong><small>Nova venda</small></div><button type="button" aria-label="Notificações e comandas" onClick={() => navigateCashierPage('orders')}><IconBase className="h-5 w-5"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></IconBase></button><button type="button" aria-label="Atualizar produtos" onClick={async () => { try { const response = await window.ConfloraSession.apiFetch('/api/caixa/products'); if (!response.ok) throw new Error('Não foi possível atualizar.'); const rows = await response.json(); setProducts(rows.map((item) => ({ ...item, categoryName: item.category || 'Geral', stock: item.stock + ' ' + item.unit, image: item.imageUrl || '/store-assets/placeholder.svg', isShortcut: favoriteProductIdsRef.current.has(String(item.id)) }))); setProductNotice('Catálogo atualizado.'); } catch (error) { setProductNotice(error.message); } }}>↻</button><button type="button" aria-label="Mais opções" aria-expanded={showMobileOptions} onClick={() => setShowMobileOptions(!showMobileOptions)}>☰</button></div>
+                <div className="cf-mobile-sale-heading"><button aria-label="Voltar" type="button" onClick={() => window.ConfloraNavigation.back()}>‹</button><div><strong>Caixa</strong><small>Nova venda</small></div><button type="button" aria-label="Notificações e comandas" onClick={() => navigateCashierPage('orders')}><IconBase className="h-5 w-5"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></IconBase></button><button type="button" aria-label="Atualizar produtos" onClick={async () => { try { await loadProducts(); setProductNotice('Catálogo atualizado.'); } catch (error) { setProductNotice(error.message); } }}>↻</button><button type="button" aria-label="Mais opções" aria-expanded={showMobileOptions} onClick={() => setShowMobileOptions(!showMobileOptions)}>☰</button></div>
                 <label className="cf-mobile-search"><span aria-hidden="true">⌕</span><input aria-label="Buscar produto" placeholder="Nome, categoria ou código…" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} /><button type="button" aria-label="Limpar busca" onClick={() => setSearchQuery('')}>×</button><button type="button" aria-label="Filtros" onClick={() => setShowMobileOptions(!showMobileOptions)}>☷</button></label>
-                {showMobileOptions && <nav className="cf-mobile-options"><button onClick={() => navigateCashierPage('orders')}>Comandas</button><button onClick={() => navigateCashierPage('deliveries')}>Entregas</button><button onClick={() => navigateCashierPage('report')}>Relatório</button><button onClick={() => navigateCashierPage('history')}>Histórico</button><button onClick={() => setActiveModal('discount')}>Desconto</button><button onClick={() => setActiveModal('freight')}>Entrega</button><button onClick={openCustomerModal}>Cliente</button></nav>}
+                {showMobileOptions && <nav className="cf-mobile-options"><button onClick={() => navigateCashierPage('orders')}>Comandas</button><button onClick={() => navigateCashierPage('deliveries')}>Entregas</button><button onClick={() => navigateCashierPage('report')}>Relatório</button><button onClick={() => navigateCashierPage('history')}>Histórico</button><button onClick={() => setActiveModal('discount')}>Desconto</button><button onClick={() => setActiveModal('freight')}>Entrega</button><button onClick={openCustomerModal}>Cliente</button><a href="/">Loja</a><button className="cf-danger-button" onClick={async () => { await window.ConfloraSession.apiFetch('/api/auth/logout', { method: 'POST' }); window.location.reload(); }}>{'team_logout'.tr}</button></nav>}
               </div>
               <PdvComponents.Topbar hideCashier user={currentUser} onCashier={() => navigateCashierPage(null)} onSearch={setSearchQuery} searchValue={searchQuery} searchInputRef={searchInputRef} />
               <div className="cf-page-toolbar cf-pos-context">

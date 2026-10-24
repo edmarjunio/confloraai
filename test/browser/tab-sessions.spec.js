@@ -53,7 +53,7 @@ test('two tabs keep separate logins and discard unsaved carts across refresh and
 test('checkout exposes readable steps and no translation keys', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#products .product-card').first()).toBeVisible();
-  await page.locator('#languageSelect').selectOption('pt');
+  if (await page.locator('#languageSelect').inputValue() !== 'pt') await page.locator('#languageSelect').selectOption('pt');
   if (await page.locator('#coachSkip').isVisible()) await page.locator('#coachSkip').click();
   await page.locator('#cartButton').click();
   await expect(page.locator('#cartDialog')).toContainText('Confira seus produtos');

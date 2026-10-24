@@ -2,21 +2,24 @@ const config = require('./config/env');
 const Logger = require('./shared/logger');
 const { createApp } = require('./http/app');
 const { CatalogRepository } = require('./catalog/catalog.repository');
-const { MessageRouter } = require('./router/message.router');
-const { DirectPriceService } = require('./services/direct-price.service');
 const { AgentService } = require('./ai/agent.service');
 const { FirestoreRepository } = require('./database/firestore.repository');
 const { OrderService } = require('./orders/order.service');
 const { WhatsAppClient } = require('./integrations/whatsapp.client');
 const { TaskQueueClient } = require('./integrations/task-queue.client');
-const { LearningService } = require('./services/learning.service');
 const { MessageService } = require('./services/message.service');
 
 async function bootstrap() {
   Logger.info(`Iniciando Conflora AI v2.1 em modo [${config.env}]...`);
+  Logger.info('Configuração de entrada WhatsApp carregada.', { envFile: config.envSource.path, envFileLoaded: config.envSource.loaded,
+    envSourceReason: config.envSource.reason, envSourceError: config.envSource.error, inheritedWhatsAppKeys: config.envSource.inheritedWhatsAppKeys,
+    assistantEnabled: config.whatsapp.assistantEnabled, agentOwner: config.whatsapp.agentOwner, graphVersion: config.whatsapp.graphVersion,
+    account: require('./integrations/whatsapp-diagnostics').idDiagnostic(process.env.WHATSAPP_BUSINESS_ACCOUNT_ID),
+    sender: require('./integrations/whatsapp-diagnostics').idDiagnostic(config.whatsapp.phoneNumberId) });
 
   // 1. Repositórios de dados
   const firestoreRepo = new FirestoreRepository();
+  const stopCatalogWatch = require('./services/meta-catalog-watch').watchMetaCatalog(firestoreRepo);
   const catalogRepo = new CatalogRepository({
     firestoreRepo,
   });
@@ -27,13 +30,10 @@ async function bootstrap() {
   });
 
   // 2. Serviços e Integrações
-  const router = new MessageRouter(catalogRepo);
-  const directPriceService = new DirectPriceService();
   const agentService = new AgentService();
   const orderService = new OrderService({ firestoreRepo, catalogRepo });
   const whatsappClient = new WhatsAppClient();
   const taskQueueClient = new TaskQueueClient();
-  const learningService = new LearningService({ firestoreRepo, catalogRepo });
 
   // 2.1 Meta Business Agent Platform Service
   let metaAgentService = null;
@@ -59,14 +59,11 @@ async function bootstrap() {
   }
 
   const messageService = new MessageService({
-    router,
-    directPriceService,
     agentService,
     catalogRepo,
     firestoreRepo,
     orderService,
     whatsappClient,
-    learningService,
   });
   if (metaAgentService) {
     messageService.metaAgentService = metaAgentService;
@@ -78,7 +75,9 @@ async function bootstrap() {
   const host = '0.0.0.0';
   const primaryPort = Number(process.env.PORT) || 3000;
 
-  const server = app.listen(primaryPort, host, () => {
+  const server = app.listen(primaryPort, host, (error) => {
+    // Express 5 also invokes this callback for bind errors.
+    if (error) return;
     Logger.info(`Conflora AI rodando com sucesso na porta principal ${primaryPort} (${host})`);
     console.log(`\n==================================================`);
     console.log(`🚀 Conflora AI online com sucesso!`);
@@ -86,8 +85,13 @@ async function bootstrap() {
     console.log(`👉 Painel Caixa PDV: http://localhost:${primaryPort}/pdv`);
     console.log(`==================================================\n`);
   });
+  server.once('close', stopCatalogWatch);
 
-  server.on('error', error => { Logger.error('Erro no servidor HTTP', error); process.exitCode = 1; });
+  server.on('error', error => {
+    stopCatalogWatch();
+    Logger.error('Erro no servidor HTTP; processo encerrado sem iniciar outro worker.', error, { port: primaryPort, processId: process.pid });
+    process.exit(1);
+  });
   process.on('unhandledRejection', error => {
     Logger.error('Falha assíncrona não tratada; reiniciando processo', error instanceof Error ? error : new Error(String(error)));
     server.close(() => app.locals.errorHistory.queue.finally(() => process.exit(1)));
