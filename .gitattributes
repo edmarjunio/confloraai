@@ -1,0 +1,2 @@
+# Compressed PDF bytes must never be treated as line-oriented source text.
+*.pdf binary

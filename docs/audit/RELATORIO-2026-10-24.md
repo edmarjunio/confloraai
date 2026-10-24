@@ -2,9 +2,9 @@
 
 ## Estado da entrega
 
-**Bloqueio de integração identificado ao abrir o [PR #14](https://github.com/edmarjunio/confloraai/pull/14):** a main recebeu `d7ddee9` e `73a98a2` enquanto a branch isolada era implementada. O primeiro remove sincronização Meta, proveniência, testes e documentos e reintroduz `validated-catalog-profiles.js` como leitor do JSON. A simulação somente leitura `git merge-tree --write-tree HEAD origin/main` encontrou conflitos de conteúdo e modify/delete. Não houve merge/rebase nem substituição desses commits. É necessária definição do contrato funcional vigente antes de resolver os conflitos; a pergunta foi enviada ao usuário. Os números abaixo validam esta branch sobre `42a573c`, **não a combinação com a nova main**. O PR permanece draft e não integrável no estado atual.
+**Integração do [PR #14](https://github.com/edmarjunio/confloraai/pull/14):** a main recebeu `d7ddee9` e `73a98a2` enquanto a branch isolada era implementada. A simulação de integração detectou conflitos. O usuário definiu expressamente: **“Manter o escopo desta auditoria, preservando Meta e proveniência”**. A atualização foi resolvida na branch do PR, sem mesclar o PR na main. Os resultados anteriores abaixo continuam identificados por sua revisão; a validação da integração é registrada no adendo ao final. O rascunho continua necessário pelas pendências globais de paginação, conteúdo e homologação, não por uma autorização ausente sobre Meta/proveniência.
 
-Branch `codex/contratos-produtos`, base `42a573c`; diagnóstico registrado antes da implementação em `96567f9`. Contratos de mídia/conteúdo em `6e66c28`; consumidores, concorrência e leituras em `c66f0c9`. Worktree isolado; main, servidor real na porta 8080 e túnel não foram reiniciados. Sem deploy, merge, sincronização Meta, upload, migração ou alteração comercial remota nesta entrega.
+Branch `codex/contratos-produtos`, base inicial `42a573c`; diagnóstico registrado antes da implementação em `96567f9`. Contratos de mídia/conteúdo em `6e66c28`; consumidores, concorrência e leituras em `c66f0c9`. Worktree isolado; main, servidor real na porta 8080 e túnel não foram reiniciados. Sem deploy, merge do PR na main, sincronização Meta, upload, migração ou alteração comercial remota nesta entrega. A main foi incorporada somente à branch de trabalho conforme a decisão posterior do usuário.
 
 Complemento `0ff1cc5`: upload/migração de foto também exigem a versão lida, além da referência anterior. Dois uploads simultâneos não podem substituir a galeria um do outro só porque a foto principal permaneceu igual. Storage e Firestore não formam uma transação única: um upload que conclua antes do conflito pode deixar objeto sem referência; não é excluído automaticamente e exige reconciliação/manutenção autorizada.
 
@@ -196,3 +196,24 @@ Para testar esta revisão local: usar este worktree, dependências locais e conf
 Recomendações prioritárias: concluir paginação/busca/facetas sem esconder totais, revisar as imagens e conteúdo com a equipe, homologar um conjunto pequeno de SKUs reais na Meta antes de reativar publicação ampla e medir navegação em dispositivos/rede representativos. A operação da loja não deve depender de aprovação fictícia de conteúdo ou de catálogo indisponível.
 
 Referências oficiais consultadas: [cursores Firestore](https://firebase.google.com/docs/firestore/query-data/query-cursors), [metadados Storage](https://firebase.google.com/docs/storage/web/file-metadata). O TTL imutável das fotos usa nomes de objeto únicos; mudança de foto cria outra referência e não reutiliza o mesmo objeto com conteúdo diferente.
+
+## Adendo — resolução da atualização concorrente da main
+
+Base integrada: `73a98a2`, incluindo `d7ddee9`. A integração ocorre exclusivamente em `codex/contratos-produtos`; os commits da main permanecem no histórico, sem reset, force push ou publicação da aplicação.
+
+| Grupo revisado | Decisão e motivo |
+| --- | --- |
+| Sincronização Meta, trigger, inbox, parser, transporte e outbox | Preservados os serviços oficiais já usados pela branch. Não foi adotada a remoção das guardas de geração/posse humana, a retomada implícita ou o caminho paralelo de envio sem essas guardas. Ausência de destinatário continua sendo falha/reconciliação, não sucesso `SENT` fictício. |
+| Catálogo/mídia/conteúdo | Preservados os normalizadores compartilhados, licença e proveniência. Não foi incorporado o enriquecimento independente pelo JSON nem a aprovação implícita por URL/host. |
+| Regras comerciais | Preservados preço oficial, bloqueio de itens financeiros internos, reservas transacionais, idempotência e conciliação. A revisão das diferenças da main nesses arquivos mostrou remoções dessas proteções, não uma nova regra comercial a migrar. |
+| Compositor humano | Preservados takeover antes da composição, requestId e proteção persistente; não voltou a enviar texto sem reivindicação/idempotência. |
+| Fixtures e testes | Preservados todos os testes isolados e a foto fixture em `test/fixtures`, independentemente da nova cópia local em `public/`. Memória e simulador permanecem exclusivos dos ambientes autorizados. |
+| Cache | Preservada a geração `real-products1`, sem voltar ao namespace antigo. A integração não é um reset de cache nem migração de dados. |
+| Hosting | Preservado o novo alias/target `loja` em `.firebaserc`; nenhuma configuração remota foi aplicada. O isolamento dos diretórios de teste, snapshots históricos e fotos locais no pacote de deploy permanece. |
+| Interface/artefatos compatíveis | Preservadas a retirada de atalhos duplicados Loja/Sair no menu móvel do PDV e as atualizações de imagens de documentação/PDF feitas na main. O logout oficial e a navegação da topbar continuam disponíveis. |
+| Fotos locais novas na main | Arquivos preservados, mas não aprovados como fotos de produto nem usados como fallback. Continuam excluídos do pacote de publicação e não são enviados para Storage automaticamente. |
+| Limpeza de documentos históricos | Mantida a remoção dos relatórios antigos já substituídos pelo presente diretório de auditoria. Contratos operacionais, evidências atuais e módulos com consumidores reais foram preservados. |
+
+Nenhuma consulta adicional em massa, envio Meta, upload, migração ou alteração financeira remota foi necessária para resolver os conflitos. A validação deve distinguir a integração do código dos estados reais consultados anteriormente: o snapshot dos 759 produtos e o relatório Meta mantêm seus horários originais.
+
+Validação após integração: build de frontend, checagem completa de sintaxe e ESLint aprovados; **495 testes Node aprovados, zero falhas, um ignorado por depender de emulador**, em 96,38 s nesta execução; **32 testes de navegador mobile/desktop aprovados**, em 57,5 s. Esses são tempos das suítes isoladas, não tempos de carregamento do produto. Nenhum marcador de conflito permaneceu. `git diff --check` aprovado; os PDFs recebidos da main foram classificados como binários em `.gitattributes`, sem modificar seus bytes, evitando interpretação incorreta como linhas de código. Evidência resumida em `INTEGRATION-validation.json`; logs em `.private/audit/integration-*.log`.

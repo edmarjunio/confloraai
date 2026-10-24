@@ -4,7 +4,7 @@ Registro histórico desta entrega. Para decisões atuais, consultar [arquitetura
 
 **Implementação local, sem homologação funcional ou de performance. Não publicar nem operar automaticamente em 24/10 apenas por causa da data.** Este documento substitui a descrição de atendimento dos relatórios históricos. Não comprova aprovação, entrega Meta, vínculo de catálogo ou liquidação Sicredi.
 
-[Manifesto completo de arquivos](WHATSAPP_CHANGED_FILES.md) e [registro das checagens estáticas](whatsapp-static-validation-2026-10-23.json). Resultado final: sintaxe de 35 arquivos JS sem falhas, ESLint completo com código 0, TypeScript `--noEmit` com código 0, JSX analisado em memória e diff sem erros de whitespace. Esses resultados não executam nem substituem homologação.
+O manifesto e o registro estático originais de 23/10 foram retirados na limpeza documental posterior da main. A evidência vigente está no [relatório de auditoria](audit/RELATORIO-2026-10-24.md). O resultado histórico registrava sintaxe de 35 arquivos JS sem falhas, ESLint completo com código 0, TypeScript `--noEmit` com código 0, JSX analisado em memória e diff sem erros de whitespace. Esses resultados não executam nem substituem homologação.
 
 ## Revisões e preservação
 

@@ -4,6 +4,14 @@
     "production": "confloraai",
     "dev": "confloraai-dev"
   },
-  "targets": {},
+  "targets": {
+    "confloraai": {
+      "hosting": {
+        "loja": [
+          "lojaconflora"
+        ]
+      }
+    }
+  },
   "etags": {}
 }
