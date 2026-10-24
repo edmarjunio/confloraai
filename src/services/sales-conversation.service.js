@@ -21,6 +21,7 @@ class SalesConversationService {
 
   async save(phone, previous, patch) {
     return this.store.transaction(async tx => {
+      await require('./automation-send-guard').assertTransactionAutomation(tx);
       const session = await tx.get('sessions', phone) || {};
       const { customerKeyFor, scopedId } = require('../agent/agent-store');
       const conversation = await tx.get('agent_conversations', scopedId('conflora', customerKeyFor('conflora', phone)));
@@ -51,6 +52,7 @@ class SalesConversationService {
     const inventory = await this.repository.getInventorySettings();
     return items.map(item => {
       const requestedName = String(item.name || item.requestedName || '').trim();
+      if (require('./meta-catalog-sync.service').restrictedCategory(requestedName) || /\b(rinha|trafico|sem licenca)\b/.test(normalizeText(requestedName))) return { requestedName, quantity: item.quantity ?? null, fulfillment: 'POLICY_REVIEW' };
       const quantity = item.quantity === null || item.quantity === undefined ? null : Number(item.quantity);
       if (!requestedName || requestedName.length > 120 || quantity !== null && (!Number.isFinite(quantity) || quantity <= 0 || quantity > 10000)) {
         throw new Error('Me diga o produto e uma quantidade válida.');
@@ -60,8 +62,9 @@ class SalesConversationService {
         (row.searchAliases || []).some(alias => toSingular(alias) === query));
       const words = query.split(' ').filter(word => !['de', 'da', 'do'].includes(word));
       const candidates = (item.productId ? products.filter(row => row.id === item.productId) : exact.length ? exact : products.filter(row => words.every(word => toSingular(commercialProduct(row).name).split(' ').includes(word))))
-        .filter(row => item.targetPrice === null || item.targetPrice === undefined || commercialProduct(row).price === item.targetPrice);
-      if (candidates.length > 1) return { requestedName, quantity, fulfillment: 'CHOICE', choices: candidates.map(row => commercialProduct(row).name).slice(0, 3) };
+        .filter(row => item.productId || item.targetPrice === null || item.targetPrice === undefined || commercialProduct(row).price === item.targetPrice);
+      if (candidates.length > 1) return { requestedName, quantity, fulfillment: 'CHOICE', choices: candidates.map(row => commercialProduct(row).name),
+        choiceProducts: candidates.slice(0, 10).map(row => ({ id: row.id, name: commercialProduct(row).name, priceMinor: commercialProduct(row).priceMinor })) };
       const product = candidates[0] ? commercialProduct(candidates[0]) : null;
       const identified = product?.active && Number.isSafeInteger(product.priceMinor) && product.priceMinor >= 0;
       const available = identified && (inventory.stockControlEnabled === false || Number.isFinite(product.stockQuantity) &&
@@ -74,8 +77,13 @@ class SalesConversationService {
   }
 
   async present(phone, state) {
+    if (state.items.some(item => item.fulfillment === 'POLICY_REVIEW')) {
+      await require('./conversation-automation').conversationAutomation(this.repository, phone, { pauseReason: 'commerce_policy_review_required', messageId: state.id });
+      return { reply: '', intent: 'COMMERCE_POLICY_REVIEW' };
+    }
     const choices = state.items.find(item => item.fulfillment === 'CHOICE');
-    if (choices) return this.response(`Qual ${choices.requestedName}: ${choices.choices.join(' ou ')}?`);
+    if (choices) return this.response(`Qual ${choices.requestedName}: ${(choices.choiceProducts || []).map(item => `${item.name} de ${formatCurrency(item.priceMinor / 100)}`).join(' ou ')}?`,
+      (choices.choiceProducts || []).slice(0, 3).map(item => ({ id: `sales_variant:${item.id}:${state.version}`, title: `${item.name} ${formatCurrency(item.priceMinor / 100)}`.slice(0, 20) })));
     const missingQuantity = state.items.filter(item => item.quantity === null);
     if (missingQuantity.length) return this.response(`Qual a quantidade de ${missingQuantity.map(item => item.requestedName).join(' e ')}?`);
     const procurement = state.items.filter(item => item.fulfillment === 'PROCUREMENT');
@@ -102,20 +110,10 @@ class SalesConversationService {
     return this.intake.register(phone, draft, { messageId: state.id, customerName });
   }
 
-  async startCart(phone, fulfillment) {
-    const draft = await this.repository.getOrder(phone);
-    if (!draft?.items?.length || draft.status !== 'AWAITING_CONFIRMATION') return this.response('Sua sacola está vazia. Escolha os produtos primeiro.');
-    const session = await this.store.read('sessions', phone) || {};
-    const state = await this.save(phone, session.salesConversation, { id: randomUUID(), stage: 'DISCOVERY',
-      items: await this.classify(draft.items.map(item => ({ requestedName: item.name, quantity: item.quantity }))),
-      fulfillment, paymentMethod: null, address: '', confirmedDeliveryFeeMinor: null, deliveryFeeMinor: null });
-    return this.present(phone, state);
-  }
-
   async receiveMetaCart({ phone, commerceOrder, messageId }) {
     const session = await this.store.read('sessions', phone) || {};
     const previous = session.salesConversation;
-    if (previous?.metaMessageId === messageId) return this.present(phone, previous);
+    if (previous?.metaMessageId === messageId) return previous.stage === 'ORDER_CREATED' ? { ...this.response('Esse carrinho já foi registrado. O pagamento segue o estado oficial da comanda.'), orderId: previous.orderId } : this.present(phone, previous);
     if (previous?.items?.length && previous.stage !== 'ORDER_CREATED') {
       await require('./conversation-automation').conversationAutomation(this.repository, phone, { pauseReason: 'cart_conflicts_with_pending_context', messageId });
       return { reply: '', intent: 'CART_REQUIRES_HUMAN_REVIEW' };
@@ -134,9 +132,20 @@ class SalesConversationService {
   async handle({ phone, message = '', interactiveId = '', customerName = '', messageId = '' }) {
     const session = await this.store.read('sessions', phone) || {};
     let state = session.salesConversation;
-    if (messageId && state?.lastAppliedMessageId === messageId) return this.present(phone, state);
+    if (messageId && state?.lastAppliedMessageId === messageId) return state.stage === 'ORDER_CREATED' ? { ...this.response('Pedido já registrado; pagamento conforme a comanda oficial.'), orderId: state.orderId } : this.present(phone, state);
     let input;
     if (interactiveId) {
+      const variant = /^sales_variant:([a-zA-Z0-9_-]{1,180}):(\d+)$/.exec(interactiveId);
+      if (variant && state && Number(variant[2]) === state.version) {
+        const index = state.items.findIndex(item => item.fulfillment === 'CHOICE' && item.choiceProducts?.some(product => product.id === variant[1]));
+        if (index >= 0) {
+          const items = [...state.items];
+          const selected = items[index].choiceProducts.find(product => product.id === variant[1]);
+          items[index] = { requestedName: selected.name, productId: selected.id, quantity: items[index].quantity };
+          state = await this.save(phone, state, { items: await this.classify(items), lastAppliedMessageId: messageId });
+          return this.present(phone, state);
+        }
+      }
       const match = /^sales_(yes|no|pickup|delivery|pix|cash|credit|debit):(\d+)$/.exec(interactiveId);
       if (!match || !state || Number(match[2]) !== state.version) return this.response('Essa opção mudou. Confira o pedido atual.');
       const selected = match[1];
@@ -145,9 +154,18 @@ class SalesConversationService {
         paymentMethod: { pix: 'PIX', cash: 'DINHEIRO', credit: 'CREDITO', debit: 'DEBITO' }[selected] };
     } else {
       input = require('./sales-parser').parseSalesMessage(message, state);
-      if (!input && typeof this.agent?.extractSalesIntent === 'function') input = await this.agent.extractSalesIntent({ message, conversation: state ? {
+      if (!input && typeof this.agent?.extractSalesIntent === 'function') {
+        input = await this.agent.extractSalesIntent({ message, conversation: state ? {
         stage: state.stage, items: state.items.map(item => ({ name: item.requestedName, quantity: item.quantity })),
-      } : { stage: 'DISCOVERY', items: [] } }).catch(() => null);
+        } : { stage: 'DISCOVERY', items: [] } }).catch(() => null);
+        // AI extracts language but never supplies consent/cancellation authority.
+        if (input && ['confirm', 'decline', 'cancel'].includes(input.action)) {
+          if (input.items?.length) input.action = 'update';
+          else if (state?.stage === 'ORDER_CREATED') return { ...this.response('Pedido já registrado; pagamento conforme a comanda oficial.'), orderId: state.orderId };
+          else if (state?.items?.length) return this.present(phone, state);
+          else input = null;
+        }
+      }
       if (!input || !input.items?.length && !['confirm', 'decline', 'cancel'].includes(input.action) && !input.fulfillment && !input.paymentMethod && !input.address) {
         await require('./conversation-automation').conversationAutomation(this.repository, phone, { pauseReason: 'ambiguous_customer_needs_human', messageId });
         return { reply: '', intent: 'AMBIGUOUS_NEEDS_HUMAN' };
@@ -165,28 +183,37 @@ class SalesConversationService {
     if (['PIX', 'DINHEIRO', 'CREDITO', 'DEBITO'].includes(input.paymentMethod)) details.paymentMethod = input.paymentMethod;
     if (typeof input.address === 'string' && input.address.trim().length >= 8 && input.address.length <= 500) details.address = input.address.trim();
     if (input.items?.length) {
+      if (input.items.length > 30) throw Object.assign(new Error('Envie até 30 itens por pedido.'), { status: 400 });
       const newOrder = state?.stage === 'ORDER_CREATED';
-      const merged = new Map((newOrder ? [] : state?.items || []).map(item => [normalizeText(item.requestedName), item]));
+      const merged = new Map((newOrder ? [] : state?.items || []).map((item, index) => [`${normalizeText(item.requestedName)}:${item.productId || item.targetPrice || index}`, item]));
       for (const item of input.items) {
+        item.quantity = item.quantity === undefined || item.quantity === null ? null : Number(item.quantity);
+        if (item.quantity !== null && (!Number.isFinite(item.quantity) || item.quantity <= 0 || item.quantity > 10000)) throw Object.assign(new Error('Informe uma quantidade positiva válida.'), { status: 400 });
         const unresolved = [...merged.entries()].filter(([, row]) => row.fulfillment === 'CHOICE');
         if (unresolved.length === 1 && unresolved[0][1].choices.some(choice => toSingular(choice) === toSingular(item.name))) {
           const [oldKey, oldItem] = unresolved[0];
           merged.delete(oldKey);
           if (item.quantity === null) item.quantity = oldItem.quantity;
         }
-        const key = [...merged.keys()].find(key => toSingular(key) === toSingular(item.name)) || normalizeText(item.name);
+        const matches = [...merged.entries()].filter(([, row]) => toSingular(row.requestedName) === toSingular(item.name) &&
+          (item.targetPrice === null || item.targetPrice === undefined || row.targetPrice === item.targetPrice || row.priceMinor === Math.round(item.targetPrice * 100)));
+        if (matches.length > 1) return this.response(`Qual opção de ${item.name} deseja alterar: ${matches.map(([, row]) => formatCurrency(row.priceMinor / 100)).join(' ou ')}? Informe o produto e o valor da opção.`);
+        const key = matches[0]?.[0] || `${normalizeText(item.name)}:price:${item.targetPrice ?? 'unspecified'}`;
         const previous = merged.get(key);
         if (['add', 'remove'].includes(item.operation) && !Number.isFinite(item.quantity)) return this.response(`Qual a quantidade de ${item.name}?`);
         if (item.operation === 'remove' && !previous) return this.response(`${item.name} não está no resumo atual. Qual item deseja retirar?`);
         const quantity = item.operation === 'add' ? Number(previous?.quantity || 0) + item.quantity : item.operation === 'remove' ? Number(previous.quantity) - item.quantity : item.quantity;
         if (quantity !== null && quantity <= 0) merged.delete(key);
-        else merged.set(key, { requestedName: item.name, quantity, targetPrice: item.targetPrice ?? previous?.targetPrice ?? null });
+        else merged.set(key, { requestedName: item.name, quantity, ...(previous?.productId && (item.targetPrice === null || item.targetPrice === undefined || previous.priceMinor === Math.round(item.targetPrice * 100)) ? { productId: previous.productId } : {}), targetPrice: item.targetPrice ?? previous?.targetPrice ?? null });
       }
       state = await this.save(phone, state, { ...(newOrder ? { id: randomUUID(), orderId: null, fulfillment: null, paymentMethod: null, address: '', confirmedDeliveryFeeMinor: null, deliveryFeeMinor: null } : {}),
         ...details, lastAppliedMessageId: messageId, stage: 'DISCOVERY', items: await this.classify([...merged.values()]) });
       return this.present(phone, state);
     }
-    if (!state?.items?.length) return this.response('Me diga os produtos e as quantidades.');
+    if (!state?.items?.length) {
+      if (Object.keys(details).length) await this.save(phone, state, details);
+      return this.response('Me diga os produtos e as quantidades.');
+    }
     if (state.stage === 'PROCUREMENT_CONFIRMATION' && ['confirm', 'decline'].includes(input.action)) {
       const fresh = await this.classify(state.items);
       if (fresh.some((item, index) => item.fulfillment !== state.items[index].fulfillment)) {
@@ -196,7 +223,7 @@ class SalesConversationService {
       if (input.action === 'confirm') await this.registerProcurement(phone, state, customerName);
       const items = fresh.filter(item => item.fulfillment === 'IMMEDIATE');
       state = await this.save(phone, state, { items, stage: 'DISCOVERY' });
-      if (!items.length) return this.response(input.action === 'confirm' ? 'Encomenda registrada. Avisaremos quando houver previsão e valor.' : 'Certo. Precisa de mais algum produto?');
+      if (!items.length) return this.response(input.action === 'confirm' ? 'Solicitação de procura registrada, sem compra ou cobrança. A equipe enviará cotação e condições para seu aceite.' : 'Certo. Precisa de mais algum produto?');
       const next = await this.present(phone, state);
       if (input.action === 'confirm') next.reply = 'Encomenda registrada. ' + next.reply;
       return next;

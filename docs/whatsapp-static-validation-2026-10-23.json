@@ -1,0 +1,60 @@
+{
+  "date": "2026-10-23",
+  "branch": "main",
+  "initialRevision": "f7ec6478b5ee79614f6fa7ff8d03d88e286ec3e6",
+  "continuationRevision": "aeb65b6a7dc1464ae9ff1cd94fcc39d24be04204",
+  "scope": "Análise estática local; cenários funcionais não executados",
+  "checks": {
+    "nodeSyntax": {
+      "files": 35,
+      "failures": 0
+    },
+    "eslint": {
+      "scope": "projeto completo, incluindo no-dupe-class-members",
+      "exitCode": 0
+    },
+    "typescriptFunctions": {
+      "noEmit": true,
+      "exitCode": 0
+    },
+    "jsx": {
+      "mode": "esbuild transform em memória, sem executar aplicação",
+      "exitCode": 0
+    },
+    "diffWhitespace": {
+      "exitCode": 0
+    },
+    "logoPresent": true,
+    "localConfiguration": {
+      "wabaPresent": false,
+      "welcomeContractVerified": false,
+      "catalogEnabled": false,
+      "syncEnabled": false,
+      "credentialsPrinted": false
+    }
+  },
+  "functionalTests": {
+    "executed": false,
+    "reason": "Aguardam início explícito da sessão de homologação solicitada pelo usuário; data sozinha não autoriza"
+  },
+  "performance": {
+    "executed": false,
+    "measurements": null
+  },
+  "externalActions": {
+    "deploy": false,
+    "mergeByAgent": false,
+    "commitByAgent": false,
+    "realMessages": false,
+    "initialCatalogSync": false,
+    "metaChanges": false,
+    "remoteDataChanges": false,
+    "serverStarted": false
+  },
+  "limitations": [
+    "Conta Meta, template aprovado, vínculo/permissões do catálogo e coexistência não verificados",
+    "Documentação direta developers.facebook.com parcialmente inacessível/429",
+    "Trigger de produtos preparado, não publicado",
+    "Análise estática não comprova comportamento funcional ou produção"
+  ]
+}

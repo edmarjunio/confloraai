@@ -207,6 +207,7 @@ function createTestMessageService(aiMock = null, captures = {}) {
 
 test('11. Proteção de markAsRead contra IDs que não iniciam com wamid (prevenção erro 131009)', async () => {
   const service = createTestMessageService();
+  await new (require('../src/services/incoming-message.service').IncomingMessageService)(service.firestoreRepo).accept({ phone: '5564999990011', message: 'Oi', messageId: 'local-123456789' });
   const result = await service.handleCustomerMessage({
     phone: '5564999990011',
     message: 'Oi',
@@ -234,7 +235,8 @@ test('13. Busca inteligente usando tags cadastradas no Firestore (ex: "três mar
 
 test('14. Aprendizado Contínuo com Integridade', async () => {
   const service = createTestMessageService();
-  await service.learningService.learnFromCompletedSale({
+  const learningService = new LearningService({ firestoreRepo: service.firestoreRepo, catalogRepo: service.catalogRepo });
+  await learningService.learnFromCompletedSale({
     purchasedItems: [{ name: 'Palmeira Azul', price: 190.0 }],
     conversationHistory: [{ role: 'user', text: 'voces tem palmeira de bismarck' }],
   });

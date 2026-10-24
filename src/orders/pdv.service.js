@@ -472,11 +472,12 @@ class PdvService {
     let automationRecipient = '';
     const sendOnce = async (stage, send, checkpoint) => {
       const guard = require('../services/automation-send-guard');
-      if (automationRecipient) await guard.assertAutomation(this.repository.repository, automationRecipient, job.conversationVersion);
+      const guardOptions = { requireAssistant: job.kind.startsWith('conversation-') };
+      if (automationRecipient) await guard.assertAutomation(this.repository.repository, automationRecipient, job.conversationVersion, guardOptions);
       await update({ status: 'SENDING', sendingStage: stage, sendingAt: new Date().toISOString() });
       uncertainSend = true;
       let result;
-      try { result = automationRecipient ? await guard.withAutomation(this.repository.repository, automationRecipient, job.conversationVersion, send) : await send(); }
+      try { result = automationRecipient ? await guard.withAutomation(this.repository.repository, automationRecipient, job.conversationVersion, send, guardOptions) : await send(); }
       catch (error) {
         // Only the trusted transport can establish that no customer message was submitted.
         if (error.definitelyNotSent === true) uncertainSend = false;
@@ -559,7 +560,7 @@ class PdvService {
         await this.deliverCatalog(job);
         return;
       }
-      if (job.kind === 'conversation-text' && this.catalogAgent) {
+      if (job.kind === 'conversation-text') {
         // Old queued free-form replies are never sent after switching to the controlled agent.
         await update({ status: 'SKIPPED', leaseUntil: 0, lastError: 'SUPERSEDED_BY_VERIFIED_AGENT' });
         return;
@@ -580,7 +581,7 @@ class PdvService {
       const phone = normalizePhone(job.recipient || (isOwner ? recipient : (order?.customerPhone || settlement?.customerPhone)));
       if (!isOwner && !['driver-available', 'driver-assigned'].includes(job.kind)) automationRecipient = phone;
       if (!phone && isOwner) { throw new Error('WhatsApp da horta não configurado.'); }
-      if (!phone) { await update({ status: 'SENT', skipped: true, leaseUntil: 0 }); return; }
+      if (!phone) { await update({ status: 'NEEDS_RECONCILIATION', skipped: true, leaseUntil: 0, lastError: 'INVALID_OR_MISSING_RECIPIENT' }); return; }
       let text;
       if (job.kind === 'closing' || job.kind === 'conversation-text') text = job.text;
       else if (job.kind === 'owner-new') text = `CONFLORA — NOVO PEDIDO #${order.ticketNumber || order.id}\nCliente: ${order.customerName}\nValor: ${money(order.total)}\nPagamento: ${order.completedAt ? 'confirmado' : 'ainda não confirmado'}`;

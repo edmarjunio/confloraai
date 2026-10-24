@@ -267,55 +267,19 @@ function renderTermsOfServiceHtml() {
 </html>`;
 }
 
-function whatsappCustomerPhone(phone) {
-  const digits = String(phone || '').replace(/\D/g, '');
-  return digits && !digits.startsWith('55') && digits.length <= 11
-    ? `55${digits}`
-    : digits;
-}
-
-async function sendCustomerOrderReceipt(whatsappClient, phone, receiptText) {
-  const targetPhone = whatsappCustomerPhone(phone);
-  if (!/^\d{12,15}$/.test(targetPhone)) {
-    return { sent: false, reason: 'invalid_or_missing_customer_phone_number'.tr };
-  }
-  const template = config.whatsapp.templates.customerOrder;
-  if (!template) {
-    return { sent: false, reason: 'configure_an_approved_whatsapp_receipt_template'.tr };
-  }
-  try {
-    const result = await whatsappClient.sendTemplate(
-      targetPhone,
-      template,
-      config.whatsapp.templates.language,
-      [
-        {
-          type: 'body',
-          parameters: [{ type: 'text', text: receiptText }],
-        },
-      ],
-    );
-    if (result?.mock || result?.success === false) {
-      return { sent: false, reason: 'whatsapp_without_valid_credentials_or_unconfirmed_sending'.tr };
-    }
-    return { sent: true };
-  } catch (error) {
-    Logger.error('failed_to_send_order_receipt_via_whatsapp'.tr, error);
-    return { sent: false, reason: 'could_not_send_receipt_via_whatsapp'.tr };
-  }
+async function sendCustomerOrderReceipt(app, order) {
+  const id = order.id + '-receipt';
+  await app.locals.pdv.store.transaction(async tx => {
+    if (await tx.get('pdv_outbox', id)) return;
+    tx.set('pdv_outbox', id, { id, orderId: order.id, kind: 'receipt', status: 'PENDING', attempts: 0 });
+  });
+  await app.locals.pdv.service.deliver(id);
+  const job = await app.locals.pdv.store.read('pdv_outbox', id);
+  return { sent: job?.status === 'SENT' && !job.skipped, reason: job?.lastError || '' };
 }
 
 async function prepareSicrediCheckoutOrder({ app, sicrediClient, taskQueueClient, order }) {
-  if (order.paymentMethod !== 'PIX' || order.pixMode === 'MANUAL') {
-    const id = `${order.id}-receipt`;
-    await app.locals.pdv.store.transaction(async (tx) => {
-      if (await tx.get('pdv_outbox', id)) return;
-      tx.set('pdv_outbox', id, { id, orderId: order.id, kind: 'receipt', status: 'PENDING', attempts: 0 });
-    });
-    await app.locals.pdv.service.deliver(id);
-    const job = await app.locals.pdv.store.read('pdv_outbox', id);
-    return { order, receiptDelivery: { sent: job?.status === 'SENT' && !job.skipped, reason: job?.lastError || '' } };
-  }
+  if (order.paymentMethod !== 'PIX' || order.pixMode === 'MANUAL') return { order, receiptDelivery: await sendCustomerOrderReceipt(app, order) };
   if (order.pixProvider !== 'SICREDI' || !order.pixData?.txid) {
     return { order, receiptDelivery: { sent: false, reason: 'pix_order_prior_to_sicredi_integration_do_not_generate_a_new_charge'.tr } };
   }
@@ -622,14 +586,23 @@ function createApp({
     if (body.object !== 'whatsapp_business_account' || !Array.isArray(body.entry)) {
       return res.sendStatus(200);
     }
+    if (!process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || !config.whatsapp.phoneNumberId) {
+      Logger.error('Recebimento WhatsApp bloqueado: configure a conta e o número oficiais antes de aceitar eventos.');
+      return res.sendStatus(503);
+    }
 
     try {
     for (const entry of body.entry) {
       for (const change of entry.changes || []) {
         const value = change.value;
+        if (!['messages', 'smb_message_echoes'].includes(change.field)) {
+          Logger.debug('Evento WhatsApp ignorado: campo sem consumidor neste webhook.', { field: change.field || 'missing' });
+          continue;
+        }
         if (!process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || entry.id !== process.env.WHATSAPP_BUSINESS_ACCOUNT_ID ||
             !config.whatsapp.phoneNumberId || value?.metadata?.phone_number_id !== config.whatsapp.phoneNumberId) {
-          Logger.warn('Evento WhatsApp recusado: conta/número não conferem com a configuração.');
+          Logger.warn('Evento WhatsApp recusado: conta/número não conferem com a configuração.',
+            require('../integrations/whatsapp-diagnostics').eventDiagnostic(entry, change, config));
           continue;
         }
         if (change.field === 'smb_message_echoes') {
@@ -657,7 +630,14 @@ function createApp({
           if (msg.type === 'order') {
             try { commerceOrder = require('../integrations/whatsapp-inbound').normalizeOrder(msg.order); }
             catch {
-              await require('../services/conversation-automation').conversationAutomation(messageService.firestoreRepo, phone, { pauseReason: 'invalid_meta_cart', messageId });
+              const rejectedId = incoming.id(messageId);
+              const newRejectedEvent = await incoming.store.transaction(async tx => {
+                if (await tx.get('incoming_messages', rejectedId)) return false;
+                tx.set('incoming_messages', rejectedId, { id: rejectedId, payload: { phone, message: '[CARRINHO_META_INVALIDO]', messageId },
+                  status: 'NEEDS_RECONCILIATION', attempts: 0, lastError: 'INVALID_META_CART', createdAt: new Date().toISOString(), expiresAt: null });
+                return true;
+              });
+              if (newRejectedEvent) await require('../services/conversation-automation').conversationAutomation(messageService.firestoreRepo, phone, { pauseReason: 'invalid_meta_cart', messageId });
               continue;
             }
           }
@@ -675,11 +655,17 @@ function createApp({
             receivedByRevision: process.env.K_REVISION || process.env.APP_REVISION || 'local' };
 
           await incoming.accept(taskPayload);
+          Logger.debug('Evento WhatsApp persistido na inbox.', { eventFingerprint: incoming.id(messageId).slice(0, 12),
+            assistantEnabled: config.whatsapp.assistantEnabled, field: change.field, inputType: msg.type || 'text',
+            revision: process.env.K_REVISION || process.env.APP_REVISION || 'local' });
           if (process.env.NODE_ENV === 'production' && config.whatsapp.assistantEnabled && taskQueueClient) {
             await taskQueueClient.enqueueProcessMessage(taskPayload).catch(error => Logger.warn('message_persisted_queue_will_be_resumed_by_the_worker'.tr, { messageId, error: error.message }));
           }
           // The durable inbox is authoritative even when Cloud Tasks is unavailable.
-          if (process.env.NODE_ENV !== 'production') setImmediate(() => messageService.handleCustomerMessage({ ...taskPayload, ...(!config.whatsapp.assistantEnabled ? { verifyOnly: true } : {}) }).catch(() => {}));
+          if (process.env.NODE_ENV !== 'production') setImmediate(() => messageService.handleCustomerMessage({ ...taskPayload, ...(!config.whatsapp.assistantEnabled ? { verifyOnly: true } : {}) }).catch(error => {
+            Logger.error('Falha ao processar evento WhatsApp persistido; conferir inbox e reconciliação.', error,
+              { code: 'WHATSAPP_MESSAGE_PROCESSING_FAILED', eventFingerprint: incoming.id(messageId).slice(0, 12), diagnosticCode: error.diagnosticCode || null });
+          }));
         }
       }
     }
@@ -1460,11 +1446,7 @@ function createApp({
       });
       let receiptDelivery = { sent: false, reason: 'shipping_not_requested'.tr };
       if (resolvedPaymentMethod === 'PIX') {
-        receiptDelivery = await sendCustomerOrderReceipt(
-          messageService.whatsappClient,
-          customerPhone,
-          receiptText,
-        );
+        receiptDelivery = await sendCustomerOrderReceipt(app, order);
         if (!receiptDelivery.sent) {
           Logger.warn('manual_pix_sale_created_unable_to_send_receipt_to_customer'.tr, {
             orderId: order.id,
@@ -2218,11 +2200,7 @@ function createApp({
       let receiptDelivery = { sent: false, reason: 'shipping_not_requested'.tr };
       const orderWithReceipt = { ...order, receiptText };
       if (isPix) {
-        receiptDelivery = await sendCustomerOrderReceipt(
-          messageService.whatsappClient,
-          approval.customerPhone,
-          receiptText,
-        );
+        receiptDelivery = await sendCustomerOrderReceipt(app, order);
         if (!receiptDelivery.sent) {
           Logger.warn('discount_approved_unable_to_send_pix_receipt_to_customer'.tr, {
             orderId: order.id,

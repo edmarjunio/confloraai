@@ -2,17 +2,22 @@ const { randomUUID } = require('node:crypto');
 const { runTransaction } = require('../database/transactions');
 const { customerKeyFor, scopedId } = require('../agent/agent-store');
 
-async function conversationAutomation(repo, phone, { pauseReason, messageId = '' } = {}) {
+async function conversationAutomation(repo, phone, { pauseReason, messageId = '', echoEventId = '' } = {}) {
   const tenantId = 'conflora';
   const customerKey = customerKeyFor(tenantId, phone);
   const id = scopedId(tenantId, customerKey);
   return runTransaction(repo, async tx => {
     const current = await tx.get('agent_conversations', id) || { tenantId, customerKey, automation: 'active' };
     if (current.tenantId !== tenantId || current.customerKey !== customerKey) throw new Error('CONVERSATION_ISOLATION');
+    if (echoEventId) {
+      const eventId = require('node:crypto').createHash('sha256').update(`echo:${echoEventId}`).digest('hex');
+      if (await tx.get('incoming_messages', eventId)) return current;
+      tx.set('incoming_messages', eventId, { id: eventId, status: 'COMPLETED', payload: { phone, messageId: echoEventId, message: '[MENSAGEM_HUMANA_OBSERVADA]', type: 'smb_message_echoes' }, completedAt: new Date().toISOString(), expiresAt: null });
+    }
     if (!pauseReason || current.automation === 'paused') return current;
     const now = new Date().toISOString();
     const handoffId = `hf_${messageId ? customerKeyFor(tenantId, messageId) : randomUUID()}`;
-    const paused = { ...current, automation: 'paused', version: Number(current.version || 0) + 1, handoffId, reason: pauseReason, pausedAt: now, updatedAt: now, customerPhone: phone };
+    const paused = { ...current, automation: 'paused', attentionStatus: 'NEEDS_HUMAN_ATTENTION', version: Number(current.version || 0) + 1, handoffId, reason: pauseReason, pausedAt: now, updatedAt: now, customerPhone: phone };
     tx.set('agent_handoffs', handoffId, { id: handoffId, tenantId, customerKey, reason: pauseReason, status: 'open', createdAt: now, cartPreserved: true });
     tx.set('agent_conversations', id, paused);
     return paused;
@@ -47,7 +52,7 @@ async function resumeAgentRequestedConversation(repo, phone, actor) {
       ...current,
       automation: 'active',
       resumedAt: now,
-      resumedBy: actor.id, assignedTo: null, version: Number(current.version || 0) + 1,
+      resumedBy: actor.id, assignedTo: null, attentionStatus: 'RESOLVED', version: Number(current.version || 0) + 1,
       updatedAt: now,
     };
     tx.set('agent_conversations', conversationId, resumed);
@@ -71,7 +76,7 @@ async function setConversationChannel(repo, phone, channel) {
     if (current.tenantId !== tenantId || current.customerKey !== customerKey) throw new Error('CONVERSATION_ISOLATION');
     if (current.automation === 'paused') return current;
 
-    const updated = { ...current, channel, updatedAt: new Date().toISOString() };
+    const updated = { ...current, channel, customerPhone: phone, updatedAt: new Date().toISOString() };
     tx.set('agent_conversations', conversationId, updated);
     return updated;
   });
@@ -98,6 +103,7 @@ async function evaluateDailyReset(repo, phone, { now = new Date() } = {}) {
 
     const updated = {
       ...current,
+      customerPhone: phone,
       lastSessionDate: tzDateStr,
       sessionStartedAt: now.toISOString(),
       updatedAt: now.toISOString(),
@@ -116,12 +122,15 @@ async function resetConversationContext(repo, phone, actor = null) {
     const session = await tx.get('sessions', phone) || {};
     // Preserve every commercial draft and pending operation. Archive only conversational working context.
     const sales = session.salesConversation;
-    if (sales && sales.items?.length && sales.stage !== 'ORDER_CREATED') return { blocked: true, reason: 'PENDING_CONVERSATIONAL_ORDER' };
     const now = new Date().toISOString();
+    const archiveId = `context-reset-${customerKeyFor('conflora', phone)}-${Number(current.version || 0) + 1}`;
+    if (sales) tx.set('agent_handoffs', archiveId, { id: archiveId, kind: 'CONVERSATION_CONTEXT_ARCHIVE', status: 'closed',
+      tenantId: 'conflora', customerKey: customerKeyFor('conflora', phone), customerPhone: phone, salesConversation: sales,
+      createdAt: now, archivedBy: actor?.id || 'customer', commercialDataPreserved: true });
     tx.set('sessions', phone, { ...session, salesConversation: null, previousSalesConversation: sales || session.previousSalesConversation || null });
     const updated = { ...current, channel: 'menu', version: Number(current.version || 0) + 1, contextResetAt: now, contextResetBy: actor?.id || 'customer', updatedAt: now };
     tx.set('agent_conversations', id, updated);
-    return { blocked: false, conversation: updated };
+    return { preservedContextId: sales ? archiveId : null, conversation: updated };
   });
 }
 module.exports = { conversationAutomation, resumeAgentRequestedConversation, setConversationChannel, evaluateDailyReset, resetConversationContext };

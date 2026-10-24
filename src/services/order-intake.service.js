@@ -154,6 +154,7 @@ class OrderIntakeService {
 
   async changeDraft(phone, previous, next) {
     return runTransaction(this.repository, async tx => {
+      await require('./automation-send-guard').assertTransactionAutomation(tx);
       const session = await tx.get('sessions', phone) || {};
       if (session.orderIntake?.id !== previous?.id || session.orderIntake?.version !== previous?.version) throw conflict();
       const saved = { ...next, version: Number(previous?.version || 0) + 1, updatedAt: this.now().toISOString() };
@@ -179,6 +180,7 @@ class OrderIntakeService {
     const items = await this.classify(draft.items);
     const profile = await this.procurement.customerProfile(phone);
     const result = await runTransaction(this.repository, async tx => {
+      await require('./automation-send-guard').assertTransactionAutomation(tx);
       const session = await tx.get('sessions', phone) || {};
       const previous = await tx.get('agent_handoffs', draft.id);
       if (previous) {
@@ -210,6 +212,7 @@ class OrderIntakeService {
     const forecast = String(input.forecast || '').trim();
     if (input.confirmed !== true || !forecast || forecast.length > 120 || /[\r\n]/.test(forecast) || !Number.isSafeInteger(input.version)) throw Object.assign(new Error('Informe a previsão confirmada e a versão da comanda.'), { status: 400 });
     const result = await runTransaction(this.repository, async tx => {
+      await require('./automation-send-guard').assertTransactionAutomation(tx);
       const request = await tx.get('agent_handoffs', id);
       if (!request || request.kind !== 'ORDER_REQUEST' || request.tenantId !== 'conflora') throw Object.assign(new Error('Solicitação não encontrada.'), { status: 404 });
       if (request.quoteVersion || request.acceptedAt) throw Object.assign(new Error('Use a cotação da encomenda para atualizar valores e datas antes do aceite.'), { status: 409 });

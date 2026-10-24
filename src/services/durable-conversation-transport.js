@@ -23,7 +23,7 @@ function durableConversationTransport(repo, client, { phone, messageId, version 
         if (previous && Number(previous.conversationVersion || 0) !== Number(version || 0)) return { blocked: true };
         if (previous && previous.status !== 'RETRYABLE') return { uncertain: true };
         if (Number(previous?.attempts || 0) >= 12) return { uncertain: true };
-        const job = { id, kind: 'conversation-native', recipient: phone, conversationVersion: Number(version || 0), status: 'SENDING',
+        const job = { id, kind: 'conversation-native', recipient: phone, sourceMessageId: messageId || '', conversationVersion: Number(version || 0), status: 'SENDING',
           sendingStage: String(method), createdAt: previous?.createdAt || new Date().toISOString(),
           sendingAt: new Date().toISOString(), attempts: Number(previous?.attempts || 0) + 1, leaseUntil: 0 };
         tx.set('pdv_outbox', id, job);
@@ -49,6 +49,8 @@ function durableConversationTransport(repo, client, { phone, messageId, version 
           const job = await tx.get('pdv_outbox', id);
           if (job?.status !== 'SENDING') throw new Error('SUBMISSION_CHECKPOINT_CHANGED');
           tx.set('pdv_outbox', id, { ...job, status: 'SENT', providerMessageId, sentAt: new Date().toISOString(), completedAt: new Date().toISOString() });
+          const providerKey = createHash('sha256').update(providerMessageId).digest('hex');
+          tx.set('whatsapp_delivery', providerKey, { id: providerKey, providerMessageId, outboxId: id, source: 'CLOUD_API_AUTOMATION', createdAt: new Date().toISOString() });
         });
         return result;
       } catch (error) {

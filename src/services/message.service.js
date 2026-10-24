@@ -24,37 +24,28 @@ function isAmbiguousMessage(text) {
 class MessageService {
   /**
    * @param {Object} dependencies
-   * @param {import('../router/message.router').MessageRouter} dependencies.router
-   * @param {import('./direct-price.service').DirectPriceService} dependencies.directPriceService
    * @param {import('../ai/agent.service').AgentService} dependencies.agentService
    * @param {import('../catalog/catalog.repository').CatalogRepository} dependencies.catalogRepo
    * @param {import('../database/firestore.repository').FirestoreRepository} dependencies.firestoreRepo
    * @param {import('../orders/order.service').OrderService} dependencies.orderService
    * @param {import('../integrations/whatsapp.client').WhatsAppClient} dependencies.whatsappClient
-   * @param {import('./learning.service').LearningService} [dependencies.learningService]
    */
   constructor({
-    router,
-    directPriceService,
     agentService,
     catalogRepo,
     firestoreRepo,
     orderService,
     whatsappClient,
-    learningService = null,
   }) {
-    this.router = router;
-    this.directPriceService = directPriceService;
     this.agentService = agentService;
     this.catalogRepo = catalogRepo;
     this.firestoreRepo = firestoreRepo;
     this.orderService = orderService;
     this.whatsappClient = whatsappClient;
-    this.learningService = learningService;
   }
 
   /**
-   * Pipeline principal de atendimento com IA e envio de fotos do Firebase Storage.
+   * Pipeline durável de atendimento: template, catálogo Meta e serviços comerciais oficiais.
    *
    * @param {Object} input
    * @param {string} input.phone
@@ -90,6 +81,7 @@ class MessageService {
     messageId = '',
     verifyOnly = false,
     commerceOrder = null,
+    conversationVersion,
   }) {
     const { evaluateDailyReset } = require('./conversation-automation');
     await evaluateDailyReset(this.firestoreRepo, phone).catch(err => {
@@ -105,21 +97,18 @@ class MessageService {
     let conversation = await conversationAutomation(this.firestoreRepo, phone);
 
     if (conversation.automation === 'paused') return { reply: '', intent: 'HUMAN_HANDOFF_ACTIVE', imagesSent: 0, latencyMs: 0 };
+    if (conversationVersion !== undefined && conversationVersion !== Number(conversation.version || 0)) return { reply: '', intent: 'STALE_AUTOMATION_BLOCKED', latencyMs: 0 };
     if (verifyOnly) return { reply: '', intent: 'AUTOMATION_DISABLED', imagesSent: 0, latencyMs: 0 };
     const whatsappConfig = require('../config/env').whatsapp;
     if (!whatsappConfig.assistantEnabled) return { reply: '', intent: 'AUTOMATION_DISABLED', imagesSent: 0, latencyMs: 0 };
     if (whatsappConfig.agentOwner !== 'cloud_api') return { reply: '', intent: 'AUTOMATION_DISABLED', imagesSent: 0, latencyMs: 0 };
 
     whatsapp = require('./durable-conversation-transport').durableConversationTransport(this.firestoreRepo, this.whatsappClient, { phone, messageId, version: Number(conversation.version || 0) });
+    const work = operation => require('./automation-send-guard').withAutomation(this.firestoreRepo, phone, Number(conversation.version || 0), operation);
     if (messageId) whatsapp?.markAsRead?.(messageId)?.catch(() => {});
     const command = require('../shared/string.util').normalizeText(message);
     if (/^(reiniciar|recomecar conversa)$/.test(command)) {
       const reset = await require('./conversation-automation').resetConversationContext(this.firestoreRepo, phone);
-      if (reset.blocked) {
-        const reply = 'Há itens pendentes no atendimento. O reinício preserva pedidos e encomendas; peça à equipe para revisar o atendimento.';
-        await whatsapp?.sendTextMessage(phone, reply);
-        return { reply, intent: 'RESET_PENDING_REVIEW', latencyMs: 0 };
-      }
       whatsapp = require('./durable-conversation-transport').durableConversationTransport(this.firestoreRepo, this.whatsappClient, { phone, messageId, version: reset.conversation.version });
       return this.sendMainMenu(phone, whatsapp, startTime, customerName);
     }
@@ -136,32 +125,64 @@ class MessageService {
     this.salesConversation ||= new (require('./sales-conversation.service').SalesConversationService)({ repository: this.firestoreRepo, agent: this.agentService, orders: this.orderService, catalog: this.catalogRepo, intake: this.orderIntake });
     if (commerceOrder) {
       await setConversationChannel(this.firestoreRepo, phone, 'agent');
-      const result = await this.salesConversation.receiveMetaCart({ phone, commerceOrder, messageId });
+      const result = await work(() => this.salesConversation.receiveMetaCart({ phone, commerceOrder, messageId }));
       return this.sendSalesResult(phone, whatsapp, result, messageId, startTime);
     }
     if (interactiveId === 'catalogo_virtual') return this.sendMainMenu(phone, whatsapp, startTime, customerName);
     if (['montar_sacola', 'btn_sacola'].includes(interactiveId) || /^(montar minha sacola|montar sacola|comprar agora|comprar|fazer pedido)$/.test(command) || /^(cat_|sub_|add_)/.test(interactiveId)) {
       await setConversationChannel(this.firestoreRepo, phone, 'agent');
       if (process.env.WHATSAPP_META_CATALOG_ENABLED === 'true' && process.env.WHATSAPP_META_CATALOG_ID) {
-        await whatsapp?.sendCatalogMessage(phone);
-        return { reply: '', intent: 'META_CATALOG_SENT', latencyMs: Math.round(performance.now() - startTime) };
+        try {
+          await whatsapp.sendCatalogMessage(phone);
+          return { reply: '', intent: 'META_CATALOG_SENT', latencyMs: Math.round(performance.now() - startTime) };
+        } catch (error) {
+          if (error.automationBlocked || !error.definitelyNotSent) throw error;
+          Logger.error('Catálogo Meta recusado; compra por texto e conferência operacional necessárias.', error, { source: 'WHATSAPP' });
+        }
       }
-      const reply = 'O catálogo do WhatsApp aguarda habilitação pela equipe. Por enquanto, escreva os produtos e quantidades para comprar por aqui.';
-      await whatsapp?.sendTextMessage(phone, reply);
+      const reply = 'O catálogo do WhatsApp está indisponível ou aguarda habilitação pela equipe. Por enquanto, escreva os produtos e quantidades para comprar por aqui.';
+      await whatsapp.sendTextMessage(phone, reply);
       return { reply, intent: 'META_CATALOG_PENDING_TEXT_SALES', latencyMs: 0 };
     }
     if (interactiveId === 'btn_atendente') {
       await setConversationChannel(this.firestoreRepo, phone, 'agent');
       const reply = 'Olá! 🌱 Sou o assistente virtual da Conflora. O que você procura?';
-      await whatsapp?.sendTextMessage(phone, reply);
+      await whatsapp.sendTextMessage(phone, reply);
       await this.firestoreRepo.appendMessage(phone, 'assistant', reply, { requirePersistence: true });
       return { reply, intent: 'AGENT_ASSISTANCE', latencyMs: 0 };
     }
     const session = await this.salesConversation.store.read('sessions', phone) || {};
-    const procurement = await this.orderIntake.procurement.reply({ phone, message, messageId, session });
+    const procurement = await work(() => this.orderIntake.procurement.reply({ phone, message, messageId, session }));
     if (procurement) return this.sendSalesResult(phone, whatsapp, procurement, messageId, startTime);
     const objective = require('./sales-parser').parseSalesMessage(message, session.salesConversation);
-    if ((!conversation.channel || conversation.channel === 'menu') && !objective && !interactiveId && !session.salesConversation?.items?.length) return this.sendMainMenu(phone, whatsapp, startTime, customerName);
+    if (objective?.items?.some(item => require('./meta-catalog-sync.service').restrictedCategory(item.name))) {
+      await conversationAutomation(this.firestoreRepo, phone, { pauseReason: 'commerce_policy_review_required', messageId });
+      return { reply: '', intent: 'COMMERCE_POLICY_REVIEW', latencyMs: 0 };
+    }
+    if (this.metaAgentService && !interactiveId && (objective?.query || /\b(foto|fotos|imagem|imagens)\b/.test(command))) {
+      const envelope = await work(() => this.metaAgentService.execute('atender_mensagem', { customer_phone: phone, message_id: messageId || require('node:crypto').randomUUID(), message }));
+      if (!envelope.next_action.send_customer_message) return { reply: '', intent: 'HUMAN_HANDOFF_ACTIVE', latencyMs: 0 };
+      if (envelope.data.kind !== 'ORDER_INTAKE') {
+        const id = 'catalog-' + require('node:crypto').createHash('sha256').update(messageId || require('node:crypto').randomUUID()).digest('hex');
+        await require('../database/transactions').runTransaction(this.firestoreRepo, async tx => {
+          const existing = await tx.get('pdv_outbox', id);
+          if (existing) return;
+          tx.set('pdv_outbox', id, { id, kind: 'conversation-catalog', recipient: phone, conversationVersion: Number(conversation.version || 0),
+            productIds: envelope.data.products.map(product => product.id), photoRequested: Boolean(envelope.data.photo_requested), criteriaQuery: message,
+            status: 'PENDING', attempts: 0, createdAt: new Date().toISOString() });
+        });
+        return { reply: '', intent: 'VERIFIED_CATALOG_QUEUED', latencyMs: 0 };
+      }
+    }
+    if (!interactiveId && require('../shared/greeting').recognizeGreeting(message)) {
+      if (!conversation.channel || conversation.channel === 'menu') return this.sendMainMenu(phone, whatsapp, startTime, customerName);
+      const reply = `${require('../shared/greeting').recognizeGreeting(message)} Qual produto você procura?`;
+      return this.sendSalesResult(phone, whatsapp, { reply, intent: 'GREETING_SENT' }, messageId, startTime);
+    }
+    if ((!conversation.channel || conversation.channel === 'menu') && !objective && !interactiveId && !session.salesConversation?.items?.length) {
+      await conversationAutomation(this.firestoreRepo, phone, { pauseReason: 'ambiguous_customer_needs_human', messageId });
+      return { reply: '', intent: 'AMBIGUOUS_NEEDS_HUMAN', latencyMs: 0 };
+    }
     conversation = await setConversationChannel(this.firestoreRepo, phone, 'agent');
     if (String(message || '') === '[COMPROVANTE_ENVIADO]') {
       const reply = 'Envie o comprovante na página do pedido. O caixa confere o Pix antes de confirmar.';
@@ -171,14 +192,17 @@ class MessageService {
     if (/^(order_|pay_)/.test(interactiveId)) {
       return this.sendSalesResult(phone, whatsapp, { reply: 'Essa opção pertence ao atendimento anterior. Escreva os produtos e quantidades para conferir o pedido atual.', intent: 'LEGACY_CALLBACK_EXPIRED' }, messageId, startTime);
     }
-    const result = await this.salesConversation.handle({ phone, message, interactiveId, customerName, messageId });
+    const result = await work(() => this.salesConversation.handle({ phone, message, interactiveId, customerName, messageId }));
     return this.sendSalesResult(phone, whatsapp, result, messageId, startTime);
   }
 
   async sendSalesResult(phone, whatsapp, result, messageId, startTime) {
     if (result.reply) {
-      if (result.buttons?.length) await whatsapp?.sendInteractiveButtons(phone, { bodyText: result.reply, buttons: result.buttons });
-      else await whatsapp?.sendTextMessage(phone, result.reply);
+      if (!result.buttons?.length || result.reply.length > 1000) {
+        const characters = Array.from(result.reply);
+        for (let offset = 0; offset < characters.length; offset += 3500) await whatsapp.sendTextMessage(phone, characters.slice(offset, offset + 3500).join(''));
+      }
+      if (result.buttons?.length) await whatsapp.sendInteractiveButtons(phone, { bodyText: result.reply.length > 1000 ? `Confira o resumo completo enviado acima.\n${result.reply.slice(-900)}` : result.reply, buttons: result.buttons });
       await this.firestoreRepo.appendMessage(phone, 'assistant', result.reply, { requirePersistence: true, messageId });
     }
     return { ...result, latencyMs: Math.round(performance.now() - startTime) };
@@ -188,7 +212,7 @@ class MessageService {
     await require('./conversation-automation').setConversationChannel(this.firestoreRepo, phone, 'menu');
     try { await whatsapp.sendWelcomeTemplate(phone, customerName); }
     catch (error) {
-      Logger.error('Falha no template de boas-vindas; reconciliação operacional necessária.', error, { source: 'WHATSAPP' });
+      Logger.error('Falha no template de boas-vindas; reconciliação operacional necessária.', error, { source: 'WHATSAPP', diagnosticCode: error.diagnosticCode || 'WELCOME_TRANSPORT_FAILURE' });
       error.requiresReconciliation = true;
       throw error;
     }

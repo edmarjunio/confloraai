@@ -8,7 +8,9 @@ class IncomingMessageService {
     const id = this.id(payload.messageId);
     await this.store.transaction(async tx => {
       if (await tx.get('incoming_messages', id)) return;
-      tx.set('incoming_messages', id, { id, payload, status: 'PENDING', attempts: 0, createdAt: new Date(this.now()).toISOString() });
+      const { customerKeyFor, scopedId } = require('../agent/agent-store');
+      const conversation = await tx.get('agent_conversations', scopedId('conflora', customerKeyFor('conflora', payload.phone)));
+      tx.set('incoming_messages', id, { id, payload: { ...payload, conversationVersion: Number(conversation?.version || 0) }, status: 'PENDING', attempts: 0, createdAt: new Date(this.now()).toISOString() });
     });
   }
   async claim(messageId) {
@@ -26,7 +28,7 @@ class IncomingMessageService {
       const sender = await tx.get('incoming_aggregations', senderKey);
       if (sender?.leaseUntil > this.now() && sender.messageId !== messageId) throw Object.assign(new Error('Conversa em processamento.'), { status: 503 });
       tx.set('incoming_aggregations', senderKey, { id: senderKey, phone, messageId, owner, leaseUntil: this.now() + 120000 });
-      tx.set('incoming_messages', id, { ...current, id, status: 'PROCESSING', owner, attempts: Number(current?.attempts || 0) + 1, leaseUntil: this.now() + 120000, expiresAt: null });
+      tx.set('incoming_messages', id, { ...current, id, status: 'PROCESSING', owner, processedByRevision: process.env.K_REVISION || process.env.APP_REVISION || 'local', attempts: Number(current?.attempts || 0) + 1, leaseUntil: this.now() + 120000, expiresAt: null });
       return { id, owner, senderKey, payload: current.payload };
     });
   }

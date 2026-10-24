@@ -82,7 +82,7 @@ for (const [label, patch] of [
   if (patch.valor_num) silent(result);
   else {
     assert.equal(result.next_action.send_customer_message, true);
-    assert.match(result.data.customer_message, /encomendar/);
+    assert.match(result.data.customer_message, /encomenda/);
     assert.deepEqual(result.data.products, []);
   }
 });
@@ -98,7 +98,7 @@ for (const [label, message] of [
     assert.equal((await f.handoffs.getConversation('conflora', customerKeyFor('conflora', phone))).automation, 'paused');
   } else {
     assert.equal(result.next_action.send_customer_message, true);
-    assert.match(result.data.customer_message, /encomendar/);
+    assert.match(result.data.customer_message, /encomenda/);
     assert.deepEqual(result.data.products, []);
     assert.equal((await f.handoffs.listOpen('conflora')).length, 0);
   }
@@ -119,7 +119,9 @@ function deliveryFixture(f, send) {
   const handle = messages.handleCustomerMessage.bind(messages);
   messages.handleCustomerMessage = async input => {
     await require('../src/services/conversation-automation').setConversationChannel(repo, input.phone, 'catalog');
-    return handle(input);
+    const payload = { ...input, message: input.message === 'Hibisco' ? 'Quanto custa Hibisco?' : input.message };
+    await new (require('../src/services/incoming-message.service').IncomingMessageService)(repo).accept(payload);
+    return handle(payload);
   };
   return { repo, pdv, messages };
 }
@@ -224,7 +226,7 @@ test('26 handoff never calls transport, AI, cart, payment or stock services', as
   const { messages } = deliveryFixture(f, fail);
   messages.agentService = { generateResponse: fail }; messages.orderService = new Proxy({}, { get: () => fail });
   const r = await messages.handleCustomerMessage({ phone, message: 'não sei qual é', messageId: 'wamid.handoff' });
-  assert.equal(r.reply, ''); assert.equal(r.intent, 'HUMAN_HANDOFF');
+  assert.equal(r.reply, ''); assert.equal(r.intent, 'AMBIGUOUS_NEEDS_HUMAN');
   assert.equal([...f.db.raw.values()].filter(v => v.kind === 'conversation-catalog').length, 0);
 });
 

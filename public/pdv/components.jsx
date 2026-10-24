@@ -1649,7 +1649,7 @@ window.PdvComponents = (() => {
           {/* Bar de Ações do Operador */}
           <div className="p-3 bg-emerald-50/60 border-b border-emerald-100 flex flex-wrap gap-2 shrink-0">
             {conversation.automation === 'paused' ? (
-              <button type="button" onClick={() => onRelease(conversation)} className="cf-btn-3d cf-btn-3d--secondary cf-btn-3d--sm">
+              <button type="button" onClick={() => { compositionClaim.current = null; setCompositionReady(false); onRelease(conversation); }} className="cf-btn-3d cf-btn-3d--secondary cf-btn-3d--sm">
                 🤖 Devolver ao Agente
               </button>
             ) : (
